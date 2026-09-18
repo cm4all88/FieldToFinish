@@ -410,14 +410,40 @@ namespace FieldCodes.Cad
         /// <summary>Draws accepted connections that pass the filter. Invalid geometry
         /// is refused; every warning is printed; existing pipes are never replaced
         /// without an answer.</summary>
+        /// <summary>
+        /// Answers the existing-pipe question for one connection. The window supplies
+        /// one so the drafter decides in the dialog; FTFDIPDRAW leaves it null and the
+        /// question is asked at the command line exactly as it always was.
+        /// </summary>
+        internal delegate ExistingPipeDecision ExistingPipeDecider(PipeConnection connection,
+                                                                   IList<ExistingPipe> existing);
+
         internal static int DrawConnections(Database db, Transaction tr, Editor ed, UtilityProject project,
                                             FtfSettings settings, string version, Func<PipeConnection, bool> filter)
+        {
+            return DrawConnections(db, tr, ed, project, settings, version, filter, null);
+        }
+
+        internal static int DrawConnections(Database db, Transaction tr, Editor ed, UtilityProject project,
+                                            FtfSettings settings, string version, Func<PipeConnection, bool> filter,
+                                            ExistingPipeDecider decider)
         {
             var findings = UtilityQc.Evaluate(project, settings.Dips);
             var drawn = 0;
 
             foreach (var c in project.Connections.Where(c => c.IsAccepted && c.ToStructureId != null && filter(c)).ToList())
             {
+                // Drafting left over from a connection this one replaced is of a pipe
+                // that no longer exists. It goes before anything new is drawn, so the
+                // drawing never shows two answers to the same question.
+                if (c.HasSupersededDrafting)
+                {
+                    var removed = UtilityCadService.EraseConnectionDrafting(db, tr, c.SupersededDraftingId);
+                    if (removed > 0)
+                        ed.WriteMessage("\n  {0} object(s) from the previous connection erased -- that pipe now runs elsewhere.", removed);
+                    c.SupersededDraftingId = null;
+                }
+
                 var from = project.Structure(c.FromStructureId);
                 var to = project.Structure(c.ToStructureId);
 
@@ -436,11 +462,27 @@ namespace FieldCodes.Cad
                     var owned = existing.Any(x => x.OwnedByFtf);
                     ed.WriteMessage("\n  {0} -> {1}: {2} existing pipe object(s) found between these structures ({3}).",
                                     from.Label, to.Label, existing.Count, owned ? "drafted by FTF" : "drawn by hand");
-                    var options = new PromptKeywordOptions("\n  Existing pipe [Update/Replace/Keep/New] <Keep>: ", "Update Replace Keep New");
-                    options.Keywords.Default = "Keep";
-                    options.AllowNone = true;
-                    var answer = ed.GetKeywords(options);
-                    var choice = answer.Status == PromptStatus.OK ? answer.StringResult : "Keep";
+                    string choice;
+                    if (decider != null)
+                    {
+                        // The window already asked. Same four answers, same meanings.
+                        switch (decider(c, existing))
+                        {
+                            case ExistingPipeDecision.AdoptOrUpdate: choice = "Update"; break;
+                            case ExistingPipeDecision.Replace: choice = "Replace"; break;
+                            case ExistingPipeDecision.CreateNew: choice = "New"; break;
+                            default: choice = "Keep"; break;
+                        }
+                        ed.WriteMessage("\n  Existing pipe: {0} (chosen in Dip Builder).", choice);
+                    }
+                    else
+                    {
+                        var options = new PromptKeywordOptions("\n  Existing pipe [Update/Replace/Keep/New] <Keep>: ", "Update Replace Keep New");
+                        options.Keywords.Default = "Keep";
+                        options.AllowNone = true;
+                        var answer = ed.GetKeywords(options);
+                        choice = answer.Status == PromptStatus.OK ? answer.StringResult : "Keep";
+                    }
 
                     if (choice == "Keep") continue;
                     if (choice == "Replace")

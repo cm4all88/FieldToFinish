@@ -220,10 +220,45 @@ namespace FieldCodes.Cad
         /// its pipe label.</summary>
         public static int EraseConnectionDrafting(Database db, Transaction tr, string connectionId)
         {
+            if (string.IsNullOrEmpty(connectionId)) return 0;
             return Ownership.DeleteOwned(db, tr, s =>
                 (s.Kind == FtfEntityKind.UtilityPipe || s.Kind == FtfEntityKind.UtilityPipeLabel) &&
                 s.PointNumber == connectionId);
         }
+
+        /// <summary>Where this connection's pipe label actually sits in the drawing,
+        /// and whether it has been moved away from where FTF put it. Returns null when
+        /// the pipe has no label.</summary>
+        public static bool TryReadPipeLabel(Database db, Transaction tr, PipeConnection connection,
+                                            out Point3d location, out double rotation, out bool movedByHand,
+                                            out string text)
+        {
+            location = Point3d.Origin;
+            rotation = 0;
+            movedByHand = false;
+            text = null;
+            if (connection == null) return false;
+
+            foreach (var pair in Ownership.FindOwned(db, tr,
+                         s => s.Kind == FtfEntityKind.UtilityPipeLabel && s.PointNumber == connection.Id))
+            {
+                var mtext = tr.GetObject(pair.Key, OpenMode.ForRead) as MText;
+                if (mtext == null) continue;
+                location = mtext.Location;
+                rotation = mtext.Rotation;
+                text = mtext.Contents;
+                // The stamp carries where FTF computed the label should go. If the text
+                // is no longer there, a human dragged it.
+                movedByHand = pair.Value != null && pair.Value.WasMovedByHand(location, MovedTolerance);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>How far a label may sit from its computed position before it counts
+        /// as deliberately moved. Small enough that a real drag is caught, large enough
+        /// that arithmetic noise is not.</summary>
+        public const double MovedTolerance = 0.02;
 
         /// <summary>
         /// Draws one confirmed pipe: a centerline, or a double line offset by half the
@@ -270,7 +305,10 @@ namespace FieldCodes.Cad
                 }
             }
 
-            // The label reads along the pipe, clear of a double line.
+            // The label reads along the pipe, clear of a double line -- unless the
+            // drafter has put it somewhere, in which case that is where it goes. A
+            // redraw that moves a deliberately placed label back to the midpoint is
+            // the drawing undoing the drafter's work.
             var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
             var textHeight = us.TextHeightPlotted * scale;
             var clearance = (doubleLine ? PipeDraftingRules.HalfWidthFeet(pipe) * settings.General.UnitsPerFoot : 0) +
@@ -279,23 +317,32 @@ namespace FieldCodes.Cad
             var direction = Math.Atan2(b.Y - a.Y, b.X - a.X);
             var plan = LineLabelPlanner.PlaceAt(mid.X, mid.Y, direction, LineLabelSide.Left, clearance, true);
 
+            var computed = new Point3d(plan.X, plan.Y, 0);
+            var labelPlan = DipWorkflow.PlanLabel(project, connection, us, plan.X, plan.Y, plan.RotationRadians);
+            var placed = new Point3d(labelPlan.X, labelPlan.Y, 0);
+            var rotation = labelPlan.RotationRadians;
+
             using (var text = new MText())
             {
                 text.SetDatabaseDefaults(db);
                 var style = Setup.DrawingResources.FindTextStyle(db, tr, us.TextStyle);
                 if (!style.IsNull) text.TextStyleId = style;
-                text.Contents = UtilityLabelFormatter.PipeLabel(project, connection, us);
+                // A label the drafter retyped is theirs; generation does not overwrite it.
+                text.Contents = labelPlan.Text;
                 text.TextHeight = textHeight;
                 text.Attachment = AttachmentPoint.MiddleCenter;
-                text.Location = new Point3d(plan.X, plan.Y, 0);
-                text.Rotation = plan.RotationRadians;
+                text.Location = placed;
+                text.Rotation = rotation;
                 text.LayerId = ProductionLayers.Get(db, tr, standard.LabelLayer, settings);
                 CadUtil.AddToModelSpace(db, tr, text);
-                Ownership.Stamp(text, connection.Id, rulesVersion, FtfEntityKind.UtilityPipeLabel, null, tag);
+                // Stamp where FTF WOULD have put it, not where it went: that is what
+                // makes a later hand-drag detectable as a drag.
+                Ownership.Stamp(text, connection.Id, rulesVersion, FtfEntityKind.UtilityPipeLabel,
+                                labelPlan.DrafterPlaced ? placed : computed, tag);
                 ids.Add(text.ObjectId);
             }
 
-            connection.Drafted = true;
+            DipWorkflow.RecordDrafted(project, connection);
             return ids;
         }
 

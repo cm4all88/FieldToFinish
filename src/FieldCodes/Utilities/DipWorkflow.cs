@@ -185,12 +185,98 @@ namespace FieldCodes.Utilities
         }
     }
 
+    /// <summary>Where a pipe label goes and what it says, once the drafter's own
+    /// choices have been taken into account.</summary>
+    public sealed class PipeLabelPlan
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double RotationRadians { get; set; }
+
+        /// <summary>True when this is where the drafter put it, not where FTF
+        /// computed it should go.</summary>
+        public bool DrafterPlaced { get; set; }
+
+        public string Text { get; set; }
+
+        /// <summary>True when the text is the drafter's, not the generated text.</summary>
+        public bool TextOverridden { get; set; }
+    }
+
     /// <summary>
     /// Reads the project and reports the state of the work. Pure: it changes
     /// nothing, so the window can call it as often as it likes.
     /// </summary>
     public static class DipWorkflow
     {
+        /// <summary>
+        /// Decides where a pipe label goes and what it reads, given where FTF would
+        /// put it. A location the drafter chose wins over the computed midpoint, and
+        /// text the drafter typed wins over generated text -- that is the whole rule,
+        /// and it is here rather than in the drafting code so it can be tested.
+        /// </summary>
+        public static PipeLabelPlan PlanLabel(UtilityProject project, PipeConnection connection,
+                                              UtilitySettings settings,
+                                              double computedX, double computedY, double computedRotation)
+        {
+            var plan = new PipeLabelPlan
+            {
+                X = computedX, Y = computedY, RotationRadians = computedRotation
+            };
+            if (connection == null) return plan;
+
+            if (connection.LabelLocation != null)
+            {
+                plan.X = connection.LabelLocation.X;
+                plan.Y = connection.LabelLocation.Y;
+                plan.RotationRadians = connection.LabelLocation.RotationRadians;
+                plan.DrafterPlaced = true;
+            }
+
+            if (connection.LabelTextIsOverridden)
+            {
+                plan.Text = connection.LabelTextOverride;
+                plan.TextOverridden = true;
+            }
+            else if (project != null)
+            {
+                plan.Text = UtilityLabelFormatter.PipeLabel(project, connection, settings ?? new UtilitySettings());
+            }
+            return plan;
+        }
+
+        /// <summary>Records that the drafter put the label somewhere. Passing null
+        /// gives the label back to FTF, so the next redraw returns it to the pipe.</summary>
+        public static void PlaceLabel(PipeConnection connection, double? x, double? y, double rotationRadians)
+        {
+            if (connection == null) return;
+            connection.LabelLocation = x.HasValue && y.HasValue
+                ? new LabelPlacement(x.Value, y.Value, rotationRadians) : null;
+        }
+
+        /// <summary>
+        /// Records label text the drafter typed. The generated text is kept beside it
+        /// so the override is visible as an override rather than looking like output.
+        /// Passing null or the generated text itself clears the override.
+        /// </summary>
+        public static void OverrideLabelText(UtilityProject project, PipeConnection connection,
+                                             UtilitySettings settings, string text)
+        {
+            if (connection == null) return;
+            var generated = project != null
+                ? UtilityLabelFormatter.PipeLabel(project, connection, settings ?? new UtilitySettings())
+                : null;
+
+            if (string.IsNullOrWhiteSpace(text) || text == generated)
+            {
+                connection.LabelTextOverride = null;
+                connection.LabelTextOverrodeGenerated = null;
+                return;
+            }
+            connection.LabelTextOverride = text;
+            connection.LabelTextOverrodeGenerated = generated;
+        }
+
         /// <summary>What the drawing was made from. Any change to the pipe as
         /// observed, to either structure's surveyed position, or to which structure
         /// the pipe runs to, changes this string -- and the drawing becomes stale.

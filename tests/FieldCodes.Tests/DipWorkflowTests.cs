@@ -630,6 +630,139 @@ public sealed class DipWorkflowTests
                      DipWorkflow.Describe(project, s1045, north, null).LabelState);
     }
 
+    // ================================================= where the label goes
+
+    /// <summary>The bug item 15 names: a redraw used to send a moved label back to
+    /// the pipe midpoint. The placement now wins over the computed position.</summary>
+    [Fact]
+    public void RedrawingAPipe_KeepsALabelTheDrafterPlaced()
+    {
+        StructureRecord s1045, s1048;
+        var project = Network(out s1045, out s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+
+        // FTF would put it at the midpoint...
+        var generated = DipWorkflow.PlanLabel(project, connection, Settings, 500.0, 1091.71, 1.5708);
+        Assert.False(generated.DrafterPlaced);
+        Assert.Equal(500.0, generated.X, 4);
+
+        // ...the drafter drags it clear of the callout...
+        DipWorkflow.PlaceLabel(connection, 528.0, 1120.0, 0.0);
+
+        // ...and a redraw computes the same midpoint but places it where they put it.
+        var redrawn = DipWorkflow.PlanLabel(project, connection, Settings, 500.0, 1091.71, 1.5708);
+        Assert.True(redrawn.DrafterPlaced);
+        Assert.Equal(528.0, redrawn.X, 4);
+        Assert.Equal(1120.0, redrawn.Y, 4);
+        Assert.Equal(0.0, redrawn.RotationRadians, 6);
+    }
+
+    [Fact]
+    public void GivingTheLabelBackToFtf_ReturnsItToTheComputedPosition()
+    {
+        StructureRecord s1045, s1048;
+        var project = Network(out s1045, out s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+
+        DipWorkflow.PlaceLabel(connection, 528.0, 1120.0, 0.0);
+        DipWorkflow.PlaceLabel(connection, null, null, 0.0);
+
+        var plan = DipWorkflow.PlanLabel(project, connection, Settings, 500.0, 1091.71, 1.5708);
+        Assert.False(plan.DrafterPlaced);
+        Assert.Equal(500.0, plan.X, 4);
+        Assert.Null(connection.LabelLocation);
+    }
+
+    [Fact]
+    public void GeneratedLabelText_ShowsTheSlopeWhenBothEndsSupportIt()
+    {
+        StructureRecord s1045, s1048;
+        var project = Network(out s1045, out s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+
+        var plan = DipWorkflow.PlanLabel(project, connection, Settings, 0, 0, 0);
+
+        Assert.False(plan.TextOverridden);
+        Assert.Contains("RCP", plan.Text);
+        Assert.Contains("%", plan.Text);
+    }
+
+    /// <summary>One end dipped: the label still describes the pipe, and simply does
+    /// not carry a slope. No number is invented to complete the format.</summary>
+    [Fact]
+    public void GeneratedLabelText_OmitsSlopeWhenOnlyOneEndIsObserved()
+    {
+        var s1045 = Structure("PT 1045 SDMH\n12 RCP N INV 6.41", 328.42, 1000, 500);
+        var s1048 = Structure("PT 1048 SDMH", 326.28, 1183.42, 500);
+        var project = Project(s1045, s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+
+        var plan = DipWorkflow.PlanLabel(project, connection, Settings, 0, 0, 0);
+
+        Assert.Contains("RCP", plan.Text);
+        Assert.DoesNotContain("%", plan.Text);
+    }
+
+    [Fact]
+    public void OverridingLabelText_KeepsTheGeneratedTextAndWinsOnRedraw()
+    {
+        StructureRecord s1045, s1048;
+        var project = Network(out s1045, out s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+        var generated = UtilityLabelFormatter.PipeLabel(project, connection, Settings);
+
+        DipWorkflow.OverrideLabelText(project, connection, Settings, "12\" RCP SD FIELD VERIFY");
+
+        var plan = DipWorkflow.PlanLabel(project, connection, Settings, 0, 0, 0);
+        Assert.True(plan.TextOverridden);
+        Assert.Equal("12\" RCP SD FIELD VERIFY", plan.Text);
+        Assert.Equal(generated, connection.LabelTextOverrodeGenerated);
+    }
+
+    [Fact]
+    public void ClearingTheLabelOverride_GoesBackToGeneratedText()
+    {
+        StructureRecord s1045, s1048;
+        var project = Network(out s1045, out s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+
+        DipWorkflow.OverrideLabelText(project, connection, Settings, "anything");
+        DipWorkflow.OverrideLabelText(project, connection, Settings, null);
+
+        Assert.False(connection.LabelTextIsOverridden);
+        Assert.Null(connection.LabelTextOverrodeGenerated);
+        Assert.False(DipWorkflow.PlanLabel(project, connection, Settings, 0, 0, 0).TextOverridden);
+    }
+
+    /// <summary>Retyping the label to exactly what it already says is not an override;
+    /// it would otherwise pin the text and stop it updating when the slope does.</summary>
+    [Fact]
+    public void RetypingTheGeneratedTextVerbatim_IsNotAnOverride()
+    {
+        StructureRecord s1045, s1048;
+        var project = Network(out s1045, out s1048);
+        var north = NorthPipe(s1045);
+        var connection = ConnectionFinder.Accept(project, s1045, north,
+            ConnectionFinder.ManualCandidate(project, s1045, north, s1048, Settings), true, null);
+        var generated = UtilityLabelFormatter.PipeLabel(project, connection, Settings);
+
+        DipWorkflow.OverrideLabelText(project, connection, Settings, generated);
+
+        Assert.False(connection.LabelTextIsOverridden);
+    }
+
     // ==================================================== unresolved is valid
 
     [Fact]
