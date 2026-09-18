@@ -29,7 +29,7 @@ namespace FieldCodes.Cad.Ui
     /// label and a local map on the right. Map tab: every structure and connection,
     /// with draw-all and label-all. Warnings sit quietly at the bottom.
     /// </summary>
-    internal sealed class DipBuilderForm : Form
+    internal sealed partial class DipBuilderForm : Form
     {
         // Palette: one working blue on a quiet ground. Amber, red and green only ever
         // mean state. Two sets: light, and dark to sit beside Civil 3D's dark theme.
@@ -198,6 +198,7 @@ namespace FieldCodes.Cad.Ui
             Controls.Add(BuildTabBar());
             Controls.Add(BuildWarningsPanel());
             Controls.Add(BuildStatusBar());
+            Controls.Add(BuildNavigationBar());
             Controls.Add(BuildHeader());
 
             FormClosed += (s, e) => DipSession.Form = null;
@@ -731,6 +732,7 @@ namespace FieldCodes.Cad.Ui
             connPanel.Controls.Add(_candidateList);
             connPanel.Controls.Add(_candidateCaption);
             connPanel.Controls.Add(_connectionState);
+            connPanel.Controls.Add(BuildPipeCard());
             connPanel.Controls.Add(Row(
                 Btn("Find connections", OnFindConnections, true),
                 Btn("Confirm selected", OnConfirm),
@@ -738,9 +740,11 @@ namespace FieldCodes.Cad.Ui
                 Btn("Leave unresolved", OnLeaveUnresolved),
                 Btn("Runs outside survey limits", OnOutsideLimits),
                 Btn("Draw this structure's pipes", (s, e) => OnDraw(false)),
+                Btn("Draw all ready pipes", OnDrawAllReady),
                 Advanced(Btn("Draw all confirmed pipes", (s, e) => OnDraw(true)))));
             _connectionGroup = Step("3", "Connections",
-                "Select a pipe and find where it runs. Nothing connects until you confirm. The list shows each pipe and where it goes.",
+                "Select a pipe. If you know where it runs, use Connects to... and click that structure. " +
+                "Otherwise find candidates and confirm one. Nothing connects until you say so.",
                 connPanel, 5);
             scroll.Controls.Add(_connectionGroup);
 
@@ -795,6 +799,7 @@ namespace FieldCodes.Cad.Ui
                 _candidateList.Items.Clear();
                 ShowConnectionState();
                 SyncConnectionSelection();
+                RefreshWorkflow();
                 if (_map != null) _map.Invalidate();
                 FitAll();
             };
@@ -955,6 +960,7 @@ namespace FieldCodes.Cad.Ui
         private void OpenStructure(string structureId)
         {
             if (structureId == null) return;
+            _nav.Open(structureId);
             _structureId = structureId;
             _labelEdited = false;
             _candidates = new List<ConnectionCandidate>();
@@ -1133,6 +1139,7 @@ namespace FieldCodes.Cad.Ui
             RefreshStructure();
             RefreshReview();
             RefreshMapSummary();
+            RefreshWorkflow();
             if (DipSession.LastMessage != null) Say(DipSession.LastMessage, Bad);
             FitAll();
             _map.Invalidate();
@@ -1689,6 +1696,7 @@ namespace FieldCodes.Cad.Ui
 
                 var point = (CogoPoint)tr.GetObject(picked.ObjectId, OpenMode.ForRead);
                 var record = UtilityCadService.EnsureStructure(project, UtilityCadService.Snapshot(point), settings.Dips);
+                _nav.Open(record.Id);
                 _structureId = record.Id;
                 _labelEdited = false;
                 ed.WriteMessage("\nDip Builder: {0}, rim {1:0.00} from the drawing.", record.Label, record.Cad.Rim);
@@ -1738,7 +1746,7 @@ namespace FieldCodes.Cad.Ui
                 foreach (var message in UtilityCadService.ImportNotes(project, parsed, live, settings.Dips))
                     ed.WriteMessage("\n  " + message);
                 var first = project.StructureByPoint(parsed.Structures[0].PointNumber);
-                if (first != null) _structureId = first.Id;
+                if (first != null) { _nav.Open(first.Id); _structureId = first.Id; }
                 return true;
             });
             if (posted) Say(parsed.Structures.Count + " structure(s) read from the notes.", Good);
@@ -2040,7 +2048,7 @@ namespace FieldCodes.Cad.Ui
             if (_findings.SelectedItems.Count == 0) return;
             var finding = (QcFinding)_findings.SelectedItems[0].Tag;
             var structure = DipSession.Project.Structure(finding.StructureId);
-            if (structure != null) _structureId = structure.Id;
+            if (structure != null) { _nav.Open(structure.Id); _structureId = structure.Id; }
             var pointNumber = structure != null && structure.Cad != null ? structure.Cad.PointNumber : null;
 
             DipSession.Post("zoom", (db, tr, ed, project, settings, version) =>
