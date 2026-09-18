@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Autodesk application bundle for Field to Finish.
+
+  Dropping this folder into an ApplicationPlugins directory makes Civil 3D load the
+  plugin on startup, so nobody has to run NETLOAD. One bundle serves both releases:
+  Civil 3D picks the ComponentEntry whose series matches the host it is running on.
+
+  Locations, highest priority last:
+    %APPDATA%\Autodesk\ApplicationPlugins\      per user, no admin rights needed
+    %PROGRAMFILES%\Autodesk\ApplicationPlugins\ all users, needs admin
+
+  NOTE: loading it does not make it unloadable. AutoCAD holds a .NET assembly for the
+  life of the process, so rebuilding still requires closing Civil 3D first.
+-->
+<ApplicationPackage
+    SchemaVersion="1.0"
+    AutodeskProduct="AutoCAD"
+    Name="Field to Finish"
+    AppVersion="1.0.0"
+    Description="Survey field-to-finish: point features, drip lines, labels, tags and schedules."
+    Author="Parametrix"
+    ProductType="Application"
+    ProductCode="{6B1F3A42-9C57-4E18-B0D3-7F2A5C4E91AB}"
+    UpgradeCode="{2E7D9C11-4A63-49F0-8B5C-1D3E6A08F742}">
+
+  <CompanyDetails Name="Parametrix" />
+
+  <RuntimeRequirements OS="Win64" Platform="AutoCAD*" />
+
+  <!-- Civil 3D 2024 is AutoCAD R24.3, on .NET Framework 4.8.
+
+       2024 only, deliberately, while this build is being stabilised. A second release
+       is another Components block with its own SeriesMin/SeriesMax and a ComponentEntry
+       pointing at ./Contents/<year>/ -- plus a matching target in the csproj. -->
+  <Components Description="Civil 3D 2024">
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R24.3" SeriesMax="R24.3" />
+    <ComponentEntry
+        AppName="FieldToFinish"
+        Version="1.0.0"
+        ModuleName="./Contents/2024/FieldCodes.Cad.dll"
+        AppDescription="Field to Finish (Civil 3D 2024)"
+        LoadOnAutoCADStartup="True" />
+  </Components>
+
+</ApplicationPackage>

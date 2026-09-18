@@ -1,0 +1,16 @@
+NETLOAD "C:\dev\FieldToFinish\src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll"
+NETLOAD "C:\dev\FieldToFinish\tests\LiveSmoke\ProductionTestHarness.dll"
+PRODEXPECT
+REOPENED
+PRODVERIFY
+FTFPROFILE
+
+FTFDIPCHECK
+No
+FTFDIPREVISIT
+FTFEASEMENTEXPORT
+FTFEASEMENTCHECK
+No
+No
+No
+QSAVE

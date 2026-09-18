@@ -1,0 +1,69 @@
+# Visual Studio / .NET build output
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet / generated packages
+packages/
+*.nupkg
+
+# Test and temporary output
+TestResults/
+**/TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# FTF / AutoCAD generated logs
+*.log
+acad.err
+
+# AutoCAD temporary / backup files
+*.bak
+*.sv$
+*.ac$
+*.dwl
+*.dwl2
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+Thumbs.db
+.DS_Store
+
+# Generated plot/output files
+*.plt
+*.pc3.bak
+
+# Local secrets / environment
+.env
+.env.*
+*.secrets.json
+secrets.json
+
+# Local IDE settings
+.idea/
+.vscode/
+
+# Compiled binaries
+*.dll
+*.pdb
+*.exe
+
+# Generated test output
+tests/LiveSmoke/out*.dwg
+tests/LiveSmoke/*.log.raw
+tests/LiveSmoke/trace.txt
+tests/LiveSmoke/outprod.ftf-*.txt
+
+# Generated/recovered test drawings
+tests/LiveSmoke/seedprod_recover.dwg
+
+# Checkpoint build artifacts / archives
+checkpoints/**/build-net48/*.dll
+checkpoints/**/source.tar.gz

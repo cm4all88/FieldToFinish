@@ -1,0 +1,7 @@
+; Visual check of exhibit layouts: run on a copy of outprod.dwg with run-accore.ps1; writes plot-EXHIBIT-*.pdf here.
+(command "_.-PLOT" "_Y" "EXHIBIT 1 OF 1" "DWG To PDF.pc3" "ANSI full bleed A (8.50 x 11.00 Inches)" "_I" "_P" "_N" "_L" "1:1" "0.00,0.00" "_Y" "." "_Y" "_N" "_N" "_N" "C:/dev/FieldToFinish/tests/LiveSmoke/plot-EXHIBIT-1-OF-1.pdf" "_N" "_Y")
+(command "_.-PLOT" "_Y" "EXHIBIT 2" "DWG To PDF.pc3" "ANSI full bleed A (8.50 x 11.00 Inches)" "_I" "_P" "_N" "_L" "1:1" "0.00,0.00" "_Y" "." "_Y" "_N" "_N" "_N" "C:/dev/FieldToFinish/tests/LiveSmoke/plot-EXHIBIT-2.pdf" "_N" "_Y")
+(command "_.-PLOT" "_Y" "EXHIBIT 3" "DWG To PDF.pc3" "ANSI full bleed A (8.50 x 11.00 Inches)" "_I" "_P" "_N" "_L" "1:1" "0.00,0.00" "_Y" "." "_Y" "_N" "_N" "_N" "C:/dev/FieldToFinish/tests/LiveSmoke/plot-EXHIBIT-3.pdf" "_N" "_Y")
+(command "_.-PLOT" "_Y" "EXHIBIT 4" "DWG To PDF.pc3" "ANSI full bleed A (8.50 x 11.00 Inches)" "_I" "_P" "_N" "_L" "1:1" "0.00,0.00" "_Y" "." "_Y" "_N" "_N" "_N" "C:/dev/FieldToFinish/tests/LiveSmoke/plot-EXHIBIT-4.pdf" "_N" "_Y")
+(command "_.-PLOT" "_Y" "EXHIBIT 5" "DWG To PDF.pc3" "ANSI full bleed A (8.50 x 11.00 Inches)" "_I" "_P" "_N" "_L" "1:1" "0.00,0.00" "_Y" "." "_Y" "_N" "_N" "_N" "C:/dev/FieldToFinish/tests/LiveSmoke/plot-EXHIBIT-5.pdf" "_N" "_Y")
+

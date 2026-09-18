@@ -1,0 +1,309 @@
+{
+  "version": "1.0",
+  "unitsPerFoot": 1.0,
+  "trunkDecimals": 0,
+  "multiStemAverage": "Arithmetic",
+
+  "protectedLayers": [ "V-SIGN", "V-UTIL-*", "V-STRC-*", "C-STRM-STRC" ],
+
+  "//maskableLayers": "Label layers are NOT listed here: labels are hard obstacles and never overlap each other. Layers named by a code rule's blockLayer or label.layer are classified automatically, so they do not need listing either. Modifier suffixes (-DEAD, -RMV, -PROT) are stripped before matching.",
+  "maskableLayers":  [ "V-TREE-DRIP", "C-TOPO-*", "V-ROAD-*" ],
+
+  "//ignoreCodes": "NEVER-DRAW list only: codes that will never produce drawing content no matter how complete the setup gets. Ground shots are surface data for the TIN; notes are notes. Keep this list SHORT. A code that simply has no rule yet must NOT go here - it belongs in the unhandled report, which is how anyone finds out what still needs configuring. Silence is worse than noise once this is deployed: a surveyor who sees nothing assumes the poles were handled. A trailing sequence number is matched automatically, so GS covers GS2.",
+  "ignoreCodes": [ "GS", "INFO", "INFOL" ],
+
+  "//lineworkCodes": "Codes whose points define linework, not features. Civil 3D builds these into figures via the Figure Prefix Database; this tool labels the resulting polylines, so the points need no rule and are not reported as unhandled. GENERATED FROM the office figure prefix database at C3D2024\\Survey\\SurveySettings\\Civil3D parametrix.fdb_xdef (122 prefixes, revision stamp 2025-10-01) - regenerate from that file rather than editing by hand, and it stays correct for every job rather than the one it was seeded from.",
+
+  "//lineworkControlCodes": "Recorded for reference; NOT parsed here. From Civil3D PMX-Universal.f2f_xdef: B begin, U continue, E end, C close, P begin curve, T end curve, G rectangle, RT right turn, X extend, CIR circle, OC point on curve, HO/VO/SO horizontal/vertical/stop offset, RPN recall point, CPN connect point. Delimiter is a space, field code escape is /, auto-begin is on. This is why a description reads 'EC RMP B' or chains figures as 'BLD B EC B BLD1 B'. Civil 3D matches figures by prefix, so EC1 and EC2 are separate strings sharing the EC prefix - which is why the trailing-digit grouping below is correct.",
+
+  "lineworkCodes": [
+    "AFL", "ASPH", "BANK", "BAR", "BENCHL", "BIKE", "BLC", "BLD", "BLE", "BRABUT", "BREJ",
+    "BRIDGE", "BRK", "BULK", "BULL", "CAOH", "CAU", "CG", "CIR", "CJ", "CLA",
+    "CLC", "CLD", "CLG", "CLS", "CRK", "CRW", "CU", "CVTL", "CX", "DIKE",
+    "DK", "DOCK", "EBLK", "EBP", "EC", "EGG", "EGR", "ELS", "EOW", "EP",
+    "ETL", "EVL", "FBD", "FBW", "FCK", "FHW", "FJET", "FLOAT", "FNC", "FOG",
+    "FOU", "FRL", "FU", "GRL", "GU", "HDR", "HGL", "HWM", "ICMP", "ICP",
+    "ICPP", "ICT", "IDI", "IDWPP", "INFOL", "INV", "IPVC", "JBAR", "LINE", "LN",
+    "LNDY", "LNSO", "LOG", "LOGBOOM", "OHWM", "OU", "PATCH", "PATH", "PILECAP", "PILESHT",
+    "PLAY", "PLTR", "POH", "PU", "RIP", "RMP", "RRCL", "RRRAIL", "RRTIE", "RWB",
+    "RWBK", "RWC", "RWMT", "RWRK", "RWT", "RWWD", "SDTD", "SDU", "SNL", "SQ",
+    "SSU", "STEU", "STR", "TANK", "TBC", "TILT", "TOE", "TOH", "TOP", "TSL",
+    "TU", "UCAD", "UFOD", "UPD", "UTD", "WLF", "WLOHWM", "WLST", "WTRFALL", "WU",
+    "XW", "XX"
+  ],
+
+  "//lineFeatures": "LINEWORK IDENTIFICATION ONLY - no labeling standards live here yet. Civil 3D creates these figures from the field codes (see lineworkCodes); FTF's job is to FINISH the existing linework, never recreate it. Each entry ties a figure code to the layer the office Figure Prefix Database assigns it, so existing linework can be identified two ways: by SurveyFigure name (RWC3 -> RWC) or, for plain polylines, by layer. Layers are copied verbatim from Civil3D parametrix.fdb_xdef. Names identify the feature; what its label should SAY is deliberately unconfigured until the office standard is supplied. Several codes share a layer (FNC/FHW, BLD/BLC, CU/CX, LNSO/FOG, XW/JBAR/BAR, AFL/TILT, FBD/FRL) - layer-based identification reports all candidates; a figure name resolves exactly.",
+  "lineFeatures": [
+    { "code": "RWC",   "name": "Concrete Wall",        "layer": "V-SURF-WALL-CONC-E" },
+    { "code": "RWB",   "name": "Wall Bottom",          "layer": "V-SURF-WALL-BTM" },
+    { "code": "RWT",   "name": "Wall Top",             "layer": "V-SURF-WALL-TOP" },
+    { "code": "RWRK",  "name": "Rock Wall",            "layer": "V-SURF-WALL-ROCK-E", "label": "ROCK WALL" },
+    { "code": "RWBK",  "name": "Block Wall",           "layer": "V-SURF-WALL-CMUW-E" },
+    { "code": "RWMT",  "name": "Wall",                 "layer": "V-SURF-WALL-E", "label": "WALL" },
+    { "code": "RWWD",  "name": "Wood Wall",            "layer": "V-SURF-WALL-WOOD-E" },
+    { "code": "FNC",   "name": "Fence",                "layer": "V-SURF-FENC-E" },
+    { "code": "FHW",   "name": "Fence (hog wire)",     "layer": "V-SURF-FENC-E" },
+    { "code": "FBD",   "name": "Wood Fence",           "layer": "V-SURF-FENC-WOOD-E" },
+    { "code": "FRL",   "name": "Rail Fence",           "layer": "V-SURF-FENC-WOOD-E" },
+    { "code": "FBW",   "name": "Barbed Wire Fence",    "layer": "V-SURF-FENC-BARB-E" },
+    { "code": "FCK",   "name": "Chain Link Fence",     "layer": "V-SURF-FENC-CHNL-E", "label": "CHAIN LINK FENCE" },
+    { "code": "GRL",   "name": "Guardrail",            "layer": "V-SURF-GRAL-E" },
+    { "code": "HDR",   "name": "Handrail",             "layer": "V-SURF-HDRL-E" },
+    { "code": "BLD",   "name": "Building",             "layer": "V-SURF-BLDG-E", "label": "BUILDING" },
+    { "code": "BLC",   "name": "Building (site)",      "layer": "V-SURF-BLDG-E", "label": "BUILDING" },
+    { "code": "BLE",   "name": "Building Roofline",    "layer": "V-SURF-BLDG-ROOF-E" },
+    { "code": "LN",    "name": "Skip Stripe",          "layer": "V-CHAN-SKST-E" },
+    { "code": "LNSO",  "name": "Stripe",               "layer": "V-CHAN-STRP-E", "label": "STRIPE" },
+    { "code": "FOG",   "name": "Fog Line",             "layer": "V-CHAN-STRP-E", "label": "FOG LINE" },
+    { "code": "LNDY",  "name": "Double Yellow Stripe", "layer": "V-CHAN-STRP-DBL1-E", "label": "DOUBLE YELLOW" },
+    { "code": "XW",    "name": "Crosswalk",            "layer": "V-CHAN-MRKG-E" },
+    { "code": "JBAR",  "name": "Jersey Barrier",       "layer": "V-CHAN-MRKG-E" },
+    { "code": "BAR",   "name": "Traffic Marking",      "layer": "V-CHAN-MRKG-E" },
+    { "code": "CU",    "name": "Curb",                 "layer": "V-SURF-CURB-E", "label": "CURB" },
+    { "code": "CX",    "name": "Curb (back)",          "layer": "V-SURF-CURB-E", "label": "CURB" },
+    { "code": "CG",    "name": "Curb & Gutter Flowline", "layer": "V-SURF-CURB-FLOW-E" },
+    { "code": "TBC",   "name": "Top Back of Curb",     "layer": "V-SURF-CURB-BACK-E" },
+    { "code": "EP",    "name": "Asphalt Edge",         "layer": "V-SURF-ASPH-E", "label": "EDGE OF PAVEMENT" },
+    { "code": "AFL",   "name": "Asphalt Flowline",     "layer": "V-SURF-ASPH-FLOW-E" },
+    { "code": "TILT",  "name": "Asphalt Flowline (tilt)", "layer": "V-SURF-ASPH-FLOW-E" },
+    { "code": "PATCH", "name": "Asphalt Patch",        "layer": "V-SURF-ASPH-PATC-E" },
+    { "code": "EC",    "name": "Concrete Edge",        "layer": "V-SURF-CONC-E", "label": "EDGE OF CONCRETE" },
+    { "code": "EGR",   "name": "Gravel Edge",          "layer": "V-SURF-GRVL-E" },
+    { "code": "EGG",   "name": "Grass Edge",           "layer": "V-SURF-GRAS-E" },
+    { "code": "PATH",  "name": "Path / Trail",         "layer": "V-SURF-TRAL-E" },
+    { "code": "SDTD",  "name": "Storm Line",           "layer": "V-UTIL-STRM-E", "label": "STORM" },
+    { "code": "ASPH",  "name": "Asphalt",              "layer": "", "label": "ASPHALT" }
+  ],
+
+  "//ignoreLineNames": "TBC export names deliberately mapped to nothing: recognised so the inventory stops flagging them as unknown, but no feature is identified and nothing is drawn. Exact, case-insensitive, trimmed. To map a TBC name to a feature instead, add it to that feature's \"aliases\" list above (same exact-match discipline). Every entry in either place is a confirmed office decision, never a guess.",
+  "ignoreLineNames": [],
+
+  "//SETTINGS-MOVED": "unitsPerFoot, trunkDecimals, multiStemAverage, protectedLayers, maskableLayers and labelPlacement below are SEED VALUES ONLY. They are read once, to create ftf-settings.json the first time FTFSETUP runs on a machine that has none. After that the settings file wins and editing them here has no effect - use FTFSETUP. This file is never written by the plugin; it is the office grammar standard and ships with it.",
+
+  "//labelPlacement": "Seed only - superseded by ftf-settings.json. characterWidthFactor is gone: collision boxes are measured from the real text now.",
+  "labelPlacement": {
+    "textHeightPlotted": 0.08,
+    "paddingPlotted": 0.02,
+    "baseOffsetPlotted": 0.06,
+    "ringStepPlotted": 0.06,
+    "ringCount": 4,
+    "movedTolerance": 0.001
+  },
+
+  "codes": [
+    {
+      "//pole": "PROOF THAT THE ENGINE IS NOT TREE-SPECIFIC. This rule was added with no C# change at all: the parser skips species, trunk, drip and rotation because this rule declares none of them, and modifiers still compose (PP 1234 DEAD labels '(DEAD)' and suffixes the layer). Like trees, it places NO block - the Civil 3D point style already draws the pole symbol, and a second one on top would be wrong. A bare 'PP' carries no data and so draws nothing; only a pole with a number on it produces a label.",
+      "id": "pole",
+      "description": "Power Pole",
+      "match": "^(?<code>PP)\\s+(?<number>[0-9]+)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+
+      "label": {
+        "format": "POLE {number}",
+        "layer": "V-UTIL-POWR-TEXT",
+        "leader": "Auto"
+      },
+
+      "tagPrefix": "P"
+    },
+
+    {
+      "id": "tree",
+      "description": "Tree",
+
+      "//match": "Office format: SPECIES <diameter> [<diameter> ...] . <drip radius>. More than one diameter is a cluster. Each diameter must start with a digit so the bare '.' separator cannot be swallowed by the trunk group. {SPECIES} expands to the keys of the species map below, so the two cannot drift apart - and so this rule does not swallow every other code of the same shape ('PP 1234' is a power pole, not a tree of unknown species). The drip group is optional so a missing drip radius is a precise error rather than a no-match. A species not in the map is reported in the unhandled summary, with a sample description, which is what you need to add it.",
+      "match": "^(?<code>(?<species>{SPECIES}))\\s+(?<trunk>[0-9]+(?:\\.[0-9]+)?(?:\\s+[0-9]+(?:\\.[0-9]+)?)*)(?:\\s+\\.\\s+(?<drip>[0-9]+(?:\\.[0-9]+)?))?(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+
+      "species": {
+        "CON": "CONIFER",
+        "DEC": "DECIDUOUS",
+        "MAP": "MAPLE"
+      },
+
+      "//block": "DELIBERATELY ABSENT. Civil 3D description keys already apply a point style that draws the tree symbol, so inserting a block here would put a second symbol on top of the first. The plugin does only what point styles cannot: trimmed drip lines, collision-avoided labels, draw-order banding. To hand the symbol back to the plugin, restore: block TREE-{species}, blockLayer V-TREE, blockScaleFrom trunk.exact (NOT trunk - that one is rounded for labels), blockScaleDivisor 12; and turn the symbol off in the point style so they do not double up.",
+
+      "dripLine": {
+        "layer": "V-TREE-DRIP",
+        "radiusFrom": "drip",
+        "unify": true
+      },
+
+      "label": {
+        "format": "{trunk}\" {species}",
+        "clusterFormat": "CLUSTER OF {trunk.count} STEMS, AVG {trunk}\" {species}",
+        "layer": "V-TREE-TEXT",
+        "leader": "Auto"
+      },
+
+      "tagPrefix": "T",
+
+      "validate": [
+        { "field": "drip",  "min": 2,   "max": 80,  "severity": "Warning",
+          "message": "Drip radius is outside the expected 2-80 ft range." },
+        { "field": "trunk", "min": 1,   "max": 120, "severity": "Warning",
+          "message": "Trunk diameter is outside the expected 1-120 in range." }
+      ]
+    },
+
+    {
+      "//sign": "EXAMPLE RULE - the office code for a sign is SN, not SIGN, and every SN in the survey so far is bare and therefore draws nothing. Kept because it is the only rule exercising azimuth rotation. NOTE what it does NOT do: it names no block. Civil 3D's description keys place the sign symbol; FTF reads the azimuth and ROTATES that existing marker, then adds the label, tag and modifier treatment. That is the division of labour for every point feature. Rewrite the match as SN if signs are ever coded with data.",
+      "id": "sign",
+      "description": "Sign (SIGN example rule)",
+      "match": "^(?<code>SIGN)\\s+(?<type>[A-Z0-9-]+)(?:\\s+(?<rotation>[0-9.]+))?(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+
+      "//rotation": "Survey azimuth is clockwise from north; AutoCAD is counter-clockwise from east, so 135 becomes 315. The conversion lives in FieldCodes.Geometry.Angles and nowhere else.",
+      "rotation": { "from": "rotation", "mode": "Azimuth" },
+
+      "label": {
+        "format": "{type} SIGN",
+        "layer": "V-SIGN-TEXT",
+        "leader": "Always"
+      },
+
+      "tagPrefix": "S",
+
+      "validate": [
+        { "field": "rotation", "min": 0, "max": 360, "severity": "Warning",
+          "message": "Azimuth is outside 0-360." }
+      ]
+    },
+
+    {
+      "//point-features": "The rules below are common point features added as CONFIGURATION ONLY - no C# changes. Civil 3D's description keys own every symbol; these rules add the finishing: label, rotation, tag, modifier treatment. Each fires only when the description carries data after the code, so a bare CB or MB stays 'nothing to draw'. The grammar is deliberately uniform (CODE <id/size> [modifiers]) and conservative: anything that does not fit lands in the unknown-codes report with its real description, which is how grammar gets corrected against reality rather than guessed. Codes marked 'unconfirmed' were not seen in survey data yet and are inert until they appear.",
+
+      "//sn-sign": "Office sign code. The number after SN is the field azimuth: FTF rotates the existing COGO marker. It never inserts a sign block.",
+      "id": "sn-sign",
+      "description": "Sign",
+      "match": "^(?<code>SN(?:NP)?)\\s+(?<rotation>[0-9]+(?:\\.[0-9]+)?)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "rotation": { "from": "rotation", "mode": "Azimuth" },
+      "label": { "format": "SIGN", "layer": "V-SIGN-TEXT", "leader": "Auto" },
+      "tagPrefix": "S",
+      "validate": [
+        { "field": "rotation", "min": 0, "max": 360, "severity": "Warning",
+          "message": "Azimuth is outside 0-360." }
+      ]
+    },
+
+    {
+      "id": "hydrant",
+      "description": "Fire Hydrant",
+      "match": "^(?<code>WFH|FH)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "HYDRANT {number}", "layer": "V-UTIL-WATR-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "water-valve",
+      "description": "Water Valve",
+      "match": "^(?<code>WVL|WV)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "WATER VALVE {number}", "layer": "V-UTIL-WATR-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "//gas-valve": "Office code unconfirmed - inert until it appears in survey data.",
+      "id": "gas-valve",
+      "description": "Gas Valve",
+      "match": "^(?<code>GV)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "GAS VALVE {number}", "layer": "V-UTIL-NGAS-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "manhole",
+      "description": "Manhole",
+      "match": "^(?<code>S[SD]MH)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "{code} {number}", "layer": "V-UTIL-STRC-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "catch-basin",
+      "description": "Catch Basin",
+      "match": "^(?<code>CBS?)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "{code} {number}", "layer": "V-UTIL-STRM-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "//vault": "Office code unconfirmed - inert until it appears in survey data.",
+      "id": "vault",
+      "description": "Utility Vault",
+      "match": "^(?<code>VLT)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "VAULT {number}", "layer": "V-UTIL-STRC-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "junction-box",
+      "description": "Junction Box",
+      "match": "^(?<code>PJB|JB)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "JUNCTION BOX {number}", "layer": "V-UTIL-POWR-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "mailbox",
+      "description": "Mailbox",
+      "match": "^(?<code>MB)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "MAILBOX {number}", "layer": "V-SITE-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "bollard",
+      "description": "Bollard / Post",
+      "match": "^(?<code>POST|BOL)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "POST {number}", "layer": "V-SITE-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "id": "light-pole",
+      "description": "Light Pole",
+      "match": "^(?<code>LT|LP)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "LIGHT POLE {number}", "layer": "V-UTIL-POWR-TEXT", "leader": "Auto" },
+      "tagPrefix": "L"
+    },
+
+    {
+      "//guy-anchor": "Office code unconfirmed - inert until it appears in survey data.",
+      "id": "guy-anchor",
+      "description": "Guy Anchor",
+      "match": "^(?<code>GUY|GA)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": { "format": "GUY ANCHOR {number}", "layer": "V-UTIL-POWR-TEXT", "leader": "Auto" }
+    },
+
+    {
+      "//control": "Survey control cross-references: 'XMAG AKA 1013' labels the point with its alias. These were the last codes in the unknown report; ZK stays there deliberately until its meaning is confirmed.",
+      "id": "control",
+      "description": "Survey Control",
+      "match": "^(?<code>XMAG|XHT|XNL|FMAG)\\s+(?<aka>AKA\\s+[0-9][0-9 &]*[0-9])\\s*$",
+      "label": { "format": "{aka}", "layer": "V-CTRL-TEXT", "leader": "Auto" }
+    }
+  ],
+
+  "modifiers": [
+    {
+      "id": "cluster",
+      "pattern": "^CL(?<count>[0-9]+)$",
+      "priority": 10,
+      "labelFormat": "CLUSTER OF {count} TREES AVERAGE {trunk}\"",
+      "//block": "Also absent: a modifier that substituted a block would reintroduce the double-symbol this rule exists to avoid.",
+      "stemCountFrom": "count"
+    },
+    {
+      "id": "dead",
+      "pattern": "^DEAD$",
+      "priority": 20,
+      "labelSuffix": " (DEAD)",
+      "layerSuffix": "-DEAD",
+      "flag": true
+    },
+    {
+      "id": "remove",
+      "pattern": "^REM(OVE)?$",
+      "priority": 30,
+      "labelSuffix": " (REMOVE)",
+      "layerSuffix": "-RMV"
+    },
+    {
+      "id": "protected",
+      "pattern": "^PROT(ECTED)?$",
+      "priority": 40,
+      "labelSuffix": " (PROTECTED)",
+      "layerSuffix": "-PROT",
+      "flag": true
+    }
+  ]
+}

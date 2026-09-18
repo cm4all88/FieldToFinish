@@ -1,0 +1,45 @@
+{
+  "version": "1",
+  "drafting": {
+    "lineTypes": [
+      {
+        "name": "Boundary",
+        "enabled": true,
+        "layer": "V-PROP-BNDY-E",
+        "linetype": "",
+        "annotation": "BearingDistance",
+        "featureText": "",
+        "bearingFormat": "QuadrantBearing",
+        "annotationLayer": "",
+        "textStyle": "",
+        "textHeightPlotted": 0.10,
+        "offsetPlotted": 0.04,
+        "placement": "Above",
+        "stacked": false,
+        "mask": true,
+        "bearingSecondsDecimals": 0,
+        "distanceDecimals": 2,
+        "footSymbol": true
+      },
+      {
+        "name": "Centerline",
+        "enabled": true,
+        "layer": "V-ROAD-CNTR-E",
+        "linetype": "",
+        "annotation": "FeatureText",
+        "featureText": "CENTERLINE",
+        "bearingFormat": "QuadrantBearing",
+        "annotationLayer": "",
+        "textStyle": "",
+        "textHeightPlotted": 0.10,
+        "offsetPlotted": 0.04,
+        "placement": "Above",
+        "stacked": false,
+        "mask": false,
+        "bearingSecondsDecimals": 0,
+        "distanceDecimals": 2,
+        "footSymbol": true
+      }
+    ]
+  }
+}

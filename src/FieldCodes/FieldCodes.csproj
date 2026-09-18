@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 so one DLL loads under both .NET Framework 4.8 (C3D 2024)
+         and .NET 8 (C3D 2026). Do NOT add an Autodesk reference to this project. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>FieldCodes</AssemblyName>
+    <RootNamespace>FieldCodes</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- 1591 = missing XML comment on a public member. The doc file is still
+         generated and real warnings are still errors; we just don't require a
+         <summary> on every self-explanatory config/DTO property. -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>FieldCodes.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pin to the version AutoCAD ships in its install directory. Mismatches here
+         surface as a FileLoadException at NETLOAD time on 2024, because the CAD
+         AppDomain has already bound its own copy. Check the version on the
+         Newtonsoft.Json.dll next to acad.exe before changing this.
+         See README for the ILRepack alternative. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>
