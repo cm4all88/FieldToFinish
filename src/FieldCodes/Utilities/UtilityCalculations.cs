@@ -496,7 +496,19 @@ namespace FieldCodes.Utilities
                 ToPipeId = candidate.MatchingPipe != null ? candidate.MatchingPipe.Id : null,
                 Status = manual ? ConnectionStatus.ManualOverride : ConnectionStatus.Confirmed,
                 Confidence = manual ? Confidence.None : candidate.Confidence,
-                OverrideNote = note
+                OverrideNote = note,
+
+                // Anything already drawn for the connection just replaced is now of a
+                // pipe that no longer exists. Carry its id so the drawing path erases
+                // it rather than leaving it in the file looking current.
+                SupersededDraftingId = existing != null && existing.Drafted
+                    ? (existing.SupersededDraftingId ?? existing.Id) : null,
+
+                // A label the drafter positioned or retyped belongs to this pipe at
+                // this structure, not to the far end that changed. It is kept.
+                LabelLocation = existing != null ? existing.LabelLocation : null,
+                LabelTextOverride = existing != null ? existing.LabelTextOverride : null,
+                LabelTextOverrodeGenerated = existing != null ? existing.LabelTextOverrodeGenerated : null
             };
             foreach (var line in candidate.Basis) connection.Basis.Add(line);
             if (manual)

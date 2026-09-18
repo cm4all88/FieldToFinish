@@ -248,6 +248,25 @@ namespace FieldCodes.Utilities
         [JsonProperty("formula")] public string Formula { get; set; }
     }
 
+    /// <summary>A label position the drafter chose, kept so a redraw does not move
+    /// the label back to where FTF would have put it.</summary>
+    public sealed class LabelPlacement
+    {
+        [JsonProperty("x")] public double X { get; set; }
+        [JsonProperty("y")] public double Y { get; set; }
+
+        /// <summary>Rotation in radians as drawn, so a redraw reproduces the reading
+        /// direction the drafter saw when they placed it.</summary>
+        [JsonProperty("rot")] public double RotationRadians { get; set; }
+
+        public LabelPlacement() { }
+
+        public LabelPlacement(double x, double y, double rotationRadians)
+        {
+            X = x; Y = y; RotationRadians = rotationRadians;
+        }
+    }
+
     /// <summary>A link between an observed pipe and the structure at its far end.
     /// Always anchored to a field observation at the near end.</summary>
     public sealed class PipeConnection
@@ -266,6 +285,45 @@ namespace FieldCodes.Utilities
         [JsonProperty("basis")] public List<string> Basis { get; set; }
         [JsonProperty("overrideNote")] public string OverrideNote { get; set; }
         [JsonProperty("drafted")] public bool Drafted { get; set; }
+
+        // ---- drafting record -------------------------------------------------
+        // Drafted on its own says a pipe was drawn once; it cannot say whether the
+        // drawing still matches the observations. These three do, and nothing here
+        // is an observation: they record what FTF drew and when.
+
+        /// <summary>The inputs this connection was last drafted from, as a fingerprint.
+        /// A difference means the drawing no longer matches the field data -- the pipe
+        /// is stale. Null on a connection drafted before this was recorded.</summary>
+        [JsonProperty("draftedFrom")] public string DraftedFingerprint { get; set; }
+
+        /// <summary>When the pipe was last drafted.</summary>
+        [JsonProperty("draftedUtc")] public DateTime? DraftedUtc { get; set; }
+
+        /// <summary>Where the drafter put the pipe label, in drawing coordinates.
+        /// Set only by a deliberate placement; a redraw keeps it instead of returning
+        /// the label to the pipe midpoint.</summary>
+        [JsonProperty("labelAt")] public LabelPlacement LabelLocation { get; set; }
+
+        /// <summary>Label text the drafter typed, replacing the generated text. Null
+        /// while the label is generated. The generated text is kept beside it so the
+        /// override stays visible as an override.</summary>
+        [JsonProperty("labelText")] public string LabelTextOverride { get; set; }
+
+        /// <summary>The generated text at the moment the drafter overrode it.</summary>
+        [JsonProperty("labelTextGenerated")] public string LabelTextOverrodeGenerated { get; set; }
+
+        /// <summary>The connection this one replaced, when that one had already been
+        /// drafted. Its pipe and label are still in the drawing, stamped with the old
+        /// id, and are no longer what the data says -- so the drawing path erases them
+        /// and the window can say the old drafting is stale. Cleared once redrawn.</summary>
+        [JsonProperty("supersededDrafting")] public string SupersededDraftingId { get; set; }
+
+        /// <summary>True when drafting exists in the drawing for a connection this one
+        /// replaced. That geometry is stale by definition.</summary>
+        [JsonIgnore] public bool HasSupersededDrafting { get { return SupersededDraftingId != null; } }
+
+        [JsonIgnore] public bool LabelTextIsOverridden { get { return LabelTextOverride != null; } }
+        [JsonIgnore] public bool LabelWasPlacedByDrafter { get { return LabelLocation != null; } }
 
         public PipeConnection()
         {
