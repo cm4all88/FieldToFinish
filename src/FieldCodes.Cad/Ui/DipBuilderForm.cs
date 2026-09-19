@@ -2025,6 +2025,8 @@ namespace FieldCodes.Cad.Ui
                 };
                 var at = ed.GetPoint(options);
                 if (at.Status != PromptStatus.OK) return false;
+                var styles = UtilityCadService.MissingStyles(db, tr, settings.Dips);
+                if (styles != null) ed.WriteMessage("\n" + styles);
 
                 UtilityCadService.PlaceStructureLabel(db, tr, structure, text, at.Value, settings, version);
                 project.Overrides.RemoveAll(o => o.Target == structureId && o.What == "Structure label text");

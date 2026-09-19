@@ -377,6 +377,8 @@ namespace FieldCodes.Cad
                     UseBasePoint = true, BasePoint = new Point3d(structure.Cad.Easting, structure.Cad.Northing, 0)
                 });
                 if (at.Status != PromptStatus.OK) return;
+                var styles = UtilityCadService.MissingStyles(db, tr, settings.Dips);
+                if (styles != null) ed.WriteMessage("\n" + styles);
 
                 UtilityCadService.PlaceStructureLabel(db, tr, structure, string.Join("\n", lines.ToArray()),
                                                       at.Value.TransformBy(ed.CurrentUserCoordinateSystem), settings, rules.Version);
@@ -395,6 +397,8 @@ namespace FieldCodes.Cad
         {
             var offset = CadUtil.DrawingUnitsPerPlottedUnit(db) * 0.6;
             var placed = 0;
+            var styles = UtilityCadService.MissingStyles(db, tr, settings.Dips);
+            if (styles != null) ed.WriteMessage("\n" + styles);
             foreach (var structure in project.Structures.Where(s => s.Cad != null && s.Field.Pipes.Count > 0))
             {
                 if (UtilityCadService.StructureLabelLocation(db, tr, structure).HasValue) continue;
@@ -415,6 +419,8 @@ namespace FieldCodes.Cad
         {
             var findings = UtilityQc.Evaluate(project, settings.Dips);
             var drawn = 0;
+            var styles = UtilityCadService.MissingStyles(db, tr, settings.Dips);
+            if (styles != null) ed.WriteMessage("\n" + styles);
 
             foreach (var c in project.Connections.Where(c => c.IsAccepted && c.ToStructureId != null && filter(c)).ToList())
             {

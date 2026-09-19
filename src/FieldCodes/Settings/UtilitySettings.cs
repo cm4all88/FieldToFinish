@@ -141,7 +141,13 @@ namespace FieldCodes.Settings
         /// visibly different from the invert word.</summary>
         [JsonProperty("referencePrefixUnconfirmed")] public string PrefixUnconfirmed { get; set; }
 
+        /// <summary>Text style for pipe and structure labels (office: Survey). Empty or missing in the drawing uses the current style.</summary>
         [JsonProperty("textStyle")] public string TextStyle { get; set; }
+
+        /// <summary>Multileader style for structure labels (office: xPMX SURV Text Arrow Anno, the Storm Callout / Sewer
+        /// palette tools). An annotative style makes the label annotative, as the office tools do. Empty or missing in
+        /// the drawing uses the current style.</summary>
+        [JsonProperty("leaderStyle")] public string LeaderStyle { get; set; }
         [JsonProperty("textHeightPlotted")] public double TextHeightPlotted { get; set; }
         [JsonProperty("pipeLabelOffsetPlotted")] public double PipeLabelOffsetPlotted { get; set; }
 
@@ -185,7 +191,8 @@ namespace FieldCodes.Settings
                 MakeSystem(UtilitySystem.Storm, "SD", "V-UTIL-STRM-E", 0.3, 20.0, 1.0, true),
                 MakeSystem(UtilitySystem.Sanitary, "SS", "V-UTIL-SSWR-E", 0.4, 15.0, 3.0, true),
                 // No thresholds have been set for these yet, so their checks start off.
-                MakeSystem(UtilitySystem.Culvert, "CULV", "V-UTIL-CULV-E", 0.0, 0.0, 0.0, false),
+                // The office has no culvert layer: culverts draw on the storm layers (office decision 2026-09-18).
+                MakeSystem(UtilitySystem.Culvert, "CULV", "V-UTIL-STRM-E", 0.0, 0.0, 0.0, false),
                 MakeSystem(UtilitySystem.Water, "W", "V-UTIL-WATR-E", 0.0, 0.0, 0.0, false),
                 MakeSystem(UtilitySystem.Other, "UTIL", "V-UTIL-E", 0.0, 0.0, 0.0, false)
             };
@@ -223,7 +230,9 @@ namespace FieldCodes.Settings
             PrefixSpringline = "SPR";
             PrefixUnconfirmed = "IE?";
 
-            TextStyle = string.Empty;
+            // The office survey standard (PMX Survey Standards C3D.dwt; Storm Callout and Sewer palette tools).
+            TextStyle = "Survey";
+            LeaderStyle = "xPMX SURV Text Arrow Anno";
             TextHeightPlotted = 0.08;
             PipeLabelOffsetPlotted = 0.06;
         }

@@ -337,15 +337,55 @@ namespace FieldCodes.Cad
             var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
             var anchor = new Point3d(structure.Cad.Easting, structure.Cad.Northing, 0);
             var style = Setup.DrawingResources.FindTextStyle(db, tr, us.TextStyle);
+            var leaderStyle = LeaderStyle(db, tr, us.LeaderStyle);
+
+            // The office callout style is annotative: the label is too, sized on paper and shown at the drawing's
+            // annotation scale -- as the Storm Callout and Sewer palette tools make it.
+            var annotative = false;
+            if (!leaderStyle.IsNull)
+            {
+                var s = (MLeaderStyle)tr.GetObject(leaderStyle, OpenMode.ForRead);
+                annotative = s.Annotative == AnnotativeStates.True;
+            }
 
             Ownership.EnsureRegApp(db, tr);
-            using (var leader = CadUtil.NewLeaderedLabel(db, tr, ToMText(text), us.TextHeightPlotted * scale, style,
-                       ProductionLayers.Get(db, tr, standard.StructureLabelLayer, settings), location, anchor))
+            using (var leader = CadUtil.NewLeaderedLabel(db, tr, ToMText(text), us.TextHeightPlotted * (annotative ? 1 : scale), style,
+                       ProductionLayers.Get(db, tr, standard.StructureLabelLayer, settings), location, anchor, leaderStyle))
             {
+                if (annotative)
+                {
+                    leader.Annotative = AnnotativeStates.True;
+                    try { if (db.Cannoscale != null) leader.AddContext(db.Cannoscale); }
+                    catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                }
                 Ownership.Stamp(leader, structure.Id, rulesVersion, FtfEntityKind.StructureLabel, location,
                                 structure.Field.PointNumber);
                 return leader.ObjectId;
             }
+        }
+
+        /// <summary>A multileader style by name; Null when the name is empty or the drawing does not have it.</summary>
+        public static ObjectId LeaderStyle(Database db, Transaction tr, string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return ObjectId.Null;
+            var styles = (DBDictionary)tr.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForRead);
+            return styles.Contains(name) ? styles.GetAt(name) : ObjectId.Null;
+        }
+
+        /// <summary>
+        /// Which of the Dip Builder's text and leader styles this drawing lacks, as a line for the command line; null
+        /// when it has them. The labels still draw, in the drawing's current styles.
+        /// </summary>
+        public static string MissingStyles(Database db, Transaction tr, UtilitySettings us)
+        {
+            var missing = new List<string>();
+            if (!string.IsNullOrWhiteSpace(us.TextStyle) && Setup.DrawingResources.FindTextStyle(db, tr, us.TextStyle).IsNull)
+                missing.Add("text style \"" + us.TextStyle + "\"");
+            if (!string.IsNullOrWhiteSpace(us.LeaderStyle) && LeaderStyle(db, tr, us.LeaderStyle).IsNull)
+                missing.Add("multileader style \"" + us.LeaderStyle + "\"");
+            return missing.Count == 0 ? null
+                : "Dip Builder: this drawing has no " + string.Join(" or ", missing.ToArray()) +
+                  " (the office survey template has them); labels use the drawing's current style instead.";
         }
 
         public static string ToMText(string text)

@@ -36,6 +36,7 @@ namespace FieldCodes.Cad.Setup
         private TextBox _prefixTop;
         private TextBox _prefixSpring;
         private TextBox _textHeight;
+        private TextBox _dipTextStyle, _dipLeaderStyle;
         private TextBox _labelOffset;
         private DataGridView _thresholds;
         private CheckedListBox _checks;
@@ -151,6 +152,8 @@ namespace FieldCodes.Cad.Setup
             _slopeDecimals = TextRow("Slope decimals", null);
             _textHeight = TextRow("Text height (plotted)", null);
             _labelOffset = TextRow("Pipe label offset (plotted)", null);
+            _dipTextStyle = TextRow("Text style", "Office: Survey. Empty or not in the drawing uses the current style.", 240);
+            _dipLeaderStyle = TextRow("Structure label leader style", "Office: xPMX SURV Text Arrow Anno (annotative, as the Storm Callout tool). Empty uses the current style.", 240);
 
             Heading("Label wording");
             Note("Tokens in braces are filled in; a part in [square brackets] disappears when " +
@@ -201,6 +204,8 @@ namespace FieldCodes.Cad.Setup
             _slopeDecimals.Text = d.SlopeDecimals.ToString(CultureInfo.InvariantCulture);
             _textHeight.Text = Fmt(d.TextHeightPlotted);
             _labelOffset.Text = Fmt(d.PipeLabelOffsetPlotted);
+            _dipTextStyle.Text = d.TextStyle ?? string.Empty;
+            _dipLeaderStyle.Text = d.LeaderStyle ?? string.Empty;
             _pipeLabel.Text = d.PipeLabelFormat;
             _header.Text = d.StructureHeaderFormat;
             _rim.Text = d.RimLineFormat;
@@ -291,6 +296,8 @@ namespace FieldCodes.Cad.Setup
             i = d.SlopeDecimals; ReadInt(_slopeDecimals, "Dips: slope decimals", x => x >= 0 && x <= 4, "must be between 0 and 4", problems, ref i); d.SlopeDecimals = i;
             v = d.TextHeightPlotted; ReadDouble(_textHeight, "Dips: text height", x => x > 0, "must be greater than zero", problems, ref v); d.TextHeightPlotted = v;
             v = d.PipeLabelOffsetPlotted; ReadDouble(_labelOffset, "Dips: pipe label offset", x => x >= 0, "cannot be negative", problems, ref v); d.PipeLabelOffsetPlotted = v;
+            d.TextStyle = (_dipTextStyle.Text ?? string.Empty).Trim();
+            d.LeaderStyle = (_dipLeaderStyle.Text ?? string.Empty).Trim();
 
             d.PipeLabelFormat = Required(_pipeLabel, "pipe label", problems, d.PipeLabelFormat);
             d.StructureHeaderFormat = Required(_header, "structure first line", problems, d.StructureHeaderFormat);

@@ -181,9 +181,19 @@ namespace FieldCodes.Cad
                                                ObjectId styleId, ObjectId layerId,
                                                Point3d textLocation, Point3d anchor)
         {
+            return NewLeaderedLabel(db, tr, contents, textHeight, styleId, layerId, textLocation, anchor, ObjectId.Null);
+        }
+
+        /// <summary>As above with a named multileader style (<paramref name="leaderStyleId"/>); Null uses the current one.</summary>
+        public static MLeader NewLeaderedLabel(Database db, Transaction tr,
+                                               string contents, double textHeight,
+                                               ObjectId styleId, ObjectId layerId,
+                                               Point3d textLocation, Point3d anchor, ObjectId leaderStyleId)
+        {
             var leader = new MLeader();
             leader.SetDatabaseDefaults(db);
-            if (!db.MLeaderstyle.IsNull) leader.MLeaderStyle = db.MLeaderstyle;
+            if (!leaderStyleId.IsNull) leader.MLeaderStyle = leaderStyleId;
+            else if (!db.MLeaderstyle.IsNull) leader.MLeaderStyle = db.MLeaderstyle;
             leader.ContentType = ContentType.MTextContent;
 
             using (var text = new MText())
