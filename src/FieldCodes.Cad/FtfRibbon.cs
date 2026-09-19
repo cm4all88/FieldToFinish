@@ -543,7 +543,6 @@ namespace FieldCodes.Cad
             });
         }
 
-        /// <summary>Strip easement: a hatched band between two parallel curves.</summary>
         /// <summary>A recorded sheet with a closed traverse drawn on it.</summary>
         public static ImageSource Record(int px)
         {
@@ -565,6 +564,7 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>Strip easement: a hatched band between two parallel curves.</summary>
         public static ImageSource Easement(int px)
         {
             return Render(px, dc =>

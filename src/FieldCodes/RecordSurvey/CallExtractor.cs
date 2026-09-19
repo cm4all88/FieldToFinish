@@ -54,6 +54,7 @@ namespace FieldCodes.RecordSurvey
             {
                 if (page.Lines.Select(l => l.PassRotationDegrees).Distinct().Count() > 1)
                     page.Lines = PageGeometry.Merge(page.Lines);
+                JoinProse(page);
                 foreach (var line in page.Lines)
                     classified.Add(EntityClassifier.Classify(line, page.Number));
             }
@@ -77,6 +78,88 @@ namespace FieldCodes.RecordSurvey
                 project.Warnings.Add(prose.Count + " call(s) were read from the legal description text; they are grouped as the open figure \"Description\" in reading order, separate from the plan.");
             }
             return project;
+        }
+
+        // ------------------------------------------------------------ prose paragraphs
+
+        private static readonly Regex ProseMarker = new Regex(
+            @"\b(THENCE|BEGINNING|DESCRIBED|COMMENCING|LYING|THEREOF|SAID|ALONG|EXCEPT|SUBJECT|PORTION|CONTAINING|THEREFROM|TOGETHER)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        private static int LetterWords(string text)
+        {
+            return (text ?? string.Empty).Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).Count(w => w.Length >= 2 && w.All(char.IsLetter));
+        }
+
+        private static bool ProseLike(DocumentLine line)
+        {
+            var words = LetterWords(line.Text);
+            return words >= 4 || (words >= 1 && ProseMarker.IsMatch(line.Text ?? string.Empty));
+        }
+
+        /// <summary>
+        /// A legal description wraps: "thence S 88°" ends one line and "26'42"E along said line 634.31'
+        /// to the west line" starts the next. The OCR gives one line per printed line, so the paragraph
+        /// is put back together before the calls are read: horizontal lines of running text (a
+        /// description word such as THENCE or BEGINNING in the first, four or more words in each)
+        /// that sit one under the other, at the same height and overlapping sideways, become one
+        /// line whose box is their union. Stacked plan labels and monument notes are left alone.
+        /// </summary>
+        public static void JoinProse(DocumentPage page)
+        {
+            if (page == null || page.Lines == null || page.Lines.Count < 2) return;
+            var horizontal = page.Lines
+                .Where(l => l.Box != null && Math.Abs(PageGeometry.Normalize(l.Box.RotationDegrees)) < 15.0)
+                .OrderBy(l => l.Box.Y).ThenBy(l => l.Box.X).ToList();
+            var used = new HashSet<DocumentLine>();
+            var joined = new List<KeyValuePair<DocumentLine, List<DocumentLine>>>();
+
+            foreach (var seed in horizontal)
+            {
+                if (used.Contains(seed) || !ProseLike(seed) || !ProseMarker.IsMatch(seed.Text ?? string.Empty)) continue;
+                var paragraph = new List<DocumentLine> { seed };
+                used.Add(seed);
+                var last = seed;
+                while (true)
+                {
+                    DocumentLine best = null;
+                    var bestGap = double.MaxValue;
+                    foreach (var c in horizontal)
+                    {
+                        if (used.Contains(c) || !ProseLike(c)) continue;
+                        var h = Math.Max(last.Box.Height, c.Box.Height);
+                        if (h <= 0) continue;
+                        var ratio = c.Box.Height / Math.Max(1e-9, last.Box.Height);
+                        if (ratio < 0.6 || ratio > 1.6) continue;
+                        var gap = c.Box.Y - last.Box.Bottom;
+                        if (gap < -0.3 * h || gap > 0.9 * h) continue;
+                        var overlap = Math.Min(c.Box.Right, last.Box.Right) - Math.Max(c.Box.X, last.Box.X);
+                        if (overlap < 0.3 * Math.Min(c.Box.Width, last.Box.Width)) continue;
+                        if (gap < bestGap) { bestGap = gap; best = c; }
+                    }
+                    if (best == null) break;
+                    paragraph.Add(best);
+                    used.Add(best);
+                    last = best;
+                }
+                if (paragraph.Count > 1) joined.Add(new KeyValuePair<DocumentLine, List<DocumentLine>>(seed, paragraph));
+            }
+            if (joined.Count == 0) return;
+
+            var members = new HashSet<DocumentLine>(joined.SelectMany(j => j.Value));
+            var result = page.Lines.Where(l => !members.Contains(l)).ToList();
+            foreach (var j in joined)
+            {
+                var box = j.Value[0].Box;
+                foreach (var m in j.Value.Skip(1)) box = box.Union(m.Box);
+                var line = new DocumentLine(string.Join(" ", j.Value.Select(m => (m.Text ?? string.Empty).Trim())), box, j.Value.Min(m => m.Confidence))
+                {
+                    PassRotationDegrees = j.Key.PassRotationDegrees
+                };
+                foreach (var m in j.Value) line.Words.AddRange(m.Words);
+                result.Add(line);
+            }
+            page.Lines = result;
         }
 
         // ------------------------------------------------------------ document
@@ -239,7 +322,9 @@ namespace FieldCodes.RecordSurvey
                 switch (t.Kind)
                 {
                     case SurveyTokenKind.Bearing:
-                        if (t.Read == null || !t.Read.Ok) break;
+                        // A bearing that could not be read still opens a fragment: the course exists on the
+                        // page, and the review shows it with the reason and no value.
+                        if (t.Read == null) break;
                         if (current != null && current.Bearing != null && current.Distance == null && current.Tag.Length == 0)
                         {
                             // Two bearings in a row (R and M with distances after): keep both fragments.
@@ -250,6 +335,15 @@ namespace FieldCodes.RecordSurvey
                         break;
                     case SurveyTokenKind.Distance:
                         if (t.Read == null || !t.Read.Ok) break;
+                        if (l.InProse)
+                        {
+                            // In running text the distance follows its bearing and carries a unit ("660 feet",
+                            // "634.31'"); a bare number is a section, lot or page number, and a second
+                            // distance after the course is a tie or an offset, not another course.
+                            if (current == null || current.Bearing == null || current.Distance != null || t.Read.Unit.Length == 0) break;
+                            current.Distance = t;
+                            break;
+                        }
                         if (current == null || current.Distance != null)
                         {
                             // A second distance after one bearing: "N..E 1320.45' (R) 1320.38' (M)" -- a new
@@ -279,6 +373,7 @@ namespace FieldCodes.RecordSurvey
             if (next.Bearing == null) return true;                       // a distance-only fragment continues the course
             if (ReferenceEquals(next.Bearing, first.Bearing)) return true;
             if (first.Bearing == null || next.Bearing.Read == null || first.Bearing.Read == null) return false;
+            if (!next.Bearing.Read.Ok || !first.Bearing.Read.Ok) return false;
             // The record and measured bearings of one course are within a degree of each other and one is tagged.
             var close = Math.Abs(CurveSolver.AngleDiff(first.Bearing.Read.Value, next.Bearing.Read.Value)) < 1.0;
             return close && (next.Tag.Length > 0 || first.Tag.Length > 0);
@@ -298,6 +393,11 @@ namespace FieldCodes.RecordSurvey
                     var existing = call.Records.FirstOrDefault(r => r.SourceId == tag && (r.Empty || (f.Bearing == null) != (r.AzimuthDegrees == null)));
                     if (existing == null) { existing = new RecordValue { SourceId = tag }; call.Records.Add(existing); }
                     target = existing;
+                }
+                if (f.Bearing != null && f.Bearing.Read != null && !f.Bearing.Read.Ok)
+                {
+                    call.Notes.Add("Bearing \"" + f.Bearing.Text + "\" could not be read: " + (f.Bearing.Read.Error ?? "not a bearing") + " Enter it from the image.");
+                    target.Confidence = 0;
                 }
                 if (f.Bearing != null && f.Bearing.Read != null && f.Bearing.Read.Ok)
                 {
@@ -485,6 +585,12 @@ namespace FieldCodes.RecordSurvey
                 call.Source = new SourceRef(group[0].Page, box, string.Join(" | ", group.Select(g => g.Line.Text).ToArray()), group.Min(g => g.Line.EffectiveConfidence));
                 call.PageHint = box;
                 call.Confidence = confidence;
+                // A key with nothing usable after it ("a 3") is not a curve; an untagged group that
+                // states no element at all is dropped rather than listed as an empty curve.
+                if (call.Curve.StatedElements.Count == 0 && string.IsNullOrEmpty(call.Curve.Tag) && !call.Curve.Radius.HasValue && !call.Curve.DeltaDegrees.HasValue && !call.Curve.ArcLength.HasValue && !call.Curve.ChordLength.HasValue && !call.Curve.TangentLength.HasValue)
+                {
+                    continue;
+                }
                 FinishCurve(call, options);
                 project.Calls.Add(call);
             }
@@ -536,8 +642,20 @@ namespace FieldCodes.RecordSurvey
                 var value = i + 1 < tokens.Count ? tokens[i + 1] : null;
                 if (value == null || value.Read == null || !value.Read.Ok) { call.Notes.Add("Curve element " + t.Name + " has no readable value after it."); continue; }
                 var src = new SourceRef(l.Page, l.Line.Box, t.Text + value.Text, l.Line.EffectiveConfidence);
-                confidence = Math.Min(confidence, value.Read.Confidence);
                 var name = t.Name;
+                if (name == "A" || name == "DELTA")
+                {
+                    // "A" and the OCR shapes of Δ ("4=", "D") are one letter away from noise: "a 3" is not an arc
+                    // of three feet. They count only with a value written like a curve element -- a degree sign,
+                    // decimals or a unit.
+                    var v = value.Text ?? string.Empty;
+                    if (value.Kind == SurveyTokenKind.Distance && v.IndexOf('.') < 0 && v.IndexOf('\'') < 0 && !Regex.IsMatch(v, @"[A-Z]{2}", RegexOptions.IgnoreCase))
+                    {
+                        call.Notes.Add("'" + t.Text.Trim() + " " + v.Trim() + "' was not read as a curve element: a bare whole number after " + t.Text.Trim() + ".");
+                        continue;
+                    }
+                }
+                confidence = Math.Min(confidence, value.Read.Confidence);
                 if (name == "A") name = value.Kind == SurveyTokenKind.Angle ? "DELTA" : "L";
                 if (name == "DELTA" && t.Text.Trim().StartsWith("D", StringComparison.OrdinalIgnoreCase) && !t.Text.Contains("Δ") && !t.Text.ToUpperInvariant().Contains("DELTA"))
                 {

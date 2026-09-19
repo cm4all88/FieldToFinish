@@ -110,7 +110,7 @@ namespace FieldCodes.RecordSurvey
             return kept.OrderBy(l => l.Box.Y).ThenBy(l => l.Box.X).ToList();
         }
 
-        internal static bool IsSameSpot(PageBox a, PageBox b, double fraction)
+        public static bool IsSameSpot(PageBox a, PageBox b, double fraction)
         {
             var overlap = a.Overlap(b);
             if (overlap <= 0) return false;

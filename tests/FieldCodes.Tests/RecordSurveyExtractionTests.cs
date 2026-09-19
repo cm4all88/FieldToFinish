@@ -28,7 +28,106 @@ public sealed class RecordSurveyExtractionTests
 
     private static string Sample(string name) => Path.Combine(AppContext.BaseDirectory, "Samples", name);
 
+    // ---------------------------------------------------------------- curve keys that are one letter from noise
+
+    [Fact]
+    public void ABareWholeNumberAfterAOrDeltaIsNotACurveElement()
+    {
+        Assert.Empty(Extract(L("a 3", 800, 900)).Calls.Where(c => c.Kind == CallKind.Curve));
+        Assert.Empty(Extract(L("4:4,", 800, 900)).Calls.Where(c => c.Kind == CallKind.Curve));
+        Assert.Empty(Extract(L("d= 70", 800, 900)).Calls.Where(c => c.Kind == CallKind.Curve));
+
+        var real = Extract(L("R=250.00' A=100.00'", 800, 900));
+        var c = Assert.Single(real.Calls);
+        Assert.Equal(100.0, c.Curve!.ArcLength!.Value, 6);
+        var angle = Extract(L("R=250.00' A 22°55'06\"", 800, 900));
+        Assert.Equal(22 + 55 / 60.0 + 6 / 3600.0, Assert.Single(angle.Calls).Curve!.DeltaDegrees!.Value, 9);
+    }
+
+    // ---------------------------------------------------------------- legal description prose
+
+    [Fact]
+    public void AWrappedDescriptionLineIsJoinedSoTheCallReadsAcrossTheBreak()
+    {
+        var page = Doc(
+            L("thence S 88°", 400, 900),
+            L("26'42\"E along said line 634.3/' to the west line of Tract 202 of said", 400, 935),
+            L("plat; thence N 1°22'58\" W along said west line 300 feet to the", 400, 970)).Pages[0];
+        CallExtractor.JoinProse(page);
+        var line = Assert.Single(page.Lines);
+        Assert.StartsWith("thence S 88° 26'42\"E along", line.Text);
+        Assert.Equal(400, line.Box.X);
+        Assert.Equal(900, line.Box.Y);
+
+        var p = CallExtractor.Extract(Doc(
+            L("thence S 88°", 400, 900),
+            L("26'42\"E along said line 634.3/' to the west line of Tract 202 of said", 400, 935),
+            L("plat; thence N 1°22'58\" W along said west line 300 feet to the", 400, 970)), new ExtractionOptions());
+        Assert.Equal(2, p.Calls.Count);
+        Assert.All(p.Calls, c => Assert.Equal("Description", c.Figure));
+        var first = p.Calls[0];
+        Assert.Equal(180 - (88 + 26 / 60.0 + 42 / 3600.0), first.Records[0].AzimuthDegrees!.Value, 9);
+        Assert.Equal(634.31, first.Records[0].DistanceFeet!.Value, 6);
+        var second = p.Calls[1];
+        Assert.Equal(360 - (1 + 22 / 60.0 + 58 / 3600.0), second.Records[0].AzimuthDegrees!.Value, 9);
+        Assert.Equal(300.0, second.Records[0].DistanceFeet!.Value, 6);
+    }
+
+    [Fact]
+    public void BareNumbersInProseAreNotDistancesAndOnlyTheFirstDistanceBelongsToTheCourse()
+    {
+        var p = Extract(L("of said Section 18; thence N 4°53'45\" E along the east line 300 feet to a point 30 feet from the corner", 400, 900));
+        var c = Assert.Single(p.Calls);
+        Assert.Equal("Description", c.Figure);
+        var r = Assert.Single(c.Records);
+        Assert.Equal(4 + 53 / 60.0 + 45 / 3600.0, r.AzimuthDegrees!.Value, 9);
+        Assert.Equal(300.0, r.DistanceFeet!.Value, 6);
+    }
+
+    [Fact]
+    public void StackedPlanNotesAreNotJoinedIntoAParagraph()
+    {
+        var page = Doc(
+            L("FOUND 1/2\" REBAR WITH CAP LS 12345", 400, 900),
+            L("SET 5/8\" REBAR WITH CAP LS 12345", 400, 935),
+            L("N 89°42'18\" E", 900, 1200),
+            L("150.00'", 900, 1235)).Pages[0];
+        CallExtractor.JoinProse(page);
+        Assert.Equal(4, page.Lines.Count);
+    }
+
     // ---------------------------------------------------------------- courses
+
+    [Fact]
+    public void ABearingThatCannotBeReadStillListsTheCourseWithTheReason()
+    {
+        // 81 seconds is not a bearing; the course is on the page all the same, with its distance below it.
+        var p = Extract(L("S 1°38'8I\" E", 800, 900), L("150.00'", 800, 935));
+        var c = Assert.Single(p.Calls);
+        Assert.Equal(CallStatus.NeedsReview, c.Status);
+        Assert.False(c.IsBuildable);
+        Assert.Contains(c.Notes, n => n.Contains("could not be read") && n.Contains("Seconds must be under 60"));
+        var r = Assert.Single(c.Records);
+        Assert.Null(r.AzimuthDegrees);
+        Assert.Equal(150.0, r.DistanceFeet!.Value, 6);
+        Assert.Equal(0.0, c.Confidence);
+
+        var rows = new ReviewSession(p, new FieldCodes.Settings.RecordSurveySettings()).Rows();
+        var row = Assert.Single(rows);
+        Assert.Equal("(none)", row.Bearing);
+        Assert.Equal("150.00'", row.Distance);
+    }
+
+    [Fact]
+    public void ABearingOnItsOwnShowsInTheReviewWithNoDistance()
+    {
+        var p = Extract(L("N 89°42'18\" E", 800, 900));
+        var c = Assert.Single(p.Calls);
+        Assert.False(c.IsBuildable);
+        var row = Assert.Single(new ReviewSession(p, new FieldCodes.Settings.RecordSurveySettings()).Rows());
+        Assert.Equal("N 89°42'18\" E", row.Bearing);
+        Assert.Equal("(none)", row.Distance);
+    }
 
     [Fact]
     public void ABearingAndDistanceOnOneLineBecomeOneRecordedCall()

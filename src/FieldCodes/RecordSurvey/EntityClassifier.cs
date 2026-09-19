@@ -105,6 +105,11 @@ namespace FieldCodes.RecordSurvey
 
             result.Tokens = SurveyCallParser.Tokenize(text);
             var bearings = result.Tokens.Count(t => t.Kind == SurveyTokenKind.Bearing && t.Read != null && t.Read.Ok);
+            // Quadrant letters, digits and a degree sign in the right places, but a value that cannot be
+            // right (81 seconds, a degree group that is no number): a bearing on the page that could not
+            // be read. Kept as a course with no bearing so the review shows the spot instead of losing it.
+            var unreadable = result.Tokens.Count(t => t.Kind == SurveyTokenKind.Bearing && (t.Read == null || !t.Read.Ok)
+                                                       && t.Text.Any(char.IsDigit) && t.Text.IndexOf('°') >= 0);
             var distances = result.Tokens.Count(t => t.Kind == SurveyTokenKind.Distance && t.Read != null && t.Read.Ok);
             var angles = result.Tokens.Count(t => t.Kind == SurveyTokenKind.Angle && t.Read != null && t.Read.Ok);
             var keys = result.Tokens.Where(t => t.Kind == SurveyTokenKind.CurveKey).Select(t => t.Name).ToList();
@@ -153,6 +158,7 @@ namespace FieldCodes.RecordSurvey
             result.InProse = words.Count(w => w.Length >= 2 && w.All(char.IsLetter)) >= 4;
             if (bearings >= 1 && distances >= 1) return Set(result, SurveyEntityKind.BearingDistance, result.InProse ? 0.85 : 0.95, null);
             if (bearings >= 1) return Set(result, SurveyEntityKind.Bearing, result.InProse ? 0.8 : 0.9, null);
+            if (unreadable >= 1) return Set(result, distances >= 1 ? SurveyEntityKind.BearingDistance : SurveyEntityKind.Bearing, 0.5, null);
 
             // Everything that is prose.
             if (MonumentRx.IsMatch(text) || MonumentBare.IsMatch(text)) return Set(result, SurveyEntityKind.Monument, 0.85, null);

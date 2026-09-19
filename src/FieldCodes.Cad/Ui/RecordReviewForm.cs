@@ -200,8 +200,8 @@ namespace FieldCodes.Cad.Ui
             foreach (var en in _settings.RecordSurvey.Entities.Where(x => x.Enabled)) _objectType.Items.Add(en.Name);
             type.Controls.Add(_objectType);
             type.Controls.Add(Btn("Assign", (s, e) => Assign()));
-            type.Controls.Add(Btn("Up", (s, e) => Move(-1)));
-            type.Controls.Add(Btn("Down", (s, e) => Move(1)));
+            type.Controls.Add(Btn("Up", (s, e) => MoveCourse(-1)));
+            type.Controls.Add(Btn("Down", (s, e) => MoveCourse(1)));
             col2.Controls.Add(type);
             table.Controls.Add(col2, 1, 0);
 
@@ -438,7 +438,7 @@ namespace FieldCodes.Cad.Ui
             LoadRows();
         }
 
-        private void Move(int delta)
+        private void MoveCourse(int delta)
         {
             var call = Selected();
             if (call == null) return;

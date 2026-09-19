@@ -254,6 +254,8 @@ public sealed class RecordSurveyOcrNoiseTests
     [InlineData("S$ 88° 26 42\" F", 180 - (88 + 26 / 60.0 + 42 / 3600.0))]     // stray $, no minute mark, F for E
     [InlineData("N O° 47\"W", 360 - 47 / 60.0)]                                 // O for 0, second mark on the minutes
     [InlineData("589° 33 Ww", 180 + 89 + 33 / 60.0)]                            // 5 for S, doubled W
+    [InlineData("N 89°43'/4\"W", 360 - (89 + 43 / 60.0 + 14 / 3600.0))]        // slash for a 1 in the seconds
+    [InlineData("N 4°§3'45\"E", 4 + 53 / 60.0 + 45 / 3600.0)]                   // section sign for a 5
     [InlineData("NB7°OS W", 360 - (87 + 5 / 60.0))]                             // B for 8, OS for 05
     [InlineData("$ 68°24 29\"E", 180 - (68 + 24 / 60.0 + 29 / 3600.0))]
     public void OcrDamagedBearingsAreReadByPositionAtLowerConfidence(string text, double azimuth)
@@ -378,5 +380,40 @@ public sealed class RecordSurveyOcrNoiseTests
             EntityClassifier.Classify(new DocumentLine("DEDICATION", new PageBox(0, 0, 100, 40), 0.9), 1)
         };
         Assert.Equal("Subdivision Plat", EntityClassifier.SurveyTypeFrom(lines));
+    }
+
+    [Theory]
+    [InlineData("/4", "14", 1)]
+    [InlineData("§3", "53", 1)]
+    [InlineData("OO", "00", 2)]
+    [InlineData("1320.45", "1320.45", 0)]
+    [InlineData("LOT", "LOT", 0)]
+    public void DigitRepairCoversEveryLookAlikeAndLeavesWordsAlone(string token, string expected, int repairs)
+    {
+        int n;
+        Assert.Equal(expected, SurveyCallParser.RepairDigits(token, out n));
+        Assert.Equal(repairs, n);
+    }
+
+    [Fact]
+    public void ABearingWithImpossibleSecondsIsRefusedWithTheReason()
+    {
+        var r = SurveyCallParser.ParseBearing("S 1°38'8I\" E");
+        Assert.False(r.Ok);
+        Assert.Contains("Seconds must be under 60", r.Error);
+        Assert.Contains("81", r.Error);
+    }
+
+    [Fact]
+    public void ASlashInTheDecimalsIsAOneButAFractionIsNotADistance()
+    {
+        var d = SurveyCallParser.ParseDistance("634.3/'");
+        Assert.True(d.Ok);
+        Assert.Equal(634.31, d.Value, 6);
+        Assert.Equal("ft", d.Unit);
+
+        Assert.DoesNotContain(SurveyCallParser.Tokenize("NE 1/4 of the NE 1/4"), t => t.Kind == SurveyTokenKind.Distance);
+        Assert.DoesNotContain(SurveyCallParser.Tokenize("FOUND 1/2\" REBAR"), t => t.Kind == SurveyTokenKind.Distance);
+        Assert.Contains(SurveyCallParser.Tokenize("N 45°00'00\" E 1320.45'"), t => t.Kind == SurveyTokenKind.Distance && t.Read.Ok && Math.Abs(t.Read.Value - 1320.45) < 1e-9);
     }
 }

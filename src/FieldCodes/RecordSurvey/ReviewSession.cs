@@ -92,8 +92,11 @@ namespace FieldCodes.RecordSurvey
             };
             if (c.Kind == CallKind.Line)
             {
-                row.Bearing = v != null && v.AzimuthDegrees.HasValue ? SurveyDirection.FormatBearing(v.AzimuthDegrees.Value, s.BearingSecondsDecimals, "°", s.BearingSpaces) : "(none)";
-                row.Distance = v != null && v.DistanceFeet.HasValue ? SurveyDirection.FormatDistance(v.DistanceFeet.Value, s.DistanceDecimals, s.FootSymbol) : "(none)";
+                // An incomplete course has no geometry value yet; show what was read so the reviewer
+                // types only the missing half.
+                var shown = v ?? (c.Measured != null && !c.Measured.Empty ? c.Measured : c.Records.FirstOrDefault(r => !r.Empty));
+                row.Bearing = shown != null && shown.AzimuthDegrees.HasValue ? SurveyDirection.FormatBearing(shown.AzimuthDegrees.Value, s.BearingSecondsDecimals, "°", s.BearingSpaces) : "(none)";
+                row.Distance = shown != null && shown.DistanceFeet.HasValue ? SurveyDirection.FormatDistance(shown.DistanceFeet.Value, s.DistanceDecimals, s.FootSymbol) : "(none)";
                 row.CurveInfo = string.Empty;
             }
             else

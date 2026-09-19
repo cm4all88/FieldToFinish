@@ -106,14 +106,17 @@ namespace FieldCodes.RecordSurvey
         /// into a confidence penalty. A token with more letters than digits is left alone --
         /// that is a word, not a damaged number.
         /// </summary>
+        /// <summary>Characters OCR gives for a digit: letters, the slash for a 1, the section sign for a 5.</summary>
+        public const string LookAlikes = "OQILSBZoqilsbz/§";
+
         public static string RepairDigits(string token, out int repairs)
         {
             repairs = 0;
             if (string.IsNullOrEmpty(token)) return token;
-            if (token.Count(char.IsLetter) == 0) return token;
+            if (!token.Any(c => LookAlikes.IndexOf(c) >= 0)) return token;
             // Only a token made of digits, separators and the known look-alikes is repaired; a word is
             // a word. (The parsers' patterns already restrict their slots to exactly these characters.)
-            if (token.Any(c => !char.IsDigit(c) && c != '.' && c != ',' && "OQILSBZoqilsbz/".IndexOf(c) < 0)) return token;
+            if (token.Any(c => !char.IsDigit(c) && c != '.' && c != ',' && LookAlikes.IndexOf(c) < 0)) return token;
 
             var sb = new StringBuilder(token.Length);
             foreach (var c in token)
@@ -123,7 +126,7 @@ namespace FieldCodes.RecordSurvey
                 {
                     case 'O': case 'Q': r = '0'; break;
                     case 'I': case 'L': case '/': r = '1'; break;
-                    case 'S': r = '5'; break;
+                    case 'S': case '§': r = '5'; break;
                     case 'B': r = '8'; break;
                     case 'Z': r = '2'; break;
                 }
@@ -145,8 +148,8 @@ namespace FieldCodes.RecordSurvey
         // is one letter read twice; a lone F after a full body is an E. Degrees may be one to three digits so
         // a misread 189 is refused, not folded.
         private static readonly Regex BearingRegex = new Regex(
-            @"(?<ns>(?:\b(?:N|S|NORTH|SOUTH))|(?<![A-Z0-9])(?:5|\$|§)(?=\s*\$?\s*[0-9OIlSB/]{1,3}\s*°))\s*\$?\s*" +
-            @"(?<body>[0-9OIlSB/](?:[0-9OIlSB/°'""\s.\-]|D(?![A-Z])){0,22}?)\s*" +
+            @"(?<ns>(?:\b(?:N|S|NORTH|SOUTH))|(?<![A-Z0-9])(?:5|\$|§)(?=\s*\$?\s*[0-9OIlSB/§]{1,3}\s*°))\s*\$?\s*" +
+            @"(?<body>[0-9OIlSB/§](?:[0-9OIlSB/§°'""\s.\-]|D(?![A-Z])){0,22}?)\s*" +
             @"(?<ew>(?:EAST|WEST|E{1,2}|W{1,2}|EF|F)\b)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
@@ -236,7 +239,7 @@ namespace FieldCodes.RecordSurvey
             var current = new StringBuilder();
             foreach (var c in text)
             {
-                if (char.IsDigit(c) || c == '.' || "OQILSBZoqilsbz/".IndexOf(c) >= 0) { current.Append(c); continue; }
+                if (char.IsDigit(c) || c == '.' || LookAlikes.IndexOf(c) >= 0) { current.Append(c); continue; }
                 if (current.Length > 0) { groups.Add(current.ToString()); current.Length = 0; marks.Add(c == '°' || c == '\'' || c == '"' ? c : ' '); }
                 else if (c == '°' || c == '\'' || c == '"') { if (marks.Count > 0) marks[marks.Count - 1] = c; }
             }
@@ -286,7 +289,7 @@ namespace FieldCodes.RecordSurvey
         // minutes and seconds are read by position, any mark or none between them. Three plain numbers
         // (45 12 10) are an angle only when nothing else is on the line.
         private static readonly Regex AngleRegex = new Regex(
-            @"(?<![A-Z0-9])(?<body>[0-9OIlSB/]{1,3}\s*°(?:\s*[0-9OIlSB/]{1,2}(?:\.[0-9]+)?(?:\s*[°'""]|(?![0-9OIlSB.]))(?:\s*[0-9OIlSB/]{1,2}(?:\.[0-9OIlSB]+)?(?:\s*[°'""])?)?)?)",
+            @"(?<![A-Z0-9])(?<body>[0-9OIlSB/§]{1,3}\s*°(?:\s*[0-9OIlSB/§]{1,2}(?:\.[0-9]+)?(?:\s*[°'""]|(?![0-9OIlSB.]))(?:\s*[0-9OIlSB/§]{1,2}(?:\.[0-9OIlSB]+)?(?:\s*[°'""])?)?)?)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly Regex AngleLooseRegex = new Regex(
@@ -334,8 +337,11 @@ namespace FieldCodes.RecordSurvey
         public const double FeetPerRod = 16.5;
 
         // 1320.45', 1,320.45 FT, 1320.45 FEET, 402.44 M, 20.00 CH, 4 RODS, or a bare number.
+        // 1320.45', 1,320.45', 660 FEET, 20.117 M, 20 CH, 4 RDS. A slash inside the decimals is a 1 the OCR
+        // could not shape (634.3/' is 634.31'); a slash between whole numbers is a fraction (NE 1/4, 1/2" REBAR),
+        // and neither side of it is a distance.
         private static readonly Regex DistanceRegex = new Regex(
-            @"(?<![A-Z0-9°'"".-])(?<num>(?:[0-9OIlSB]{1,3}(?:,[0-9OIlSB]{3})+|[0-9OIlSB]+)(?:\.[0-9OIlSB]+)?|\.[0-9OIlSB]+)\s*" +
+            @"(?<![A-Z0-9°'"".\-/])(?<num>(?:[0-9OIlSB]{1,3}(?:,[0-9OIlSB]{3})+|[0-9OIlSB]+)(?:\.[0-9OIlSB/§]+)?|\.[0-9OIlSB/§]+)(?!/[0-9])\s*" +
             @"(?<unit>'|FT\.?|FEET|METERS|METRES|M\b|CH\.?|CHAINS|CHS|RODS|RDS|RD\.?)?(?!\s*°)(?![0-9])",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
