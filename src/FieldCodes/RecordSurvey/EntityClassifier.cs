@@ -30,6 +30,8 @@ namespace FieldCodes.RecordSurvey
         public const string Legend = "Legend";
         public const string Note = "Note";
         public const string Certification = "Certification";
+        /// <summary>A bare whole number on its own: a lot number or a distance written without a foot mark -- the assembly decides which.</summary>
+        public const string Number = "Number";
         public const string Other = "Other";
     }
 
@@ -43,6 +45,9 @@ namespace FieldCodes.RecordSurvey
         public List<SurveyToken> Tokens { get; set; }
         /// <summary>For lots, blocks, tracts, references, sheets: the identifier found ("7", "A", "R1", "3 OF 4").</summary>
         public string Key { get; set; }
+
+        /// <summary>The call sits inside running text (a legal description) rather than beside a line on the plan.</summary>
+        public bool InProse { get; set; }
 
         public ClassifiedLine() { Tokens = new List<SurveyToken>(); Confidence = 1.0; }
 
@@ -70,19 +75,20 @@ namespace FieldCodes.RecordSurvey
             @"\b(?:A\.?\s?F\.?\s?N\.?|AFN|AUDITOR'?S?\s+FILE\s+(?:NO|NUMBER)\.?|REC(?:ORDING)?\.?\s*(?:NO|NUMBER|#)\.?|RECORDED\s+UNDER\s+(?:NO\.?|NUMBER|AFN|A\.F\.N\.)|INSTRUMENT\s+(?:NO|NUMBER)\.?)\s*:?\s*(?<n>\d{6,16}(?:-\d+)?)", O);
         private static readonly Regex VolPage = new Regex(
             @"\b(?:VOL(?:UME)?\.?)\s*(?<v>\d{1,4})\s*(?:OF\s+(?<of>PLATS|SURVEYS|SHORT\s+PLATS|DEEDS))?\s*,?\s*(?:PAGES?|PGS?|PS?)\.?\s*(?<p>\d{1,4}(?:\s*(?:-|THRU|THROUGH|AND|&)\s*\d{1,4})?)", O);
-        private static readonly Regex RefKey = new Regex(@"^\s*\(?\s*(?<id>R\d{1,2})\s*\)?\s*[:=-]?\s*(?<rest>.+)$", O);
+        private static readonly Regex RefKey = new Regex(@"^\s*\(?\s*(?<id>R\d{1,2})\s*(?:\)\s*[:=-]?|[:=-])\s*(?<rest>.{4,})$", O);
         private static readonly Regex MonumentRx = new Regex(
             @"\b(?:FOUND|FD\.?|FND\.?|SET|CALC(?:ULATED|'D)?|CALC\.)\b.*\b(?:REBAR|R/?B|IRON\s+PIPE|I\.?P\.?|IRON\s+ROD|I\.?R\.?|MON(?:UMENT)?\.?|PIN|NAIL|TACK|LEAD|CAP|BRASS|DISK|DISC|PK|MAG|SPIKE|STONE|CONC(?:RETE)?|HUB|CASE|PIPE|BOLT|RIVET|CORNER)\b", O);
         private static readonly Regex MonumentBare = new Regex(
             @"^\s*(?:\d+/\d+""?|5/8|1/2|3/4)?\s*(?:REBAR|IRON\s+PIPE|MON(?:UMENT)?\.?\s+IN\s+CASE|BRASS\s+(?:CAP|DISK)|CONC(?:RETE)?\s+MON)\b", O);
         private static readonly Regex Basis = new Regex(@"\bBASIS\s+OF\s+BEARINGS?\b", O);
-        private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*1\s*""?\s*=\s*(?<n>\d{1,4})\s*'?", O);
-        private static readonly Regex ScaleBare = new Regex(@"^\s*1\s*""\s*=\s*(?<n>\d{1,4})\s*'\s*$", O);
+        private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?", O);
+        private static readonly Regex ScaleBare = new Regex(@"^\s*1\s*(?:""|''|INCH|IN\.?)\s*=\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?\s*$", O);
+        private static readonly Regex BareNumber = new Regex(@"^\s*(?<n>\d{1,3})\s*$", O);
         private static readonly Regex Street = new Regex(
             @"\b(?:[NSEW]\.?\s?[EW]?\.?\s+)?(?:\d{1,3}(?:ST|ND|RD|TH)|[A-Z]{3,})\s+(?:STREET|ST\.?|AVENUE|AVE\.?|ROAD|RD\.?|WAY|PLACE|PL\.?|COURT|CT\.?|DRIVE|DR\.?|LANE|LN\.?|BOULEVARD|BLVD\.?|HIGHWAY|HWY\.?|CIRCLE|CIR\.?|PARKWAY|PKWY\.?|TERRACE|TER\.?|LOOP|TRAIL|TRL\.?)(?:\s+(?:N\.?E\.?|N\.?W\.?|S\.?E\.?|S\.?W\.?|N\.?|S\.?|E\.?|W\.?))?\s*$", O);
         private static readonly Regex Sheet = new Regex(@"\bSHEET\s*(?<n>\d{1,3})\s*OF\s*(?<m>\d{1,3})\b", O);
         private static readonly Regex Title = new Regex(
-            @"\b(?<t>RECORD\s+OF\s+SURVEY|SHORT\s+(?:SUBDIVISION|PLAT)|BOUNDARY\s+LINE\s+ADJUSTMENT|LOT\s+LINE\s+ADJUSTMENT|LARGE\s+LOT\s+(?:SUBDIVISION|PLAT)|BINDING\s+SITE\s+PLAN|PLAT\s+OF|SUBDIVISION|EASEMENT\s+EXHIBIT|EXHIBIT\s+[A-Z]\b)", O);
+            @"\b(?<t>RECORD\s+OF\s+SURVEY|SHORT\s+(?:SUBDIVISION|PLAT)|BOUNDARY\s+LINE\s+ADJUSTMENT|LOT\s+LINE\s+ADJUSTMENT|LARGE\s+LOT\s+(?:SUBDIVISION|PLAT)|BINDING\s+SITE\s+PLAN|PLAT\s+OF|SUBDIVISION|EASEMENT\s+EXHIBIT|EXHIBIT\s+[A-Z]\b|THIS\s+PLAT\s+OF|DEDICATION\b|VOL(?:UME)?\.?\s*\d+\s+OF\s+PLATS)", O);
         private static readonly Regex SurveyorRx = new Regex(@"\b(?:P\.?L\.?S\.?|PROFESSIONAL\s+LAND\s+SURVEYOR|LAND\s+SURVEYOR|SURVEYOR'?S\s+CERTIFICATE|CERTIFICATE\s+NO\.?|LICENSE\s+NO\.?)\b", O);
         private static readonly Regex CertRx = new Regex(@"\b(?:I\s+HEREBY\s+CERTIFY|CERTIFICATION|DECLARATION|ACKNOWLEDGMENT|APPROVALS?|AUDITOR'?S\s+CERTIFICATE|TREASURER'?S\s+CERTIFICATE|SEAL)\b", O);
         private static readonly Regex LegendRx = new Regex(@"^\s*LEGEND\b", O);
@@ -142,8 +148,11 @@ namespace FieldCodes.RecordSurvey
                 return Set(result, SurveyEntityKind.LineTableRow, 0.9, lineTag.Name);
             if (keys.Count > 0 && (distances + angles + bearings) >= 1)
                 return Set(result, SurveyEntityKind.CurveData, 0.9, curveTag != null ? curveTag.Name : null);
-            if (bearings >= 1 && distances >= 1) return Set(result, SurveyEntityKind.BearingDistance, 0.95, null);
-            if (bearings >= 1) return Set(result, SurveyEntityKind.Bearing, 0.9, null);
+            // A call with many words around it is a sentence of the legal description ("thence N 40°06'40" E
+            // 120 feet to ..."), not a label beside a line: still a call, but kept apart from the plan's.
+            result.InProse = words.Count(w => w.Length >= 2 && w.All(char.IsLetter)) >= 4;
+            if (bearings >= 1 && distances >= 1) return Set(result, SurveyEntityKind.BearingDistance, result.InProse ? 0.85 : 0.95, null);
+            if (bearings >= 1) return Set(result, SurveyEntityKind.Bearing, result.InProse ? 0.8 : 0.9, null);
 
             // Everything that is prose.
             if (MonumentRx.IsMatch(text) || MonumentBare.IsMatch(text)) return Set(result, SurveyEntityKind.Monument, 0.85, null);
@@ -154,8 +163,11 @@ namespace FieldCodes.RecordSurvey
             if (NoteRx.IsMatch(text) || NumberedNote.IsMatch(text)) return Set(result, SurveyEntityKind.Note, 0.7, null);
             if (Street.IsMatch(text) && words.Count <= 6) return Set(result, SurveyEntityKind.StreetName, 0.75, null);
 
+            // A bare whole number: a lot number in the middle of a lot, or a distance written without its
+            // foot mark beside a line (both are common on older plats). Kept as both possibilities.
+            if ((m = BareNumber.Match(text)).Success) return Set(result, SurveyEntityKind.Number, 0.6, m.Groups["n"].Value);
             // A lone distance on a line: usually the second half of a stacked bearing/distance label.
-            if (distances == 1 && bearings == 0 && angles == 0 && words.Count <= 1) return Set(result, SurveyEntityKind.Distance, 0.7, null);
+            if (distances == 1 && bearings == 0 && angles == 0 && words.Count == 0 && keys.Count == 0) return Set(result, SurveyEntityKind.Distance, 0.7, null);
 
             return result;
         }
@@ -180,7 +192,7 @@ namespace FieldCodes.RecordSurvey
                 if (t.StartsWith("LARGE LOT")) return "Large Lot Subdivision";
                 if (t.StartsWith("BINDING SITE")) return "Binding Site Plan";
                 if (t.StartsWith("EASEMENT") || t.StartsWith("EXHIBIT")) return "Easement Exhibit";
-                if (t.StartsWith("PLAT OF") || t == "SUBDIVISION") return "Subdivision Plat";
+                if (t.StartsWith("PLAT OF") || t == "SUBDIVISION" || t.StartsWith("THIS PLAT") || t == "DEDICATION" || t.Contains("OF PLATS")) return "Subdivision Plat";
             }
             return "Unknown";
         }

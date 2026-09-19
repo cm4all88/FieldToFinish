@@ -241,3 +241,142 @@ public sealed class RecordSurveyParsingTests
         Assert.True(SurveyCallParser.DigitAlternatives("1358.06", 0.5, 3).Count <= 3);
     }
 }
+
+/// <summary>
+/// What tesseract actually produced from 1950s and 60s King County plats (typed and hand-lettered),
+/// and what the reader must do with it: read by position when the marks are wrong, refuse when the
+/// digits are, and never turn noise into a call.
+/// </summary>
+public sealed class RecordSurveyOcrNoiseTests
+{
+    [Theory]
+    [InlineData("S 89° 43° 14° EF", 180 - (89 + 43 / 60.0 + 14 / 3600.0))]     // marks all read as degree signs, E read as EF
+    [InlineData("S$ 88° 26 42\" F", 180 - (88 + 26 / 60.0 + 42 / 3600.0))]     // stray $, no minute mark, F for E
+    [InlineData("N O° 47\"W", 360 - 47 / 60.0)]                                 // O for 0, second mark on the minutes
+    [InlineData("589° 33 Ww", 180 + 89 + 33 / 60.0)]                            // 5 for S, doubled W
+    [InlineData("NB7°OS W", 360 - (87 + 5 / 60.0))]                             // B for 8, OS for 05
+    [InlineData("$ 68°24 29\"E", 180 - (68 + 24 / 60.0 + 29 / 3600.0))]
+    public void OcrDamagedBearingsAreReadByPositionAtLowerConfidence(string text, double azimuth)
+    {
+        var read = SurveyCallParser.ParseBearing(text);
+        Assert.True(read.Ok, read.Error);
+        Assert.Equal(azimuth, read.Value, 9);
+        Assert.True(read.Confidence < 0.95, "confidence " + read.Confidence);
+        Assert.NotEmpty(read.Notes);
+    }
+
+    [Theory]
+    [InlineData("N 1° 38 BIE")]         // BI -> 81 seconds: refused, not folded
+    [InlineData("NEBS°OZ W")]           // no digits at all
+    [InlineData("N@s*327w")]
+    [InlineData("NE. 1/4 of NE. 1/4")]
+    public void NoiseIsRefusedNotRead(string text)
+    {
+        Assert.False(SurveyCallParser.ParseBearing(text).Ok);
+    }
+
+    [Fact]
+    public void ADroppedMinuteMarkDoesNotTruncateTheAngle()
+    {
+        var read = SurveyCallParser.ParseAngle("50°23");
+        Assert.True(read.Ok);
+        Assert.Equal(50 + 23 / 60.0, read.Value, 9);
+        var withMark = SurveyCallParser.ParseAngle("50°23'");
+        Assert.Equal(50 + 23 / 60.0, withMark.Value, 9);
+        Assert.Equal(1.0, withMark.Confidence);
+        // Marks in the wrong places do cost confidence.
+        var wrong = SurveyCallParser.ParseAngle("50\"23'");
+        Assert.False(wrong.Ok);                                     // no degree sign: not an angle at all
+        var swapped = SurveyCallParser.ParseBearing("N 50° 23° 10° E");
+        Assert.True(swapped.Ok);
+        Assert.True(swapped.Confidence < 1.0);
+    }
+
+    [Theory]
+    [InlineData("4=26°58 06", "DELTA", 26 + 58 / 60.0 + 6 / 3600.0)]     // tesseract's Δ
+    [InlineData("A 50°23", "A", 50 + 23 / 60.0)]
+    [InlineData("Δ 41°53'", "DELTA", 41 + 53 / 60.0)]
+    public void SpacedAndMisreadCurveKeysTokenize(string text, string key, double angle)
+    {
+        var tokens = SurveyCallParser.Tokenize(text);
+        Assert.Equal(key, tokens.First(t => t.Kind == SurveyTokenKind.CurveKey).Name);
+        Assert.Equal(angle, tokens.First(t => t.Kind == SurveyTokenKind.Angle).Read!.Value, 9);
+    }
+
+    [Theory]
+    [InlineData("R 573.69'", "R", 573.69)]
+    [InlineData("T 326.67'", "T", 326.67)]
+    [InlineData("L 705.05'", "L", 705.05)]
+    [InlineData("470' RAD.", "R", 470.0)]
+    public void OlderPlatsWriteCurveElementsWithoutAnEqualsSign(string text, string key, double value)
+    {
+        var tokens = SurveyCallParser.Tokenize(text);
+        Assert.Equal(key, tokens.First(t => t.Kind == SurveyTokenKind.CurveKey).Name);
+        Assert.Equal(value, tokens.First(t => t.Kind == SurveyTokenKind.Distance).Read!.Value, 6);
+        Assert.Equal(value, SurveyCallParser.ParseDistance(text).Value, 6);
+    }
+
+    [Fact]
+    public void ALetterAloneIsNotADistance()
+    {
+        Assert.False(SurveyCallParser.ParseDistance("L").Ok);
+        Assert.False(SurveyCallParser.ParseDistance("LOT").Ok);
+        // "LOT 4" is a lot number: the classifier's lot rule runs before any distance is considered.
+        Assert.Equal(SurveyEntityKind.LotNumber, EntityClassifier.Classify(new DocumentLine("LOT 4", new PageBox(0, 0, 60, 20), 0.9), 1).Kind);
+    }
+
+    [Theory]
+    [InlineData("SCALE: 1\" = 50'", "50")]
+    [InlineData("SCALE 1 INCH = 100 FEET", "100")]
+    [InlineData("Scale: 1\"=200'", "200")]
+    [InlineData("1\" = 60'", "60")]
+    public void ScaleNotesInEverySpellingClassify(string text, string feet)
+    {
+        var c = EntityClassifier.Classify(new DocumentLine(text, new PageBox(0, 0, 100, 20), 0.9), 1);
+        Assert.Equal(SurveyEntityKind.Scale, c.Kind);
+        Assert.Equal(feet, c.Key);
+    }
+
+    [Fact]
+    public void ABareNumberIsNeitherADistanceNorALotUntilTheAssemblyDecides()
+    {
+        var c = EntityClassifier.Classify(new DocumentLine("164", new PageBox(0, 0, 40, 20), 0.9), 1);
+        Assert.Equal(SurveyEntityKind.Number, c.Kind);
+        Assert.Equal("164", c.Key);
+        var junk = EntityClassifier.Classify(new DocumentLine("6 a'°cR", new PageBox(0, 0, 40, 20), 0.9), 1);
+        Assert.NotEqual(SurveyEntityKind.Distance, junk.Kind);
+    }
+
+    [Fact]
+    public void ABareNumberInsideAClosedLoopNamesTheLot()
+    {
+        // A 100' square at 1"=50' (6 px/ft), corners (600,900) (600,300) (1200,300) (1200,900), lot number "7" in the middle.
+        DocumentLine L(string t, double x, double y, double rot = 0) => new DocumentLine(t, new PageBox(x, y, t.Length * 14, 28, rot), 0.95);
+        var d = new DocumentText();
+        var page = new DocumentPage { Number = 1, WidthPx = 2550, HeightPx = 3300, Dpi = 300 };
+        page.Lines.AddRange(new[]
+        {
+            L("N 00°00'00\" E 100.00'", 600 - 154 - 40, 600 - 14, 90), L("N 90°00'00\" E 100.00'", 900 - 154, 300 - 14 - 40),
+            L("S 00°00'00\" E 100.00'", 1200 - 154 + 40, 600 - 14, -90), L("S 90°00'00\" W 100.00'", 900 - 154, 900 - 14 + 40),
+            L("7", 900 - 7, 600 - 14)
+        });
+        d.Pages.Add(page);
+        var p = CallExtractor.Extract(d, new ExtractionOptions());
+        Assert.Contains(p.Annotations, a => a.Kind == SurveyEntityKind.Number && a.Text == "7");
+        var a = TraverseAssembler.Assemble(p, new AssemblyOptions { ScaleFeetPerInch = 50, Dpi = 300 });
+        var loop = Assert.Single(a.Figures);
+        Assert.True(loop.Closed);
+        Assert.Equal("Lot 7", loop.Name);
+    }
+
+    [Fact]
+    public void OlderPlatTitlesAndDedicationsGiveTheSurveyType()
+    {
+        var lines = new[]
+        {
+            EntityClassifier.Classify(new DocumentLine("This plat of \"WALDHEIM ACRES\" Addition to King County", new PageBox(0, 0, 500, 20), 0.9), 1),
+            EntityClassifier.Classify(new DocumentLine("DEDICATION", new PageBox(0, 0, 100, 40), 0.9), 1)
+        };
+        Assert.Equal("Subdivision Plat", EntityClassifier.SurveyTypeFrom(lines));
+    }
+}

@@ -308,6 +308,11 @@ turn the symbol off in the point style.
 | `FTFBLOCKS` | Lists the drawing's blocks and checks them against the rules | n/a |
 | `FTFDRAWLINE` | Drafts cadastral / record lines with bearing/distance annotation — the separate drafting world, see below | n/a |
 | `FTFDRAFTCLEAN` | Cleanup for the drafted world: annotation by default, geometry only on explicit confirmation | n/a |
+| `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
+| `FTFRECORDCHECK` | Drawing versus the record; flags only | yes |
+| `FTFRECORDLABEL` | Places or refreshes the record labels | yes |
+| `FTFRECORDSOURCE` | Where a reconstructed line came from | n/a |
+| `FTFRECORDREBUILD` | Reopen the review, rebuild after edits | yes |
 
 ## Line labelling: the primary workflow is interactive
 
@@ -482,6 +487,139 @@ non-tangent curves (refused unless the inputs uniquely define the curve), then
 curve annotation standards and optionally a curve table. Milestone 1 is straight
 courses: Pick Endpoint, Bearing+Distance, Azimuth+Distance, COGO point start/end,
 continuous entry, computed annotation, undo.
+
+## Recorded surveys: FTFRECORD — reconstruction from a recorded plat or Record of Survey
+
+`FTFRECORD` takes a recorded plat, short plat, Record of Survey, boundary line
+adjustment, large lot subdivision or easement exhibit (PDF, TIFF, JPG, PNG) and
+rebuilds it as Civil 3D geometry **from its written calls**. It is not a tracing
+tool: the picture assists interpretation (which text is where, which courses meet),
+but every line and arc is traversed from a bearing and distance or from curve
+elements that a person has seen and approved.
+
+```
+FTFRECORD
+  → choose the document
+  → read it (Windows OCR at several page rotations, or a .ocr.json sidecar)
+  → extract calls, curves, lots, monuments, record references, notes — each with a confidence
+  → propose the course order and figures from where the labels sit on the page
+  → REVIEW: every call in a table against the page image; approve, edit, take an alternative, reorder
+  → check the office standard against this drawing (missing layer/style/block = withheld, reported)
+  → Build: traverse each figure, draw once per shared line, label, place monuments
+  → QC report on the command line and beside the drawing
+```
+
+| Command | Does |
+|---|---|
+| `FTFRECORD` | Upload, extract, order, review, build, QC |
+| `FTFRECORDCHECK` | Drawing versus record: bearing/distance/curve mismatches, closure per lot, shared boundaries, duplicates, missing lines/labels/monuments, layer and style against the standard. Flags only. |
+| `FTFRECORDLABEL` | Places or refreshes the bearing/distance, curve, lot and record-vs-measured labels (hand-moved labels are kept and routed around) |
+| `FTFRECORDSOURCE` | Click a reconstructed object: document, recording number, sheet, call, record source, record and measured values, confidence, spot on the page |
+| `FTFRECORDREBUILD` | Reopens the review for a stored record and rebuilds after edits; warns first when the geometry was hand-edited |
+
+### What the reader does and does not know
+
+- **Windows OCR** (`Windows.Media.Ocr`, `Windows.Data.Pdf`, through the Windows 10 SDK
+  contracts) reads the page; nothing is installed and nothing leaves the machine. Survey
+  annotation runs at every angle, so each page is read at the rotations in
+  Settings > Recorded Surveys (0, 90, 270, 180 by default) and the hits are mapped back
+  onto the page and merged. Large sheets are read in overlapping tiles.
+- Windows OCR gives **no per-word confidence**. FTF's confidence is honest about it: a
+  line read once is 0.90, the same text read again in another pass is 0.97, and every
+  repaired look-alike character (O for 0, l for 1, S for 5, B for 8) lowers it. A spot
+  read *differently* in two passes keeps both readings and is flagged.
+- **Sidecar**: any OCR tool can write the document's text in the `DocumentText` schema as
+  `<document>.ocr.json` and FTFRECORD reads that instead (Settings > Recorded Surveys >
+  OCR engine = Sidecar). `tests\RealWorld\pdf-to-sidecar.py` does it with tesseract, and
+  is how the extraction is exercised outside Civil 3D.
+
+### What is never guessed
+
+- A bearing over 90°, 60+ minutes or seconds, a chord longer than the diameter: refused
+  with the reason, shown in the review, never folded into a plausible value.
+- A bearing with no distance nearby stays incomplete and cannot be approved until a
+  person enters the distance. Nothing is invented to complete a course.
+- A curve needs two of R, Δ, L, CH, T; the rest are **calculated** and every stated
+  element is checked against the solution. A curve with no chord bearing, no previous
+  course to be tangent to and no radial bearing is refused, not drawn on a guessed side.
+- A figure that does not close is drawn as written, with the misclosure vector and
+  precision reported. Alternative readings that *would* close it are listed as
+  suggestions. Nothing is adjusted.
+- Record versus measured: `R1: N 89°42'18" E 1320.45'` and `M: N 89°42'21" E 1320.38'`
+  are one course with two attributes (plus R2, R3 … each tied to its AFN / volume-page
+  reference). Geometry is built from the measured value where the document gives one
+  (or always from the record: Settings > Recorded Surveys > build from). A measured
+  bearing is never mixed with a record distance. Both values are labelled and kept on
+  the entity.
+- Every value carries its basis — Recorded, Measured, Calculated, Inferred, Entered —
+  and the label suffix and metadata say which. Inferred graphical information is never
+  presented as a call.
+- The office standard maps survey entities (Boundary, Lot Line, Right of Way,
+  Centerline, Easement, Section Line, Quarter Section, Tie Line, Adjoiner) to layers,
+  linetypes, Civil 3D general line/curve label styles, text styles, and monument blocks.
+  Every name is checked against the open drawing: a missing layer withholds those
+  courses, a missing style withholds those labels, a missing block lists the monument
+  but does not draw it. Nothing is substituted for a look-alike or created from a
+  guessed name (creating a missing layer is an explicit setting, still reported). The
+  shipped defaults are FTF's generic layer names and **no** label style or block names;
+  the PMX profiles carry the section with the office text style `Survey`, which was
+  measured from the office template, and nothing that was not.
+
+### Review
+
+The review table shows Course (figure, order, id), Type, Bearing, Distance, Curve data,
+Record source and basis, Object type, Confidence, Status and Flags. Selecting a row
+outlines its source text on the page image. Calls under the threshold (0.85), with an
+alternative reading, with disagreeing curve elements or incomplete are *NeedsReview*
+and stop the build until approved, edited (strictly parsed) or rejected. "Order courses
+from the page" chains the labels into lots by walking the sharpest right turn at each
+corner (the planar-face rule), so it never wanders off along a neighbour's line; a lot
+line labelled once serves both lots. Picking the start point of one lot places every
+lot connected to it through shared lines so they meet at their common corners.
+
+### Metadata and QC
+
+Every reconstructed entity is stamped (project id, call id) and carries an `FTF_RECORD`
+Xrecord with the document, recording number, sheet, survey type, lot/block, object type,
+basis, record source and reference, measured and record bearing/distance, curve
+elements, confidence, page and box on the document, and the build time. The whole
+project (calls, review edits with who and when, build handles, closures) is stored in the
+drawing and, by default, beside it as `<drawing>.<project>.ftfrecord.json`.
+
+`FTFRECORDCHECK` reads the stamped geometry back and reports, in the spec's form:
+
+```
+Course K1: MATCH
+Course K3: CAD 125.37 / Record 125.73 — REVIEW
+Curve K8: Radius MATCH / Arc differs 0.02' / Delta MATCH / Chord MATCH — REVIEW
+Lot 7 closure: 0.018' (1:30,000)
+Shared boundary Lot 7 / Lot 8: MATCH
+Nothing was adjusted. Discrepancies are for the surveyor to resolve.
+```
+
+### What is tested, what is not
+
+`FieldCodes/RecordSurvey` has no Autodesk dependency and carries 170+ tests: bearing
+spellings, DMS and distance units (feet, metres, chains, rods), curve reconciliation
+from every pair of elements, placement, traverse and closure, misclosure suggestions,
+record-versus-measured storage, shared lot lines and their discrepancies, OCR ambiguity
+(second-pass alternatives, digit confusions, look-alike repair), standards mapping and
+missing-style behaviour, no silent invention, source metadata round trips, the review
+gate and edits, label text and collision-free placement, and QC verdicts. Two synthetic
+Washington fixtures (a King County short plat with a curve table and a shared lot line;
+a Pierce County Record of Survey with R1/R2/M calls) run end to end in
+`tests\FieldCodes.Tests\Samples`. No project document is in the repository.
+
+`FieldCodes.Cad\RecordCommands.cs`, `RecordDocumentReader.cs`, `RecordDrafter.cs`,
+`Ui\RecordReviewForm.cs` and `Setup\RecordSurveyPage.cs` are, like the rest of the CAD
+layer, **UNTESTED against a drawing**. In particular: the Windows OCR / PDF contracts
+package loading inside Civil 3D 2024, `GeneralSegmentLabel.Create` for the Civil 3D
+labels, and the review window. Headless (accoreconsole) runs take a sidecar path and a
+start point from the command line and approve everything above the threshold, so a
+LiveSmoke script can drive the whole build.
+
+This is a production aid for a licensed surveyor. It makes no boundary determination;
+the surveyor interprets the controlling evidence.
 
 ## Configuration ownership
 

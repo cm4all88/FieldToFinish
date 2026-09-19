@@ -113,7 +113,7 @@ namespace FieldCodes.RecordSurvey
             if (token.Count(char.IsLetter) == 0) return token;
             // Only a token made of digits, separators and the known look-alikes is repaired; a word is
             // a word. (The parsers' patterns already restrict their slots to exactly these characters.)
-            if (token.Any(c => !char.IsDigit(c) && c != '.' && c != ',' && "OQILSBZoqilsbz".IndexOf(c) < 0)) return token;
+            if (token.Any(c => !char.IsDigit(c) && c != '.' && c != ',' && "OQILSBZoqilsbz/".IndexOf(c) < 0)) return token;
 
             var sb = new StringBuilder(token.Length);
             foreach (var c in token)
@@ -122,7 +122,7 @@ namespace FieldCodes.RecordSurvey
                 switch (char.ToUpperInvariant(c))
                 {
                     case 'O': case 'Q': r = '0'; break;
-                    case 'I': case 'L': r = '1'; break;
+                    case 'I': case 'L': case '/': r = '1'; break;
                     case 'S': r = '5'; break;
                     case 'B': r = '8'; break;
                     case 'Z': r = '2'; break;
@@ -137,14 +137,17 @@ namespace FieldCodes.RecordSurvey
 
         // ------------------------------------------------------------ bearings
 
-        // N 89°42'18" E, N89°42'18"E, N 89 42 18 E, N 89-42-18 E, N 89D42'18" E, NORTH 89°42'18" EAST,
-        // N 89°42' E, N 89° E.  Degrees may be one to three digits so a misread 189 is refused, not folded.
+        // N 89°42'18" E, N89°42'18"E, N 89 42 18 E, N 89-42-18 E, N 89D42'18" E, NORTH 89°42'18" EAST, N 89°42' E,
+        // N 89° E. The body between the quadrant letters is read by POSITION -- degrees, minutes, seconds in
+        // order -- with any of ° ' " - or a space as the separator, because OCR turns one mark into another
+        // as often as not (S 89° 43° 14° E). A body whose marks are not the canonical ones costs confidence.
+        // The quadrant letters tolerate OCR too: a leading 5 or $ is an S it could not shape; a doubled E or W
+        // is one letter read twice; a lone F after a full body is an E. Degrees may be one to three digits so
+        // a misread 189 is refused, not folded.
         private static readonly Regex BearingRegex = new Regex(
-            @"(?<ns>\b(?:N|S|NORTH|SOUTH))\s*" +
-            @"(?<deg>[0-9OIlSB]{1,3})\s*(?:°|D(?![A-Z])|\s|-)\s*" +
-            @"(?:(?<min>[0-9OIlSB]{1,2})\s*(?:'|-|\s)\s*" +
-            @"(?:(?<sec>[0-9OIlSB]{1,2}(?:\.[0-9OIlSB]+)?)\s*(?:""|'')?)?)?\s*" +
-            @"(?<ew>(?:E|W|EAST|WEST)\b)",
+            @"(?<ns>(?:\b(?:N|S|NORTH|SOUTH))|(?<![A-Z0-9])(?:5|\$|§)(?=\s*\$?\s*[0-9OIlSB/]{1,3}\s*°))\s*\$?\s*" +
+            @"(?<body>[0-9OIlSB/](?:[0-9OIlSB/°'""\s.\-]|D(?![A-Z])){0,22}?)\s*" +
+            @"(?<ew>(?:EAST|WEST|E{1,2}|W{1,2}|EF|F)\b)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly Regex DueRegex = new Regex(
@@ -174,32 +177,30 @@ namespace FieldCodes.RecordSurvey
                 return SurveyValueRead.Failure(raw, "Not a quadrant bearing (expected N 89°42'18\" E or similar).");
 
             var read = new SurveyValueRead { Raw = raw };
-            int repairs;
             var total = 0;
-            var degText = RepairDigits(m.Groups["deg"].Value, out repairs); total += repairs;
-            var minText = m.Groups["min"].Success ? RepairDigits(m.Groups["min"].Value, out repairs) : null; total += repairs;
-            var secText = m.Groups["sec"].Success ? RepairDigits(m.Groups["sec"].Value, out repairs) : null; total += repairs;
+            var nsText = m.Groups["ns"].Value.ToUpperInvariant();
+            var ewText = m.Groups["ew"].Value.ToUpperInvariant();
+            if (nsText == "5" || nsText == "$" || nsText == "§") { total++; read.Notes.Add("A leading '" + nsText + "' read as S."); }
+            if (ewText == "EE" || ewText == "WW") { total++; read.Notes.Add("A doubled quadrant letter read once."); }
+            if (ewText == "EF" || ewText == "F") { total++; read.Notes.Add("A trailing '" + ewText + "' read as E."); }
 
-            double deg, min = 0, sec = 0;
-            if (!double.TryParse(degText, NumberStyles.Float, CultureInfo.InvariantCulture, out deg))
-                return SurveyValueRead.Failure(raw, "The degrees '" + m.Groups["deg"].Value + "' are not a number.");
-            if (minText != null && !double.TryParse(minText, NumberStyles.Float, CultureInfo.InvariantCulture, out min))
-                return SurveyValueRead.Failure(raw, "The minutes '" + m.Groups["min"].Value + "' are not a number.");
-            if (secText != null && !double.TryParse(secText, NumberStyles.Float, CultureInfo.InvariantCulture, out sec))
-                return SurveyValueRead.Failure(raw, "The seconds '" + m.Groups["sec"].Value + "' are not a number.");
+            double deg, min, sec;
+            int parts;
+            bool canonical;
+            string error;
+            int repairs;
+            if (!ReadDms(m.Groups["body"].Value, out deg, out min, out sec, out parts, out canonical, out repairs, out error))
+                return SurveyValueRead.Failure(raw, error);
+            total += repairs;
 
             if (deg > 90.0)
                 return SurveyValueRead.Failure(raw, string.Format(CultureInfo.InvariantCulture,
                     "A quadrant bearing cannot exceed 90°; read {0}°. Check the image -- it may be a misread digit.", deg));
-            if (min >= 60.0)
-                return SurveyValueRead.Failure(raw, "Minutes must be under 60; read " + min.ToString("0", CultureInfo.InvariantCulture) + "'. Check the image.");
-            if (sec >= 60.0)
-                return SurveyValueRead.Failure(raw, "Seconds must be under 60; read " + sec.ToString("0.#", CultureInfo.InvariantCulture) + "\". Check the image.");
             if (deg == 90.0 && (min > 0 || sec > 0))
                 return SurveyValueRead.Failure(raw, "A bearing of 90° cannot carry minutes or seconds.");
 
-            var ns = char.ToUpperInvariant(m.Groups["ns"].Value[0]);
-            var ew = char.ToUpperInvariant(m.Groups["ew"].Value[0]);
+            var ns = nsText[0] == 'N' ? 'N' : 'S';
+            var ew = ewText[0] == 'W' ? 'W' : 'E';
             var angle = deg + min / 60.0 + sec / 3600.0;
             double azimuth;
             if (ns == 'N') azimuth = ew == 'E' ? angle : 360.0 - angle;
@@ -208,16 +209,68 @@ namespace FieldCodes.RecordSurvey
 
             read.Ok = true;
             read.Value = azimuth;
-            read.Confidence = Math.Pow(RepairPenalty, total);
-            if (total > 0) read.Notes.Add(total + " look-alike character(s) repaired (O/0, l/1, S/5, B/8).");
-            if (minText == null) read.Notes.Add("No minutes written; read as whole degrees.");
-            else if (secText == null) read.Notes.Add("No seconds written; read as zero seconds.");
+            read.Confidence = Math.Pow(RepairPenalty, total) * (canonical ? 1.0 : 0.9);
+            if (repairs > 0) read.Notes.Add(repairs + " look-alike character(s) repaired (O/0, l/1, S/5, B/8).");
+            if (parts == 1) read.Notes.Add("No minutes written; read as whole degrees.");
+            else if (parts == 2) read.Notes.Add("No seconds written; read as zero seconds.");
+            if (!canonical) read.Notes.Add("The degree, minute and second marks are not as expected; the values were read by position. Check the image.");
 
-            // The match must account for the whole token run it sits in: "N 189°..." fails
-            // above; "N 89°42'18\" E 1320.45'" is fine because the distance is outside it.
             read.Normalized = string.Format(CultureInfo.InvariantCulture, "{0} {1:00}°{2:00}'{3}\" {4}",
                 ns, (int)deg, (int)min, FormatSeconds(sec), ew);
             return read;
+        }
+
+        /// <summary>
+        /// Degrees, minutes and seconds by position from a body such as "89°42'18"", "89° 42° 14°",
+        /// "89 42 18", "89-42-18", "45°30" or "45". Any of ° ' " - D or a space separates the parts; only the
+        /// last part may carry decimals; minutes and seconds must be under 60. canonical says whether the
+        /// marks were the usual ones in the usual places.
+        /// </summary>
+        internal static bool ReadDms(string body, out double deg, out double min, out double sec, out int parts,
+                                     out bool canonical, out int repairs, out string error)
+        {
+            deg = min = sec = 0; parts = 0; canonical = true; repairs = 0; error = null;
+            var text = (body ?? string.Empty).Replace("D", "°").Replace("d", "°");     // N89d42'18"E: d is the AutoCAD degree sign
+            var groups = new List<string>();
+            var marks = new List<char>();
+            var current = new StringBuilder();
+            foreach (var c in text)
+            {
+                if (char.IsDigit(c) || c == '.' || "OQILSBZoqilsbz/".IndexOf(c) >= 0) { current.Append(c); continue; }
+                if (current.Length > 0) { groups.Add(current.ToString()); current.Length = 0; marks.Add(c == '°' || c == '\'' || c == '"' ? c : ' '); }
+                else if (c == '°' || c == '\'' || c == '"') { if (marks.Count > 0) marks[marks.Count - 1] = c; }
+            }
+            if (current.Length > 0) { groups.Add(current.ToString()); marks.Add(' '); }
+            if (groups.Count == 0 || groups.Count > 3) { error = "Expected degrees, minutes and seconds (up to three numbers); found " + groups.Count + "."; return false; }
+            if (string.Concat(groups.ToArray()).Count(char.IsDigit) == 0) { error = "No digits in the angle."; return false; }
+
+            var values = new double[groups.Count];
+            for (var i = 0; i < groups.Count; i++)
+            {
+                int r;
+                var repaired = RepairDigits(groups[i], out r);
+                repairs += r;
+                if (!double.TryParse(repaired, NumberStyles.Float, CultureInfo.InvariantCulture, out values[i]) || values[i] < 0)
+                { error = "'" + groups[i] + "' is not a number."; return false; }
+                if (i < groups.Count - 1 && values[i] != Math.Floor(values[i])) { error = "Only the last angle component may have decimals."; return false; }
+            }
+            parts = groups.Count;
+            deg = values[0];
+            if (parts >= 2) { min = values[1]; if (min >= 60.0) { error = "Minutes must be under 60; read " + min.ToString("0", CultureInfo.InvariantCulture) + "'. Check the image."; return false; } }
+            if (parts == 3) { sec = values[2]; if (sec >= 60.0) { error = "Seconds must be under 60; read " + sec.ToString("0.#", CultureInfo.InvariantCulture) + "\". Check the image."; return false; } }
+
+            // Canonical marks: ° after the degrees when anything follows, ' after the minutes when seconds
+            // follow, and nothing else in their places. Plain spaces or dashes throughout are canonical too.
+            var expected = new[] { '°', '\'', '"' };
+            var allPlain = marks.All(x => x == ' ');
+            if (!allPlain)
+                for (var i = 0; i < marks.Count && i < 3; i++)
+                {
+                    var last = i == marks.Count - 1;
+                    if (marks[i] == ' ' && !last) { canonical = false; break; }
+                    if (marks[i] != ' ' && marks[i] != expected[i]) { canonical = false; break; }
+                }
+            return true;
         }
 
         private static string FormatSeconds(double sec)
@@ -229,12 +282,15 @@ namespace FieldCodes.RecordSurvey
 
         // ------------------------------------------------------------ angles
 
+        // An angle without quadrant letters: the degree sign is what marks it (45°12'10"); after it the
+        // minutes and seconds are read by position, any mark or none between them. Three plain numbers
+        // (45 12 10) are an angle only when nothing else is on the line.
         private static readonly Regex AngleRegex = new Regex(
-            @"(?<![A-Z0-9])(?<deg>[0-9OIlSB]{1,3})\s*°\s*(?:(?<min>[0-9OIlSB]{1,2})\s*'\s*(?:(?<sec>[0-9OIlSB]{1,2}(?:\.[0-9OIlSB]+)?)\s*""?)?)?",
+            @"(?<![A-Z0-9])(?<body>[0-9OIlSB/]{1,3}\s*°(?:\s*[0-9OIlSB/]{1,2}(?:\.[0-9]+)?(?:\s*[°'""]|(?![0-9OIlSB.]))(?:\s*[0-9OIlSB/]{1,2}(?:\.[0-9OIlSB]+)?(?:\s*[°'""])?)?)?)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly Regex AngleLooseRegex = new Regex(
-            @"(?<![A-Z0-9.])(?<deg>[0-9]{1,3})\s+(?<min>[0-9]{1,2})\s+(?<sec>[0-9]{1,2}(?:\.[0-9]+)?)(?![0-9.])",
+            @"^\s*(?<body>[0-9]{1,3}\s+[0-9]{1,2}\s+[0-9]{1,2}(?:\.[0-9]+)?)\s*$",
             RegexOptions.CultureInvariant);
 
         /// <summary>
@@ -250,28 +306,23 @@ namespace FieldCodes.RecordSurvey
             if (!m.Success) { m = AngleLooseRegex.Match(s); loose = true; }
             if (!m.Success) return SurveyValueRead.Failure(raw, "Not an angle (expected 45°12'10\").");
 
-            int repairs, total = 0;
-            var degText = RepairDigits(m.Groups["deg"].Value, out repairs); total += repairs;
-            var minText = m.Groups["min"].Success ? RepairDigits(m.Groups["min"].Value, out repairs) : null; total += repairs;
-            var secText = m.Groups["sec"].Success ? RepairDigits(m.Groups["sec"].Value, out repairs) : null; total += repairs;
-
-            double deg, min = 0, sec = 0;
-            if (!double.TryParse(degText, NumberStyles.Float, CultureInfo.InvariantCulture, out deg) ||
-                (minText != null && !double.TryParse(minText, NumberStyles.Float, CultureInfo.InvariantCulture, out min)) ||
-                (secText != null && !double.TryParse(secText, NumberStyles.Float, CultureInfo.InvariantCulture, out sec)))
-                return SurveyValueRead.Failure(raw, "The angle components are not numbers.");
+            double deg, min, sec;
+            int parts, repairs;
+            bool canonical;
+            string error;
+            if (!ReadDms(m.Groups["body"].Value, out deg, out min, out sec, out parts, out canonical, out repairs, out error))
+                return SurveyValueRead.Failure(raw, error);
             if (deg > 360.0) return SurveyValueRead.Failure(raw, "An angle cannot exceed 360°.");
-            if (min >= 60.0) return SurveyValueRead.Failure(raw, "Minutes must be under 60.");
-            if (sec >= 60.0) return SurveyValueRead.Failure(raw, "Seconds must be under 60.");
 
             var read = new SurveyValueRead
             {
                 Ok = true, Raw = raw, Value = deg + min / 60.0 + sec / 3600.0,
-                Confidence = Math.Pow(RepairPenalty, total) * (loose ? 0.9 : 1.0),
+                Confidence = Math.Pow(RepairPenalty, repairs) * (loose || !canonical ? 0.9 : 1.0),
                 Normalized = string.Format(CultureInfo.InvariantCulture, "{0}°{1:00}'{2}\"", (int)deg, (int)min, FormatSeconds(sec))
             };
-            if (total > 0) read.Notes.Add(total + " look-alike character(s) repaired.");
+            if (repairs > 0) read.Notes.Add(repairs + " look-alike character(s) repaired.");
             if (loose) read.Notes.Add("Read as degrees minutes seconds from three plain numbers.");
+            else if (!canonical) read.Notes.Add("The minute and second marks are not as expected; the values were read by position. Check the image.");
             return read;
         }
 
@@ -297,10 +348,12 @@ namespace FieldCodes.RecordSurvey
         {
             var raw = text ?? string.Empty;
             var s = NormalizeSymbols(raw).Trim();
-            var m = DistanceRegex.Match(s);
-            if (!m.Success) return SurveyValueRead.Failure(raw, "Not a distance (expected 1320.45').");
-            // Look-alikes may be repaired inside a number; a token with no digit at all is a word.
-            if (m.Groups["num"].Value.Count(char.IsDigit) == 0) return SurveyValueRead.Failure(raw, "Not a distance (expected 1320.45').");
+            // The first match that holds a digit: look-alikes may be repaired inside a number, but a
+            // token with no digit at all ("L") is a word, and the number may come after it.
+            Match m = null;
+            foreach (Match candidate in DistanceRegex.Matches(s))
+                if (candidate.Groups["num"].Value.Count(char.IsDigit) > 0) { m = candidate; break; }
+            if (m == null) return SurveyValueRead.Failure(raw, "Not a distance (expected 1320.45').");
 
             int repairs;
             var numText = RepairDigits(m.Groups["num"].Value.Replace(",", string.Empty), out repairs);
@@ -379,6 +432,22 @@ namespace FieldCodes.RecordSurvey
                 Claim(tokens, covered, m, SurveyTokenKind.Bearing, ParseBearing(m.Value));
             foreach (Match m in DueRegex.Matches(s))
                 Claim(tokens, covered, m, SurveyTokenKind.Bearing, ParseBearing(m.Value));
+            foreach (Match m in RadiusAfterRegex.Matches(s))
+            {
+                // Two tokens out of one match: the value, then a key that says what it was.
+                var value = m.Groups["num"];
+                if (value.Value.Count(char.IsDigit) == 0) continue;
+                var read = ParseDistance(value.Value + "'");
+                if (!read.Ok) continue;
+                var free = true;
+                for (var k = m.Index; k < m.Index + m.Length; k++) if (covered[k]) { free = false; break; }
+                if (!free) continue;
+                for (var k = m.Index; k < m.Index + m.Length; k++) covered[k] = true;
+                tokens.Add(new SurveyToken { Kind = SurveyTokenKind.CurveKey, Text = m.Groups["key"].Value, Start = m.Groups["key"].Index, Length = m.Groups["key"].Length, Name = "R" });
+                tokens.Add(new SurveyToken { Kind = SurveyTokenKind.Distance, Text = value.Value, Start = value.Index, Length = value.Length, Read = read });
+                // The key comes first in reading order for the curve reader: give it a start just before the value.
+                tokens[tokens.Count - 2].Start = value.Index - 1;
+            }
             foreach (Match m in CurveKeyRegex.Matches(s))
                 Claim(tokens, covered, m, SurveyTokenKind.CurveKey, null, CurveKeyName(m.Groups["key"].Value));
             foreach (Match m in TagRegex.Matches(s))
@@ -388,7 +457,10 @@ namespace FieldCodes.RecordSurvey
             foreach (Match m in LineTagRegex.Matches(s))
                 Claim(tokens, covered, m, SurveyTokenKind.LineTag, null, "L" + m.Groups["n"].Value);
             foreach (Match m in AngleRegex.Matches(s))
+            {
+                if (m.Groups["body"].Value.Count(char.IsDigit) == 0) continue;
                 Claim(tokens, covered, m, SurveyTokenKind.Angle, ParseAngle(m.Value));
+            }
             foreach (Match m in DistanceRegex.Matches(s))
             {
                 // A distance must be a number, not a run of look-alikes; and "1" inside a
@@ -424,9 +496,17 @@ namespace FieldCodes.RecordSurvey
         }
 
         // R=250.00', RADIUS = 250.00', L=197.22', ARC=, A=, Δ=45°12'10", DELTA=, D=, CH=, CHORD=, C=, CD=,
-        // CB=N45°12'10"E, CH BRG=, CHORD BEARING=, T=, TAN=, TANGENT=.  Also "R 250.00'" with a space.
+        // CB=N45°12'10"E, CH BRG=, CHORD BEARING=, T=, TAN=, TANGENT=.  Older plats write the key with a
+        // space and no sign ("R 573.69'", "Δ 41°53'", "T 326.67'"), which is accepted when a number
+        // follows directly; a bare letter before a word stays a word.
         private static readonly Regex CurveKeyRegex = new Regex(
-            @"(?<![A-Z])(?<key>RADIUS|RAD|R|ARC LENGTH|ARC|LENGTH|LEN|L|DELTA|Δ|D|CHORD BEARING|CHORD BRG|CH BRG|CH\.? BEARING|CB|CHORD|CHD|CH|CD|C|TANGENT|TAN|T)\s*(?:=|:)\s*",
+            @"(?<![A-Z])(?<key>RADIUS|RAD|R|ARC LENGTH|ARC|LENGTH|LEN|L|A|DELTA|Δ|D|CHORD BEARING|CHORD BRG|CH BRG|CH\.? BEARING|CB|CHORD|CHD|CH|CD|C|TANGENT|TAN|T|(?<![0-9])4(?=[=:]))" +
+            @"(?:\s*(?:=|:)\s*|\s+(?=[0-9OIlSB]{1,4}(?:[.,°'][0-9OIlSB]|\s*°|'|\s*$|\s+[0-9])|(?=[NS]\s*[0-9])))",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        // "470' RAD." / "470.00 RADIUS": the key after the value, as some plats write the radius.
+        private static readonly Regex RadiusAfterRegex = new Regex(
+            @"(?<num>[0-9OIlSB]+(?:\.[0-9OIlSB]+)?)\s*'?\s*(?<key>RAD\.?|RADIUS)(?![A-Z])",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static string CurveKeyName(string key)
@@ -434,7 +514,8 @@ namespace FieldCodes.RecordSurvey
             var k = key.ToUpperInvariant().Replace(".", string.Empty);
             if (k == "R" || k == "RAD" || k == "RADIUS") return "R";
             if (k == "L" || k == "ARC" || k == "ARC LENGTH" || k == "LENGTH" || k == "LEN") return "L";
-            if (k == "D" || k == "Δ" || k == "DELTA") return "DELTA";
+            if (k == "A") return "A";      // arc length or (OCR for Δ) the central angle: settled by the value that follows
+            if (k == "D" || k == "Δ" || k == "DELTA" || k == "4") return "DELTA";
             if (k == "CB" || k.Contains("BEARING") || k.Contains("BRG")) return "CB";
             if (k == "CH" || k == "CHD" || k == "CHORD" || k == "CD" || k == "C") return "CH";
             if (k == "T" || k == "TAN" || k == "TANGENT") return "T";

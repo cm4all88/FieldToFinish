@@ -47,10 +47,16 @@ namespace FieldCodes.RecordSurvey
             project.Document.Pages = text.Pages.Count;
             project.OcrPath = null;
 
+            // A sidecar written pass by pass (one set of lines per rotation) merges here exactly as
+            // the Windows reader merges its own passes; a merged document is unchanged by it.
             var classified = new List<ClassifiedLine>();
             foreach (var page in text.Pages)
+            {
+                if (page.Lines.Select(l => l.PassRotationDegrees).Distinct().Count() > 1)
+                    page.Lines = PageGeometry.Merge(page.Lines);
                 foreach (var line in page.Lines)
                     classified.Add(EntityClassifier.Classify(line, page.Number));
+            }
 
             ReadDocumentInfo(project, classified);
             ReadReferences(project, classified);
@@ -62,6 +68,14 @@ namespace FieldCodes.RecordSurvey
 
             foreach (var call in project.Calls) Classify(call, options);
             foreach (var m in project.Monuments) m.ReviewStatus = m.Confidence >= options.ReviewThreshold ? CallStatus.Extracted : CallStatus.NeedsReview;
+
+            var prose = project.Calls.Where(c => c.Figure == "Description").OrderBy(c => c.Source != null ? c.Source.Page : 0).ThenBy(c => c.Source != null && c.Source.Box != null ? c.Source.Box.Y : 0).ThenBy(c => c.Source != null && c.Source.Box != null ? c.Source.Box.X : 0).ToList();
+            if (prose.Count > 0)
+            {
+                for (var i = 0; i < prose.Count; i++) prose[i].Order = i + 1;
+                project.Figures.Add(new SurveyFigure { Name = "Description", Kind = "Description", Closed = false });
+                project.Warnings.Add(prose.Count + " call(s) were read from the legal description text; they are grouped as the open figure \"Description\" in reading order, separate from the plan.");
+            }
             return project;
         }
 
@@ -71,7 +85,8 @@ namespace FieldCodes.RecordSurvey
         {
             var doc = project.Document;
             doc.SurveyType = EntityClassifier.SurveyTypeFrom(lines);
-            var title = lines.FirstOrDefault(l => l.Kind == SurveyEntityKind.SurveyTitle);
+            // The title is the biggest title-ish text on the sheet, not the first description sentence.
+            var title = lines.Where(l => l.Kind == SurveyEntityKind.SurveyTitle && l.Line.Box != null).OrderByDescending(l => l.Line.Box.Height).FirstOrDefault();
             if (title != null) doc.Title = title.Line.Text.Trim();
             var scale = lines.Select(EntityClassifier.ScaleOf).FirstOrDefault(s => s.HasValue);
             if (scale.HasValue) doc.ScaleFeetPerInch = scale;
@@ -81,9 +96,11 @@ namespace FieldCodes.RecordSurvey
             if (basis != null) doc.BasisOfBearing = basis.Line.Text.Trim();
             var surveyor = lines.FirstOrDefault(l => l.Kind == SurveyEntityKind.Surveyor);
             if (surveyor != null) doc.Surveyor = surveyor.Line.Text.Trim();
-            var county = lines.Select(l => Regex.Match(l.Line.Text ?? string.Empty, @"\b([A-Z]+)\s+COUNTY\b", RegexOptions.IgnoreCase))
-                              .FirstOrDefault(m => m.Success);
-            if (county != null) doc.County = county.Groups[1].Value.ToUpperInvariant() + " COUNTY";
+            // The county named most often (OCR mangles it now and then), four letters or more.
+            var county = lines.Select(l => Regex.Match(l.Line.Text ?? string.Empty, @"\b([A-Z]{4,})\s+COUNTY\b", RegexOptions.IgnoreCase))
+                              .Where(m => m.Success).GroupBy(m => m.Groups[1].Value.ToUpperInvariant())
+                              .OrderByDescending(g => g.Count()).FirstOrDefault();
+            if (county != null) doc.County = county.Key + " COUNTY";
 
             // The document's own recording number: a reference line with no R-key, nearest the
             // title. Keyed lines (R1: AFN ...) are the surveys it cites.
@@ -145,7 +162,7 @@ namespace FieldCodes.RecordSurvey
         private static void ReadCourses(RecordSurveyProject project, List<ClassifiedLine> lines, ExtractionOptions options)
         {
             var fragments = new List<Fragment>();
-            var loneDistances = lines.Where(l => l.Kind == SurveyEntityKind.Distance).ToList();
+            var loneDistances = lines.Where(l => l.Kind == SurveyEntityKind.Distance || l.Kind == SurveyEntityKind.Number).ToList();
             var usedDistances = new HashSet<ClassifiedLine>();
 
             foreach (var l in lines.Where(x => x.Kind == SurveyEntityKind.BearingDistance || x.Kind == SurveyEntityKind.Bearing || x.Kind == SurveyEntityKind.LineTableRow))
@@ -157,6 +174,7 @@ namespace FieldCodes.RecordSurvey
                 // reading in the same direction; say so in the confidence.
                 foreach (var f in lineFragments.Where(x => x.Bearing != null && x.Distance == null))
                 {
+                    if (l.InProse) continue;
                     var reach = options.PairingReach * Math.Max(1.0, l.Line.Box.Height);
                     var candidate = loneDistances
                         .Where(d => !usedDistances.Contains(d) && d.Page == l.Page && Math.Abs(PageGeometry.Normalize(d.Line.Box.RotationDegrees - l.Line.Box.RotationDegrees)) < 15.0)
@@ -168,7 +186,8 @@ namespace FieldCodes.RecordSurvey
                     usedDistances.Add(candidate.d);
                     f.Distance = candidate.d.Tokens.First(t => t.Kind == SurveyTokenKind.Distance && t.Read != null && t.Read.Ok);
                     f.Distance.Read.Notes.Add("Distance paired from the line below/beside the bearing.");
-                    f.Distance.Read.Confidence *= 0.9;
+                    f.Distance.Read.Confidence *= candidate.d.Kind == SurveyEntityKind.Number ? 0.8 : 0.9;
+                    if (candidate.d.Kind == SurveyEntityKind.Number) f.Distance.Read.Notes.Add("A bare number with no foot mark; it may be a lot number rather than this course's distance.");
                     var dTag = candidate.d.Tokens.FirstOrDefault(t => t.Kind == SurveyTokenKind.Tag);
                     if (dTag != null && f.Tag.Length == 0) f.Tag = dTag.Name;
                     f.Distance.Read.Raw = candidate.d.Line.Text;
@@ -203,6 +222,11 @@ namespace FieldCodes.RecordSurvey
             }
 
             MergeStackedRecordAndMeasured(project, options);
+
+            // Bare numbers not used as a distance are kept for the ordering step: one inside a
+            // closed loop names the lot.
+            foreach (var l in loneDistances.Where(x => x.Kind == SurveyEntityKind.Number && !usedDistances.Contains(x)))
+                project.Annotations.Add(new SurveyAnnotation { Kind = SurveyEntityKind.Number, Text = l.Key, Source = l.Source, Confidence = l.Line.EffectiveConfidence });
         }
 
         private static List<Fragment> FragmentsOf(ClassifiedLine l)
@@ -310,7 +334,14 @@ namespace FieldCodes.RecordSurvey
         private static void Finish(SurveyCall call, ClassifiedLine line, ExtractionOptions options)
         {
             call.Source = line.Source;
-            call.PageHint = line.Line.Box;
+            call.PageHint = line.InProse ? null : line.Line.Box;
+            if (line.InProse)
+            {
+                // Legal description calls are grouped into their own open figure, in reading order, and
+                // never ordered from the page: the text block is not where the line is.
+                call.Figure = "Description";
+                call.Notes.Add("Read from the legal description text, not from a label on the plan.");
+            }
             var lineTag = line.Tokens.FirstOrDefault(t => t.Kind == SurveyTokenKind.LineTag);
             if (lineTag != null) call.Notes.Add("Tagged " + lineTag.Name + " on the document.");
 
@@ -506,7 +537,22 @@ namespace FieldCodes.RecordSurvey
                 if (value == null || value.Read == null || !value.Read.Ok) { call.Notes.Add("Curve element " + t.Name + " has no readable value after it."); continue; }
                 var src = new SourceRef(l.Page, l.Line.Box, t.Text + value.Text, l.Line.EffectiveConfidence);
                 confidence = Math.Min(confidence, value.Read.Confidence);
-                switch (t.Name)
+                var name = t.Name;
+                if (name == "A") name = value.Kind == SurveyTokenKind.Angle ? "DELTA" : "L";
+                if (name == "DELTA" && t.Text.Trim().StartsWith("D", StringComparison.OrdinalIgnoreCase) && !t.Text.Contains("Δ") && !t.Text.ToUpperInvariant().Contains("DELTA"))
+                {
+                    // "D 6°CL": the degree of curve (chord definition), not the central angle -- when the group
+                    // also states Δ, or the value is followed by CL/AR. Noted, not used: R is what the office draws from.
+                    var after = i + 2 < tokens.Count ? tokens[i + 2].Text.ToUpperInvariant() : string.Empty;
+                    var hasDelta = tokens.Any(x => x.Kind == SurveyTokenKind.CurveKey && (x.Text.Contains("Δ") || x.Text.ToUpperInvariant().Contains("DELTA"))) ||
+                                   call.Curve.Stated("DELTA");
+                    if (hasDelta || after.StartsWith("CL") || after.StartsWith("AR"))
+                    {
+                        call.Notes.Add("Degree of curve " + value.Read.Normalized + " read and set aside; the curve is built from R and Δ.");
+                        continue;
+                    }
+                }
+                switch (name)
                 {
                     case "R": if (value.Kind == SurveyTokenKind.Distance) { c.Radius = value.Read.Value; Stated(c, "R", src); } break;
                     case "L": if (value.Kind == SurveyTokenKind.Distance) { c.ArcLength = value.Read.Value; Stated(c, "L", src); } break;

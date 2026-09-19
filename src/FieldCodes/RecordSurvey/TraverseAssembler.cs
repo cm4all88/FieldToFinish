@@ -416,6 +416,10 @@ namespace FieldCodes.RecordSurvey
             var poly = chain.Select(s => new[] { s.StartX, s.StartY }).ToList();
             foreach (var f in project.Figures.Where(f => f.PageHint != null))
                 if (Inside(poly, f.PageHint.CenterX, f.PageHint.CenterY)) return f.Name;
+            // Older plats number lots with a bare figure in the middle of the lot.
+            var numbers = project.Annotations.Where(a => a.Kind == SurveyEntityKind.Number && a.Source != null && a.Source.Box != null &&
+                                                         Inside(poly, a.Source.Box.CenterX, a.Source.Box.CenterY)).ToList();
+            if (numbers.Count == 1) return "Lot " + numbers[0].Text;
             return null;
         }
 
