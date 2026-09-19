@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -183,15 +183,24 @@ namespace FieldCodes.Cad
         /// <summary>The exhibit section of the chosen profile, or the drawing's own.</summary>
         internal static ExhibitSettings ExhibitProfile(string profile, FtfSettings current)
         {
+            string problem;
+            return ExhibitProfile(profile, current, out problem);
+        }
+
+        /// <summary>As above, saying why when the exhibit's own profile could not be used.</summary>
+        internal static ExhibitSettings ExhibitProfile(string profile, FtfSettings current, out string problem)
+        {
+            problem = null;
             if (string.IsNullOrWhiteSpace(profile)) return current.Exhibits;
             try
             {
                 var path = FtfSettings.ProfilePath(profile);
                 if (File.Exists(path)) return FtfSettings.Load(path).Exhibits ?? current.Exhibits;
+                problem = "the exhibit's profile \"" + profile + "\" is not on this computer (" + path + "); the drawing's current settings were used instead";
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-            catch (ConfigException) { }
+            catch (IOException ex) { problem = "the exhibit's profile \"" + profile + "\" could not be read (" + ex.Message + "); the drawing's current settings were used instead"; }
+            catch (UnauthorizedAccessException ex) { problem = "the exhibit's profile \"" + profile + "\" could not be read (" + ex.Message + "); the drawing's current settings were used instead"; }
+            catch (ConfigException ex) { problem = "the exhibit's profile \"" + profile + "\" is not valid (" + ex.Message + "); the drawing's current settings were used instead"; }
             return current.Exhibits;
         }
 
@@ -343,6 +352,10 @@ namespace FieldCodes.Cad
         private readonly HashSet<string> _keptEdited = new HashSet<string>();
         private readonly HashSet<string> _userErased = new HashSet<string>();
         private readonly Dictionary<string, Point3d> _userPositions = new Dictionary<string, Point3d>();
+        // Labels the drafter moved (position, the text they had then, rotation) and block attributes the drafter changed.
+        private readonly Dictionary<string, Tuple<Point3d, string, double>> _movedLabels = new Dictionary<string, Tuple<Point3d, string, double>>();
+        private readonly Dictionary<string, Dictionary<string, string>> _userAttributes = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        private bool _fromTemplate;
         private readonly List<SheetBox> _boxes = new List<SheetBox>();
         private readonly double _upf;
         private BlockTableRecord _space;
@@ -423,9 +436,15 @@ namespace FieldCodes.Cad
                 }
                 var manager = LayoutManager.Current;
                 if (!string.IsNullOrWhiteSpace(_xs.TemplateLayout) && layouts.Contains(_xs.TemplateLayout))
+                {
                     manager.CopyLayout(_xs.TemplateLayout, _exhibit.LayoutName);
+                    _fromTemplate = true;
+                }
                 else if (!string.IsNullOrWhiteSpace(_xs.TemplateLayout) && ImportLayout(_xs.TemplateFile, _xs.TemplateLayout, _exhibit.LayoutName))
+                {
                     Note("Info", null, "The layout was made from \"" + _xs.TemplateLayout + "\" in " + Path.GetFileName(_xs.TemplateFile) + ".");
+                    _fromTemplate = true;
+                }
                 else
                 {
                     if (!string.IsNullOrWhiteSpace(_xs.TemplateLayout)) Note("Warning", null, "Template layout \"" + _xs.TemplateLayout + "\" is not in this drawing" + (string.IsNullOrWhiteSpace(_xs.TemplateFile) ? string.Empty : " or in " + _xs.TemplateFile) + "; a blank layout was used.");
@@ -449,7 +468,12 @@ namespace FieldCodes.Cad
                     vp.Erase();
                 }
             }
-            if (!Rebuilding) SetPaper(layout);
+            if (!Rebuilding)
+            {
+                // An office template layout brings its own page setup: it is kept, and FTFEXHIBITQA compares it with the profile.
+                if (_fromTemplate) Note("Info", null, "The page setup (plotter, paper, plot style) is the template layout's own; FTF did not change it.");
+                else SetPaper(layout);
+            }
             return true;
         }
 
@@ -601,6 +625,7 @@ namespace FieldCodes.Cad
             };
             var untouched = new List<string>();
             var filled = new List<string>();
+            var written = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (ObjectId id in def)
             {
                 var attribute = _tr.GetObject(id, OpenMode.ForRead) as AttributeDefinition;
@@ -611,15 +636,51 @@ namespace FieldCodes.Cad
                 var mapped = map.FirstOrDefault(m => string.Equals(m.Key, attribute.Tag, StringComparison.OrdinalIgnoreCase));
                 if (mapped.Key != null) template = mapped.Value;
                 else if (map.Count == 0) defaults.TryGetValue(attribute.Tag, out template);
+                // Approval, certification and seal fields are the surveyor's; a person field only from what the drafter typed.
+                var refusal = template == null ? null : ExhibitSettings.AttributeRefusal(attribute.Tag, template);
+                if (refusal != null)
+                {
+                    Note("Warning", key, "\"" + def.Name + "\" attribute " + attribute.Tag + " was not filled: " + refusal + ".");
+                    template = null;
+                }
                 var value = template == null ? null : _exhibit.Info.Fill(template);
                 if (!string.IsNullOrWhiteSpace(value)) { attRef.TextString = value.ToUpperInvariant(); filled.Add(attribute.Tag); }
-                else if (template == null) untouched.Add(attribute.Tag);
+                else
+                {
+                    if (template == null) untouched.Add(attribute.Tag);
+                    // Initials the block itself carries would print as if they were this exhibit's.
+                    if ((ExhibitSettings.IsPersonTag(attribute.Tag) || ExhibitSettings.IsProfessionalTag(attribute.Tag)) && !string.IsNullOrWhiteSpace(attRef.TextString))
+                        Note("Warning", key, "\"" + def.Name + "\" attribute " + attribute.Tag + " shows the block's own value \"" + attRef.TextString +
+                             "\"; FTF leaves it -- clear it or set it as the office does before the exhibit goes out.");
+                }
+                written[attribute.Tag] = attRef.TextString;
                 reference.AttributeCollection.AppendAttribute(attRef);
                 _tr.AddNewlyCreatedDBObject(attRef, true);
             }
             if (untouched.Count > 0)
                 Note("Info", key, "\"" + def.Name + "\" attributes left as the block defines them (FTF does not know what they hold): " + string.Join(", ", untouched.ToArray()) + ".");
+            KeepDrafterAttributes(reference, key, def.Name, written);
             return reference;
+        }
+
+        /// <summary>
+        /// Puts back attribute values the drafter typed on the previous build's block, and records what FTF itself
+        /// wrote so the next rebuild can tell the two apart.
+        /// </summary>
+        private void KeepDrafterAttributes(BlockReference reference, string key, string blockName, Dictionary<string, string> written)
+        {
+            Dictionary<string, string> changed;
+            if (_userAttributes.TryGetValue(key, out changed))
+                foreach (ObjectId attId in reference.AttributeCollection)
+                {
+                    var att = (AttributeReference)_tr.GetObject(attId, OpenMode.ForWrite);
+                    string typed;
+                    if (!changed.TryGetValue(att.Tag, out typed)) continue;
+                    att.TextString = typed;
+                    Note("Info", key, "\"" + blockName + "\" attribute " + att.Tag + " keeps the value typed by hand, \"" + typed + "\"; the hand edit was kept.");
+                }
+            var item = _exhibit.Items.LastOrDefault(i => i.Key == key);
+            if (item != null) item.Attributes = written;
         }
 
         private void ApplyLineweights()
@@ -667,6 +728,23 @@ namespace FieldCodes.Cad
                 }
                 if (item.KeepPosition && ExhibitCommands.Moved(entity, item))
                     _userPositions[item.Key] = ExhibitCommands.PositionOf(entity).Value;
+                // A course or area label the drafter moved: remembered with the text it had, so an unchanged label stays put.
+                var label = entity as MText;
+                if (label != null && !item.KeepPosition && (item.Kind == "LABEL" || item.Kind == "AREALABEL") &&
+                    (item.HandPosition || ExhibitCommands.Moved(entity, item)))
+                    _movedLabels[item.Key] = Tuple.Create(label.Location, item.Text, label.Rotation);
+                // Title block and sheet block attributes the drafter changed are carried into the new block.
+                var block = entity as BlockReference;
+                if (block != null && item.Attributes != null)
+                    foreach (ObjectId attId in block.AttributeCollection)
+                    {
+                        var att = _tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                        string wrote;
+                        if (att == null || !item.Attributes.TryGetValue(att.Tag, out wrote) || att.TextString == wrote) continue;
+                        Dictionary<string, string> changed;
+                        if (!_userAttributes.TryGetValue(item.Key, out changed)) _userAttributes[item.Key] = changed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        changed[att.Tag] = att.TextString;
+                    }
                 if (item.Kind == "VIEWPORT") continue;
                 entity.UpgradeOpen();
                 entity.Erase();
@@ -724,7 +802,9 @@ namespace FieldCodes.Cad
             }
             var layersBefore = (LayerTable)_tr.GetObject(_db.LayerTableId, OpenMode.ForRead);
             var viewportLayerIsNew = !string.IsNullOrWhiteSpace(_xs.ViewportLayer) && !layersBefore.Has(_xs.ViewportLayer);
-            vp.LayerId = ProductionLayers.Get(_db, _tr, _xs.ViewportLayer, _settings);
+            // A template layout's own viewport stays on the layer the office put it on.
+            if (!created && old == null && _fromTemplate) viewportLayerIsNew = false;
+            else vp.LayerId = ProductionLayers.Get(_db, _tr, _xs.ViewportLayer, _settings);
             var viewportLayer = (LayerTableRecord)_tr.GetObject(vp.LayerId, OpenMode.ForRead);
             if (viewportLayerIsNew && viewportLayer.IsPlottable)
             {
@@ -1369,6 +1449,8 @@ namespace FieldCodes.Cad
                     { "OWNER", _exhibit.Info.Owner }, { "APN", _exhibit.Info.Apn }, { "COUNTY", _exhibit.Info.County }, { "PURPOSE", _exhibit.Info.Purpose },
                     { "SHEET", _exhibit.Info.Sheet }, { "PREPAREDBY", _exhibit.Info.PreparedBy }, { "DATE", _exhibit.Info.Date }
                 };
+                var written = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var untouched = new List<string>();
                 foreach (ObjectId id in def)
                 {
                     var attribute = _tr.GetObject(id, OpenMode.ForRead) as AttributeDefinition;
@@ -1377,11 +1459,16 @@ namespace FieldCodes.Cad
                     attRef.SetAttributeFromBlock(attribute, reference.BlockTransform);
                     string value;
                     if (values.TryGetValue(attribute.Tag, out value) && !string.IsNullOrWhiteSpace(value)) attRef.TextString = value.ToUpperInvariant();
+                    else if (!values.ContainsKey(attribute.Tag)) untouched.Add(attribute.Tag);
+                    written[attribute.Tag] = attRef.TextString;
                     reference.AttributeCollection.AppendAttribute(attRef);
                     _tr.AddNewlyCreatedDBObject(attRef, true);
                 }
                 reference.LayerId = ProductionLayers.Get(_db, _tr, _xs.BorderLayer, _settings);
                 Stamp(reference, "BORDER", "TITLEBLOCK", FtfEntityKind.ExhibitBorder, null, true, at);
+                if (untouched.Count > 0)
+                    Note("Info", "BORDER", "\"" + Path.GetFileName(_xs.TitleBlockPath) + "\" attributes left as the block defines them (FTF does not know what they hold): " + string.Join(", ", untouched.ToArray()) + ".");
+                KeepDrafterAttributes(reference, "BORDER", Path.GetFileName(_xs.TitleBlockPath), written);
             }
             catch (Autodesk.AutoCAD.Runtime.Exception ex)
             {
@@ -1395,11 +1482,13 @@ namespace FieldCodes.Cad
         {
             var size = _xs.NorthArrowSizeIn;
             ObjectId defId;
-            if (!string.IsNullOrWhiteSpace(_xs.NorthArrowBlock) && ((BlockTable)_tr.GetObject(_db.BlockTableId, OpenMode.ForRead)).Has(_xs.NorthArrowBlock))
-                defId = ((BlockTable)_tr.GetObject(_db.BlockTableId, OpenMode.ForRead))[_xs.NorthArrowBlock];
+            // The office's north arrow block: this drawing's, or brought in from the block library like the other sheet blocks.
+            var office = string.IsNullOrWhiteSpace(_xs.NorthArrowBlock) ? ObjectId.Null : BlockDef(_xs.NorthArrowBlock, "NORTH");
+            if (!office.IsNull)
+                defId = office;
             else
             {
-                if (!string.IsNullOrWhiteSpace(_xs.NorthArrowBlock)) Note("Warning", "NORTH", "North arrow block \"" + _xs.NorthArrowBlock + "\" is not in this drawing; a simple arrow is drawn.");
+                if (!string.IsNullOrWhiteSpace(_xs.NorthArrowBlock)) Note("Warning", "NORTH", "North arrow block \"" + _xs.NorthArrowBlock + "\" could not be used; a simple arrow is drawn instead.");
                 defId = Definition("FTF_NORTH_ARROW_" + ((int)Math.Round(size * 100)).ToString(CultureInfo.InvariantCulture), append =>
                 {
                     var tip = new Point2d(0, size / 2);
@@ -2495,6 +2584,20 @@ namespace FieldCodes.Cad
                           string layer, bool keepPosition, string description, double width = 0, bool mask = false, ObjectId style = default(ObjectId))
         {
             var position = Position(key, at);
+            var handPosition = false;
+            Tuple<Point3d, string, double> moved;
+            if (_movedLabels.TryGetValue(key, out moved))
+            {
+                if (moved.Item2 == contents)
+                {
+                    position = moved.Item1;
+                    rotation = moved.Item3;
+                    handPosition = true;
+                }
+                else
+                    Note("Warning", key, "\"" + Plain(moved.Item2) + "\" was moved by hand, but it now reads \"" + Plain(contents) +
+                         "\" (the easement changed), so it was placed again -- check where it sits.");
+            }
             var text = new MText();
             text.SetDatabaseDefaults(_db);
             if (!style.IsNull) text.TextStyleId = style;
@@ -2513,6 +2616,12 @@ namespace FieldCodes.Cad
                 text.BackgroundScaleFactor = 1.15;
             }
             Add(text, key, kind, kind == "LABEL" || kind == "AREALABEL" ? FtfEntityKind.ExhibitLabel : FtfEntityKind.ExhibitText, layer, contents, keepPosition, position);
+            if (handPosition)
+            {
+                var item = _exhibit.Items.LastOrDefault(i => i.Key == key);
+                if (item != null) item.HandPosition = true;
+                Note("Info", key, "\"" + Plain(contents) + "\" stays where it was moved by hand.");
+            }
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json;
@@ -526,8 +527,47 @@ namespace FieldCodes.Settings
             return list;
         }
 
+        /// <summary>
+        /// Title block attributes that belong to the surveyor alone -- approval, acceptance, certification, licence,
+        /// seal, stamp, signature. FTF never writes them, whatever a profile maps.
+        /// </summary>
+        public static bool IsProfessionalTag(string tag)
+        {
+            var t = new string((tag ?? string.Empty).ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+            if (t.Length == 0) return false;
+            if (new[] { "APPROV", "ACCEPT", "CERTIF", "LICEN", "SEAL", "PLS" }.Any(t.Contains)) return true;
+            if (t.StartsWith("SIGN", StringComparison.Ordinal)) return true;
+            // A plot or date stamp is not a surveyor's stamp.
+            return t.Contains("STAMP") && !new[] { "TIME", "PLOT", "DATE", "FILE" }.Any(t.Contains);
+        }
+
+        /// <summary>A person field ("DrawnBy", "CheckedBy"): filled only from what the drafter typed for the exhibit.</summary>
+        public static bool IsPersonTag(string tag)
+        {
+            var t = new string((tag ?? string.Empty).ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+            return t.EndsWith("BY", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Why FTF will not fill this title block attribute from this mapping, or null when it may. Approval and seal
+        /// fields are never filled; a person field only from an exhibit field (a fixed name in the profile would put the
+        /// same person on every exhibit).
+        /// </summary>
+        public static string AttributeRefusal(string tag, string template)
+        {
+            if (IsProfessionalTag(tag)) return "approval, certification and seal fields are the surveyor's; FTF never fills them";
+            if (IsPersonTag(tag) && !string.IsNullOrWhiteSpace(template) && template.IndexOf('{') < 0)
+                return "a fixed name in the profile would appear on every exhibit; map it to a field the drafter fills, such as {preparedBy} or {checkedBy}";
+            return null;
+        }
+
         public void Validate(ICollection<string> problems)
         {
+            foreach (var m in AttributeMap())
+            {
+                var refusal = AttributeRefusal(m.Key, m.Value);
+                if (refusal != null) problems.Add("Exhibits: title block attribute " + m.Key + " cannot be mapped: " + refusal + ".");
+            }
             if (SheetWidthIn <= 1 || SheetHeightIn <= 1) problems.Add("Exhibits: the sheet size is too small.");
             if (ViewportWidthIn <= 0.5 || ViewportHeightIn <= 0.5) problems.Add("Exhibits: the viewport is too small.");
             if (ViewportLeftIn < 0 || ViewportBottomIn < 0 || ViewportLeftIn + ViewportWidthIn > SheetWidthIn + 1e-9 || ViewportBottomIn + ViewportHeightIn > SheetHeightIn + 1e-9)

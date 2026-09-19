@@ -237,9 +237,11 @@ namespace FieldCodes.Cad
             var rows = new List<InspectRow>();
             Action<string, string, string, string, string> add = (severity, category, item, value, handle) =>
                 rows.Add(new InspectRow { Section = category, Item = item, Value = value, Handle = handle, Layout = handle == null ? null : x.LayoutName, Severity = severity, Source = "FTFEXHIBITQA" });
-            var xs = ExhibitCommands.ExhibitProfile(x.ProfileName, settings);
+            string profileProblem;
+            var xs = ExhibitCommands.ExhibitProfile(x.ProfileName, settings, out profileProblem);
             var es = settings.Easements;
             var upf = settings.General.UnitsPerFoot;
+            if (profileProblem != null) add(Review, SheetPlot, "Profile", profileProblem, null);
 
             // Source data: stale exhibit, survey changes, easements no longer stored.
             var shown = x.Sources.Select(s => records.FirstOrDefault(r => r.Id == s.EasementId)).ToList();
@@ -435,7 +437,9 @@ namespace FieldCodes.Cad
             }
             foreach (var f in new[] { Tuple.Create("Template drawing", xs.TemplateFile), Tuple.Create("Block library", xs.BlockLibrary), Tuple.Create("Title block drawing", xs.TitleBlockPath), Tuple.Create("Stamp library", xs.StampLibrary) })
                 if (!string.IsNullOrWhiteSpace(f.Item2) && !File.Exists(f.Item2)) add(Review, SheetPlot, f.Item1, f.Item2 + " cannot be found from this computer", null);
-            foreach (var block in new[] { xs.TitleBlockName, xs.ScaleBarBlock }.Concat(xs.SheetBlockList().Select(b => b.Name)).Where(n => !string.IsNullOrWhiteSpace(n)))
+            foreach (var style in OfficeStylesMissing(db, tr, xs))
+                add(Review, Drafting, "Office style", style, null);
+            foreach (var block in new[] { xs.TitleBlockName, xs.ScaleBarBlock, xs.DrawNorthArrow ? xs.NorthArrowBlock : null }.Concat(xs.SheetBlockList().Select(b => b.Name)).Where(n => !string.IsNullOrWhiteSpace(n)))
             {
                 var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 if (!bt.Has(block)) add(Review, SheetPlot, "Block " + block, "not in the drawing (the exhibit could not place it)", null);
@@ -444,6 +448,12 @@ namespace FieldCodes.Cad
             // What is left to people, not FTF.
             foreach (var note in x.Review.Where(n => n.Message.Contains("attributes left as the block defines them")))
                 add(Info, ManualReview, "Title block attributes", note.Message, null);
+            foreach (var note in x.Review.Where(n => n.Message.Contains(" was not filled: ") || n.Message.Contains("shows the block's own value")))
+                add(Review, ManualReview, "Title block attributes", note.Message, null);
+            foreach (var note in x.Review.Where(n => n.Message.Contains("keeps the value typed by hand") || n.Message.Contains("stays where it was moved by hand")))
+                add(Info, ManualReview, "Kept from the drafter", note.Message, null);
+            foreach (var note in x.Review.Where(n => n.Message.Contains("was moved by hand, but it now reads")))
+                add(Review, ManualReview, "Moved label", note.Message, null);
             var stampMode = (xs.StampMode ?? ExhibitSettings.StampNone).Trim();
             if (!string.Equals(stampMode, ExhibitSettings.StampNone, StringComparison.OrdinalIgnoreCase))
                 add(Info, ManualReview, "Surveyor stamp", has("STAMP") && !string.IsNullOrWhiteSpace(x.StampBlock) && string.Equals(stampMode, ExhibitSettings.StampBlock, StringComparison.OrdinalIgnoreCase)
@@ -451,6 +461,25 @@ namespace FieldCodes.Cad
                     : has("STAMP") ? "placeholder only -- the surveyor places the stamp" : "no stamp place on the sheet (erased by hand)", null);
             add(Info, ManualReview, "Surveyor review", "legal descriptions and exhibits are drafts until the surveyor reviews them; FTF does not approve them", null);
             return rows;
+        }
+
+        /// <summary>
+        /// The office styles the profile names that this drawing does not have. FTF never makes its own copy of an office
+        /// style; without it the exhibit falls back to the drawing's current style, which the drafter should know.
+        /// </summary>
+        internal static List<string> OfficeStylesMissing(Database db, Transaction tr, ExhibitSettings xs)
+        {
+            var missing = new List<string>();
+            foreach (var text in new[] { xs.TextStyle, xs.TitleTextStyle }.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase))
+                if (Setup.DrawingResources.FindTextStyle(db, tr, text).IsNull)
+                    missing.Add("text style \"" + text + "\" is not in this drawing; the exhibit used the current text style");
+            if (!string.IsNullOrWhiteSpace(xs.DimensionStyle) && !((DimStyleTable)tr.GetObject(db.DimStyleTableId, OpenMode.ForRead)).Has(xs.DimensionStyle))
+                missing.Add("dimension style \"" + xs.DimensionStyle + "\" is not in this drawing; width dimensions used the current dimension style");
+            if (!string.IsNullOrWhiteSpace(xs.LeaderStyle) && !((DBDictionary)tr.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForRead)).Contains(xs.LeaderStyle))
+                missing.Add("multileader style \"" + xs.LeaderStyle + "\" is not in this drawing; POB/POC leaders used the current multileader style");
+            if (!string.IsNullOrWhiteSpace(xs.TableStyle) && !((DBDictionary)tr.GetObject(db.TableStyleDictionaryId, OpenMode.ForRead)).Contains(xs.TableStyle))
+                missing.Add("table style \"" + xs.TableStyle + "\" is not in this drawing; line/curve tables used the current table style");
+            return missing;
         }
 
         /// <summary>The smallest distance between an easement hatch's pattern lines, drawing units; null for a hatch without lines.</summary>
