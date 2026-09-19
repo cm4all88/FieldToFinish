@@ -255,6 +255,8 @@ public sealed class RecordSurveyOcrNoiseTests
     [InlineData("N O° 47\"W", 360 - 47 / 60.0)]                                 // O for 0, second mark on the minutes
     [InlineData("589° 33 Ww", 180 + 89 + 33 / 60.0)]                            // 5 for S, doubled W
     [InlineData("N 89°43'/4\"W", 360 - (89 + 43 / 60.0 + 14 / 3600.0))]        // slash for a 1 in the seconds
+    [InlineData("S 1° 22'58\" pW", 180 + 1 + 22 / 60.0 + 58 / 3600.0)]          // stray p between the seconds mark and W
+    [InlineData("N 88° 37'02\"\"pw", 360 - (88 + 37 / 60.0 + 2 / 3600.0))]      // doubled mark and a stray p
     [InlineData("N 4°§3'45\"E", 4 + 53 / 60.0 + 45 / 3600.0)]                   // section sign for a 5
     [InlineData("NB7°OS W", 360 - (87 + 5 / 60.0))]                             // B for 8, OS for 05
     [InlineData("$ 68°24 29\"E", 180 - (68 + 24 / 60.0 + 29 / 3600.0))]

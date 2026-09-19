@@ -145,12 +145,13 @@ namespace FieldCodes.RecordSurvey
         // order -- with any of ° ' " - or a space as the separator, because OCR turns one mark into another
         // as often as not (S 89° 43° 14° E). A body whose marks are not the canonical ones costs confidence.
         // The quadrant letters tolerate OCR too: a leading 5 or $ is an S it could not shape; a doubled E or W
-        // is one letter read twice; a lone F after a full body is an E. Degrees may be one to three digits so
-        // a misread 189 is refused, not folded.
+        // is one letter read twice; a lone F after a full body is an E; a p or q between the seconds mark and
+        // the letter is the mark's tail read as a letter. Degrees may be one to three digits so a misread 189
+        // is refused, not folded.
         private static readonly Regex BearingRegex = new Regex(
             @"(?<ns>(?:\b(?:N|S|NORTH|SOUTH))|(?<![A-Z0-9])(?:5|\$|§)(?=\s*\$?\s*[0-9OIlSB/§]{1,3}\s*°))\s*\$?\s*" +
             @"(?<body>[0-9OIlSB/§](?:[0-9OIlSB/§°'""\s.\-]|D(?![A-Z])){0,22}?)\s*" +
-            @"(?<ew>(?:EAST|WEST|E{1,2}|W{1,2}|EF|F)\b)",
+            @"(?:(?<=""\s*)(?<stray>[pq])\s*)?(?<ew>(?:EAST|WEST|E{1,2}|W{1,2}|EF|F)\b)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly Regex DueRegex = new Regex(
@@ -186,6 +187,8 @@ namespace FieldCodes.RecordSurvey
             if (nsText == "5" || nsText == "$" || nsText == "§") { total++; read.Notes.Add("A leading '" + nsText + "' read as S."); }
             if (ewText == "EE" || ewText == "WW") { total++; read.Notes.Add("A doubled quadrant letter read once."); }
             if (ewText == "EF" || ewText == "F") { total++; read.Notes.Add("A trailing '" + ewText + "' read as E."); }
+            // 58" pW: the seconds mark and the W come apart as a stray p (seen on typed plats).
+            if (m.Groups["stray"].Success) { total++; read.Notes.Add("A stray '" + m.Groups["stray"].Value + "' between the seconds mark and the quadrant letter ignored."); }
 
             double deg, min, sec;
             int parts;
