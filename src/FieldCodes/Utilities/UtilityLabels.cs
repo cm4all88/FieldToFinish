@@ -56,8 +56,17 @@ namespace FieldCodes.Utilities
 
         private static string Num(double value)
         {
-            return value.ToString(Math.Abs(value - Math.Round(value)) < 1e-9 ? "0" : "0.#",
-                                  CultureInfo.InvariantCulture);
+            return SizeNumber(value);
+        }
+
+        /// <summary>
+        /// A size in inches with the precision it was entered with and no padding: 12, 17.5, 1.25. The stored value
+        /// is never rounded for a label.
+        /// </summary>
+        public static string SizeNumber(double value)
+        {
+            var r = value.ToString("R", CultureInfo.InvariantCulture);
+            return r.IndexOf('E') < 0 ? r : value.ToString("0.###############", CultureInfo.InvariantCulture);
         }
 
         public static string PipeLabel(UtilityProject project, PipeConnection connection,
@@ -90,7 +99,7 @@ namespace FieldCodes.Utilities
 
             lines.Add(Apply(settings.StructureHeaderFormat, new Dictionary<string, string>
             {
-                { "code", !string.IsNullOrEmpty(structure.Field.FieldCode) ? structure.Field.FieldCode : structure.StructureType },
+                { "code", structure.EffectiveCode },
                 { "number", structure.Field.PointNumber },
                 { "type", structure.StructureType },
                 { "size", StructureDimensions.SizeText(structure, settings) }

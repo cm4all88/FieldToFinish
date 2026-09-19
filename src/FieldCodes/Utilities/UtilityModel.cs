@@ -146,9 +146,28 @@ namespace FieldCodes.Utilities
         /// <summary>The field-note line this came from, verbatim.</summary>
         [JsonProperty("raw")] public string RawText { get; set; }
 
+        /// <summary>
+        /// Values that were copied from the connected pipe at the other structure when this end was completed
+        /// ("direction", "size", "material") and have not been entered or confirmed here since. They are the drafter's
+        /// carry-over, not an observation at this structure. Empty for everything observed here.
+        /// </summary>
+        [JsonProperty("prefilled", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> Prefilled { get; set; }
+        public bool ShouldSerializePrefilled() { return Prefilled != null && Prefilled.Count > 0; }
+
+        /// <summary>Which pipe the prefilled values came from ("SDMH 1047: N/NW 17.5" RIBBED PVC").</summary>
+        [JsonProperty("prefilledFrom")] public string PrefilledFrom { get; set; }
+        public bool ShouldSerializePrefilledFrom() { return !string.IsNullOrEmpty(PrefilledFrom); }
+
+        public bool IsPrefilled(string field)
+        {
+            return Prefilled != null && Prefilled.Contains(field);
+        }
+
         public PipeObservation()
         {
             Id = Guid.NewGuid().ToString("N");
+            Prefilled = new List<string>();
             Conditions = new List<string>();
             Direction = new ObservedDirection { Kind = DirectionKind.Unknown };
         }
@@ -215,6 +234,28 @@ namespace FieldCodes.Utilities
         [JsonProperty("type")] public string StructureType { get; set; }
         [JsonProperty("system")] public UtilitySystem System { get; set; }
 
+        /// <summary>
+        /// True once the drafter has set the structure type in the Dip Builder to something other than the field
+        /// code. The field code itself (Field.FieldCode) is never changed: it stays as observed. Only a type the
+        /// drafter chose outranks it -- a type that came from the CAD point's description never does.
+        /// </summary>
+        [JsonProperty("typeSetByDrafter")] public bool TypeSetByDrafter { get; set; }
+        public bool ShouldSerializeTypeSetByDrafter() { return TypeSetByDrafter; }
+
+        /// <summary>
+        /// The code that decides how the structure is treated and shown (round or rectangular, pipe buttons, label
+        /// header): the drafter's type when they set one, otherwise the field code, otherwise the type.
+        /// </summary>
+        [JsonIgnore]
+        public string EffectiveCode
+        {
+            get
+            {
+                if (TypeSetByDrafter && !string.IsNullOrEmpty(StructureType)) return StructureType;
+                return !string.IsNullOrEmpty(Field.FieldCode) ? Field.FieldCode : StructureType;
+            }
+        }
+
         /// <summary>Inside width typed by the drafter, inches. Separate from the field value.</summary>
         [JsonProperty("enteredInsideWidthIn")] public double? EnteredInsideWidthIn { get; set; }
 
@@ -232,8 +273,7 @@ namespace FieldCodes.Utilities
         {
             get
             {
-                var code = !string.IsNullOrEmpty(Field.FieldCode) ? Field.FieldCode : StructureType;
-                return (code ?? "STRUCTURE") + " " + (Field.PointNumber ?? "?");
+                return (EffectiveCode ?? "STRUCTURE") + " " + (Field.PointNumber ?? "?");
             }
         }
     }

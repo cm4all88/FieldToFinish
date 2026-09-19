@@ -157,7 +157,7 @@ namespace FieldCodes.Utilities
                 source = DimensionSource.UserEntry;
                 return structure.EnteredInsideWidthIn;
             }
-            var rule = settings != null ? settings.FindCode(structure.Field.FieldCode ?? structure.StructureType) : null;
+            var rule = settings != null ? settings.FindCode(structure.EffectiveCode) : null;
             if (rule != null && rule.InsideWidthIn.HasValue)
             {
                 source = DimensionSource.Profile;
@@ -169,7 +169,8 @@ namespace FieldCodes.Utilities
         /// <summary>Round, rectangular or no size, from the structure's code.</summary>
         public static StructureShape ShapeOf(StructureRecord structure, UtilitySettings settings)
         {
-            var rule = structure != null && settings != null ? settings.FindCode(structure.Field.FieldCode ?? structure.StructureType) : null;
+            // The drafter's type when they set one, otherwise the field code (see StructureRecord.EffectiveCode).
+            var rule = structure != null && settings != null ? settings.FindCode(structure.EffectiveCode) : null;
             if (rule == null && structure != null && settings != null) rule = settings.FindCode(structure.StructureType);
             return rule != null ? rule.Shape : StructureShape.Round;
         }
@@ -183,9 +184,9 @@ namespace FieldCodes.Utilities
             DimensionSource source;
             var width = InsideWidth(structure, settings, out source);
             if (!width.HasValue) return null;
-            var w = width.Value.ToString("0.#", CultureInfo.InvariantCulture) + "\"";
+            var w = UtilityLabelFormatter.SizeNumber(width.Value) + "\"";
             if (shape == StructureShape.Rectangular && structure.EnteredInsideLengthIn.HasValue)
-                return w + "x" + structure.EnteredInsideLengthIn.Value.ToString("0.#", CultureInfo.InvariantCulture) + "\"";
+                return w + "x" + UtilityLabelFormatter.SizeNumber(structure.EnteredInsideLengthIn.Value) + "\"";
             return w;
         }
 

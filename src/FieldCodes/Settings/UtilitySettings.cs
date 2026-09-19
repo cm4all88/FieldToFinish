@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FieldCodes.Utilities;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -63,6 +64,88 @@ namespace FieldCodes.Settings
         [JsonProperty("minCoverFt")] public double MinCoverFt { get; set; }
     }
 
+    /// <summary>
+    /// Which pipe sizes and materials show first when a pipe is added at one kind of structure. Structure types,
+    /// a system, or neither (any structure). Speed tools only: nothing outside these lists is ever rejected.
+    /// </summary>
+    public sealed class PipeChoiceRule
+    {
+        [JsonProperty("name")] public string Name { get; set; }
+
+        /// <summary>Structure codes this rule is for (CB, SDMH). Empty: decided by the system instead.</summary>
+        [JsonProperty("structureCodes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> StructureCodes { get; set; }
+
+        /// <summary>The system this rule is for when it names no structure codes. Null with no codes: any structure.</summary>
+        [JsonProperty("system")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public UtilitySystem? System { get; set; }
+
+        [JsonProperty("commonSizes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<double> CommonSizes { get; set; }
+
+        /// <summary>Sizes behind the "Larger" button. Only a path to more choices: any size can be typed there.</summary>
+        [JsonProperty("largerSizes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<double> LargerSizes { get; set; }
+
+        [JsonProperty("commonMaterials", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> CommonMaterials { get; set; }
+
+        /// <summary>Materials behind "More...". Empty: every other office material.</summary>
+        [JsonProperty("moreMaterials", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> MoreMaterials { get; set; }
+
+        public PipeChoiceRule()
+        {
+            StructureCodes = new List<string>();
+            CommonSizes = new List<double>();
+            LargerSizes = new List<double>();
+            CommonMaterials = new List<string>();
+            MoreMaterials = new List<string>();
+        }
+
+        public void Normalize()
+        {
+            StructureCodes = Words(StructureCodes);
+            CommonMaterials = Words(CommonMaterials);
+            MoreMaterials = Words(MoreMaterials);
+            if (CommonSizes == null) CommonSizes = new List<double>();
+            if (LargerSizes == null) LargerSizes = new List<double>();
+        }
+
+        /// <summary>What the rule applies to, in words.</summary>
+        public string Describe()
+        {
+            if (!string.IsNullOrWhiteSpace(Name)) return Name.Trim();
+            if (StructureCodes != null && StructureCodes.Count > 0) return string.Join(", ", StructureCodes.ToArray());
+            return System.HasValue ? System.Value.ToString() : "Any structure";
+        }
+
+        private static List<string> Words(IEnumerable<string> values)
+        {
+            return (values ?? Enumerable.Empty<string>()).Where(v => !string.IsNullOrWhiteSpace(v))
+                                                         .Select(v => v.Trim().ToUpperInvariant()).Distinct().ToList();
+        }
+    }
+
+    /// <summary>The buttons resolved for one structure: shown first, and behind Larger / More.</summary>
+    public sealed class PipeChoiceSet
+    {
+        public string RuleName { get; set; }
+        public List<double> CommonSizes { get; private set; }
+        public List<double> LargerSizes { get; private set; }
+        public List<string> CommonMaterials { get; private set; }
+        public List<string> MoreMaterials { get; private set; }
+
+        public PipeChoiceSet()
+        {
+            CommonSizes = new List<double>();
+            LargerSizes = new List<double>();
+            CommonMaterials = new List<string>();
+            MoreMaterials = new List<string>();
+        }
+    }
+
     public sealed class UtilitySettings : ISettingsSection
     {
         public string Title { get { return "Storm & Sewer Dips"; } }
@@ -77,6 +160,28 @@ namespace FieldCodes.Settings
         /// <summary>Pipe material abbreviations the note parser recognises.</summary>
         [JsonProperty("materials", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> Materials { get; set; }
+
+        // Pick lists in the Dip Builder window. The "common" values show first; the rest sit under "More...".
+        // Suggestions only: any value can still be typed, and the observed field value always wins.
+
+        /// <summary>Structure codes shown first in the Type list; the other structure codes are under More.</summary>
+        [JsonProperty("commonStructureCodes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> CommonStructureCodes { get; set; }
+
+        /// <summary>
+        /// The size and material buttons offered when a pipe is added, by structure type and system. The first rule
+        /// naming the structure's type wins, then the first rule for its system with no types named, then the rule
+        /// with neither (any structure). Only decides which buttons show first: any size or material can be entered.
+        /// </summary>
+        [JsonProperty("pipeChoices", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<PipeChoiceRule> PipeChoices { get; set; }
+
+        /// <summary>Round structure diameters (inches) shown first, and those under More. Rectangular structures get
+        /// no size list: their inside dimensions are always typed as measured.</summary>
+        [JsonProperty("structureDiametersCommon", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<double> StructureDiametersCommon { get; set; }
+        [JsonProperty("structureDiametersMore", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<double> StructureDiametersMore { get; set; }
 
         /// <summary>The reference SHOWN as an assumption for an unmarked dip ("Assumed
         /// reference: Invert"). Display only: the pipe stays Unspecified until the
@@ -203,6 +308,13 @@ namespace FieldCodes.Settings
                 "CONC", "STEEL", "AC", "ADS", "PE", "UNK"
             };
 
+            // Common / More split from the Puget Sound field defaults (King, Pierce, Snohomish; 2026-09-18), in the
+            // office's own codes. Round sizes follow the WSDOT / King County Type 2 catch basin and manhole family.
+            CommonStructureCodes = new List<string> { "CB", "CBR", "SDMH", "SSMH", "MH" };
+            PipeChoices = DefaultPipeChoices();
+            StructureDiametersCommon = new List<double> { 48, 54, 60, 72, 96 };
+            StructureDiametersMore = new List<double> { 36, 42, 84, 108, 120 };
+
             AssumedPipeReference = MeasurementReference.Invert;
             // Office decision: a dip is the invert unless the note or the drafter says
             // top of pipe. Still recorded on each pipe as coming from this default.
@@ -270,6 +382,111 @@ namespace FieldCodes.Settings
             return null;
         }
 
+        /// <summary>The Type pick list: the common codes (only those still defined), then every other structure code.</summary>
+        public void StructureCodeChoices(out List<string> common, out List<string> more)
+        {
+            Split((StructureCodes ?? new List<StructureCodeRule>()).Select(c => c.Code), CommonStructureCodes, out common, out more);
+        }
+
+        /// <summary>
+        /// The buttons for a pipe at a structure of this type and system. Sizes and materials are kept exactly as
+        /// configured; "more" materials default to every other office material when the rule lists none, and
+        /// "larger" sizes to the any-structure rule's sizes when it lists none.
+        /// </summary>
+        public PipeChoiceSet PipeChoicesFor(string structureType, UtilitySystem system)
+        {
+            var rules = (PipeChoices ?? DefaultPipeChoices()).Where(r => r != null).ToList();
+            foreach (var r in rules) r.Normalize();
+            var code = (structureType ?? string.Empty).Trim().ToUpperInvariant();
+
+            var any = rules.FirstOrDefault(r => r.StructureCodes.Count == 0 && r.System == null);
+            var rule = (code.Length > 0 ? rules.FirstOrDefault(r => r.StructureCodes.Contains(code)) : null)
+                       ?? rules.FirstOrDefault(r => r.StructureCodes.Count == 0 && r.System == system)
+                       ?? any
+                       ?? new PipeChoiceRule();
+
+            var set = new PipeChoiceSet { RuleName = rule.Describe() };
+            set.CommonSizes.AddRange(rule.CommonSizes.Distinct());
+            var larger = rule.LargerSizes.Count > 0 || any == null || any == rule
+                ? rule.LargerSizes
+                : any.CommonSizes.Concat(any.LargerSizes).ToList();
+            set.LargerSizes.AddRange(larger.Distinct().Where(v => !set.CommonSizes.Contains(v)).OrderBy(v => v));
+
+            set.CommonMaterials.AddRange(rule.CommonMaterials.Distinct());
+            var more = rule.MoreMaterials.Count > 0
+                ? rule.MoreMaterials
+                : (Materials ?? new List<string>()).Select(m => (m ?? string.Empty).Trim().ToUpperInvariant()).ToList();
+            set.MoreMaterials.AddRange(more.Where(m => m.Length > 0 && !set.CommonMaterials.Contains(m)).Distinct());
+            return set;
+        }
+
+        /// <summary>
+        /// Starting points for the pipe buttons, from the Puget Sound field defaults (King, Pierce, Snohomish;
+        /// 2026-09-18) written in the office's own codes. The usual sizes are the ones worth one click at that kind of
+        /// structure -- shortcuts, not a range the structure is limited to: Larger holds the rest and any size can be
+        /// typed. Speed only, never a standard: the office edits these.
+        /// </summary>
+        public static List<PipeChoiceRule> DefaultPipeChoices()
+        {
+            return new List<PipeChoiceRule>
+            {
+                new PipeChoiceRule
+                {
+                    Name = "Catch basins and inlets",
+                    StructureCodes = { "CB", "CBR", "CBS", "DI", "INLET", "SDAD" },
+                    CommonSizes = { 6, 8, 10, 12, 15, 18, 24 },
+                    LargerSizes = { 4, 21, 27, 30, 36, 42, 48, 54, 60 },
+                    CommonMaterials = { "PVC", "RCP", "CPEP", "HDPE", "CMP", "CONC", "UNK" }
+                },
+                new PipeChoiceRule
+                {
+                    Name = "Storm", System = UtilitySystem.Storm,
+                    CommonSizes = { 8, 10, 12, 15, 18, 24, 30, 36, 48 },
+                    LargerSizes = { 4, 6, 21, 27, 33, 42, 54, 60, 66, 72, 84, 96, 108, 120 },
+                    CommonMaterials = { "RCP", "CMP", "PVC", "HDPE", "CPEP", "CONC", "UNK" }
+                },
+                new PipeChoiceRule
+                {
+                    Name = "Sanitary", System = UtilitySystem.Sanitary,
+                    CommonSizes = { 4, 6, 8, 10, 12, 15, 18, 24 },
+                    LargerSizes = { 21, 27, 30, 33, 36, 42, 48, 54, 60, 72 },
+                    CommonMaterials = { "VCP", "PVC", "RCP", "DI", "CONC", "UNK" }
+                },
+                new PipeChoiceRule
+                {
+                    Name = "Culverts", System = UtilitySystem.Culvert,
+                    CommonSizes = { 12, 15, 18, 24, 30, 36, 48, 60 },
+                    LargerSizes = { 8, 10, 42, 54, 66, 72, 84, 96, 108, 120, 144 },
+                    CommonMaterials = { "CMP", "RCP", "HDPE", "CPEP", "PVC", "CONC", "UNK" }
+                },
+                new PipeChoiceRule
+                {
+                    Name = "Any structure",
+                    CommonSizes = { 4, 6, 8, 10, 12, 15, 18, 24, 30, 36, 42, 48 },
+                    LargerSizes = { 1, 1.25, 1.5, 2, 3, 14, 16, 20, 21, 27, 33, 54, 60, 66, 72, 78, 84, 90, 96, 102, 108, 120, 144 },
+                    CommonMaterials = { "RCP", "PVC", "CMP", "HDPE", "VCP", "DI", "CONC", "UNK" }
+                }
+            };
+        }
+
+        /// <summary>A size in inches as the pick lists show it: 8, 1.25.</summary>
+        public static string SizeText(double inches)
+        {
+            return inches.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static void Split(IEnumerable<string> all, IEnumerable<string> commonNames, out List<string> common, out List<string> more)
+        {
+            var known = (all ?? Enumerable.Empty<string>()).Where(v => !string.IsNullOrWhiteSpace(v))
+                                                         .Select(v => v.Trim().ToUpperInvariant()).Distinct().ToList();
+            var wanted = new HashSet<string>((commonNames ?? Enumerable.Empty<string>()).Where(v => v != null)
+                                                                                     .Select(v => v.Trim().ToUpperInvariant()));
+            // Common values keep the order the office listed them in; the rest keep the order of the full list.
+            common = (commonNames ?? Enumerable.Empty<string>()).Where(v => v != null).Select(v => v.Trim().ToUpperInvariant())
+                                                               .Where(known.Contains).Distinct().ToList();
+            more = known.Where(v => !wanted.Contains(v)).ToList();
+        }
+
         public UtilitySystemStandard Standard(UtilitySystem system)
         {
             if (Systems != null)
@@ -283,6 +500,19 @@ namespace FieldCodes.Settings
             if (StructureCodes == null) StructureCodes = new List<StructureCodeRule>();
             if (Systems == null) Systems = new List<UtilitySystemStandard>();
             if (Materials == null) Materials = new List<string>();
+            if (CommonStructureCodes == null) CommonStructureCodes = new List<string>();
+            // Settings saved before pipe choices existed get the defaults; a saved empty list stays empty.
+            if (PipeChoices == null) PipeChoices = DefaultPipeChoices();
+            if (StructureDiametersCommon == null) StructureDiametersCommon = new List<double>();
+            if (StructureDiametersMore == null) StructureDiametersMore = new List<double>();
+            foreach (var rule in PipeChoices.Where(r => r != null))
+            {
+                rule.Normalize();
+                if (rule.CommonSizes.Concat(rule.LargerSizes).Any(v => double.IsNaN(v) || v <= 0))
+                    problems.Add("Dips: pipe sizes for \"" + rule.Describe() + "\" must be greater than zero.");
+            }
+            if (StructureDiametersCommon.Concat(StructureDiametersMore).Any(v => double.IsNaN(v) || v <= 0))
+                problems.Add("Dips: structure diameters in the pick list must be greater than zero.");
             if (DisabledChecks == null) DisabledChecks = new List<QcCode>();
             if (UnmarkedDipsAreInvertsByConvention && string.IsNullOrWhiteSpace(UnmarkedDipConventionSource))
                 problems.Add("Dips: say where the office convention that unmarked dips are inverts is documented, or turn it off.");
