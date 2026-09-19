@@ -264,12 +264,121 @@ namespace FtfUiTest
             Field<TabControl>("_tabs").SelectedIndex = index;
         }
 
+        /// <summary>Selects the pipe as a drafter does: by clicking its card.</summary>
         private static void SelectPipeRow(int row)
         {
-            var grid = Field<DataGridView>("_grid");
-            if (grid.Rows.Count <= row) { Fail("grid has no row " + row); return; }
-            grid.CurrentCell = grid.Rows[row].Cells[0];
-            grid.Rows[row].Selected = true;
+            var card = Card(row);
+            if (card == null) { Fail("no pipe card " + row); return; }
+            card.GetType().GetMethod("OnClick", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(card, new object[] { EventArgs.Empty });
+        }
+
+        // The Add pipe panel and the pipe cards ------------------------------------
+
+        /// <summary>Whether a control is set to show, whether or not Civil 3D (and so the window) is in front.</summary>
+        private static bool Shown(Control c)
+        {
+            return c != null && (bool)typeof(Control).GetMethod("GetState", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(c, new object[] { 2 });
+        }
+
+        private static Control Quick { get { return Field<Control>("_quick"); } }
+
+        private static Control Compass { get { return QuickField<Control>("_compass"); } }
+
+        private static string CompassSelected { get { return (string)Compass.GetType().GetProperty("Selected").GetValue(Compass, null); } }
+
+        private static Point CompassPoint(string name)
+        {
+            return (Point)Compass.GetType().GetMethod("PointFor").Invoke(Compass, new object[] { name });
+        }
+
+        /// <summary>A left click on the compass at this point, through the same handler the mouse uses.</summary>
+        private static void ClickCompassAt(Point p)
+        {
+            Compass.GetType().GetMethod("OnMouseClick", BindingFlags.NonPublic | BindingFlags.Instance)
+                   .Invoke(Compass, new object[] { new MouseEventArgs(MouseButtons.Left, 1, p.X, p.Y, 0) });
+        }
+
+        private static void ClickCompass(string name) { ClickCompassAt(CompassPoint(name)); }
+
+        private static void ClickCompassAtAzimuth(double azimuth)
+        {
+            var c = Compass;
+            var r = Math.Min(c.Width, c.Height) * 0.3;
+            var a = azimuth * Math.PI / 180.0;
+            ClickCompassAt(new Point((int)Math.Round(c.Width / 2.0 + Math.Sin(a) * r), (int)Math.Round(c.Height / 2.0 - Math.Cos(a) * r)));
+        }
+
+        private static T QuickField<T>(string name) where T : class
+        {
+            var q = Quick;
+            return q.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(q) as T;
+        }
+
+        private static FU.QuickPipeEntry QuickEntry
+        {
+            get { return (FU.QuickPipeEntry)Quick.GetType().GetProperty("Current").GetValue(Quick, null); }
+        }
+
+        private static List<Control> Cards()
+        {
+            var list = Field<Control>("_cards");
+            return list == null ? new List<Control>() : list.Controls.Cast<Control>().Where(c => c.GetType().Name == "PipeCard").ToList();
+        }
+
+        private static Control Card(int index)
+        {
+            var cards = Cards();
+            return index < cards.Count ? cards[index] : null;
+        }
+
+        private static string Headline(int index)
+        {
+            var card = Card(index);
+            return card == null ? "(no card)" : ((Label)card.GetType().GetField("Headline").GetValue(card)).Text;
+        }
+
+        private static string Detail(int index)
+        {
+            var card = Card(index);
+            return card == null ? "(no card)" : ((Label)card.GetType().GetField("Detail").GetValue(card)).Text;
+        }
+
+        /// <summary>Clicks a button inside one part of the window (a card, the Add pipe panel).</summary>
+        private static void ClickIn(Control root, string text)
+        {
+            var b = root == null ? null : FindButton(root, text);
+            if (b == null) { Fail("no button \"" + text + "\" there"); return; }
+            typeof(Button).GetMethod("OnClick", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(b, new object[] { EventArgs.Empty });
+        }
+
+        private static void Press(Button b)
+        {
+            if (b == null) { Fail("no such button"); return; }
+            typeof(Button).GetMethod("OnClick", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(b, new object[] { EventArgs.Empty });
+        }
+
+        private static Button ButtonStarting(Control root, string prefix)
+        {
+            foreach (Control c in root.Controls)
+            {
+                var b = c as Button;
+                if (b != null && b.Text.StartsWith(prefix, StringComparison.Ordinal)) return b;
+                var inner = ButtonStarting(c, prefix);
+                if (inner != null) return inner;
+            }
+            return null;
+        }
+
+        /// <summary>The texts of the buttons in one choice group of the Add pipe panel.</summary>
+        private static List<string> Buttons(string panelField)
+        {
+            var panel = QuickField<Control>(panelField);
+            return panel == null ? new List<string>() : panel.Controls.OfType<Button>().Select(b => b.Text).ToList();
+        }
+
+        private static bool Picked(Button b)
+        {
+            return (bool)Plugin.GetType("FieldCodes.Cad.Ui.PipeQuickEntry").GetMethod("IsPicked", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { b });
         }
 
         private static void Shot(string name)
@@ -417,13 +526,14 @@ namespace FtfUiTest
                 var toggle = Field<CheckBox>("_advancedToggle");
                 var grid = Field<DataGridView>("_grid");
                 toggle.Checked = false;
-                var basicCols = grid.Columns.Cast<DataGridViewColumn>().Count(c => c.Visible);
+                var basicGrid = grid.Visible;
                 var basicMove = FindButton(Window, "Move up").Visible;
+                Check(FindButton(Window, "+ Add pipe").Visible, "+ Add pipe is on the Basic view");
                 Shot("01b-basic");
                 toggle.Checked = true;
                 var advancedCols = grid.Columns.Cast<DataGridViewColumn>().Count(c => c.Visible);
                 Check(FindButton(Window, "Move up").Visible && !basicMove, "Move up only shows in Advanced");
-                Check(basicCols == 6 && advancedCols == 14, "grid shows " + basicCols + " columns in Basic and " + advancedCols + " in Advanced");
+                Check(!basicGrid && grid.Visible && advancedCols == 14, "the pipe table is the Advanced view only (" + advancedCols + " columns there)");
                 Shot("01c-advanced");
                 toggle.Checked = false;
             }, 1000);
@@ -475,6 +585,11 @@ namespace FtfUiTest
                     Check(Convert.ToString(grid.Rows[3].Cells["Material"].Value) == "", "unknown material XYZ left blank");
                     Check(Convert.ToString(grid.Rows[4].Cells["Direction"].Value) == "?", "unknown direction shown as ?");
                 }
+                var cards = Cards();
+                for (var i = 0; i < cards.Count; i++) Log("   card " + i + ": " + Headline(i) + "  |  " + Detail(i));
+                Check(cards.Count == 5, "5 pipe cards");
+                Check(Headline(0) == "N 12\" RCP IE 6.41" && Headline(2) == "E 8\" PVC TOP 5.23" && Headline(4) == "? 10\" RCP IE 5.5",
+                      "cards read like the field book");
                 var label = Field<TextBox>("_labelPreview").Text;
                 Log("   label preview:\r\n" + label);
                 Check(label.Contains("IE (N) = 322.01") && label.Contains("IE (SW) = 321.40") && label.Contains("TOP (E) = 323.19") &&
@@ -485,8 +600,11 @@ namespace FtfUiTest
             // Connections -------------------------------------------------------
             add("enter the manhole diameter", () =>
             {
-                var box = Field<TextBox>("_insideWidth");
-                Check(box.Visible, "SDMH shows a Diameter box");
+                var box = Field<ComboBox>("_diameter");
+                Check(box.Visible && !Field<TextBox>("_insideWidth").Visible, "SDMH shows a Diameter pick list, not the W x L box");
+                var items = box.Items.Cast<object>().Select(Convert.ToString).ToList();
+                Check(items.Take(5).SequenceEqual(new[] { "48", "54", "60", "72", "96" }) && items.Last() == "More...",
+                      "diameter list: 48 54 60 72 96, then More...");
                 box.Text = "48";
                 Window.GetType().GetMethod("SaveStructureFields", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Window, null);
             }, 500);
@@ -576,33 +694,284 @@ namespace FtfUiTest
                 Check(S("1047").Field.Pipes[0].Reference == FU.MeasurementReference.Invert && S("1047").Field.Pipes[0].ReferenceBasis == FU.ReferenceBasis.FieldNoteConvention,
                       "1047's unmarked dip is the invert by the office default"), 3500);
 
-            // The reported bug: a pipe typed into the grid vanished when Add pipe was pressed again.
-            add("add a pipe at 1047", () => Click("Add pipe"), 500);
-            add("type the new pipe in, then press Add pipe again straight away", () =>
+            // + Add pipe: direction -> size -> material -> MD / reference -> Add ------------------
+            add("+ Add pipe at 1047 opens the panel", () =>
             {
-                var grid = Field<DataGridView>("_grid");
-                Check(grid.Rows.Count == 2, "Add pipe gave 1047 a second row (" + grid.Rows.Count + ")");
-                if (grid.Rows.Count < 2) return;
-                var row = grid.Rows[1];
-                row.Cells["W"].Value = "15";
-                row.Cells["Material"].Value = "RCP";
-                row.Cells["Direction"].Value = "E";
-                row.Cells["Dip"].Value = "5.5";
-                row.Cells["Reference"].Value = "Invert";
-                Click("Add pipe");
-            }, 4000);
-            add("typed pipe kept", () =>
+                Click("+ Add pipe");
+                Check(Shown(Quick), "+ Add pipe opens the quick-entry panel");
+                Check(QuickField<Label>("_title").Text == "Add pipe at SDMH 1047", "panel says where the pipe is going (" + QuickField<Label>("_title").Text + ")");
+                Check(Compass != null && Shown(Compass) && Compass.Width >= 200, "the direction is a compass to click (" + (Compass == null ? "missing" : Compass.Size.ToString()) + ")");
+                Check(Field<Button>("_addPipe").Enabled == false, "+ Add pipe waits while the panel is open");
+            }, 500);
+            add("all 16 directions", () =>
+            {
+                var ok = 0;
+                foreach (var name in FU.DirectionShortcuts.Names)
+                {
+                    ClickCompass(name);
+                    var d = QuickEntry.Direction;
+                    if (d != null && d.Text == name && d.AzimuthDegrees == FU.DirectionShortcuts.For(name).AzimuthDegrees && CompassSelected == name) ok++;
+                    else Log("   direction " + name + " -> " + (d == null ? "null" : d.Text + " " + d.AzimuthDegrees));
+                }
+                Check(ok == 16, "clicking each of the 16 wedges sets that direction and shows it chosen (" + ok + "/16)");
+                // A click anywhere in a wedge takes that direction: 10 degrees is still N, 12 is N/NE, 350 is N.
+                var snapped = new[] { 10.0, 12.0, 350.0, 100.0 }.Select(az => { ClickCompassAtAzimuth(az); return QuickEntry.Direction.Text; }).ToArray();
+                Check(snapped.SequenceEqual(new[] { "N", "N/NE", "N", "E" }), "clicks between labels snap to the nearest direction (" + string.Join(" ", snapped) + ")");
+                ClickCompassAt(CompassPoint("?"));
+                Check(QuickEntry.Direction != null && !QuickEntry.Direction.IsKnown && QuickEntry.Direction.Text == "?", "the centre records the direction as unknown (?)");
+                ClickCompass("E");
+            }, 300);
+            add("usual sizes for an SDMH, then size, material, MD, Invert", () =>
+            {
+                var sizes = Buttons("_sizes");
+                Log("   SDMH sizes: " + string.Join(" ", sizes));
+                Check(sizes.SequenceEqual(new[] { "8\"", "10\"", "12\"", "15\"", "18\"", "24\"", "30\"", "36\"", "48\"", "Larger" }),
+                      "an SDMH shows the storm sizes, then Larger");
+                Check(!Shown(QuickField<TextBox>("_sizeTyped").Parent), "no typed size until Larger");
+                var materials = Buttons("_materials");
+                Log("   SDMH materials: " + string.Join(" ", materials));
+                Check(materials.First() == "RCP" && materials.Last() == "More..." && !materials.Contains("VCP"), "storm materials first, then More...");
+                ClickIn(Quick, "15\"");
+                ClickIn(Quick, "RCP");
+                QuickField<TextBox>("_dip").Text = "5.5";
+                ClickIn(QuickField<Control>("_references"), "Invert");
+                Check(QuickField<Label>("_preview").Text == "E 15\" RCP IE 5.5", "the panel previews E 15\" RCP IE 5.5 (" + QuickField<Label>("_preview").Text + ")");
+                Shot("05b-add-pipe-panel");
+                ClickIn(Quick, "Add + next");
+            }, 500);
+            add("added, panel ready for the next pipe", () =>
+            {
+                var st = S("1047");
+                Check(st.Field.Pipes.Count == 2, "1047 now has 2 pipes (" + st.Field.Pipes.Count + ")");
+                if (st.Field.Pipes.Count < 2) return;
+                var p = st.Field.Pipes[1];
+                Check(p.WidthIn == 15 && p.Material == "RCP" && p.Direction.Text == "E" && p.Direction.AzimuthDegrees == 90 && p.MeasuredDip == 5.5 &&
+                      p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter && p.Source == FU.ObservationSource.UserEntry,
+                      "E 15\" RCP 5.5 recorded as an invert entered by the drafter");
+                Check(Shown(Quick) && QuickEntry.Direction == null && !QuickEntry.SizeIn.HasValue, "Add + next leaves the panel open and empty");
+                Check(Headline(1) == "E 15\" RCP IE 5.5", "the new pipe shows as a card (" + Headline(1) + ")");
+            }, 3000);
+            add("an unlisted size and material, no reference", () =>
+            {
+                ClickCompass("N/NW");
+                ClickIn(Quick, "Larger");
+                var larger = Buttons("_sizes");
+                Log("   larger: " + string.Join(" ", larger));
+                Check(larger.Contains("54\"") && larger.Contains("6\"") && !larger.Contains("12\"") && larger.Last() == "Usual sizes",
+                      "Larger shows the rest of the sizes, not the usual ones");
+                Check(Shown(QuickField<TextBox>("_sizeTyped").Parent), "Larger offers a typed size");
+                QuickField<TextBox>("_sizeTyped").Text = "17.5";
+                ClickIn(Quick, "Use size");
+                ClickIn(Quick, "More...");
+                var more = Buttons("_materials");
+                Log("   more materials: " + string.Join(" ", more));
+                Check(more.Contains("VCP") && more.Contains("DIP") && !more.Contains("RCP") && more.Last() == "Usual materials", "More... shows the other office materials");
+                QuickField<TextBox>("_materialTyped").Text = "ribbed pvc";
+                ClickIn(Quick, "Use material");
+                QuickField<TextBox>("_dip").Text = "6.41";
+                Check(Picked(FindButton(QuickField<Control>("_references"), "Not stated")), "the reference starts as Not stated");
+                Check(QuickField<Label>("_preview").Text == "N/NW 17.5\" RIBBED PVC 6.41 Unspecified", "preview: " + QuickField<Label>("_preview").Text);
+                ClickIn(Quick, "Add pipe");
+            }, 500);
+            add("17.5 and the custom material kept; MD unspecified", () =>
             {
                 var st = S("1047");
                 Check(st.Field.Pipes.Count == 3, "1047 now has 3 pipes (" + st.Field.Pipes.Count + ")");
-                if (st.Field.Pipes.Count < 2) return;
-                var p = st.Field.Pipes[1];
-                Check(p.WidthIn == 15 && p.Material == "RCP" && p.Direction.Text == "E" && p.MeasuredDip == 5.5 && p.Reference == FU.MeasurementReference.Invert,
-                      "the typed pipe survived pressing Add pipe again (15\" RCP E 5.5 INV)");
-                var grid = Field<DataGridView>("_grid");
-                Check(grid.Rows.Count == 3 && Convert.ToString(grid.Rows[1].Cells["Material"].Value) == "RCP", "the grid still shows it");
-                Shot("05b-added-pipes");
-            }, 5000);
+                if (st.Field.Pipes.Count < 3) return;
+                var p = st.Field.Pipes[2];
+                Check(p.WidthIn == 17.5 && p.HeightIn == 17.5, "17.5\" kept exactly (" + p.WidthIn + ")");
+                Check(p.Material == "RIBBED PVC", "custom material kept (" + p.Material + ")");
+                Check(p.Direction.Text == "N/NW" && p.Direction.AzimuthDegrees == 337.5, "N/NW recorded at 337.5");
+                Check(p.Reference == FU.MeasurementReference.Unspecified && p.ReferenceBasis == FU.ReferenceBasis.NotStated,
+                      "an MD with no reference stays Unspecified, even with the office invert convention on");
+                Check(!Shown(Quick) && Field<Button>("_addPipe").Enabled, "Add pipe closes the panel");
+                Check(Headline(2) == "N/NW 17.5\" RIBBED PVC 6.41 Unspecified", "card: " + Headline(2));
+                Check(Field<TextBox>("_labelPreview").Text.Contains("(N/NW)"), "the structure label lists the N/NW pipe");
+                Shot("05c-pipe-cards");
+            }, 3000);
+
+            // The buttons follow the structure -----------------------------------------------------
+            add("change 1047 to a CB with the panel open", () =>
+            {
+                Click("+ Add pipe");
+                Field<ComboBox>("_type").Text = "CB";
+                Window.GetType().GetMethod("SaveStructureFields", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Window, null);
+            }, 500);
+            add("CB buttons and W x L", () =>
+            {
+                var sizes = Buttons("_sizes");
+                var materials = Buttons("_materials");
+                Log("   CB sizes: " + string.Join(" ", sizes) + " | materials: " + string.Join(" ", materials));
+                Check(sizes.SequenceEqual(new[] { "6\"", "8\"", "10\"", "12\"", "15\"", "18\"", "24\"", "Larger" }), "a CB shows catch basin sizes, 24\" included");
+                Check(materials.First() == "PVC" && materials.Contains("CPEP"), "a CB shows catch basin materials");
+                Check(Field<Label>("_choiceNote").Text == "Buttons for: Catch basins and inlets", Field<Label>("_choiceNote").Text);
+                // The drafter's type now drives everything type-dependent; the field code stays as observed.
+                Check(Shown(Field<TextBox>("_insideWidth")) && Shown(Field<TextBox>("_insideLength")) && !Shown(Field<ComboBox>("_diameter")),
+                      "set to CB, 1047 asks for inside W x L like any CB");
+                Check(Field<Label>("_structureTitle").Text == "CB 1047", "the title follows the drafter's type (" + Field<Label>("_structureTitle").Text + ")");
+                Check(Field<Label>("_pointInfo").Text.Contains("Type CB set by drafter (field code SDMH)"), "the original field code is still shown");
+                Check(S("1047").Field.FieldCode == "SDMH" && S("1047").TypeSetByDrafter, "the field code is unchanged; the type is marked as the drafter's");
+                Check(Project.Overrides.Any(o => o.What == "Structure type set by drafter" && o.Entered == "CB"), "the type change is recorded as an override");
+                Check(Field<TextBox>("_labelPreview").Text.StartsWith("CB 1047"), "the label header follows the type");
+                Field<ComboBox>("_type").Text = "SDMH";
+                Window.GetType().GetMethod("SaveStructureFields", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Window, null);
+            }, 3500);
+            add("back to SDMH", () =>
+            {
+                Check(Buttons("_sizes").First() == "8\"", "back to the storm sizes for SDMH");
+                Check(Shown(Field<ComboBox>("_diameter")) && !Shown(Field<TextBox>("_insideWidth")), "an SDMH (round) asks for a diameter again");
+                Check(!S("1047").TypeSetByDrafter && Field<Label>("_structureTitle").Text == "SDMH 1047", "set back to its field code, 1047 is an SDMH again");
+                ClickIn(Quick, "Cancel");
+                Check(!Shown(Quick), "Cancel closes the panel without adding");
+                Check(S("1047").Field.Pipes.Count == 3, "nothing added by Cancel");
+            }, 3500);
+
+            // Editing from the card ------------------------------------------------------------
+            add("edit the E pipe: Top of pipe", () =>
+            {
+                ClickIn(Card(1), "Edit");
+                Check(Shown(Quick) && FindButton(Quick, "Save pipe") != null, "Edit opens the panel on that pipe");
+                Check(CompassSelected == "E" && Picked(FindButton(Quick, "15\"")) && Picked(FindButton(Quick, "RCP")),
+                      "its direction, size and material show as picked");
+                ClickIn(QuickField<Control>("_references"), "Top of pipe");
+                ClickIn(Quick, "Save pipe");
+            }, 500);
+            add("edit saved like a table edit", () =>
+            {
+                var p = S("1047").Field.Pipes[1];
+                Check(p.Reference == FU.MeasurementReference.TopOfPipe && p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter && p.MeasuredDip == 5.5 && p.WidthIn == 15,
+                      "now top of pipe, set by drafter; MD and size unchanged");
+                Check(Project.Overrides.Any(o => o.Target == p.Id && o.What == "Measurement reference set by drafter"), "the reference change is recorded as an override");
+                ClickIn(Card(2), "Edit");
+                Check(QuickEntry.SizeIn == 17.5 && QuickField<TextBox>("_sizeTyped").Text == "17.5" && Shown(QuickField<TextBox>("_sizeTyped").Parent),
+                      "the typed 17.5\" comes back into the panel's size box");
+                Check(QuickField<TextBox>("_materialTyped").Text == "RIBBED PVC", "and the custom material into its box");
+                ClickIn(QuickField<Control>("_references"), "Invert");
+                ClickIn(Quick, "Save pipe");
+            }, 3000);
+            add("unspecified confirmed as invert", () =>
+            {
+                var p = S("1047").Field.Pipes[2];
+                Check(p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.ConfirmedByDrafter,
+                      "choosing Invert for an unspecified MD confirms it (ConfirmedByDrafter), as the table does");
+                Check(p.WidthIn == 17.5 && p.MeasuredDip == 6.41 && p.Material == "RIBBED PVC", "17.5\" and 6.41 unchanged by the edit");
+            }, 3000);
+
+            // Connects to... from the card, then walk the network ----------------------------
+            add("N/NW pipe: Connects to... 1048", () =>
+            {
+                Send("_.ZOOM _C 5120,5000 30 ");
+                ClickIn(Card(2), "Connects to...");
+                Send("5120,5000 ");
+                Send("UI TEST WALK\n");
+            }, 800);
+            add("manual connection on the card", () =>
+            {
+                Check(StatusOf("1047", 2) == "ManualOverride->1048", "Connects to... records a drafter's manual connection (" + StatusOf("1047", 2) + ")");
+                var c = Project.ConnectionFor(S("1047").Id, S("1047").Field.Pipes[2].Id);
+                Check(c != null && c.ToPipeId == null && c.Basis.Any(b => b.Contains("chosen manually by the drafter")), "recorded as the drafter's choice, not a field observation");
+                Log("   card: " + Headline(2) + "  |  " + Detail(2));
+                Check(Detail(2).Contains("picked by drafter") && Detail(2).Contains("not drawn yet") && Detail(2).Contains("no slope yet"), "card shows where it goes, not drawn, no slope yet");
+                Check(ButtonStarting(Card(2), "Open ") != null && FindButton(Card(2), "Draw pipe + label") != null, "card offers Open and Draw pipe + label");
+                ClickIn(Card(2), "Draw pipe + label");
+            }, 3000);
+            add("drawn from the card", () =>
+            {
+                var c = Counts();
+                // 17.5" is over the 12" double-line threshold, so the pipe is two lines with one label.
+                Check(c["pipe"] == 2 && c["pipelabel"] == 1, "Draw pipe + label drew the pipe (double line) and its label (" + c["pipe"] + ", " + c["pipelabel"] + ")");
+                Check(Detail(2).Contains("drawn") && FindButton(Card(2), "Redraw pipe + label") != null, "the card now says drawn");
+                Shot("05d-card-connected");
+                Send("_.U ");
+            }, 3000);
+            add("walk to 1048", () =>
+            {
+                Check(Counts()["pipe"] == 0, "undo removed the pipe drawn from the card");
+                Press(ButtonStarting(Card(2), "Open "));
+            }, 3000);
+            add("at 1048, Back to 1047", () =>
+            {
+                Check(Field<Label>("_structureTitle").Text.EndsWith("1048"), "Open on the card opened 1048 (" + Field<Label>("_structureTitle").Text + ")");
+                var back = Field<Button>("_back");
+                Check(Shown(back) && back.Text == "Back to SDMH 1047", "Back offers SDMH 1047 (" + back.Text + ")");
+                var incoming = Field<Control>("_cards").Controls.Cast<Control>().FirstOrDefault(x => (x.Tag as string) == "incoming");
+                var text = incoming == null ? "" : string.Join(" ", incoming.Controls.Cast<Control>().Select(x => x.Text).ToArray());
+                Log("   incoming: " + text);
+                Check(text.Contains("Runs in from SDMH 1047") && text.Contains("N/NW 17.5\" RIBBED PVC"), "1048 shows the pipe running in from 1047");
+                Shot("05e-walked-to-1048");
+                Check(S("1048").Field.Pipes.Count == 0, "no pipe at 1048 until the drafter adds one");
+                Press(ButtonStarting(incoming, "Complete pipe from SDMH 1047"));
+            }, 3000);
+            add("Complete pipe from 1047: copied, not observed", () =>
+            {
+                Check(Shown(Quick) && QuickField<Label>("_title").Text == "Complete pipe from SDMH 1047 at CB 1048", "the panel opens to complete the pipe (" + QuickField<Label>("_title").Text + ")");
+                var e = QuickEntry;
+                Check(e.Direction != null && e.Direction.Text == "S/SE" && e.SizeIn == 17.5 && e.Material == "RIBBED PVC",
+                      "opposite direction, size and material copied (S/SE 17.5\" RIBBED PVC)");
+                Check(!e.MeasuredDip.HasValue && e.Reference == FU.MeasurementReference.Unspecified && QuickField<TextBox>("_dip").Text == "",
+                      "the MD and reference start empty -- never copied from 1047");
+                Check(CompassSelected == "S/SE" && (bool)Compass.GetType().GetProperty("SelectedIsPrefilled").GetValue(Compass, null), "the copied direction shows lighter on the compass");
+                Check(Shown(QuickField<Label>("_prefillNote")) && QuickField<Label>("_prefillNote").Text.Contains("Copied from SDMH 1047"), "the panel says what was copied");
+                Check(FindButton(Quick, "Add matching pipe") != null && !Shown(FindButton(Quick, "Add + next")), "one explicit Add matching pipe");
+                Check(S("1048").Field.Pipes.Count == 0, "still nothing added while the panel is open");
+                Shot("05f-complete-pipe-panel");
+                ClickIn(Quick, "Cancel");
+                Check(S("1048").Field.Pipes.Count == 0 && Field<Control>("_cards").Controls.Cast<Control>().Any(x => (x.Tag as string) == "incoming"),
+                      "Cancel adds nothing; the pipe still waits to be completed");
+                Press(ButtonStarting(Field<Control>("_cards"), "Complete pipe from SDMH 1047"));
+                // At 1048 the crew measured an 18" pipe: the drafter changes the size, keeps the rest, enters the MD.
+                ClickIn(Quick, "Usual sizes");   // 17.5" opened the longer list; 18" is a usual one
+                ClickIn(Quick, "18\"");
+                QuickField<TextBox>("_dip").Text = "6.9";
+                ClickIn(QuickField<Control>("_references"), "Invert");
+                ClickIn(Quick, "Add matching pipe");
+            }, 500);
+            add("the other end is tied to the connection", () =>
+            {
+                var b = S("1048");
+                Check(b.Field.Pipes.Count == 1, "Add matching pipe added one pipe at 1048 (" + b.Field.Pipes.Count + ")");
+                if (b.Field.Pipes.Count != 1) return;
+                var p = b.Field.Pipes[0];
+                Check(p.Direction.Text == "S/SE" && p.WidthIn == 18 && p.Material == "RIBBED PVC" && p.MeasuredDip == 6.9 &&
+                      p.Reference == FU.MeasurementReference.Invert && p.Source == FU.ObservationSource.UserEntry, "S/SE 18\" RIBBED PVC IE 6.9 entered at 1048");
+                Check(p.Prefilled.SequenceEqual(new[] { "direction", "material" }) && p.PrefilledFrom.StartsWith("SDMH 1047"),
+                      "direction and material marked as copied from 1047; the size is 1048's own (" + string.Join(",", p.Prefilled) + ")");
+                var a = S("1047");
+                var c = Project.ConnectionFor(a.Id, a.Field.Pipes[2].Id);
+                Check(c != null && c.ToPipeId == p.Id && c.Status == FU.ConnectionStatus.ManualOverride && Project.ConnectionFor(b.Id, p.Id) == c,
+                      "the new pipe is the other end of the same connection, still the drafter's manual connection");
+                Check(Project.Overrides.Any(o => o.What == "Pipe completed from connected pipe"), "completion recorded as an override");
+                Check(!Field<Control>("_cards").Controls.Cast<Control>().Any(x => (x.Tag as string) == "incoming"), "nothing left waiting at 1048");
+                Log("   card: " + Headline(0) + "  |  " + Detail(0));
+                Check(Detail(0).Contains("slope ") && Detail(0).Contains("copied from SDMH 1047"), "the card shows the slope from both dips and what was copied");
+                Shot("05g-completed-at-1048");
+                ClickIn(Card(0), "Edit");
+                Check((bool)Compass.GetType().GetProperty("SelectedIsPrefilled").GetValue(Compass, null), "editing shows the copied direction lighter");
+                ClickCompass("S/SE");   // the drafter checks the book: S/SE was observed here too
+                ClickIn(Quick, "Save pipe");
+            }, 3000);
+            add("confirmed direction no longer copied", () =>
+            {
+                var p = S("1048").Field.Pipes[0];
+                Check(p.Prefilled.SequenceEqual(new[] { "material" }), "clicking S/SE confirms the direction as observed at 1048 (" + string.Join(",", p.Prefilled) + ")");
+                Check(Project.Overrides.Any(o => o.Target == p.Id && o.What == "Copied pipe values confirmed or changed at this structure"), "the confirmation is recorded");
+                Press(Field<Button>("_back"));
+            }, 3000);
+
+            add("back at 1047", () =>
+            {
+                Check(Field<Label>("_structureTitle").Text.EndsWith("1047") && Cards().Count == 3, "Back returned to 1047 and its 3 pipes");
+                Window.GetType().GetMethod("OpenStructure", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Window, new object[] { S("1046").Id });
+            }, 3000);
+            add("a CB from the notes: W x L and catch basin buttons", () =>
+            {
+                Check(Shown(Field<TextBox>("_insideWidth")) && Shown(Field<TextBox>("_insideLength")) && !Shown(Field<ComboBox>("_diameter")),
+                      "CB 1046 (rectangular) asks for inside W x L, not a diameter");
+                Check(Field<Label>("_choiceNote").Text == "Buttons for: Catch basins and inlets", "CB 1046 gets the catch basin pipe buttons");
+                Click("+ Add pipe");
+                Check(Buttons("_sizes").First() == "6\"", "its first size button is 6\"");
+                ClickIn(Quick, "Cancel");
+            }, 3000);
 
             // Drawing with existing pipe choices ---------------------------------
             add("back to 1045", () => PickPoint("Select structure point...", 5000, 5000), 500);
@@ -779,7 +1148,7 @@ namespace FtfUiTest
             add("label all placed the missing labels", () =>
             {
                 var c = Counts();
-                Check(c["structurelabel"] == 3, "Label all structures added leaders for 1046 and 1047 and kept 1045's (" + c["structurelabel"] + " leaders)");
+                Check(c["structurelabel"] == 4, "Label all structures added leaders for 1046, 1047 and 1048 and kept 1045's (" + c["structurelabel"] + " leaders)");
                 Tab(0);
             }, 4000);
 
@@ -1223,7 +1592,10 @@ namespace FtfUiTest
                     var list = (ListView)type.GetField("_connections", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form);
                     var preview = (TextBox)type.GetField("_labelPreview", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form);
                     Log("   sizes at " + (int)(scale * 100) + "%: grid " + grid.Size + ", candidates " + list.Size + ", preview " + preview.Size);
-                    Check(grid.Height >= 120 && grid.Width >= 500, "pipe grid usable at " + (int)(scale * 100) + "% (" + grid.Size + ")");
+                    var cards = (Control)type.GetField("_cards", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form);
+                    Log("   pipe cards at " + (int)(scale * 100) + "%: " + cards.Size);
+                    Check(cards.Width >= 500 && cards.Height >= 60, "pipe cards usable at " + (int)(scale * 100) + "% (" + cards.Size + ")");
+                    if (grid.Visible) Check(grid.Height >= 120 && grid.Width >= 500, "pipe table usable at " + (int)(scale * 100) + "% (" + grid.Size + ")");
                     Check(list.Height >= 80 && list.Width >= 500, "connections list usable at " + (int)(scale * 100) + "% (" + list.Size + ")");
                     Check(preview.Height >= 80 && preview.Width >= 250, "leader preview usable at " + (int)(scale * 100) + "% (" + preview.Size + ")");
                 }
