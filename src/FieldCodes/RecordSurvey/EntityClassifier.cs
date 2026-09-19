@@ -83,6 +83,9 @@ namespace FieldCodes.RecordSurvey
         private static readonly Regex Basis = new Regex(@"\bBASIS\s+OF\s+BEARINGS?\b", O);
         private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?", O);
         private static readonly Regex ScaleBare = new Regex(@"^\s*1\s*(?:""|''|INCH|IN\.?)\s*=\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?\s*$", O);
+        // The word SCALE on its own line and the value on the next: "SCALE" / "1 INCH = 100 FEET", or just "lOO FEET".
+        private static readonly Regex ScaleWord = new Regex(@"^\s*(?:GRAPHIC\s+)?SCALE\s*:?\s*$", O);
+        private static readonly Regex ScaleValue = new Regex(@"^\s*(?:1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*)?(?<n>[0-9OIlSB]{1,4})\s*(?:'|FT\.?|FEET)\s*$", O);
         private static readonly Regex BareNumber = new Regex(@"^\s*(?<n>\d{1,3})\s*$", O);
         private static readonly Regex Street = new Regex(
             @"\b(?:[NSEW]\.?\s?[EW]?\.?\s+)?(?:\d{1,3}(?:ST|ND|RD|TH)|[A-Z]{3,})\s+(?:STREET|ST\.?|AVENUE|AVE\.?|ROAD|RD\.?|WAY|PLACE|PL\.?|COURT|CT\.?|DRIVE|DR\.?|LANE|LN\.?|BOULEVARD|BLVD\.?|HIGHWAY|HWY\.?|CIRCLE|CIR\.?|PARKWAY|PKWY\.?|TERRACE|TER\.?|LOOP|TRAIL|TRL\.?)(?:\s+(?:N\.?E\.?|N\.?W\.?|S\.?E\.?|S\.?W\.?|N\.?|S\.?|E\.?|W\.?))?\s*$", O);
@@ -204,6 +207,32 @@ namespace FieldCodes.RecordSurvey
         }
 
         /// <summary>Scale in feet per inch from a scale line, or null.</summary>
+        /// <summary>
+        /// The scale when the word and the value were read as two lines: SCALE on one, the value
+        /// on the nearest line within a few line-heights, turned the same way. Null when the sheet
+        /// states it in one piece (ScaleOf reads that) or not at all.
+        /// </summary>
+        public static double? SplitScale(IList<ClassifiedLine> lines)
+        {
+            if (lines == null) return null;
+            foreach (var word in lines.Where(l => l.Line != null && l.Line.Box != null && ScaleWord.IsMatch(l.Line.Text ?? string.Empty)))
+            {
+                var reach = 4.0 * Math.Max(1.0, Math.Min(word.Line.Box.Width, word.Line.Box.Height));
+                var value = lines
+                    .Where(l => !ReferenceEquals(l, word) && l.Page == word.Page && l.Line.Box != null && PageGeometry.SameRotation(l.Line.Box, word.Line.Box))
+                    .Select(l => new { Line = l, Match = ScaleValue.Match(l.Line.Text ?? string.Empty), Distance = PageGeometry.CentreDistance(l.Line.Box, word.Line.Box) })
+                    .Where(x => x.Match.Success && x.Distance <= reach)
+                    .OrderBy(x => x.Distance)
+                    .FirstOrDefault();
+                if (value == null) continue;
+                int repairs;
+                double n;
+                var digits = SurveyCallParser.RepairDigits(value.Match.Groups["n"].Value, out repairs);
+                if (double.TryParse(digits, NumberStyles.Float, CultureInfo.InvariantCulture, out n) && n > 0) return n;
+            }
+            return null;
+        }
+
         public static double? ScaleOf(ClassifiedLine line)
         {
             if (line == null || line.Kind != SurveyEntityKind.Scale) return null;

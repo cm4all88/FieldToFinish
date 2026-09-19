@@ -28,6 +28,22 @@ public sealed class RecordSurveyExtractionTests
 
     private static string Sample(string name) => Path.Combine(AppContext.BaseDirectory, "Samples", name);
 
+    // ---------------------------------------------------------------- scale
+
+    [Fact]
+    public void AScaleReadAsTwoLinesIsStillTheScale()
+    {
+        var p = Extract(L("SCALE", 1200, 3000), L("1 INCH = 100 FEET", 1150, 3040));
+        Assert.Equal(100.0, p.Document.ScaleFeetPerInch);
+
+        var lookAlike = Extract(L("SCALE", 1200, 3000), L("lOO FEET", 1190, 3040), L("N 89°42'18\" E 150.00'", 400, 900));
+        Assert.Equal(100.0, lookAlike.Document.ScaleFeetPerInch);
+
+        // The value line must be near the word: a stray "50'" across the sheet is a distance, not the scale.
+        var far = Extract(L("SCALE", 1200, 3000), L("50'", 300, 300));
+        Assert.Null(far.Document.ScaleFeetPerInch);
+    }
+
     // ---------------------------------------------------------------- curve keys that are one letter from noise
 
     [Fact]
