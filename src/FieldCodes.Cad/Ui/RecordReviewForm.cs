@@ -29,7 +29,8 @@ namespace FieldCodes.Cad.Ui
         private readonly AcDocument _doc;
         private readonly ReviewSession _session;
         private readonly DocumentText _text;
-        private readonly StandardsResolution _standards;
+        private StandardsResolution _standards;
+        private readonly DrawingInventory _inventory;
         private readonly FtfSettings _settings;
         private readonly double _upf;
 
@@ -55,7 +56,7 @@ namespace FieldCodes.Cad.Ui
 
         public RecordReviewForm(AcDocument doc, ReviewSession session, DocumentText text, StandardsResolution standards, DrawingInventory inventory, FtfSettings settings)
         {
-            _doc = doc; _session = session; _text = text; _standards = standards; _settings = settings;
+            _doc = doc; _session = session; _text = text; _standards = standards; _inventory = inventory; _settings = settings;
             _upf = settings.General.UnitsPerFoot > 0 ? settings.General.UnitsPerFoot : 1.0;
             DipBuilderForm.UseTheme(ThemePreference.LoadDark());
             Text = "FTFRECORD -- review the extracted calls before anything is built";
@@ -460,7 +461,14 @@ namespace FieldCodes.Cad.Ui
             _session.Assign(call.Id, figure, (int)_order.Value);
             _session.SetReversed(call.Id, _reversed.Checked);
             var type = _objectType.SelectedItem as string;
-            if (type != null) _session.SetObjectType(call.Id, type);
+            if (type != null && !string.Equals(type, call.ObjectType, StringComparison.OrdinalIgnoreCase))
+            {
+                _session.SetObjectType(call.Id, type);
+                // A type no call had when the drawing was checked has no resolved layer or style yet.
+                var needed = _session.Project.Calls.Select(c => c.ObjectType).Where(t => !string.IsNullOrEmpty(t)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                needed.Add(_settings.RecordSurvey.DefaultObjectType);
+                _standards = StandardsResolver.Resolve(_settings.RecordSurvey, _inventory, _settings.General.LayerMappings, needed);
+            }
             LoadRows();
         }
 
