@@ -322,14 +322,17 @@ namespace FieldCodes.RecordSurvey
             var result = new List<Fragment>();
             Fragment current = null;
             string pendingTag = null;
-            foreach (var t in l.Tokens)
+            var lastBearingAt = -1;
+            for (var i = 0; i < l.Tokens.Count; i++)
             {
+                var t = l.Tokens[i];
                 switch (t.Kind)
                 {
                     case SurveyTokenKind.Bearing:
                         // A bearing that could not be read still opens a fragment: the course exists on the
                         // page, and the review shows it with the reason and no value.
                         if (t.Read == null) break;
+                        lastBearingAt = i;
                         if (current != null && current.Bearing != null && current.Distance == null && current.Tag.Length == 0)
                         {
                             // Two bearings in a row (R and M with distances after): keep both fragments.
@@ -343,9 +346,14 @@ namespace FieldCodes.RecordSurvey
                         if (l.InProse)
                         {
                             // In running text the distance follows its bearing and carries a unit ("660 feet",
-                            // "634.31'"); a bare number is a section, lot or page number, and a second
-                            // distance after the course is a tie or an offset, not another course.
-                            if (current == null || current.Bearing == null || current.Distance != null || t.Read.Unit.Length == 0) break;
+                            // "634.31'"), or stands right after the bearing with the mark lost ("N 40°06'40" E
+                            // 120 thence"); a bare number elsewhere is a section, lot or page number, and a
+                            // second distance after the course is a tie or an offset, not another course.
+                            if (current == null || current.Bearing == null || current.Distance != null) break;
+                            var adjacent = lastBearingAt >= 0 && l.Tokens.Skip(lastBearingAt + 1).Take(i - lastBearingAt - 1)
+                                .All(x => x.Kind == SurveyTokenKind.Word && !(x.Text ?? string.Empty).Any(char.IsLetterOrDigit));
+                            if (t.Read.Unit.Length == 0 && !adjacent) break;
+                            if (t.Read.Unit.Length == 0) t.Read.Notes.Add("No foot mark or unit after the number; taken as the distance because it follows the bearing directly.");
                             current.Distance = t;
                             break;
                         }

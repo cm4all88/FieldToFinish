@@ -131,6 +131,16 @@ namespace FieldCodes.RecordSurvey
                     var budget = 4000;
                     var longest = new List<Step>(chain);
                     Search(chain, placed, offsetTol, closeTol, options.MaxCoursesPerFigure, ref budget, ref closed, longest);
+                    if (closed == null)
+                    {
+                        // An open chain grows from both ends: the seed may be a middle course, and the
+                        // courses before it are found by walking the chain backwards from its start.
+                        var back = Flip(longest);
+                        var backBudget = 4000;
+                        var backLongest = new List<Step>(back);
+                        Search(back, placed, offsetTol, closeTol, options.MaxCoursesPerFigure, ref backBudget, ref closed, backLongest);
+                        longest = closed != null ? null : Flip(backLongest);
+                    }
                     found = closed ?? longest;
                 }
                 foreach (var s in found) s.Course.Uses++;
@@ -159,6 +169,18 @@ namespace FieldCodes.RecordSurvey
                 result.Figures.Add(figure);
             }
             return result;
+        }
+
+        /// <summary>The same chain walked the other way: last course first, every course turned round.</summary>
+        private static List<Step> Flip(List<Step> chain)
+        {
+            var back = new List<Step>(chain.Count);
+            for (var i = chain.Count - 1; i >= 0; i--)
+            {
+                var s = chain[i];
+                back.Add(new Step { Course = s.Course, Reversed = !s.Reversed, StartX = s.EndX, StartY = s.EndY, EndX = s.StartX, EndY = s.StartY, Gap = s.Gap });
+            }
+            return back;
         }
 
         private static Step SeedStep(Placed seed, bool reversed)

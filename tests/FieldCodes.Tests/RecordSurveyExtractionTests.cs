@@ -135,6 +135,32 @@ public sealed class RecordSurveyExtractionTests
     }
 
     [Fact]
+    public void ABareNumberRightAfterTheBearingInProseIsItsDistance()
+    {
+        var p = Extract(L("thence N 40°06'40\" E 120 thence N 82°56'05\" E, 251.86; thence southerly along the line of Lot 24", 400, 900));
+        Assert.Equal(2, p.Calls.Count);
+        Assert.Equal(120.0, p.Calls[0].Records[0].DistanceFeet!.Value, 6);
+        Assert.Contains(p.Calls[0].Records[0].DistanceSource!.RawText, s => true);
+        Assert.Equal(251.86, p.Calls[1].Records[0].DistanceFeet!.Value, 6);
+    }
+
+    [Fact]
+    public void TheOpenChainIsFoundWhicheverOrderTheLabelsWereRead()
+    {
+        var a = L("N 00°00'00\" E 100.00'", 600 - 154 - 40, 600 - 14, 0.97, 90);
+        var b = L("N 90°00'00\" E 100.00'", 900 - 154, 300 - 14 - 40, 0.97);
+        var c = L("S 00°00'00\" E 100.00'", 1200 - 154 + 40, 600 - 14, 0.97, -90);
+        foreach (var order in new[] { new[] { a, b, c }, new[] { c, b, a }, new[] { b, a, c }, new[] { c, a, b } })
+        {
+            var p = Extract(order);
+            var r = TraverseAssembler.Assemble(p, new AssemblyOptions { ScaleFeetPerInch = 50, Dpi = 300 });
+            var chain = Assert.Single(r.Figures);
+            Assert.Equal(3, chain.CallIds.Count);
+            Assert.False(chain.Closed);
+        }
+    }
+
+    [Fact]
     public void StackedPlanNotesAreNotJoinedIntoAParagraph()
     {
         var page = Doc(
