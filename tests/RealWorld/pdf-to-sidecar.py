@@ -47,8 +47,11 @@ def unrotate(box, deg, cw, ch, pw, ph):
     d = (deg + 180) % 360 - 180
     return {"x": min(xs), "y": min(ys), "w": max(xs) - min(xs), "h": max(ys) - min(ys), "rot": d}
 
+TILE_TIMEOUT = 900
+
 def tesseract_tsv(image_path, psm):
-    out = subprocess.run(["tesseract", image_path, "stdout", "--psm", str(psm), "tsv"], capture_output=True, text=True)
+    # A tile full of hatching can keep sparse-text mode busy for an hour; it is cut off and noted.
+    out = subprocess.run(["tesseract", image_path, "stdout", "--psm", str(psm), "tsv"], capture_output=True, text=True, timeout=TILE_TIMEOUT)
     if out.returncode != 0:
         raise RuntimeError(out.stderr.strip())
     rows = [r.split("\t") for r in out.stdout.splitlines()]
@@ -89,8 +92,19 @@ def ocr_canvas(canvas, path, psm, workdir, deg):
             tiles.append((tx, ty, tile_path))
     print("  %d tiles of %d px at rotation %g, %d at a time" % (len(tiles), TILE, deg, JOBS), file=sys.stderr)
     words = []
+
+    def read_tile(t):
+        try:
+            return tesseract_tsv(t[2], psm)
+        except subprocess.TimeoutExpired:
+            print("  tile at %d,%d (rotation %g) gave up after %d s; skipped" % (t[0], t[1], deg, TILE_TIMEOUT), file=sys.stderr)
+            return []
+        except RuntimeError as ex:
+            print("  tile at %d,%d (rotation %g) failed: %s; skipped" % (t[0], t[1], deg, ex), file=sys.stderr)
+            return []
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=JOBS) as pool:
-        for (tx, ty, _), found in zip(tiles, pool.map(lambda t: tesseract_tsv(t[2], psm), tiles)):
+        for (tx, ty, _), found in zip(tiles, pool.map(read_tile, tiles)):
             for w in found:
                 w["x"] += tx; w["y"] += ty
                 w["key"] = (tx, ty) + tuple(w["key"])
@@ -176,9 +190,10 @@ def main():
     ap.add_argument("--tile", type=int, default=0, help="read a large sheet in overlapping tiles of this many pixels, in parallel (0 = whole page in one run)")
     ap.add_argument("--overlap", type=int, default=400, help="tile overlap in pixels")
     ap.add_argument("--jobs", type=int, default=0, help="tesseract processes at a time when tiling (default: all cores)")
+    ap.add_argument("--tile-timeout", type=int, default=900, help="seconds a single tesseract run may take before it is skipped")
     args = ap.parse_args()
-    global TILE, OVERLAP, JOBS
-    TILE, OVERLAP = args.tile, args.overlap
+    global TILE, OVERLAP, JOBS, TILE_TIMEOUT
+    TILE, OVERLAP, TILE_TIMEOUT = args.tile, args.overlap, args.tile_timeout
     if args.jobs > 0:
         JOBS = args.jobs
 
