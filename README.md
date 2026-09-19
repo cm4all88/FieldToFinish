@@ -532,6 +532,19 @@ FTFRECORD
   `<document>.ocr.json` and FTFRECORD reads that instead (Settings > Recorded Surveys >
   OCR engine = Sidecar). `tests\RealWorld\pdf-to-sidecar.py` does it with tesseract, and
   is how the extraction is exercised outside Civil 3D.
+- **Lines are put back together before anything is read.** An OCR pass breaks a printed
+  line at every wide gap; the pieces are rejoined in the text's own frame (a sideways
+  sheet's text runs down the page), by baseline and gap. A legal description that wraps
+  ("thence S 88°" / "26'42\" E along said line 634.31'") is joined into its paragraph the
+  same way, whichever way the sheet was scanned, so a call reads across the line break. In
+  that running text only the number that follows the bearing (with a foot mark or unit,
+  or directly after it) is the course's distance; section, lot and page numbers are not.
+- **What could not be read is still shown.** A bearing with the right shape but an
+  impossible value (81 seconds, 96 degrees) is listed as a course with no bearing and the
+  reason, at its spot on the page, for the reviewer to type in; plain words that happen
+  to start with N or S are not bearings. OCR look-alikes are repaired only inside a number
+  (`634.3/'` is 634.31', `§` is a 5, `NB7°OS W` is N 87°05' W) and every repair lowers the
+  confidence; `NE 1/4` and `1/2" REBAR` are fractions, not distances.
 
 ### What is never guessed
 
@@ -599,7 +612,7 @@ Nothing was adjusted. Discrepancies are for the surveyor to resolve.
 
 ### What is tested, what is not
 
-`FieldCodes/RecordSurvey` has no Autodesk dependency and carries 170+ tests: bearing
+`FieldCodes/RecordSurvey` has no Autodesk dependency and carries 190+ tests: bearing
 spellings, DMS and distance units (feet, metres, chains, rods), curve reconciliation
 from every pair of elements, placement, traverse and closure, misclosure suggestions,
 record-versus-measured storage, shared lot lines and their discrepancies, OCR ambiguity
@@ -617,6 +630,13 @@ package loading inside Civil 3D 2024, `GeneralSegmentLabel.Create` for the Civil
 labels, and the review window. Headless (accoreconsole) runs take a sidecar path and a
 start point from the command line and approve everything above the threshold, so a
 LiveSmoke script can drive the whole build.
+
+The Civil 3D side (`RecordCommands`, `RecordDrafter`, `RecordDocumentReader`, the review
+window and the settings page) is compiled by `tests\CadCompileCheck` against stand-ins for
+the AutoCAD, Civil 3D and Windows Runtime types, with the plugin's own C# 7.3 and
+warnings-as-errors settings: `dotnet build tests/CadCompileCheck` on any machine. That
+catches what a compiler catches and nothing more; the plugin remains UNTESTED against a
+running Civil 3D until it is loaded there.
 
 This is a production aid for a licensed surveyor. It makes no boundary determination;
 the surveyor interprets the controlling evidence.
