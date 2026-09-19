@@ -235,7 +235,9 @@ namespace FieldCodes.RecordSurvey
                 {
                     var text = (l.Line.Text ?? string.Empty).Trim();
                     var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    return words.Length >= 2 && words.Length <= 6 && words.All(w => w.Length >= 2 && w.All(char.IsLetter))
+                    // Capitals only, a real word among them: "ey Ay Aw" in tall lettering is a border, not a name.
+                    return words.Length >= 2 && words.Length <= 6 && words.All(w => w.Length >= 2 && w.All(char.IsUpper))
+                        && words.Any(w => w.Length >= 4) && text.Count(char.IsLetter) >= 6
                         && !IsHeadingOnly(text) && l.Line.EffectiveConfidence >= 0.2 && Thickness(l.Line) >= 2.0 * Math.Max(1.0, median);
                 })
                 .OrderByDescending(l => Thickness(l.Line))
@@ -426,6 +428,19 @@ namespace FieldCodes.RecordSurvey
                         break;
                 }
             }
+            // "230.86 S 88°24'29" E": on a plan label the distance may be written before its bearing.
+            // A distance on its own directly before a bearing with none is that bearing's distance.
+            if (!l.InProse)
+                for (var i = 0; i + 1 < result.Count; i++)
+                {
+                    var a = result[i]; var b = result[i + 1];
+                    if (a.Bearing == null && a.Distance != null && b.Bearing != null && b.Distance == null && a.Tag.Length == 0)
+                    {
+                        b.Distance = a.Distance;
+                        result.RemoveAt(i);
+                        i--;
+                    }
+                }
             return result;
         }
 

@@ -277,6 +277,28 @@ public sealed class RecordSurveyExtractionTests
     // ---------------------------------------------------------------- courses
 
     [Fact]
+    public void ADistanceWrittenBeforeItsBearingOnALabelBelongsToThatBearing()
+    {
+        var p = Extract(L("230.86 S 88°24'29\" E", 800, 900), L("160.00'", 800, 935));
+        var c = Assert.Single(p.Calls);
+        var r = Assert.Single(c.Records);
+        Assert.Equal(180 - (88 + 24 / 60.0 + 29 / 3600.0), r.AzimuthDegrees!.Value, 9);
+        Assert.Equal(230.86, r.DistanceFeet!.Value, 6);
+    }
+
+    [Fact]
+    public void TallBorderScribbleIsNotThePlatName()
+    {
+        var p = CallExtractor.Extract(Doc(
+            new DocumentLine("ey Ay Aw", new PageBox(10373, 3145, 278, 2638, -90), 0.36),
+            new DocumentLine("DEDICATION", new PageBox(4500, 5200, 60, 700, -90), 0.9),
+            new DocumentLine("KING COUNTY, WASHINGTON", new PageBox(9800, 3100, 120, 2500, -90), 0.8),
+            new DocumentLine("SHEET 1 OF 2", new PageBox(438, 7326, 60, 950, -90), 0.5),
+            new DocumentLine("N 89°42'18\" E 150.00'", new PageBox(400, 900, 500, 46), 0.9)), new ExtractionOptions());
+        Assert.NotEqual("ey Ay Aw", p.Document.Title);
+    }
+
+    [Fact]
     public void ABearingThatCannotBeReadStillListsTheCourseWithTheReason()
     {
         // 81 seconds is not a bearing; the course is on the page all the same, with its distance below it.
