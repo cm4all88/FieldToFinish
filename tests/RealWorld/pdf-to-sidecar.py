@@ -7,6 +7,10 @@ for an office that prefers tesseract -- and writes the DocumentText schema FTFRE
 when its OCR engine is set to Sidecar (Settings > Recorded Surveys).
 
     pdf-to-sidecar.py PLAT.pdf [--dpi 300] [--rotations 0,90,270,180] [--pages 1,2] [--out DIR]
+                      [--tile 4000 --overlap 400 --jobs 4]
+
+A 24x36 sheet at 400 dpi is 140 million pixels and tesseract takes an hour a rotation on it in
+one piece; --tile reads it in overlapping tiles, several at a time, in minutes.
 
 Each page is rendered, turned clockwise by each rotation, read with tesseract, and every hit is
 mapped back onto the unrotated page with the same mathematics as FieldCodes.RecordSurvey.
@@ -16,7 +20,7 @@ call is; that is the plugin's job, and it is unit tested.
 
 Requires: pymupdf, pillow, tesseract (the `tesseract` command on PATH).
 """
-import argparse, datetime, json, math, os, subprocess, sys, tempfile
+import argparse, concurrent.futures, datetime, json, math, os, subprocess, sys, tempfile
 
 try:
     import pymupdf
@@ -63,6 +67,56 @@ def tesseract_tsv(image_path, psm):
                       "x": int(rec["left"]), "y": int(rec["top"]), "w": int(rec["width"]), "h": int(rec["height"]), "conf": conf / 100.0})
     return words
 
+TILE = 0
+OVERLAP = 400
+JOBS = max(1, os.cpu_count() or 1)
+
+def ocr_canvas(canvas, path, psm, workdir, deg):
+    """The whole canvas in one tesseract run, or -- for a large sheet -- overlapping tiles read in
+    parallel, the way the plugin reads a page in tiles at the engine's size limit. Word boxes come
+    back in canvas coordinates either way; a word read twice in an overlap is dropped by
+    dedupe_lines."""
+    cw, ch = canvas.size
+    if TILE <= 0 or (cw <= TILE and ch <= TILE):
+        return tesseract_tsv(path, psm)
+    step = TILE - OVERLAP
+    tiles = []
+    for ty in range(0, max(1, ch - OVERLAP), step):
+        for tx in range(0, max(1, cw - OVERLAP), step):
+            x1 = min(cw, tx + TILE); y1 = min(ch, ty + TILE)
+            tile_path = os.path.join(workdir, "rot%03d-tile-%05d-%05d.png" % (deg % 360, tx, ty))
+            canvas.crop((tx, ty, x1, y1)).save(tile_path)
+            tiles.append((tx, ty, tile_path))
+    print("  %d tiles of %d px at rotation %g, %d at a time" % (len(tiles), TILE, deg, JOBS), file=sys.stderr)
+    words = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=JOBS) as pool:
+        for (tx, ty, _), found in zip(tiles, pool.map(lambda t: tesseract_tsv(t[2], psm), tiles)):
+            for w in found:
+                w["x"] += tx; w["y"] += ty
+                w["key"] = (tx, ty) + tuple(w["key"])
+            words.extend(found)
+    return words
+
+def dedupe_lines(lines):
+    """Lines read twice (once per overlapping tile) at the same spot with the same text: keep the
+    more confident one."""
+    kept = []
+    for ws in sorted(lines, key=lambda l: -min(w["conf"] for w in l)):
+        x0 = min(w["x"] for w in ws); y0 = min(w["y"] for w in ws)
+        x1 = max(w["x"] + w["w"] for w in ws); y1 = max(w["y"] + w["h"] for w in ws)
+        text = " ".join(w["text"] for w in ws)
+        duplicate = False
+        for k in kept:
+            if k["text"] != text:
+                continue
+            ox = min(x1, k["x1"]) - max(x0, k["x0"]); oy = min(y1, k["y1"]) - max(y0, k["y0"])
+            if ox > 0 and oy > 0 and ox * oy >= 0.6 * min((x1 - x0) * (y1 - y0), (k["x1"] - k["x0"]) * (k["y1"] - k["y0"])):
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append({"text": text, "x0": x0, "y0": y0, "x1": x1, "y1": y1, "ws": ws})
+    return [k["ws"] for k in kept]
+
 def group_into_lines(words):
     """Sparse-text mode hands back one word per block as often as not; a line-level engine (the
     plugin's Windows OCR) returns whole labels. Join words that sit on one baseline and nearly
@@ -97,9 +151,9 @@ def read_rotated(page_png, deg, cw, ch, pw, ph, psm, workdir):
     path = os.path.join(workdir, "rot%03d.png" % (deg % 360))
     canvas.save(path)
     cw2, ch2 = canvas.size
-    words = tesseract_tsv(path, psm)
+    words = ocr_canvas(canvas, path, psm, workdir, deg)
     result = []
-    for ws in group_into_lines(words):
+    for ws in dedupe_lines(group_into_lines(words)):
         ws.sort(key=lambda w: w["x"])
         x0 = min(w["x"] for w in ws); y0 = min(w["y"] for w in ws)
         x1 = max(w["x"] + w["w"] for w in ws); y1 = max(w["y"] + w["h"] for w in ws)
@@ -119,7 +173,14 @@ def main():
     ap.add_argument("--pages", default="")
     ap.add_argument("--psm", type=int, default=11, help="tesseract page segmentation mode; 11 = sparse text, right for a plat")
     ap.add_argument("--out", default="")
+    ap.add_argument("--tile", type=int, default=0, help="read a large sheet in overlapping tiles of this many pixels, in parallel (0 = whole page in one run)")
+    ap.add_argument("--overlap", type=int, default=400, help="tile overlap in pixels")
+    ap.add_argument("--jobs", type=int, default=0, help="tesseract processes at a time when tiling (default: all cores)")
     args = ap.parse_args()
+    global TILE, OVERLAP, JOBS
+    TILE, OVERLAP = args.tile, args.overlap
+    if args.jobs > 0:
+        JOBS = args.jobs
 
     doc = args.document
     out = args.out or os.path.dirname(os.path.abspath(doc))
@@ -146,7 +207,7 @@ def main():
         img.convert("RGB").save(path)
         page_images.append((1, path, img.width, img.height))
 
-    text = {"schema": "ftf-record-ocr-1", "document": os.path.abspath(doc), "reader": "tesseract %s dpi, rotations %s, psm %d" % (args.dpi, args.rotations, args.psm),
+    text = {"schema": "ftf-record-ocr-1", "document": os.path.abspath(doc), "reader": "tesseract %s dpi, rotations %s, psm %d%s" % (args.dpi, args.rotations, args.psm, (", tiles of %d px" % args.tile) if args.tile > 0 else ""),
             "readUtc": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "pages": [], "notes": []}
     with tempfile.TemporaryDirectory() as work:
         for number, path, pw, ph in page_images:
