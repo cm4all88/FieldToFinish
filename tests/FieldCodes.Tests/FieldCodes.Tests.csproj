@@ -26,6 +26,11 @@
     <None Include="..\..\config\rules.json" Link="rules.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Synthetic recorded-survey OCR fixtures: fictional names, numbers and calls, modelled on
+         Washington short plats and Records of Survey. No project document is in the repository. -->
+    <None Include="Samples\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

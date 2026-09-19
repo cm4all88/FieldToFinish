@@ -96,6 +96,15 @@ namespace FieldCodes.Cad
                     Small("Rebuild Exhibit", "FTFEXHIBITREBUILD", FtfIcons.Check),
                     Small("Profile", "FTFPROFILE", FtfIcons.Settings)));
 
+                tab.Panels.Add(Panel("Record",
+                    Large("Recorded\nSurvey", "FTFRECORD",
+                        "Upload a recorded plat or Record of Survey, review the extracted calls, build the geometry.",
+                        FtfIcons.Record),
+                    Small("Check Record", "FTFRECORDCHECK", FtfIcons.Check),
+                    Small("Record Labels", "FTFRECORDLABEL", FtfIcons.Labels),
+                    Small("Record Source", "FTFRECORDSOURCE", FtfIcons.Where),
+                    Small("Rebuild Record", "FTFRECORDREBUILD", FtfIcons.Check)));
+
                 tab.Panels.Add(Panel("Review",
                     Large("FTF\nWindow", "FTF",
                         "Status, review, settings and standards in one window.",
@@ -535,6 +544,27 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>Strip easement: a hatched band between two parallel curves.</summary>
+        /// <summary>A recorded sheet with a closed traverse drawn on it.</summary>
+        public static ImageSource Record(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawRectangle(null, GrayPen(2), new Rect(5, 3, 22, 26));
+                var figure = new StreamGeometry();
+                using (var g = figure.Open())
+                {
+                    g.BeginFigure(new Point(9, 9), false, true);
+                    g.LineTo(new Point(22, 8), true, false);
+                    g.LineTo(new Point(23, 20), true, false);
+                    g.LineTo(new Point(12, 24), true, false);
+                }
+                figure.Freeze();
+                dc.DrawGeometry(null, BluePen(2.5), figure);
+                foreach (var p in new[] { new Point(9, 9), new Point(22, 8), new Point(23, 20), new Point(12, 24) })
+                    dc.DrawEllipse(Blue, null, p, 2, 2);
+            });
+        }
+
         public static ImageSource Easement(int px)
         {
             return Render(px, dc =>

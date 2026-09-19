@@ -73,6 +73,7 @@ namespace FieldCodes.Settings
         [JsonProperty("dips")] public UtilitySettings Dips { get; set; }
         [JsonProperty("easements")] public EasementSettings Easements { get; set; }
         [JsonProperty("exhibits")] public ExhibitSettings Exhibits { get; set; }
+        [JsonProperty("recordSurvey")] public RecordSurveySettings RecordSurvey { get; set; }
         [JsonProperty("cleanup")] public CleanupSettings Cleanup { get; set; }
 
         public FtfSettings()
@@ -91,6 +92,7 @@ namespace FieldCodes.Settings
             Dips = new UtilitySettings();
             Easements = new EasementSettings();
             Exhibits = new ExhibitSettings();
+            RecordSurvey = new RecordSurveySettings();
             Cleanup = new CleanupSettings();
         }
 
@@ -103,7 +105,7 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Sheets, Dips, Easements, Exhibits, Cleanup
+                    Spots, Sheets, Dips, Easements, Exhibits, RecordSurvey, Cleanup
                 };
             }
         }
@@ -321,6 +323,17 @@ namespace FieldCodes.Settings
             if (Dips == null) Dips = new UtilitySettings();
             if (Easements == null) Easements = new EasementSettings();
             if (Exhibits == null) Exhibits = new ExhibitSettings();
+            if (RecordSurvey == null) RecordSurvey = new RecordSurveySettings();
+            if (RecordSurvey.Entities == null || RecordSurvey.Entities.Count == 0 ||
+                RecordSurvey.Monuments == null || RecordSurvey.Monuments.Count == 0)
+            {
+                // A settings file written before this section existed, or one with the lists
+                // removed: the standards catalog is what makes the commands usable at all.
+                var keep = RecordSurvey;
+                var fresh = new RecordSurveySettings();
+                if (keep.Entities == null || keep.Entities.Count == 0) keep.Entities = fresh.Entities;
+                if (keep.Monuments == null || keep.Monuments.Count == 0) keep.Monuments = fresh.Monuments;
+            }
             if (Cleanup == null) Cleanup = new CleanupSettings();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();

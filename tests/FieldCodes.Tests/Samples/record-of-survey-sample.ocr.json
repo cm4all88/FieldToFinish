@@ -1,0 +1,214 @@
+{
+ "schema": "ftf-record-ocr-1",
+ "document": "ROS-sample.pdf",
+ "reader": "synthetic fixture (no real document)",
+ "readUtc": "2026-09-19T00:00:00Z",
+ "pages": [
+  {
+   "number": 1,
+   "widthPx": 2550,
+   "heightPx": 3300,
+   "dpi": 300,
+   "lines": [
+    {
+     "text": "RECORD OF SURVEY",
+     "box": {
+      "x": 900,
+      "y": 120,
+      "w": 224,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.99,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "IN THE SW 1/4 OF SECTION 3, TOWNSHIP 21 NORTH, RANGE 3 EAST, W.M., PIERCE COUNTY, WASHINGTON",
+     "box": {
+      "x": 300,
+      "y": 170,
+      "w": 1288,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "AFN 202301230456",
+     "box": {
+      "x": 2100,
+      "y": 120,
+      "w": 224,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "SCALE: 1\" = 100'",
+     "box": {
+      "x": 2100,
+      "y": 3100,
+      "w": 224,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "R1: RECORD OF SURVEY, AFN 9807150123, VOL. 45 OF SURVEYS, PG. 12",
+     "box": {
+      "x": 300,
+      "y": 3000,
+      "w": 896,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.95,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "R2: PLAT OF CEDAR HILLS, VOL. 30 OF PLATS, PGS. 18-19",
+     "box": {
+      "x": 300,
+      "y": 3040,
+      "w": 742,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.95,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "(M) = MEASURED THIS SURVEY",
+     "box": {
+      "x": 300,
+      "y": 3080,
+      "w": 364,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "FOUND 3\" BRASS DISK IN CASE, DOWN 0.8'",
+     "box": {
+      "x": 300,
+      "y": 2900,
+      "w": 532,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.92,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "SET 1/2\" REBAR W/ CAP PLS 12345",
+     "box": {
+      "x": 300,
+      "y": 2940,
+      "w": 434,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.9,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "R1: N 89\u00b042'18\" E  1320.45'",
+     "box": {
+      "x": 800,
+      "y": 900,
+      "w": 378,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "M: N 89\u00b042'21\" E  1320.38'",
+     "box": {
+      "x": 800,
+      "y": 930,
+      "w": 364,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "S 00\u00b013'28\" W  148.52' (R2)   S 00\u00b013'28\" W  148.82' (M)",
+     "box": {
+      "x": 1400,
+      "y": 1400,
+      "w": 784,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "S 89\u00b013'28\" W  148.52'",
+     "box": {
+      "x": 900,
+      "y": 1900,
+      "w": 308,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.72,
+     "words": [
+      {
+       "text": "[alt] S 89\u00b013'28\" W 148.82'",
+       "box": {
+        "x": 900,
+        "y": 1900,
+        "w": 300,
+        "h": 28,
+        "rot": 0.0
+       },
+       "conf": 0.7
+      }
+     ],
+     "pass": 0.0
+    },
+    {
+     "text": "N 45\u00b0OO'OO\" W",
+     "box": {
+      "x": 2000,
+      "y": 1500,
+      "w": 182,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.9,
+     "words": [],
+     "pass": 0.0
+    }
+   ],
+   "image": null
+  }
+ ],
+ "notes": [
+  "Synthetic Record of Survey sample; fictional."
+ ]
+}
