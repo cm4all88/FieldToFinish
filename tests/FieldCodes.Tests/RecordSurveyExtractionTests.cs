@@ -85,6 +85,56 @@ public sealed class RecordSurveyExtractionTests
     }
 
     [Fact]
+    public void FragmentsOfOnePrintedLineAreJoinedInReadingOrderWhicheverWayTheSheetWasScanned()
+    {
+        // Horizontal: a wide gap split the label into two reads on the same baseline.
+        var horizontal = PageGeometry.JoinFragments(new[] { L("150.00'", 930, 900), L("N 89°42'18\" E", 700, 900) });
+        var h = Assert.Single(horizontal);
+        Assert.Equal("N 89°42'18\" E 150.00'", h.Text);
+        Assert.Equal(700, h.Box.X);
+
+        // Sideways sheet read at the 270° pass (rot -90): the text runs down the page, so the
+        // pieces are ordered by Y and the box is thin in X.
+        var a = new DocumentLine("Beginning at the N.E. Corner of said Section", new PageBox(5304, 505, 57, 1120, -90), 0.9);
+        var b = new DocumentLine("18; thence S 1°22'58\"", new PageBox(5321, 1656, 55, 509, -90), 0.9);
+        var c = new DocumentLine("W along the east line thereof 970'; thence N 88°", new PageBox(5331, 2169, 62, 1251, -90), 0.9);
+        var sideways = PageGeometry.JoinFragments(new[] { c, a, b });
+        var one = Assert.Single(sideways);
+        Assert.StartsWith("Beginning at the N.E. Corner of said Section 18; thence S 1°22'58\" W along", one.Text);
+        Assert.Equal(-90, one.Box.RotationDegrees);
+
+        // Far apart along the text, or turned differently: left alone.
+        Assert.Equal(2, PageGeometry.JoinFragments(new[] { L("LOT 1", 500, 900), L("LOT 2", 1500, 900) }).Count);
+        Assert.Equal(2, PageGeometry.JoinFragments(new[] { L("N 89°42'18\" E", 700, 900), L("150.00'", 1000, 900, 0.9, 90) }).Count);
+    }
+
+    [Fact]
+    public void ASidewaysDescriptionIsJoinedIntoAParagraphAdvancingAcrossThePage()
+    {
+        // rot -90 text: each printed line is a thin tall box, and the next line of the paragraph is
+        // the next box to the left.
+        var l1 = new DocumentLine("Beginning at the N.E. Corner of said Section 18; thence S 1°22'58\" W along", new PageBox(5304, 505, 57, 2100, -90), 0.9);
+        var l2 = new DocumentLine("the east line thereof 970'; thence N 88°", new PageBox(5249, 508, 54, 1800, -90), 0.9);
+        var l3 = new DocumentLine("26'42\"E along said line 634.3/' to the west line of Tract 202 of said", new PageBox(5190, 510, 56, 2050, -90), 0.9);
+        var page = new DocumentPage { Number = 1, WidthPx = 6600, HeightPx = 5100, Dpi = 300 };
+        page.Lines.AddRange(new[] { l3, l1, l2 });
+        CallExtractor.JoinProse(page);
+        var joined = Assert.Single(page.Lines);
+        Assert.StartsWith("Beginning at the N.E. Corner of said Section 18; thence S 1°22'58\" W along the east line thereof 970'; thence N 88° 26'42\"E", joined.Text);
+
+        var d = new DocumentText { DocumentPath = "sideways.pdf" };
+        var p = new DocumentPage { Number = 1, WidthPx = 6600, HeightPx = 5100, Dpi = 300 };
+        p.Lines.AddRange(new[] { l3, l1, l2 });
+        d.Pages.Add(p);
+        var project = CallExtractor.Extract(d, new ExtractionOptions());
+        Assert.Equal(2, project.Calls.Count);
+        Assert.Equal(180 + 1 + 22 / 60.0 + 58 / 3600.0, project.Calls[0].Records[0].AzimuthDegrees!.Value, 9);
+        Assert.Equal(970.0, project.Calls[0].Records[0].DistanceFeet!.Value, 6);
+        Assert.Equal(88 + 26 / 60.0 + 42 / 3600.0, project.Calls[1].Records[0].AzimuthDegrees!.Value, 9);
+        Assert.Equal(634.31, project.Calls[1].Records[0].DistanceFeet!.Value, 6);
+    }
+
+    [Fact]
     public void StackedPlanNotesAreNotJoinedIntoAParagraph()
     {
         var page = Doc(

@@ -124,6 +124,117 @@ namespace FieldCodes.RecordSurvey
         }
 
         /// <summary>Distance between two box centres, page pixels.</summary>
+        /// <summary>
+        /// A line's extent in its own reading frame: along the text (the reading direction) and
+        /// down the page of that text (where its next line sits). A box turned by rot reads along
+        /// (cos -rot, sin -rot): text read at the 270° pass (rot -90) runs down the page and its
+        /// paragraph advances to the left, as the sideways legal description of a sideways sheet does.
+        /// </summary>
+        public struct TextFrame
+        {
+            public double Along0, Along1, Down0, Down1;
+            public double Length { get { return Along1 - Along0; } }
+            public double Thickness { get { return Down1 - Down0; } }
+        }
+
+        public static TextFrame FrameOf(PageBox box)
+        {
+            var phi = -(box.RotationDegrees) * Math.PI / 180.0;
+            var ax = Math.Cos(phi); var ay = Math.Sin(phi);
+            var dx = -Math.Sin(phi); var dy = Math.Cos(phi);
+            var f = new TextFrame { Along0 = double.MaxValue, Along1 = double.MinValue, Down0 = double.MaxValue, Down1 = double.MinValue };
+            foreach (var c in new[] { new[] { box.X, box.Y }, new[] { box.Right, box.Y }, new[] { box.X, box.Bottom }, new[] { box.Right, box.Bottom } })
+            {
+                var a = c[0] * ax + c[1] * ay;
+                var d = c[0] * dx + c[1] * dy;
+                if (a < f.Along0) f.Along0 = a;
+                if (a > f.Along1) f.Along1 = a;
+                if (d < f.Down0) f.Down0 = d;
+                if (d > f.Down1) f.Down1 = d;
+            }
+            return f;
+        }
+
+        public static bool SameRotation(PageBox a, PageBox b)
+        {
+            return Math.Abs(Normalize(a.RotationDegrees - b.RotationDegrees)) < 15.0;
+        }
+
+        /// <summary>
+        /// Pieces of one printed line, read as separate lines (a sparse-text OCR pass breaks a line
+        /// at every wide gap), put back together in reading order: same rotation, sharing their
+        /// baseline band, the same height within reason, and no more than <paramref name="maxGapInHeights"/>
+        /// line-heights apart along the text. Everything else is left as read.
+        /// </summary>
+        public static List<DocumentLine> JoinFragments(IList<DocumentLine> lines, double maxGapInHeights = 2.0)
+        {
+            var result = new List<DocumentLine>();
+            if (lines == null) return result;
+            var framed = lines.Where(l => l != null && l.Box != null && l.Box.Width > 0 && l.Box.Height > 0)
+                              .Select(l => new { Line = l, Frame = FrameOf(l.Box) })
+                              // Reading order first, so the first piece of a line seeds its chain and the
+                              // later pieces are taken up by it rather than left standing alone.
+                              .OrderBy(x => x.Frame.Along0).ThenBy(x => x.Frame.Down0).ToList();
+            var chains = new Dictionary<DocumentLine, List<DocumentLine>>();
+            var used = new HashSet<DocumentLine>();
+            foreach (var seed in framed)
+            {
+                if (used.Contains(seed.Line)) continue;
+                used.Add(seed.Line);
+                var chain = new List<DocumentLine> { seed.Line };
+                var last = seed;
+                while (true)
+                {
+                    var best = (object)null;
+                    var bestGap = double.MaxValue;
+                    foreach (var c in framed)
+                    {
+                        if (used.Contains(c.Line) || !SameRotation(c.Line.Box, last.Line.Box)) continue;
+                        var t = Math.Min(last.Frame.Thickness, c.Frame.Thickness);
+                        if (t <= 0) continue;
+                        var ratio = c.Frame.Thickness / last.Frame.Thickness;
+                        if (ratio < 0.6 || ratio > 1.6) continue;
+                        var band = Math.Min(c.Frame.Down1, last.Frame.Down1) - Math.Max(c.Frame.Down0, last.Frame.Down0);
+                        if (band < 0.5 * t) continue;
+                        var gap = c.Frame.Along0 - last.Frame.Along1;
+                        if (gap < -0.3 * t || gap > maxGapInHeights * t) continue;
+                        if (gap < bestGap) { bestGap = gap; best = c; }
+                    }
+                    if (best == null) break;
+                    var next = framed.First(x => ReferenceEquals(x, best));
+                    used.Add(next.Line);
+                    chain.Add(next.Line);
+                    last = next;
+                }
+                foreach (var member in chain) chains[member] = chain;
+            }
+            // The page's own order is kept: a joined line stands where its first-read piece stood.
+            var emitted = new HashSet<DocumentLine>();
+            foreach (var l in lines)
+            {
+                List<DocumentLine> chain;
+                if (l == null || !chains.TryGetValue(l, out chain)) { result.Add(l); continue; }
+                if (emitted.Contains(l)) continue;
+                foreach (var member in chain) emitted.Add(member);
+                result.Add(chain.Count == 1 ? chain[0] : Joined(chain, " "));
+            }
+            return result;
+        }
+
+        /// <summary>One line out of several, in the order given: texts joined by the separator, the box
+        /// their union, the words all of them, the confidence the lowest.</summary>
+        public static DocumentLine Joined(IList<DocumentLine> parts, string separator)
+        {
+            var box = parts[0].Box;
+            foreach (var m in parts.Skip(1)) box = box.Union(m.Box);
+            var line = new DocumentLine(string.Join(separator, parts.Select(m => (m.Text ?? string.Empty).Trim()).ToArray()), box, parts.Min(m => m.Confidence))
+            {
+                PassRotationDegrees = parts[0].PassRotationDegrees
+            };
+            foreach (var m in parts) line.Words.AddRange(m.Words);
+            return line;
+        }
+
         public static double CentreDistance(PageBox a, PageBox b)
         {
             var dx = a.CenterX - b.CenterX;

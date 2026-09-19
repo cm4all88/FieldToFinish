@@ -54,6 +54,7 @@ namespace FieldCodes.RecordSurvey
             {
                 if (page.Lines.Select(l => l.PassRotationDegrees).Distinct().Count() > 1)
                     page.Lines = PageGeometry.Merge(page.Lines);
+                page.Lines = PageGeometry.JoinFragments(page.Lines);
                 JoinProse(page);
                 foreach (var line in page.Lines)
                     classified.Add(EntityClassifier.Classify(line, page.Number));
@@ -100,64 +101,68 @@ namespace FieldCodes.RecordSurvey
         /// <summary>
         /// A legal description wraps: "thence S 88°" ends one line and "26'42"E along said line 634.31'
         /// to the west line" starts the next. The OCR gives one line per printed line, so the paragraph
-        /// is put back together before the calls are read: horizontal lines of running text (a
-        /// description word such as THENCE or BEGINNING in the first, four or more words in each)
-        /// that sit one under the other, at the same height and overlapping sideways, become one
-        /// line whose box is their union. Stacked plan labels and monument notes are left alone.
+        /// is put back together before the calls are read: lines of running text (a description word
+        /// such as THENCE or BEGINNING in the first, four or more words in each) that sit one under
+        /// the other in the text's own frame -- whichever way the sheet was scanned -- at the same
+        /// height and overlapping along the text become one line whose box is their union. Stacked
+        /// plan labels and monument notes are left alone.
         /// </summary>
         public static void JoinProse(DocumentPage page)
         {
             if (page == null || page.Lines == null || page.Lines.Count < 2) return;
-            var horizontal = page.Lines
-                .Where(l => l.Box != null && Math.Abs(PageGeometry.Normalize(l.Box.RotationDegrees)) < 15.0)
-                .OrderBy(l => l.Box.Y).ThenBy(l => l.Box.X).ToList();
+            var framed = page.Lines
+                .Where(l => l.Box != null && l.Box.Width > 0 && l.Box.Height > 0)
+                .Select(l => new { Line = l, Frame = PageGeometry.FrameOf(l.Box) })
+                .OrderBy(x => Math.Round(PageGeometry.Normalize(x.Line.Box.RotationDegrees) / 15.0)).ThenBy(x => x.Frame.Down0).ThenBy(x => x.Frame.Along0)
+                .ToList();
             var used = new HashSet<DocumentLine>();
-            var joined = new List<KeyValuePair<DocumentLine, List<DocumentLine>>>();
+            var joined = new List<List<DocumentLine>>();
 
-            foreach (var seed in horizontal)
+            foreach (var seed in framed)
             {
-                if (used.Contains(seed) || !ProseLike(seed) || !ProseMarker.IsMatch(seed.Text ?? string.Empty)) continue;
-                var paragraph = new List<DocumentLine> { seed };
-                used.Add(seed);
+                if (used.Contains(seed.Line) || !ProseLike(seed.Line) || !ProseMarker.IsMatch(seed.Line.Text ?? string.Empty)) continue;
+                var paragraph = new List<DocumentLine> { seed.Line };
+                used.Add(seed.Line);
                 var last = seed;
                 while (true)
                 {
-                    DocumentLine best = null;
+                    var best = (object)null;
                     var bestGap = double.MaxValue;
-                    foreach (var c in horizontal)
+                    foreach (var c in framed)
                     {
-                        if (used.Contains(c) || !ProseLike(c)) continue;
-                        var h = Math.Max(last.Box.Height, c.Box.Height);
-                        if (h <= 0) continue;
-                        var ratio = c.Box.Height / Math.Max(1e-9, last.Box.Height);
+                        if (used.Contains(c.Line) || !ProseLike(c.Line) || !PageGeometry.SameRotation(c.Line.Box, last.Line.Box)) continue;
+                        var t = Math.Max(last.Frame.Thickness, c.Frame.Thickness);
+                        if (t <= 0) continue;
+                        var ratio = c.Frame.Thickness / Math.Max(1e-9, last.Frame.Thickness);
                         if (ratio < 0.6 || ratio > 1.6) continue;
-                        var gap = c.Box.Y - last.Box.Bottom;
-                        if (gap < -0.3 * h || gap > 0.9 * h) continue;
-                        var overlap = Math.Min(c.Box.Right, last.Box.Right) - Math.Max(c.Box.X, last.Box.X);
-                        if (overlap < 0.3 * Math.Min(c.Box.Width, last.Box.Width)) continue;
+                        var gap = c.Frame.Down0 - last.Frame.Down1;
+                        if (gap < -0.3 * t || gap > 0.9 * t) continue;
+                        var overlap = Math.Min(c.Frame.Along1, last.Frame.Along1) - Math.Max(c.Frame.Along0, last.Frame.Along0);
+                        if (overlap < 0.3 * Math.Min(c.Frame.Length, last.Frame.Length)) continue;
                         if (gap < bestGap) { bestGap = gap; best = c; }
                     }
                     if (best == null) break;
-                    paragraph.Add(best);
-                    used.Add(best);
-                    last = best;
+                    var next = framed.First(x => ReferenceEquals(x, best));
+                    paragraph.Add(next.Line);
+                    used.Add(next.Line);
+                    last = next;
                 }
-                if (paragraph.Count > 1) joined.Add(new KeyValuePair<DocumentLine, List<DocumentLine>>(seed, paragraph));
+                if (paragraph.Count > 1) joined.Add(paragraph);
             }
             if (joined.Count == 0) return;
 
-            var members = new HashSet<DocumentLine>(joined.SelectMany(j => j.Value));
-            var result = page.Lines.Where(l => !members.Contains(l)).ToList();
-            foreach (var j in joined)
+            // The page's own order is kept: a paragraph stands where its first-read line stood.
+            var paragraphOf = new Dictionary<DocumentLine, List<DocumentLine>>();
+            foreach (var j in joined) foreach (var m in j) paragraphOf[m] = j;
+            var emitted = new HashSet<DocumentLine>();
+            var result = new List<DocumentLine>();
+            foreach (var l in page.Lines)
             {
-                var box = j.Value[0].Box;
-                foreach (var m in j.Value.Skip(1)) box = box.Union(m.Box);
-                var line = new DocumentLine(string.Join(" ", j.Value.Select(m => (m.Text ?? string.Empty).Trim())), box, j.Value.Min(m => m.Confidence))
-                {
-                    PassRotationDegrees = j.Key.PassRotationDegrees
-                };
-                foreach (var m in j.Value) line.Words.AddRange(m.Words);
-                result.Add(line);
+                List<DocumentLine> paragraph;
+                if (!paragraphOf.TryGetValue(l, out paragraph)) { result.Add(l); continue; }
+                if (emitted.Contains(l)) continue;
+                foreach (var m in paragraph) emitted.Add(m);
+                result.Add(PageGeometry.Joined(paragraph, " "));
             }
             page.Lines = result;
         }
