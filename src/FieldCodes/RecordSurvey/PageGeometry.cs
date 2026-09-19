@@ -91,9 +91,12 @@ namespace FieldCodes.RecordSurvey
         public static List<DocumentLine> Merge(IEnumerable<DocumentLine> hits, double overlapFraction = 0.6)
         {
             var kept = new List<DocumentLine>();
+            // The pass that read a spot upside down gives much the same confidence as the one that
+            // read it the right way up ("1334 001 =HONI" against "INCH = 100 FEET"); words a plat
+            // uses tip the choice, and the loser is kept as an alternative.
             foreach (var hit in (hits ?? Enumerable.Empty<DocumentLine>())
                      .Where(h => h != null && h.Box != null && !string.IsNullOrWhiteSpace(h.Text))
-                     .OrderByDescending(h => h.EffectiveConfidence))
+                     .OrderByDescending(h => h.EffectiveConfidence + VocabularyBonus(h.Text)))
             {
                 var duplicate = kept.FirstOrDefault(k => IsSameSpot(k.Box, hit.Box, overlapFraction));
                 if (duplicate == null)
@@ -108,6 +111,30 @@ namespace FieldCodes.RecordSurvey
                     duplicate.Words.Add(new DocumentWord("[alt] " + hit.Text, hit.Box, hit.EffectiveConfidence));
             }
             return kept.OrderBy(l => l.Box.Y).ThenBy(l => l.Box.X).ToList();
+        }
+
+        private static readonly HashSet<string> Vocabulary = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "INCH", "INCHES", "FEET", "FOOT", "SCALE", "LOT", "LOTS", "BLOCK", "TRACT", "TRACTS", "PLAT", "SHEET", "NORTH", "SOUTH", "EAST", "WEST",
+            "THENCE", "ALONG", "LINE", "LINES", "CORNER", "SECTION", "TOWNSHIP", "RANGE", "COUNTY", "WASHINGTON", "ROAD", "STREET", "AVENUE",
+            "EASEMENT", "FOUND", "SET", "REBAR", "CAP", "MONUMENT", "PIPE", "IRON", "CONCRETE", "BRASS", "DISK", "NAIL", "CENTER", "CENTERLINE",
+            "RIGHT", "WAY", "RADIUS", "DELTA", "LENGTH", "CHORD", "TANGENT", "CURVE", "TABLE", "BEARING", "BEARINGS", "DISTANCE", "BASIS",
+            "THE", "AND", "SAID", "POINT", "BEGINNING", "RECORD", "SURVEY", "AUDITOR", "FILE", "VOLUME", "PAGE", "PAGES", "RECORDS",
+            "ADDITION", "ACRES", "DEDICATION", "OWNER", "OWNERS", "SURVEYOR", "ENGINEER", "CERTIFICATE", "APPROVED", "DATE", "NOTES", "LEGEND",
+            "PARCEL", "DEED", "UTILITY", "UTILITIES", "DRAINAGE", "ACCESS", "INGRESS", "EGRESS", "PUBLIC", "PRIVATE", "WIDE", "MEASURED",
+            "CALCULATED", "HELD", "PER", "TOTAL", "AREA", "SQUARE", "WITH", "FROM", "THAT", "THIS", "PORTION", "QUARTER", "MERIDIAN",
+            "WILLAMETTE", "DESCRIBED", "FOLLOWS", "EXCEPT", "SUBJECT", "SHORT", "BOUNDARY", "ADJUSTMENT", "LARGE", "SUBDIVISION", "EXHIBIT",
+            "BEING", "PART", "NORTHEAST", "NORTHWEST", "SOUTHEAST", "SOUTHWEST", "NORTHERLY", "SOUTHERLY", "EASTERLY", "WESTERLY", "STATE"
+        };
+
+        /// <summary>A small bonus for readings made of words a recorded survey uses: up to three words count.</summary>
+        public static double VocabularyBonus(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            var words = 0;
+            foreach (var token in text.Split(new[] { ' ', '\t', ',', ';', '.', ':', '(', ')', '"', '\'' }, StringSplitOptions.RemoveEmptyEntries))
+                if (token.Length >= 3 && Vocabulary.Contains(token)) words++;
+            return 0.06 * Math.Min(3, words);
         }
 
         public static bool IsSameSpot(PageBox a, PageBox b, double fraction)

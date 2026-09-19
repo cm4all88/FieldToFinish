@@ -174,7 +174,8 @@ namespace FieldCodes.RecordSurvey
             var doc = project.Document;
             doc.SurveyType = EntityClassifier.SurveyTypeFrom(lines);
             // The title is the biggest title-ish text on the sheet, not the first description sentence.
-            var title = lines.Where(l => l.Kind == SurveyEntityKind.SurveyTitle && l.Line.Box != null).OrderByDescending(l => l.Line.Box.Height).FirstOrDefault();
+            var title = lines.Where(l => l.Kind == SurveyEntityKind.SurveyTitle && l.Line.Box != null && LetterWords(l.Line.Text) <= 12)
+                             .OrderByDescending(l => l.Line.Box.Height).FirstOrDefault();
             if (title != null) doc.Title = title.Line.Text.Trim();
             var scale = lines.Select(EntityClassifier.ScaleOf).FirstOrDefault(s => s.HasValue) ?? EntityClassifier.SplitScale(lines);
             if (scale.HasValue) doc.ScaleFeetPerInch = scale;

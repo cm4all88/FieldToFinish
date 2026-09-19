@@ -84,7 +84,7 @@ namespace FieldCodes.RecordSurvey
         private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?", O);
         private static readonly Regex ScaleBare = new Regex(@"^\s*1\s*(?:""|''|INCH|IN\.?)\s*=\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?\s*$", O);
         // The word SCALE on its own line and the value on the next: "SCALE" / "1 INCH = 100 FEET", or just "lOO FEET".
-        private static readonly Regex ScaleWord = new Regex(@"^\s*(?:GRAPHIC\s+)?SCALE\s*:?\s*$", O);
+        private static readonly Regex ScaleWord = new Regex(@"^\s*(?:GRAPHIC\s+)?SCALE\s*:?\s*(?:[1Il]\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)?\s*)?[|]?\s*$", O);
         private static readonly Regex ScaleValue = new Regex(@"^\s*(?:1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*)?(?<n>[0-9OIlSB]{1,4})\s*(?:'|FT\.?|FEET)\s*$", O);
         private static readonly Regex BareNumber = new Regex(@"^\s*(?<n>\d{1,3})\s*$", O);
         private static readonly Regex Street = new Regex(
@@ -217,12 +217,26 @@ namespace FieldCodes.RecordSurvey
             if (lines == null) return null;
             foreach (var word in lines.Where(l => l.Line != null && l.Line.Box != null && ScaleWord.IsMatch(l.Line.Text ?? string.Empty)))
             {
-                var reach = 4.0 * Math.Max(1.0, Math.Min(word.Line.Box.Width, word.Line.Box.Height));
+                // In the word's own frame: the value continues the line (a lost "=" leaves a gap), or
+                // sits on the line below it.
+                var wf = PageGeometry.FrameOf(word.Line.Box);
                 var value = lines
                     .Where(l => !ReferenceEquals(l, word) && l.Page == word.Page && l.Line.Box != null && PageGeometry.SameRotation(l.Line.Box, word.Line.Box))
-                    .Select(l => new { Line = l, Match = ScaleValue.Match(l.Line.Text ?? string.Empty), Distance = PageGeometry.CentreDistance(l.Line.Box, word.Line.Box) })
-                    .Where(x => x.Match.Success && x.Distance <= reach)
-                    .OrderBy(x => x.Distance)
+                    .Select(l => new { Line = l, Match = ScaleValue.Match(l.Line.Text ?? string.Empty), Frame = PageGeometry.FrameOf(l.Line.Box) })
+                    .Where(x => x.Match.Success)
+                    .Select(x =>
+                    {
+                        var t = Math.Max(1.0, Math.Min(wf.Thickness, x.Frame.Thickness));
+                        var band = Math.Min(x.Frame.Down1, wf.Down1) - Math.Max(x.Frame.Down0, wf.Down0);
+                        var inlineGap = x.Frame.Along0 - wf.Along1;
+                        var inline = band >= 0.5 * t && inlineGap >= -0.3 * t && inlineGap <= 5.0 * t;
+                        var overlap = Math.Min(x.Frame.Along1, wf.Along1) - Math.Max(x.Frame.Along0, wf.Along0);
+                        var belowGap = x.Frame.Down0 - wf.Down1;
+                        var below = overlap >= 0.2 * Math.Min(x.Frame.Length, wf.Length) && belowGap >= -0.3 * t && belowGap <= 1.5 * t;
+                        return new { x.Line, x.Match, Ok = inline || below, Gap = inline ? inlineGap : belowGap };
+                    })
+                    .Where(x => x.Ok)
+                    .OrderBy(x => x.Gap)
                     .FirstOrDefault();
                 if (value == null) continue;
                 int repairs;

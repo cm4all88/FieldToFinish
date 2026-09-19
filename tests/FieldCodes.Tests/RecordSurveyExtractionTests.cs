@@ -28,6 +28,33 @@ public sealed class RecordSurveyExtractionTests
 
     private static string Sample(string name) => Path.Combine(AppContext.BaseDirectory, "Samples", name);
 
+    // ---------------------------------------------------------------- merging passes
+
+    [Fact]
+    public void TheReadingMadeOfPlatWordsWinsTheSpotOverAnUpsideDownReadOfTheSameConfidence()
+    {
+        var right = new DocumentLine("INCH = 100 FEET", new PageBox(5741, 2691, 49, 515, -90), 0.63) { PassRotationDegrees = 270 };
+        var upside = new DocumentLine("1334 001 =HONI", new PageBox(5741, 2691, 49, 515, 90), 0.66) { PassRotationDegrees = 90 };
+        var merged = PageGeometry.Merge(new[] { upside, right });
+        var kept = Assert.Single(merged);
+        Assert.Equal("INCH = 100 FEET", kept.Text);
+        Assert.Contains(kept.Words, w => w.Text.StartsWith("[alt]") && w.Text.Contains("HONI"));
+
+        // With no words on either side, confidence decides as before.
+        var a = new DocumentLine("N 89°42'18\" E", new PageBox(100, 100, 300, 30), 0.9) { PassRotationDegrees = 0 };
+        var b = new DocumentLine("3 .81,Z7.68 N", new PageBox(100, 100, 300, 30), 0.7) { PassRotationDegrees = 180 };
+        Assert.Equal("N 89°42'18\" E", Assert.Single(PageGeometry.Merge(new[] { b, a })).Text);
+    }
+
+    [Fact]
+    public void TheTitleIsTheBigShortLineNotTheDescriptionParagraph()
+    {
+        var p = Extract(
+            L("This plat of WALDHEIM ACRES Addition to King County, Washington comprises Tract 201 of Lake Morton Tracts as recorded in Volume 15 of Plats, page 22, described as follows", 400, 3000, 0.9, 0, 120),
+            L("PLAT OF WALDHEIM ACRES", 1800, 300, 0.9, 0, 90));
+        Assert.Equal("PLAT OF WALDHEIM ACRES", p.Document.Title);
+    }
+
     // ---------------------------------------------------------------- scale
 
     [Fact]
@@ -38,6 +65,12 @@ public sealed class RecordSurveyExtractionTests
 
         var lookAlike = Extract(L("SCALE", 1200, 3000), L("lOO FEET", 1190, 3040), L("N 89°42'18\" E 150.00'", 400, 900));
         Assert.Equal(100.0, lookAlike.Document.ScaleFeetPerInch);
+
+        // The "=" was not read, leaving a gap on the same line: still the scale.
+        var inline = CallExtractor.Extract(Doc(
+            new DocumentLine("SCALE I INCH", new PageBox(2483, 1845, 477, 48), 0.53),
+            new DocumentLine("lOO FEET", new PageBox(3053, 1847, 327, 45), 0.92)), new ExtractionOptions());
+        Assert.Equal(100.0, inline.Document.ScaleFeetPerInch);
 
         // The value line must be near the word: a stray "50'" across the sheet is a distance, not the scale.
         var far = Extract(L("SCALE", 1200, 3000), L("50'", 300, 300));
