@@ -55,6 +55,23 @@ public sealed class RecordSurveyExtractionTests
         Assert.Equal("PLAT OF WALDHEIM ACRES", p.Document.Title);
     }
 
+    // ---------------------------------------------------------------- sheet and recording number
+
+    [Fact]
+    public void ASheetNumberReadWithABarAndABareRecordingNumberAreStillRead()
+    {
+        var p = Extract(
+            L("SHEET | OF 2", 438, 7326, 0.5, -90),
+            L("RECORDING CERTIFICATE", 8545, 4828, 0.5, -90),
+            L("6683854", 8776, 6253, 0.5, -90),
+            L("N 89°42'18\" E 150.00'", 400, 900));
+        Assert.Equal("1 OF 2", p.Document.Sheet);
+        Assert.Equal("6683854", p.Document.RecordingNumber);
+        // The recording number is not a distance and not a lot number.
+        Assert.Single(p.Calls);
+        Assert.DoesNotContain(p.Annotations, a => a.Text == "6683854");
+    }
+
     // ---------------------------------------------------------------- scale
 
     [Fact]

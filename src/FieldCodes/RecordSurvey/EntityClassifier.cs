@@ -90,7 +90,10 @@ namespace FieldCodes.RecordSurvey
         private static readonly Regex BareNumber = new Regex(@"^\s*(?<n>\d{1,3})\s*$", O);
         private static readonly Regex Street = new Regex(
             @"\b(?:[NSEW]\.?\s?[EW]?\.?\s+)?(?:\d{1,3}(?:ST|ND|RD|TH)|[A-Z]{3,})\s+(?:STREET|ST\.?|AVENUE|AVE\.?|ROAD|RD\.?|WAY|PLACE|PL\.?|COURT|CT\.?|DRIVE|DR\.?|LANE|LN\.?|BOULEVARD|BLVD\.?|HIGHWAY|HWY\.?|CIRCLE|CIR\.?|PARKWAY|PKWY\.?|TERRACE|TER\.?|LOOP|TRAIL|TRL\.?)(?:\s+(?:N\.?E\.?|N\.?W\.?|S\.?E\.?|S\.?W\.?|N\.?|S\.?|E\.?|W\.?))?\s*$", O);
-        private static readonly Regex Sheet = new Regex(@"\bSHEET\s*(?<n>\d{1,3})\s*OF\s*(?<m>\d{1,3})\b", O);
+        private static readonly Regex Sheet = new Regex(@"\bSHEET\s*(?<n>[0-9Il|]{1,3})\s*OF\s*(?<m>[0-9Il|]{1,3})\b", O);
+        // A recording number standing on its own (6683854 under RECORDING CERTIFICATE, 20050301000123 on a modern
+        // sheet): never a distance of six million feet.
+        private static readonly Regex BareRecordingNumber = new Regex(@"^\s*(?:NO\.?\s*)?(?<n>\d{7,14})\s*$", O);
         private static readonly Regex Title = new Regex(
             @"\b(?<t>RECORD\s+OF\s+SURVEY|SHORT\s+(?:SUBDIVISION|PLAT)|BOUNDARY\s+LINE\s+ADJUSTMENT|LOT\s+LINE\s+ADJUSTMENT|LARGE\s+LOT\s+(?:SUBDIVISION|PLAT)|BINDING\s+SITE\s+PLAN|PLAT\s+OF|SUBDIVISION|EASEMENT\s+EXHIBIT|EXHIBIT\s+[A-Z]\b|THIS\s+PLAT\s+OF|DEDICATION\b|VOL(?:UME)?\.?\s*\d+\s+OF\s+PLATS)", O);
         private static readonly Regex SurveyorRx = new Regex(@"\b(?:P\.?L\.?S\.?|PROFESSIONAL\s+LAND\s+SURVEYOR|LAND\s+SURVEYOR|SURVEYOR'?S\s+CERTIFICATE|CERTIFICATE\s+NO\.?|LICENSE\s+NO\.?)\b", O);
@@ -125,7 +128,12 @@ namespace FieldCodes.RecordSurvey
 
             // Identity and headings first: "LOT 7" must not become a distance of 7.
             if (TableHeader.IsMatch(text) && bearings == 0 && distances == 0) return Set(result, SurveyEntityKind.Legend, 0.9, null);
-            if ((m = Sheet.Match(text)).Success) return Set(result, SurveyEntityKind.SheetNumber, 0.95, m.Groups["n"].Value + " OF " + m.Groups["m"].Value);
+            if ((m = Sheet.Match(text)).Success)
+            {
+                int sheetRepairs;
+                return Set(result, SurveyEntityKind.SheetNumber, 0.95, SurveyCallParser.RepairDigits(m.Groups["n"].Value.Replace('|', '1'), out sheetRepairs) + " OF " + SurveyCallParser.RepairDigits(m.Groups["m"].Value.Replace('|', '1'), out sheetRepairs));
+            }
+            if ((m = BareRecordingNumber.Match(text)).Success) return Set(result, SurveyEntityKind.RecordReference, 0.6, null);
             if ((m = ScaleRx.Match(text)).Success || (m = ScaleBare.Match(text)).Success) return Set(result, SurveyEntityKind.Scale, 0.95, m.Groups["n"].Value);
             if (Basis.IsMatch(text)) return Set(result, SurveyEntityKind.BasisOfBearing, 0.95, null);
             if ((m = Afn.Match(text)).Success && bearings == 0)
@@ -265,6 +273,11 @@ namespace FieldCodes.RecordSurvey
             r.Id = key.Success ? key.Groups["id"].Value.ToUpperInvariant() : string.Empty;
             var afn = Afn.Match(text);
             if (afn.Success) r.RecordingNumber = afn.Groups["n"].Value;
+            else
+            {
+                var bare = BareRecordingNumber.Match(text);
+                if (bare.Success) r.RecordingNumber = bare.Groups["n"].Value;
+            }
             var vp = VolPage.Match(text);
             if (vp.Success)
             {
