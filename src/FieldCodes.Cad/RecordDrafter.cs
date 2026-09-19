@@ -728,7 +728,10 @@ namespace FieldCodes.Cad
     /// The Civil 3D label styles and general segment labels, kept in one place because the
     /// API lives in AeccDbMgd and every call is guarded: a drawing without Civil 3D styles, or
     /// an object the label cannot attach to, is reported, never fatal.
-    /// UNTESTED against Civil 3D.
+    /// UNTESTED against Civil 3D. To confirm on the first run: GeneralSegmentLabel.Create on a
+    /// plain Line/Arc entity (the API documents it for feature lines and general segments),
+    /// Label.Dragged as the "someone moved it" flag, and the label's station measured from the
+    /// entity's own start (see CreateSegmentLabel).
     /// </summary>
     internal static class CivilLabels
     {

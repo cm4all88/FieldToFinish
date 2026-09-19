@@ -33,6 +33,15 @@ namespace FieldCodes.Cad
     ///
     /// UNTESTED against a document inside Civil 3D. The rotation mapping and merge are unit
     /// tested in FieldCodes (PageGeometry); this file only feeds them.
+    ///
+    /// To confirm on the first run in Civil 3D (nothing here can be run on a build machine):
+    ///   - Microsoft.Windows.SDK.Contracts loads inside the AutoCAD process (System.Runtime.
+    ///     WindowsRuntime beside the plugin DLL); if not, FTFRECORD reports it and the Sidecar
+    ///     engine still works.
+    ///   - The WinRT calls are waited on with AsTask().GetAwaiter().GetResult() on AutoCAD's UI
+    ///     thread. Should a call never return, run the body of Read on a thread-pool thread
+    ///     (Task.Run) and marshal the progress messages back.
+    ///   - OcrEngine.MaxImageDimension on the machine; tiling assumes 2600 when it cannot be read.
     /// </summary>
     internal static class RecordDocumentReader
     {
