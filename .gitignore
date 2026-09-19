@@ -67,3 +67,6 @@ tests/LiveSmoke/seedprod_recover.dwg
 # Checkpoint build artifacts / archives
 checkpoints/**/build-net48/*.dll
 checkpoints/**/source.tar.gz
+
+# Screenshots the UI test runs write (rewritten every run)
+tests/LiveSmoke/ui/*.png
