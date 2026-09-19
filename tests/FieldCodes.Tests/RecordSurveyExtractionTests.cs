@@ -66,6 +66,12 @@ public sealed class RecordSurveyExtractionTests
         var lookAlike = Extract(L("SCALE", 1200, 3000), L("lOO FEET", 1190, 3040), L("N 89°42'18\" E 150.00'", 400, 900));
         Assert.Equal(100.0, lookAlike.Document.ScaleFeetPerInch);
 
+        // The 1 read as a bar on the word's line, the value after a lost "=".
+        var barInline = CallExtractor.Extract(Doc(
+            new DocumentLine("SCALE | INCH", new PageBox(3310, 2460, 636, 64), 0.73),
+            new DocumentLine("lOO FEET", new PageBox(4070, 2462, 436, 60), 0.91)), new ExtractionOptions());
+        Assert.Equal(100.0, barInline.Document.ScaleFeetPerInch);
+
         // The 1 read as a bar, the whole statement on one (rejoined, sideways) line.
         var bar = CallExtractor.Extract(Doc(new DocumentLine("SCALE | INCH = 100 FEET", new PageBox(5735, 2346, 55, 860, -90), 0.15)), new ExtractionOptions());
         Assert.Equal(100.0, bar.Document.ScaleFeetPerInch);
@@ -185,6 +191,16 @@ public sealed class RecordSurveyExtractionTests
         Assert.Equal(970.0, project.Calls[0].Records[0].DistanceFeet!.Value, 6);
         Assert.Equal(88 + 26 / 60.0 + 42 / 3600.0, project.Calls[1].Records[0].AzimuthDegrees!.Value, 9);
         Assert.Equal(634.31, project.Calls[1].Records[0].DistanceFeet!.Value, 6);
+    }
+
+    [Fact]
+    public void AFiveDigitBareNumberAfterAProseBearingIsNotADistance()
+    {
+        // "300.92" with its point lost: left for the reviewer, never thirty thousand feet.
+        var p = Extract(L("thence N 71°42'58\" E 30092 thence N 40°06'40\" E 120 to the point of beginning", 400, 900));
+        Assert.Equal(2, p.Calls.Count);
+        Assert.Null(p.Calls[0].Records[0].DistanceFeet);
+        Assert.Equal(120.0, p.Calls[1].Records[0].DistanceFeet!.Value, 6);
     }
 
     [Fact]

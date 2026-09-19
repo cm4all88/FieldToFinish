@@ -354,6 +354,13 @@ namespace FieldCodes.RecordSurvey
                             var adjacent = lastBearingAt >= 0 && l.Tokens.Skip(lastBearingAt + 1).Take(i - lastBearingAt - 1)
                                 .All(x => x.Kind == SurveyTokenKind.Word && !(x.Text ?? string.Empty).Any(char.IsLetterOrDigit));
                             if (t.Read.Unit.Length == 0 && !adjacent) break;
+                            // "30092" after a bearing is 300.92 with its point lost, not thirty thousand feet: a
+                            // bare number that long is left for the reviewer rather than built.
+                            if (t.Read.Unit.Length == 0 && t.Read.Value >= 10000)
+                            {
+                                t.Read.Notes.Add("'" + t.Text.Trim() + "' after the bearing has no unit and five or more digits; not taken as the distance.");
+                                break;
+                            }
                             if (t.Read.Unit.Length == 0) t.Read.Notes.Add("No foot mark or unit after the number; taken as the distance because it follows the bearing directly.");
                             current.Distance = t;
                             break;

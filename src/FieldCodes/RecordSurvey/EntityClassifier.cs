@@ -85,7 +85,7 @@ namespace FieldCodes.RecordSurvey
         private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*[1Il|]\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?", O);
         private static readonly Regex ScaleBare = new Regex(@"^\s*[1Il|]\s*(?:""|''|INCH|IN\.?)\s*=\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?\s*$", O);
         // The word SCALE on its own line and the value on the next: "SCALE" / "1 INCH = 100 FEET", or just "lOO FEET".
-        private static readonly Regex ScaleWord = new Regex(@"^\s*(?:GRAPHIC\s+)?SCALE\s*:?\s*(?:[1Il]\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)?\s*)?[|]?\s*$", O);
+        private static readonly Regex ScaleWord = new Regex(@"^\s*(?:GRAPHIC\s+)?SCALE\s*:?\s*(?:[1Il|]\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)?\s*)?[|]?\s*$", O);
         private static readonly Regex ScaleValue = new Regex(@"^\s*(?:1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*)?(?<n>[0-9OIlSB]{1,4})\s*(?:'|FT\.?|FEET)\s*$", O);
         private static readonly Regex BareNumber = new Regex(@"^\s*(?<n>\d{1,3})\s*$", O);
         private static readonly Regex Street = new Regex(
