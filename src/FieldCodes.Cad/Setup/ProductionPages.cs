@@ -37,6 +37,10 @@ namespace FieldCodes.Cad.Setup
         private TextBox _prefixSpring;
         private TextBox _textHeight;
         private TextBox _dipTextStyle, _dipLeaderStyle;
+        private TextBox _commonCodes, _diametersCommon, _diametersMore;
+        private DataGridView _pipeChoices;
+        private static readonly string[] PipeChoiceColumns =
+            { "Name", "Structure types", "System", "Usual sizes (in)", "Larger sizes (in)", "Usual materials", "More materials" };
         private TextBox _labelOffset;
         private DataGridView _thresholds;
         private CheckedListBox _checks;
@@ -155,6 +159,29 @@ namespace FieldCodes.Cad.Setup
             _dipTextStyle = TextRow("Text style", "Office: Survey. Empty or not in the drawing uses the current style.", 240);
             _dipLeaderStyle = TextRow("Structure label leader style", "Office: xPMX SURV Text Arrow Anno (annotative, as the Storm Callout tool). Empty uses the current style.", 240);
 
+            Heading("Add pipe buttons");
+            Note("The size and material buttons + Add pipe shows first, by structure. A row naming structure types " +
+                 "(CB, SDMH) is used for those types; otherwise the row for the structure's system; otherwise the row " +
+                 "with neither. Larger and More... hold the rest (empty More materials: every other material above). " +
+                 "Speed only: any size or material can still be entered, and what was observed always wins.");
+            _pipeChoices = AddFullWidth(new DataGridView
+            {
+                Width = NoteWidth, Height = 190, AllowUserToAddRows = true, AllowUserToDeleteRows = true,
+                RowHeadersVisible = true, BackgroundColor = SystemColors.Window,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+            });
+            foreach (var c in PipeChoiceColumns) _pipeChoices.Columns.Add(c, c);
+            _pipeChoices.Columns[0].FillWeight = 80;
+            _pipeChoices.Columns[1].FillWeight = 80;
+            _pipeChoices.Columns[2].FillWeight = 50;
+
+            Heading("Structure pick lists");
+            Note("The structure Type and round Diameter drop-downs show these first, the rest under More. Rectangular " +
+                 "structures get no size list; their inside dimensions are typed as measured.");
+            _commonCodes = TextRow("Common structure types", "Comma separated structure codes. The other codes are under More.", 360);
+            _diametersCommon = TextRow("Round structure diameters (in), common", "Comma separated.", 360);
+            _diametersMore = TextRow("Round structure diameters (in), under More", "Comma separated.", 360);
+
             Heading("Label wording");
             Note("Tokens in braces are filled in; a part in [square brackets] disappears when " +
                  "its token has no value -- so a pipe with no calculated slope simply has no \"@ slope\".");
@@ -206,6 +233,17 @@ namespace FieldCodes.Cad.Setup
             _labelOffset.Text = Fmt(d.PipeLabelOffsetPlotted);
             _dipTextStyle.Text = d.TextStyle ?? string.Empty;
             _dipLeaderStyle.Text = d.LeaderStyle ?? string.Empty;
+            _commonCodes.Text = string.Join(", ", d.CommonStructureCodes.ToArray());
+            _pipeChoices.Rows.Clear();
+            foreach (var rule in d.PipeChoices.Where(r => r != null))
+                _pipeChoices.Rows.Add(rule.Name ?? string.Empty, string.Join(", ", rule.StructureCodes.ToArray()),
+                                      rule.System.HasValue ? rule.System.Value.ToString() : string.Empty,
+                                      string.Join(", ", rule.CommonSizes.Select(UtilitySettings.SizeText).ToArray()),
+                                      string.Join(", ", rule.LargerSizes.Select(UtilitySettings.SizeText).ToArray()),
+                                      string.Join(", ", rule.CommonMaterials.ToArray()),
+                                      string.Join(", ", rule.MoreMaterials.ToArray()));
+            _diametersCommon.Text = string.Join(", ", d.StructureDiametersCommon.Select(UtilitySettings.SizeText).ToArray());
+            _diametersMore.Text = string.Join(", ", d.StructureDiametersMore.Select(UtilitySettings.SizeText).ToArray());
             _pipeLabel.Text = d.PipeLabelFormat;
             _header.Text = d.StructureHeaderFormat;
             _rim.Text = d.RimLineFormat;
@@ -298,6 +336,38 @@ namespace FieldCodes.Cad.Setup
             v = d.PipeLabelOffsetPlotted; ReadDouble(_labelOffset, "Dips: pipe label offset", x => x >= 0, "cannot be negative", problems, ref v); d.PipeLabelOffsetPlotted = v;
             d.TextStyle = (_dipTextStyle.Text ?? string.Empty).Trim();
             d.LeaderStyle = (_dipLeaderStyle.Text ?? string.Empty).Trim();
+            d.CommonStructureCodes = Words(_commonCodes);
+            _pipeChoices.EndEdit();
+            var rules = new List<PipeChoiceRule>();
+            foreach (DataGridViewRow row in _pipeChoices.Rows)
+            {
+                if (row.IsNewRow) continue;
+                var cells = Enumerable.Range(0, PipeChoiceColumns.Length).Select(k => Convert.ToString(row.Cells[k].Value) ?? string.Empty).ToArray();
+                if (cells.All(string.IsNullOrWhiteSpace)) continue;
+                var name = cells[0].Trim();
+                var what = "Dips: Add pipe buttons \"" + (name.Length > 0 ? name : "row " + (row.Index + 1)) + "\"";
+                UtilitySystem system;
+                UtilitySystem? systemOrAny = null;
+                if (cells[2].Trim().Length > 0)
+                {
+                    if (Enum.TryParse(cells[2].Trim(), true, out system)) systemOrAny = system;
+                    else problems.Add(what + ": system \"" + cells[2].Trim() + "\" is not one of " + string.Join(", ", Enum.GetNames(typeof(UtilitySystem))) + ".");
+                }
+                var rule = new PipeChoiceRule
+                {
+                    Name = name,
+                    StructureCodes = WordList(cells[1]),
+                    System = systemOrAny,
+                    CommonSizes = SizeList(cells[3], what + " usual sizes", problems),
+                    LargerSizes = SizeList(cells[4], what + " larger sizes", problems),
+                    CommonMaterials = WordList(cells[5]),
+                    MoreMaterials = WordList(cells[6])
+                };
+                rules.Add(rule);
+            }
+            d.PipeChoices = rules;
+            d.StructureDiametersCommon = Sizes(_diametersCommon, "Dips: common structure diameters", problems);
+            d.StructureDiametersMore = Sizes(_diametersMore, "Dips: more structure diameters", problems);
 
             d.PipeLabelFormat = Required(_pipeLabel, "pipe label", problems, d.PipeLabelFormat);
             d.StructureHeaderFormat = Required(_header, "structure first line", problems, d.StructureHeaderFormat);
@@ -321,6 +391,33 @@ namespace FieldCodes.Cad.Setup
         private static string Cell(DataGridViewRow row, int index)
         {
             return (Convert.ToString(row.Cells[index].Value) ?? string.Empty).Trim();
+        }
+
+        private static List<string> Words(TextBox box)
+        {
+            return WordList(box.Text);
+        }
+
+        private static List<string> WordList(string text)
+        {
+            return (text ?? string.Empty).Split(',').Select(m => m.Trim().ToUpperInvariant()).Where(m => m.Length > 0).Distinct().ToList();
+        }
+
+        private static List<double> Sizes(TextBox box, string what, ICollection<string> problems)
+        {
+            return SizeList(box.Text, what, problems);
+        }
+
+        private static List<double> SizeList(string text, string what, ICollection<string> problems)
+        {
+            var sizes = new List<double>();
+            foreach (var part in (text ?? string.Empty).Split(',').Select(p => p.Trim()).Where(p => p.Length > 0))
+            {
+                double v;
+                if (double.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out v) && v > 0) { if (!sizes.Contains(v)) sizes.Add(v); }
+                else problems.Add(what + ": \"" + part + "\" is not a positive number.");
+            }
+            return sizes;
         }
 
         private static bool TryCell(DataGridViewRow row, int index, out double value)

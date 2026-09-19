@@ -124,6 +124,8 @@ namespace FieldCodes.Cad.Ui
         private FlowLayoutPanel _sizeGroup;
         private Label _sizeCaption;
         private TextBox _insideWidth;
+        private PickCombo _diameter;
+        private bool _roundSize = true;
         private Label _lengthCaption;
         private TextBox _insideLength;
         private Label _insideSource;
@@ -134,6 +136,19 @@ namespace FieldCodes.Cad.Ui
 
         // pipes
         private DataGridView _grid;
+        private PipeQuickEntry _quick;
+        // Whether the Add pipe panel is open. Kept apart from Visible, which reads false while the window is hidden.
+        private bool _quickOpen;
+        private PipeCardList _cards;
+        private Button _addPipe;
+        private Button _back;
+        private Label _choiceNote;
+        private string _pipeId;
+
+        // walking the network: the structures opened before this one, for Back
+        private readonly List<string> _history = new List<string>();
+        private string _shownStructureId;
+        private bool _goingBack;
 
         // connections
         private ListView _connections;
@@ -519,6 +534,12 @@ namespace FieldCodes.Cad.Ui
         /// </summary>
         private Control Step(string number, string title, string guidance, Control content, int fillLines)
         {
+            return Step(number, title, guidance, content, () => fillLines);
+        }
+
+        /// <summary>As above, with the number of fill lines decided each time the step is fitted.</summary>
+        private Control Step(string number, string title, string guidance, Control content, Func<int> fillLines)
+        {
             var card = new Panel { Dock = DockStyle.Top, BackColor = Surface, Padding = new Padding(18, 12, 18, 12) };
             card.Paint += (s, e) => e.Graphics.DrawRectangle(new Pen(Rule), 0, 0, card.Width - 1, card.Height - 1);
 
@@ -556,7 +577,7 @@ namespace FieldCodes.Cad.Ui
                 heading.Height = heading.Font.Height + 10;
                 if (number != null) heading.Padding = new Padding(heading.Font.Height + 10, 0, 0, 0);
                 hint.Height = string.IsNullOrEmpty(hint.Text) ? 0 : TextRenderer.MeasureText(hint.Text, hint.Font, new Size(inner, 0), TextFormatFlags.WordBreak).Height + 6;
-                var need = ContentHeight(content, inner, fillLines);
+                var need = ContentHeight(content, inner, fillLines());
                 var height = card.Padding.Vertical + heading.Height + hint.Height + need + 2;
                 if (card.Height != height) card.Height = height;
                 if (wrapper.Height != height + spacer.Height) wrapper.Height = height + spacer.Height;
@@ -573,6 +594,8 @@ namespace FieldCodes.Cad.Ui
             foreach (Control c in content.Controls)
             {
                 if (c.Dock != DockStyle.Top || !c.Visible) continue;
+                var fits = c as IFitsWidth;
+                if (fits != null) fits.FitWidth(width);
                 need += c is FlowLayoutPanel ? c.GetPreferredSize(new Size(width, 0)).Height : c.Height;
             }
             return need + fillLines * (Font.Height + 10);
@@ -791,6 +814,9 @@ namespace FieldCodes.Cad.Ui
             _grid.DataError += (s, e) => { e.ThrowException = false; };
             _grid.SelectionChanged += (s, e) =>
             {
+                // The grid is one way to choose the pipe; the cards are the other. A refresh rebuilding rows is neither.
+                if (!_loading && !_syncing && _grid.CurrentRow != null) _pipeId = _grid.CurrentRow.Tag as string;
+                MarkSelectedCard();
                 _candidates = new List<ConnectionCandidate>();
                 _candidateList.Items.Clear();
                 ShowConnectionState();
@@ -817,20 +843,34 @@ namespace FieldCodes.Cad.Ui
                 e.Control.TextChanged += OnTyping;
             };
 
+            // Pipes are recorded with + Add pipe and shown as cards; the table is the advanced view of the same data.
+            _quick = new PipeQuickEntry { Dock = DockStyle.Top, Visible = false };
+            _quick.Submitted += OnQuickSubmitted;
+            _quick.Cancelled += (s, e) => CloseQuickEntry();
+            _cards = new PipeCardList { Dock = DockStyle.Top };
+            _addPipe = Btn("+ Add pipe", OnAddPipe, true);
+            _back = Btn("Back", OnBack);
+            _back.Visible = false;
+            _choiceNote = Hint(string.Empty);
+
             var pipePanel = new Panel { BackColor = Surface };
-            pipePanel.Controls.Add(_grid);
-            pipePanel.Controls.Add(Row(
-                Btn("Add pipe", OnAddPipe),
+            pipePanel.Controls.Add(Advanced(_grid));
+            pipePanel.Controls.Add(Advanced(Row(
+                Hint("Table view:"),
                 Btn("Delete pipe", OnDeletePipe),
-                Advanced(Btn("Confirm unmarked dips as inverts", (s, e) => OnConfirmInvert(true))),
-                Advanced(Btn("Move up", (s, e) => MovePipe(-1))),
-                Advanced(Btn("Move down", (s, e) => MovePipe(1)))));
+                Btn("Confirm unmarked dips as inverts", (s, e) => OnConfirmInvert(true)),
+                Btn("Move up", (s, e) => MovePipe(-1)),
+                Btn("Move down", (s, e) => MovePipe(1)))));
+            pipePanel.Controls.Add(_cards);
+            pipePanel.Controls.Add(_quick);
+            pipePanel.Controls.Add(Row(_addPipe, _back, _choiceNote));
             scroll.Controls.Add(Step("2", "Pipes",
-                "Type each pipe from the field book. MD is the invert unless you tick Top of pipe. Changes save when you leave a cell.",
-                pipePanel, 6));
+                "+ Add pipe records a pipe the way the field book reads: direction, size, material, then the MD and what it was measured to. " +
+                "The buttons are the usual choices for this kind of structure; anything else can still be entered.",
+                pipePanel, () => _advancedToggle != null && _advancedToggle.Checked ? 6 : 0));
 
             // 1 structure -------------------------------------------------------
-            _type = new ComboBox { Width = 110, Margin = new Padding(0, 3, 6, 8) };
+            _type = new PickCombo { Width = 110, Margin = new Padding(0, 3, 6, 8) };
             _system = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110, Margin = new Padding(0, 3, 6, 8) };
             _system.Items.AddRange(Enum.GetNames(typeof(UtilitySystem)));
             _type.SelectionChangeCommitted += (s, e) => BeginInvoke(new Action(SaveStructureFields));
@@ -841,6 +881,12 @@ namespace FieldCodes.Cad.Ui
             _water = Box(64);
             _insideWidth = Box(56);
             _insideLength = Box(56);
+            // Round structures pick a diameter (Common / More, or typed); rectangular ones are always typed as measured.
+            _diameter = new PickCombo { Width = 70, Margin = new Padding(0, 3, 6, 8), Font = F(10.5f, true), Visible = false };
+            _diameter.Leave += (s, e) => SaveStructureFields();
+            _diameter.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; SaveStructureFields(); } };
+            _diameter.TextChanged += OnTyping;
+            _diameter.Picked += (s, e) => SaveStructureFields();
             _sizeCaption = Caption("Diameter (in)", 0);
             _lengthCaption = Caption("x", 0);
             _calcDips = new Label { AutoSize = true, ForeColor = Muted, Font = F(10f, false), Margin = new Padding(6, 7, 0, 0) };
@@ -856,7 +902,7 @@ namespace FieldCodes.Cad.Ui
             // The size caption and its boxes move as one piece, so the label always sits
             // in front of its box.
             _sizeGroup = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Surface, Margin = Padding.Empty };
-            _sizeGroup.Controls.AddRange(new Control[] { _sizeCaption, _insideWidth, _lengthCaption, _insideLength });
+            _sizeGroup.Controls.AddRange(new Control[] { _sizeCaption, _insideWidth, _diameter, _lengthCaption, _insideLength });
             structurePanel.Controls.Add(Row(
                 _sizeGroup,
                 Caption("Bottom MD (ft)", 14), _bottom,
@@ -1103,9 +1149,8 @@ namespace FieldCodes.Cad.Ui
             get
             {
                 var s = Current;
-                if (s == null || _grid.CurrentRow == null) return null;
-                var id = _grid.CurrentRow.Tag as string;
-                return s.Field.Pipes.FirstOrDefault(p => p.Id == id);
+                if (s == null || _pipeId == null) return null;
+                return s.Field.Pipes.FirstOrDefault(p => p.Id == _pipeId);
             }
         }
 
@@ -1124,8 +1169,14 @@ namespace FieldCodes.Cad.Ui
             }
             if (_settings == null) _settings = new FtfSettings();
 
-            if (_type.Items.Count == 0)
-                foreach (var code in _settings.Dips.StructureCodes) _type.Items.Add(code.Code);
+            if (!((PickCombo)_type).HasChoices)
+            {
+                List<string> common, more;
+                _settings.Dips.StructureCodeChoices(out common, out more);
+                ((PickCombo)_type).SetChoices(common, more);
+                _diameter.SetChoices(_settings.Dips.StructureDiametersCommon.Select(UtilitySettings.SizeText),
+                                     _settings.Dips.StructureDiametersMore.Select(UtilitySettings.SizeText));
+            }
 
             if (Current == null && DipSession.Project != null && DipSession.Project.Structures.Count > 0 && _structureId != null)
                 _structureId = null;
@@ -1148,11 +1199,18 @@ namespace FieldCodes.Cad.Ui
             _sizeGroup.Visible = sized;
             _sizeCaption.Text = shape == StructureShape.Rectangular ? "Inside W x L (in)" : "Diameter (in)";
             _lengthCaption.Visible = _insideLength.Visible = shape == StructureShape.Rectangular;
+            _roundSize = shape != StructureShape.Rectangular;
+            _insideWidth.Visible = !_roundSize;
+            _diameter.Visible = _roundSize;
         }
+
+        /// <summary>The entered diameter or inside width, from whichever box the structure's shape shows.</summary>
+        private string WidthText { get { return _roundSize ? _diameter.Text : _insideWidth.Text; } }
 
         private void RefreshStructure()
         {
             var s = Current;
+            TrackHistory();
             _loading = true;
             try
             {
@@ -1161,9 +1219,12 @@ namespace FieldCodes.Cad.Ui
                 {
                     _grid.Rows.Clear();
                     _connections.Items.Clear();
+                    _pipeId = null;
+                    _cards.SetRows(new Control[0]);
+                    CloseQuickEntry();
                     _structureTitle.Text = "No structure selected";
                     _pointInfo.Text = "Start with step 1: select the structure's survey point in the drawing.";
-                    _bottom.Text = _water.Text = _calcDips.Text = _insideWidth.Text = _insideLength.Text = _insideSource.Text = string.Empty;
+                    _bottom.Text = _water.Text = _calcDips.Text = _insideWidth.Text = _diameter.Text = _insideLength.Text = _insideSource.Text = string.Empty;
                     SetPreview(string.Empty);
                     RefreshWarnings();
                     return;
@@ -1173,7 +1234,11 @@ namespace FieldCodes.Cad.Ui
                 _pointInfo.Text = s.Cad == null
                     ? "No survey point in the drawing"
                     : string.Format(CultureInfo.InvariantCulture, "RIM {3:0.00}      N {1:0.00}   E {2:0.00}      Description \"{4}\"      {5}   (point {0})",
-                                    s.Field.PointNumber, s.Cad.Northing, s.Cad.Easting, s.Cad.Rim, s.Cad.Description, s.System);
+                                    s.Field.PointNumber, s.Cad.Northing, s.Cad.Easting, s.Cad.Rim, s.Cad.Description, s.System) +
+                                  // The drafter's type is used; the field code it replaced is still shown, as observed.
+                                  (s.TypeSetByDrafter && !string.IsNullOrEmpty(s.Field.FieldCode)
+                                      ? "      Type " + s.StructureType + " set by drafter (field code " + s.Field.FieldCode + ")"
+                                      : string.Empty);
                 if (!_type.Focused) _type.Text = s.StructureType ?? string.Empty;
                 _system.SelectedItem = s.System.ToString();
 
@@ -1186,6 +1251,7 @@ namespace FieldCodes.Cad.Ui
                                  (water != null ? "WL " + water.Value.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty);
 
                 if (!_insideWidth.Focused) _insideWidth.Text = Num(s.EnteredInsideWidthIn);
+                if (!_diameter.Focused) _diameter.Text = Num(s.EnteredInsideWidthIn);
                 if (!_insideLength.Focused) _insideLength.Text = Num(s.EnteredInsideLengthIn);
                 DimensionSource widthSource;
                 var width = StructureDimensions.InsideWidth(s, _settings != null ? _settings.Dips : null, out widthSource);
@@ -1208,11 +1274,23 @@ namespace FieldCodes.Cad.Ui
                     }
                     SelectRow(keep);
                 }
+                // A pipe from another structure is not this structure's selection: start at its first pipe.
+                if (!s.Field.Pipes.Any(p => p.Id == _pipeId))
+                    SelectRow(s.Field.Pipes.Count > 0 ? s.Field.Pipes[0].Id : null);
 
                 for (var i = 0; i < s.Field.Pipes.Count; i++)
                     FillRow(_grid.Rows[i], s, s.Field.Pipes[i]);
 
                 RefreshConnectionsList(s);
+                RefreshCards(s);
+                // The Add pipe buttons follow the structure: a type changed to CB shows a catch basin's sizes.
+                var choices = ChoicesFor(s);
+                _choiceNote.Text = "Buttons for: " + choices.RuleName;
+                if (_quickOpen)
+                {
+                    if (_quick.EditingPipeId != null && !s.Field.Pipes.Any(p => p.Id == _quick.EditingPipeId)) CloseQuickEntry();
+                    else if (_quick.ChoiceRule != choices.RuleName) _quick.SetChoices(choices);
+                }
             }
             finally
             {
@@ -1302,12 +1380,12 @@ namespace FieldCodes.Cad.Ui
             else
                 calc = elevation.Value.ToString("0.00", CultureInfo.InvariantCulture) + " " + DipElevations.Describe(p.Reference);
 
-            SetCell(row, "W", Num(p.WidthIn));
-            SetCell(row, "H", Num(p.HeightIn));
+            SetCell(row, "W", Exact(p.WidthIn));
+            SetCell(row, "H", Exact(p.HeightIn));
             SetCell(row, "Shape", p.Shape.ToString());
             SetCell(row, "Material", p.Material ?? string.Empty);
             SetCell(row, "Direction", p.Direction != null ? p.Direction.Text ?? string.Empty : string.Empty);
-            SetCell(row, "Dip", Num(p.MeasuredDip));
+            SetCell(row, "Dip", Exact(p.MeasuredDip));
             SetCheck(row, "Top", p.Reference == MeasurementReference.TopOfPipe);
             SetCell(row, "Reference", p.Reference.ToString());
             SetCell(row, "Calc", calc);
@@ -1340,17 +1418,45 @@ namespace FieldCodes.Cad.Ui
 
         private string SelectedPipeId()
         {
-            return _grid != null && _grid.CurrentRow != null ? _grid.CurrentRow.Tag as string : null;
+            return _pipeId;
         }
 
+        /// <summary>Makes this the selected pipe: its card is marked and the table row follows.</summary>
         private void SelectRow(string pipeId)
         {
-            foreach (DataGridViewRow row in _grid.Rows)
-                if ((row.Tag as string) == pipeId)
-                {
-                    _grid.CurrentCell = row.Cells["Material"];
-                    return;
-                }
+            _pipeId = pipeId;
+            var wasSyncing = _syncing;
+            _syncing = true;
+            try
+            {
+                foreach (DataGridViewRow row in _grid.Rows)
+                    if ((row.Tag as string) == pipeId)
+                    {
+                        try { _grid.CurrentCell = row.Cells["Material"]; }
+                        catch (InvalidOperationException) { }
+                        break;
+                    }
+            }
+            finally { _syncing = wasSyncing; }
+            MarkSelectedCard();
+        }
+
+        /// <summary>A pipe chosen from its card: selected everywhere, and the connection step follows it.</summary>
+        private void SelectPipe(string pipeId)
+        {
+            SelectRow(pipeId);
+            _candidates = new List<ConnectionCandidate>();
+            _candidateList.Items.Clear();
+            ShowConnectionState();
+            SyncConnectionSelection();
+            if (_map != null) _map.Invalidate();
+            FitAll();
+        }
+
+        private void MarkSelectedCard()
+        {
+            if (_cards == null) return;
+            foreach (var card in _cards.Cards) card.Selected = card.PipeId == _pipeId;
         }
 
         // ============================================================ live label
@@ -1386,7 +1492,7 @@ namespace FieldCodes.Cad.Ui
             var ignore = new List<string>();
             if (TryDip(_bottom.Text, "", ignore, out bottom)) structure.Field.BottomDip = bottom;
             if (TryDip(_water.Text, "", ignore, out water)) structure.Field.WaterDip = water;
-            if (TryNumber(_insideWidth.Text, "", ignore, out width)) structure.EnteredInsideWidthIn = width;
+            if (TryNumber(WidthText, "", ignore, out width)) structure.EnteredInsideWidthIn = width;
             if (TryNumber(_insideLength.Text, "", ignore, out length)) structure.EnteredInsideLengthIn = length;
 
             foreach (DataGridViewRow row in _grid.Rows)
@@ -1398,7 +1504,7 @@ namespace FieldCodes.Cad.Ui
                 var material = Live(row, "Material").Trim().ToUpperInvariant();
                 pipe.Material = material.Length == 0 ? null : material;
                 var directionText = Live(row, "Direction").Trim();
-                var direction = directionText.Length == 0 ? ObservedDirection.Unknown("?") : DipNoteParser.ParseDirection(directionText);
+                var direction = directionText.Length == 0 ? ObservedDirection.Unknown("?") : DirectionShortcuts.Parse(directionText);
                 if (direction != null) pipe.Direction = direction;
                 if (TryDip(Live(row, "Dip"), "", ignore, out dip)) pipe.MeasuredDip = dip;
                 var top = row.Cells["Top"].Value is bool && (bool)row.Cells["Top"].Value;
@@ -1483,6 +1589,12 @@ namespace FieldCodes.Cad.Ui
         {
             return v.HasValue ? v.Value.ToString("0.##", CultureInfo.InvariantCulture) : string.Empty;
         }
+        /// <summary>A field value with every decimal it has. Table cells use this, so leaving a cell never saves a
+        /// rounded copy of what was observed.</summary>
+        private static string Exact(double? v)
+        {
+            return v.HasValue ? QuickPipeEntry.Exact(v.Value) : string.Empty;
+        }
 
         // ============================================================ saving edits
         //
@@ -1505,8 +1617,8 @@ namespace FieldCodes.Cad.Ui
             TryDip(Cell(row, "Dip"), "MD", problems, out dip);
 
             var directionText = Cell(row, "Direction").Trim();
-            var direction = directionText.Length == 0 ? ObservedDirection.Unknown("?") : DipNoteParser.ParseDirection(directionText);
-            if (direction == null) problems.Add("\"" + directionText + "\" is not a direction (N, SW, N45E, AZ215)");
+            var direction = directionText.Length == 0 ? ObservedDirection.Unknown("?") : DirectionShortcuts.Parse(directionText);
+            if (direction == null) problems.Add("\"" + directionText + "\" is not a direction (N, N/NE, SW, N45E, AZ215)");
 
             if (problems.Count > 0)
             {
@@ -1528,7 +1640,51 @@ namespace FieldCodes.Cad.Ui
             var conditions = Cell(row, "Conditions").Split(',').Select(c => c.Trim().ToUpperInvariant()).Where(c => c.Length > 0).ToList();
             var notes = Cell(row, "Notes");
 
-            var posted = DipSession.Post("edit pipe", (db, tr, ed, project, settings, version) =>
+            var posted = PostPipeEdit(structureId, pipeId, new PipeEdit
+            {
+                Width = width, Height = height ?? width, Shape = shape, Material = material, Direction = direction, Dip = dip,
+                Reference = reference, Role = role, Conditions = conditions, Notes = notes, FromTopBox = fromTopBox, TopTicked = topTicked
+            });
+            if (posted) Say("Saved.", Good);
+        }
+
+        /// <summary>Everything one pipe edit sets, from the table or from the Add pipe panel.</summary>
+        private sealed class PipeEdit
+        {
+            public double? Width, Height, Dip;
+            public PipeShape Shape;
+            public string Material;
+            public ObservedDirection Direction;
+            public MeasurementReference Reference;
+            public FlowRole Role;
+            public List<string> Conditions;
+            public string Notes;
+            public bool FromTopBox, TopTicked;
+
+            /// <summary>From the Add pipe panel: which copied values are still unconfirmed. Null from the table,
+            /// where a copied value stays marked until the cell is changed.</summary>
+            public List<string> Prefilled;
+        }
+
+        /// <summary>
+        /// Saves one pipe edit. The table and the Add pipe panel both come here, so a reference confirmed, changed or
+        /// left alone -- and every override recorded -- is the same whichever way the drafter edited the pipe.
+        /// </summary>
+        private bool PostPipeEdit(string structureId, string pipeId, PipeEdit edit)
+        {
+            double? width = edit.Width, height = edit.Height, dip = edit.Dip;
+            var shape = edit.Shape;
+            var material = (edit.Material ?? string.Empty).Trim().ToUpperInvariant();
+            var direction = edit.Direction ?? ObservedDirection.Unknown("?");
+            var reference = edit.Reference;
+            var role = edit.Role;
+            var conditions = edit.Conditions ?? new List<string>();
+            var notes = edit.Notes ?? string.Empty;
+            var fromTopBox = edit.FromTopBox;
+            var topTicked = edit.TopTicked;
+            var prefilled = edit.Prefilled;
+
+            return DipSession.Post("edit pipe", (db, tr, ed, project, settings, version) =>
             {
                 var structure = project.Structure(structureId);
                 var pipe = project.Pipe(structureId, pipeId);
@@ -1547,7 +1703,8 @@ namespace FieldCodes.Cad.Ui
                                          (pipe.Material ?? string.Empty) != material || pipe.MeasuredDip != dip ||
                                          (pipe.Direction.Text ?? string.Empty) != (direction.Text ?? string.Empty);
                 var otherChanged = pipe.Role != role || !pipe.Conditions.SequenceEqual(conditions) || (pipe.Notes ?? string.Empty) != notes;
-                if (!confirming && !referenceChanged && !measurementChanged && !otherChanged) return false;
+                var copiedConfirmed = prefilled != null && !prefilled.SequenceEqual(pipe.Prefilled ?? new List<string>());
+                if (!confirming && !referenceChanged && !measurementChanged && !otherChanged && !copiedConfirmed) return false;
 
                 if (confirming) ObservationReview.ConfirmReference(project, structure, pipe, reference);
                 if (referenceChanged)
@@ -1560,6 +1717,25 @@ namespace FieldCodes.Cad.Ui
                     pipe.Reference = reference;
                     pipe.ReferenceBasis = ReferenceBasis.EnteredByDrafter;
                 }
+
+                // Copied values (completing a connected pipe) stop being "copied" once the drafter changes them here.
+                var stillCopied = prefilled != null ? prefilled.ToList() : (pipe.Prefilled ?? new List<string>()).ToList();
+                if (prefilled == null)
+                {
+                    if ((pipe.Direction.Text ?? string.Empty) != (direction.Text ?? string.Empty)) stillCopied.Remove(QuickPipeEntry.DirectionField);
+                    if (pipe.WidthIn != width) stillCopied.Remove(QuickPipeEntry.SizeField);
+                    if ((pipe.Material ?? string.Empty) != material) stillCopied.Remove(QuickPipeEntry.MaterialField);
+                }
+                var copiedChanged = !stillCopied.SequenceEqual(pipe.Prefilled ?? new List<string>());
+                if (copiedChanged)
+                    project.Overrides.Add(new ManualOverride
+                    {
+                        Target = pipe.Id, What = "Copied pipe values confirmed or changed at this structure",
+                        Generated = "copied: " + string.Join(", ", (pipe.Prefilled ?? new List<string>()).ToArray()),
+                        Entered = stillCopied.Count == 0 ? "all entered here" : "still copied: " + string.Join(", ", stillCopied.ToArray()),
+                        Utc = DateTime.UtcNow
+                    });
+                pipe.Prefilled = stillCopied;
 
                 pipe.WidthIn = width;
                 pipe.HeightIn = height ?? width;
@@ -1584,7 +1760,6 @@ namespace FieldCodes.Cad.Ui
                 }
                 return true;
             });
-            if (posted) Say("Saved.", Good);
         }
 
         private void SaveStructureFields()
@@ -1595,7 +1770,7 @@ namespace FieldCodes.Cad.Ui
             double? bottom, water, inside, length;
             TryDip(_bottom.Text, "Bottom MD", problems, out bottom);
             TryDip(_water.Text, "Water MD", problems, out water);
-            TryNumber(_insideWidth.Text, "Size", problems, out inside);
+            TryNumber(WidthText, "Size", problems, out inside);
             TryNumber(_insideLength.Text, "Length", problems, out length);
             if (problems.Count > 0)
             {
@@ -1634,7 +1809,18 @@ namespace FieldCodes.Cad.Ui
                     });
                 structure.EnteredInsideWidthIn = inside;
                 structure.EnteredInsideLengthIn = length;
-                if (type.Length > 0) structure.StructureType = type;
+                if (type.Length > 0 && type != (structure.StructureType ?? string.Empty))
+                {
+                    // The drafter's type now decides how the structure is treated; the field code stays as observed.
+                    project.Overrides.Add(new ManualOverride
+                    {
+                        Target = structure.Id, What = "Structure type set by drafter",
+                        Generated = "field code " + (structure.Field.FieldCode ?? "(none)") + ", type " + (structure.StructureType ?? "(none)"),
+                        Entered = type, Utc = DateTime.UtcNow
+                    });
+                    structure.StructureType = type;
+                    structure.TypeSetByDrafter = !string.Equals(type, structure.Field.FieldCode, StringComparison.OrdinalIgnoreCase);
+                }
                 structure.System = system;
                 return true;
             });
@@ -1770,36 +1956,282 @@ namespace FieldCodes.Cad.Ui
             if (posted) Say(pipeIds.Count + " MD(s) confirmed as inverts.", Good);
         }
 
+        // ============================================================ add pipe
+
+        /// <summary>The Add pipe buttons for this structure's type and system (office settings).</summary>
+        private PipeChoiceSet ChoicesFor(StructureRecord s)
+        {
+            var dips = _settings != null ? _settings.Dips : new UtilitySettings();
+            return dips.PipeChoicesFor(s.EffectiveCode, s.System);
+        }
+
+        private string Summary(PipeObservation p)
+        {
+            return QuickPipeEntry.Summary(p, _settings != null ? _settings.Dips : null);
+        }
+
         private void OnAddPipe(object sender, EventArgs e)
         {
             var s = Current;
             if (s == null) { Say("Select a structure first (step 1).", Bad); return; }
             _grid.EndEdit();   // a half-typed cell is saved, not lost
+            OpenQuickEntry(s, null);
+            Say("Click the direction, size and material, then the MD and what it was measured to.", Muted);
+        }
+
+        private void OpenQuickEntry(StructureRecord s, PipeObservation editing)
+        {
+            _quick.Begin(ChoicesFor(s), editing, s.Label, Summary);
+            _quick.Visible = _quickOpen = true;
+            _addPipe.Enabled = false;
+            FitAll();
+            if (_scroll != null) _scroll.ScrollControlIntoView(_quick);
+        }
+
+        private void CloseQuickEntry()
+        {
+            if (_quick == null) return;
+            _quick.Visible = _quickOpen = false;
+            _addPipe.Enabled = true;
+            FitAll();
+        }
+
+        private void OnQuickSubmitted(QuickPipeEntry entry, bool next)
+        {
+            var s = Current;
+            if (s == null) { CloseQuickEntry(); return; }
             var structureId = s.Id;
-            var newId = Guid.NewGuid().ToString("N");
-            var conventionNote = _settings.Dips.UnmarkedDipConventionSource;
-            var convention = _settings.Dips.UnmarkedDipsAreInvertsByConvention;
-            var posted = DipSession.Post("add pipe", (db, tr, ed, project, settings, version) =>
+
+            if (_quick.EditingPipeId != null)
+            {
+                var pipe = s.Field.Pipes.FirstOrDefault(p => p.Id == _quick.EditingPipeId);
+                if (pipe == null) { CloseQuickEntry(); return; }
+                // An edit goes through the same save as the table, so references and provenance behave identically.
+                var copy = new PipeObservation { Shape = pipe.Shape, HeightIn = pipe.HeightIn };
+                entry.ApplyTo(copy);
+                var posted = PostPipeEdit(structureId, pipe.Id, new PipeEdit
+                {
+                    Width = copy.WidthIn, Height = copy.HeightIn, Shape = pipe.Shape, Material = copy.Material ?? string.Empty,
+                    Direction = copy.Direction, Dip = copy.MeasuredDip, Reference = entry.Reference,
+                    Role = pipe.Role, Conditions = pipe.Conditions.ToList(), Notes = pipe.Notes,
+                    Prefilled = entry.Prefilled ?? new List<string>()
+                });
+                if (posted) Say("Saved " + Summary(copy) + ".", Good);
+                CloseQuickEntry();
+                return;
+            }
+
+            if (_quick.CompletingConnectionId != null)
+            {
+                var connectionId = _quick.CompletingConnectionId;
+                var matching = entry.Create();
+                var completed = DipSession.Post("complete pipe", (db, tr, ed, project, settings, version) =>
+                {
+                    var problem = NetworkCompletion.Complete(project, connectionId, structureId, matching);
+                    if (problem != null) { ed.WriteMessage("\nDip Builder: " + problem + " Nothing was added."); return false; }
+                    ed.WriteMessage("\nDip Builder: {0} entered at {1} as the other end of the connected pipe.", ConnectionFinder.Describe(matching), s.Label);
+                    return true;
+                });
+                if (!completed) return;
+                _pipeId = matching.Id;
+                Say("Added " + Summary(matching) + " at " + s.Label + " as the other end of the connected pipe.", Good);
+                CloseQuickEntry();
+                return;
+            }
+
+            var observation = entry.Create();
+            var newId = observation.Id;
+            var added = DipSession.Post("add pipe", (db, tr, ed, project, settings, version) =>
             {
                 var structure = project.Structure(structureId);
                 if (structure == null) return false;
-                structure.Field.Pipes.Add(new PipeObservation
-                {
-                    Id = newId,
-                    Source = ObservationSource.UserEntry,
-                    Reference = convention ? MeasurementReference.Invert : MeasurementReference.Unspecified,
-                    ReferenceBasis = convention ? ReferenceBasis.FieldNoteConvention : ReferenceBasis.NotStated,
-                    ReferenceNote = convention ? conventionNote : null,
-                    Direction = ObservedDirection.Unknown("?")
-                });
-                BeginInvoke(new Action(() =>
-                {
-                    foreach (DataGridViewRow row in _grid.Rows)
-                        if ((row.Tag as string) == newId) { _grid.CurrentCell = row.Cells["W"]; _grid.BeginEdit(true); }
-                }));
+                structure.Field.Pipes.Add(observation);
                 return true;
             });
-            if (posted) Say("Pipe added -- type its size, material, direction and MD.", Muted);
+            if (!added) return;
+            _pipeId = newId;
+            Say("Added " + Summary(observation) + " at " + s.Label + (next ? ". Next pipe:" : "."), Good);
+            if (next) OpenQuickEntry(s, null);
+            else CloseQuickEntry();
+        }
+
+        // ============================================================ pipe cards
+
+        /// <summary>One card per pipe, plus a line for each pipe that another structure says runs in here.</summary>
+        private void RefreshCards(StructureRecord s)
+        {
+            var project = DipSession.Project;
+            var findings = _settings != null ? UtilityQc.Evaluate(project, _settings.Dips) : new List<QcFinding>();
+            var rows = new List<Control>();
+
+            // Pipes already connected to this structure from the other end, with no pipe entered here for them yet.
+            foreach (var c in NetworkCompletion.Waiting(project, s))
+            {
+                var from = project.Structure(c.FromStructureId);
+                var pipe = project.Pipe(c.FromStructureId, c.FromPipeId);
+                if (from == null || pipe == null) continue;
+                var fromId = from.Id;
+                var connectionId = c.Id;
+                var line = new FlowLayoutPanel { AutoSize = false, WrapContents = true, BackColor = Ground, Padding = new Padding(8, 4, 8, 2), Tag = "incoming" };
+                line.Controls.Add(new Label
+                {
+                    AutoSize = true, ForeColor = Muted, Font = F(9.75f, false), Margin = new Padding(0, 6, 8, 0), UseMnemonic = false,
+                    Text = "Runs in from " + from.Label + ": " + Summary(pipe) + " (" + StatusWords(c.Status).ToLowerInvariant() + ") -- no pipe entered here for it yet."
+                });
+                line.Controls.Add(Btn("Complete pipe from " + from.Label, (x, e) => OnCompletePipe(connectionId), true));
+                line.Controls.Add(Btn("Open " + from.Label, (x, e) => OpenStructure(fromId)));
+                rows.Add(line);
+            }
+
+            foreach (var p in s.Field.Pipes)
+                rows.Add(BuildCard(project, s, p, findings));
+            if (s.Field.Pipes.Count == 0)
+                rows.Add(new Label { AutoSize = false, Height = Font.Height + 12, ForeColor = Muted, Text = "No pipes yet. Click + Add pipe for each pipe in the field book.", TextAlign = ContentAlignment.MiddleLeft });
+
+            _cards.SetRows(rows);
+            MarkSelectedCard();
+        }
+
+        private PipeCard BuildCard(UtilityProject project, StructureRecord s, PipeObservation p, IList<QcFinding> findings)
+        {
+            var card = new PipeCard(p.Id);
+            var pipeId = p.Id;
+            card.Picked += (x, e) => SelectPipe(pipeId);
+
+            var unconfirmed = p.MeasuredDip.HasValue && p.ReferenceUnconfirmed;
+            card.Headline.Text = Summary(p);
+            card.Headline.ForeColor = unconfirmed ? Warn : Ink;
+
+            var c = project.ConnectionFor(s.Id, p.Id);
+            StructureRecord other = null;
+            if (c != null && c.ToStructureId != null)
+                other = project.Structure(c.FromStructureId == s.Id ? c.ToStructureId : c.FromStructureId);
+
+            var facts = new List<string>();
+            if (unconfirmed) facts.Add("MD does not say what it was measured to");
+            if (c == null) facts.Add("not connected");
+            else
+            {
+                var where = other != null ? "-> " + other.Label + ", " : string.Empty;
+                facts.Add(where + StatusWords(c.Status).ToLowerInvariant());
+                if (c.IsAccepted && other != null)
+                {
+                    facts.Add(c.Drafted ? "drawn" : "not drawn yet");
+                    var slope = SlopeCalculator.Compute(project, c);
+                    facts.Add(slope.SlopePercent.HasValue
+                        ? "slope " + slope.SlopePercent.Value.ToString("F" + Math.Max(0, _settings.Dips.SlopeDecimals), CultureInfo.InvariantCulture) + "%"
+                        : slope.Basis == SlopeBasis.MissingOppositeObservation ? "no slope yet: needs the pipe at the other end" : "no slope: references not comparable");
+                }
+            }
+            if (p.Source == ObservationSource.FieldNote) facts.Add("from field notes");
+            if (p.Prefilled != null && p.Prefilled.Count > 0)
+                facts.Add(string.Join(", ", p.Prefilled.ToArray()) + " copied from " + (p.PrefilledFrom ?? "the connected pipe") + ", not observed here");
+            var issues = findings.Where(f => (f.StructureId == s.Id && f.PipeId == p.Id) || (c != null && f.ConnectionId == c.Id)).ToList();
+            if (issues.Count > 0)
+            {
+                var errors = issues.Count(f => f.Severity == Severity.Error);
+                facts.Add(errors > 0 ? errors + " problem(s)" : issues.Count + " note(s) to review");
+                card.Detail.ForeColor = errors > 0 ? Bad : Warn;
+            }
+            card.Detail.Text = string.Join("  ·  ", facts.ToArray());
+
+            card.Action("Edit", (x, e) => { SelectPipe(pipeId); OnEditPipe(); });
+            card.Action("Connects to...", (x, e) => { SelectPipe(pipeId); OnManualPick(x, e); });
+            card.Action("Suggest", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); });
+            if (other != null)
+            {
+                var otherId = other.Id;
+                card.Action("Open " + other.Label, (x, e) => OpenStructure(otherId));
+            }
+            var drawable = c != null && c.IsAccepted && c.ToStructureId != null;
+            if (drawable)
+            {
+                var connectionId = c.Id;
+                card.Action(c.Drafted ? "Redraw pipe + label" : "Draw pipe + label", (x, e) => { SelectPipe(pipeId); OnDrawPipe(connectionId); }, true, !c.Drafted);
+            }
+            if (issues.Count > 0)
+                card.Action("Show issues", (x, e) => { SelectPipe(pipeId); _warningsOpen = true; FitAll(); UpdateWarningsHeader(); });
+            card.Action("Delete", (x, e) => { SelectPipe(pipeId); OnDeletePipe(x, e); });
+            return card;
+        }
+
+        private void OnEditPipe()
+        {
+            var s = Current;
+            var p = SelectedPipe;
+            if (s == null || p == null) return;
+            OpenQuickEntry(s, p);
+            Say("Editing " + Summary(p) + ". Save pipe keeps the changes.", Muted);
+        }
+
+        /// <summary>
+        /// Starts this structure's end of a pipe connected from another structure: the Add pipe panel opens with the
+        /// opposite direction, size and material copied (and marked as copied). The MD and reference start empty;
+        /// nothing is added until the drafter clicks Add matching pipe.
+        /// </summary>
+        private void OnCompletePipe(string connectionId)
+        {
+            var s = Current;
+            var project = DipSession.Project;
+            var c = project != null ? project.Connections.FirstOrDefault(x => x.Id == connectionId) : null;
+            if (s == null || c == null) return;
+            var from = project.Structure(c.FromStructureId);
+            _grid.EndEdit();
+            _quick.BeginComplete(ChoicesFor(s), NetworkCompletion.Prefill(project, c), c.Id, s.Label, from != null ? from.Label : "the other structure", Summary);
+            _quick.Visible = _quickOpen = true;
+            _addPipe.Enabled = false;
+            FitAll();
+            if (_scroll != null) _scroll.ScrollControlIntoView(_quick);
+            Say("Check the copied direction, size and material against the field book, then enter the MD measured at " + s.Label + ".", Muted);
+        }
+
+        /// <summary>Draws one confirmed pipe and its label.</summary>
+        private void OnDrawPipe(string connectionId)
+        {
+            var posted = DipSession.Post("draw pipe", (db, tr, ed, project, settings, version) =>
+            {
+                UtilityCommands.DrawConnections(db, tr, ed, project, settings, version, c => c.Id == connectionId);
+                return true;
+            });
+            if (posted) Say("Drawing the pipe and its label -- answer any question at the command line.", Muted);
+        }
+
+        // ============================================================ walking the network
+
+        /// <summary>Remembers the structure being left, so Back returns to it.</summary>
+        private void TrackHistory()
+        {
+            if (_structureId == _shownStructureId) return;
+            if (_shownStructureId != null && !_goingBack)
+            {
+                _history.Remove(_shownStructureId);
+                _history.Add(_shownStructureId);
+                if (_history.Count > 50) _history.RemoveAt(0);
+            }
+            _goingBack = false;
+            _shownStructureId = _structureId;
+            if (_quickOpen) CloseQuickEntry();
+            UpdateBack();
+        }
+
+        private void UpdateBack()
+        {
+            if (_back == null) return;
+            var project = DipSession.Project;
+            _history.RemoveAll(id => id == _structureId || project == null || project.Structure(id) == null);
+            var previous = _history.Count > 0 && project != null ? project.Structure(_history[_history.Count - 1]) : null;
+            _back.Visible = previous != null;
+            if (previous != null) _back.Text = "Back to " + previous.Label;
+        }
+
+        private void OnBack(object sender, EventArgs e)
+        {
+            UpdateBack();
+            if (_history.Count == 0) return;
+            var id = _history[_history.Count - 1];
+            _history.RemoveAt(_history.Count - 1);
+            _goingBack = true;
+            OpenStructure(id);
         }
 
         private void OnDeletePipe(object sender, EventArgs e)
