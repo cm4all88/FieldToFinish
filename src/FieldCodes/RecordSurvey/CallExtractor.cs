@@ -177,6 +177,12 @@ namespace FieldCodes.RecordSurvey
             var title = lines.Where(l => l.Kind == SurveyEntityKind.SurveyTitle && l.Line.Box != null && LetterWords(l.Line.Text) <= 12)
                              .OrderByDescending(l => l.Line.Box.Height).FirstOrDefault();
             if (title != null) doc.Title = title.Line.Text.Trim();
+            // The plat's own name is the tallest lettering on the sheet ("FLYING ACRES" in letters an
+            // inch high) and says nothing the title words look for; a heading such as DEDICATION is
+            // not the name of the plat.
+            var tallest = TallestName(lines);
+            if (tallest != null && (title == null || Thickness(tallest.Line) > 1.5 * Thickness(title.Line) || IsHeadingOnly(title.Line.Text)))
+                doc.Title = tallest.Line.Text.Trim();
             var scale = lines.Select(EntityClassifier.ScaleOf).FirstOrDefault(s => s.HasValue) ?? EntityClassifier.SplitScale(lines);
             if (scale.HasValue) doc.ScaleFeetPerInch = scale;
             var sheet = lines.FirstOrDefault(l => l.Kind == SurveyEntityKind.SheetNumber);
@@ -200,6 +206,40 @@ namespace FieldCodes.RecordSurvey
                 doc.RecordingNumber = r.RecordingNumber;
                 if (r.Volume != null) doc.VolumePage = "VOL " + r.Volume + " PG " + r.Page + (r.Kind != null ? " (" + r.Kind + ")" : string.Empty);
             }
+        }
+
+        private static double Thickness(DocumentLine line)
+        {
+            return line != null && line.Box != null ? PageGeometry.FrameOf(line.Box).Thickness : 0;
+        }
+
+        private static readonly Regex HeadingWords = new Regex(
+            @"^\s*(?:DEDICATION|APPROVALS?|RESTRICTIONS|ACKNOWLEDGE?MENTS?|LEGEND|NOTES?|SURVEYOR'?S\s+CERTIFICATE|LAND\s+SURVEYOR'?S\s+CERTIFICATE|RECORDING\s+CERTIFICATE|TREASURER'?S\s+CERTIFICATE|CERTIFICATE)\s*:?\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        private static bool IsHeadingOnly(string text)
+        {
+            return HeadingWords.IsMatch(text ?? string.Empty);
+        }
+
+        /// <summary>The line in the tallest lettering that reads as a name: two to six words of letters,
+        /// no digits, at least twice the height of the sheet's ordinary text.</summary>
+        private static ClassifiedLine TallestName(List<ClassifiedLine> lines)
+        {
+            var sized = lines.Where(l => l.Line != null && l.Line.Box != null && l.Line.Box.Width > 0 && l.Line.Box.Height > 0).ToList();
+            if (sized.Count < 4) return null;
+            var thicknesses = sized.Select(l => Thickness(l.Line)).OrderBy(t => t).ToList();
+            var median = thicknesses[thicknesses.Count / 2];
+            return sized
+                .Where(l =>
+                {
+                    var text = (l.Line.Text ?? string.Empty).Trim();
+                    var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    return words.Length >= 2 && words.Length <= 6 && words.All(w => w.Length >= 2 && w.All(char.IsLetter))
+                        && !IsHeadingOnly(text) && l.Line.EffectiveConfidence >= 0.2 && Thickness(l.Line) >= 2.0 * Math.Max(1.0, median);
+                })
+                .OrderByDescending(l => Thickness(l.Line))
+                .FirstOrDefault();
         }
 
         private static bool IsKeyed(string key)

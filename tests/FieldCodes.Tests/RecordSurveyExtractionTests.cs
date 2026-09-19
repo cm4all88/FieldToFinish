@@ -47,6 +47,22 @@ public sealed class RecordSurveyExtractionTests
     }
 
     [Fact]
+    public void ThePlatNameIsTheTallestLetteringNotAHeadingWord()
+    {
+        // A sideways sheet: the name is 278 px tall lettering read at the 270° pass; DEDICATION and
+        // the certificates are ordinary headings.
+        var p = CallExtractor.Extract(Doc(
+            new DocumentLine("FLYING ACRES", new PageBox(10373, 3145, 278, 2638, -90), 0.26),
+            new DocumentLine("DEDICATION", new PageBox(4500, 5200, 60, 700, -90), 0.9),
+            new DocumentLine("RECORDING CERTIFICATE", new PageBox(8545, 4828, 62, 2090, -90), 0.5),
+            new DocumentLine("KING COUNTY, WASHINGTON", new PageBox(9800, 3100, 120, 2500, -90), 0.8),
+            new DocumentLine("SHEET 1 OF 2", new PageBox(438, 7326, 60, 950, -90), 0.5),
+            new DocumentLine("N 89°42'18\" E 150.00'", new PageBox(400, 900, 500, 46), 0.9)), new ExtractionOptions());
+        Assert.Equal("FLYING ACRES", p.Document.Title);
+        Assert.Equal("Subdivision Plat", p.Document.SurveyType);
+    }
+
+    [Fact]
     public void TheTitleIsTheBigShortLineNotTheDescriptionParagraph()
     {
         var p = Extract(
