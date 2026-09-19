@@ -281,4 +281,20 @@ public sealed class RecordSurveyStandardsTests
             Assert.Empty(problems);
         }
     }
+
+    [Fact]
+    public void AStandardNoCallNeededIsNotDrawableUntilItIsResolvedAgain()
+    {
+        // Resolved for Boundary only; a course given "Lot Line" in the review must not be drawn on
+        // a layer that was never checked (or, worse, on no layer at all).
+        var r = StandardsResolver.Resolve(PmxLikeSettings(), PmxLikeDrawing(), null, new[] { "Boundary" });
+        Assert.True(r.For("Boundary")!.CanDraw);
+        Assert.False(r.For("Lot Line")!.CanDraw);
+        Assert.Null(r.For("Lot Line")!.Layer);
+        Assert.Equal("NotResolved", r.For("Lot Line")!.LayerDecision);
+
+        var again = StandardsResolver.Resolve(PmxLikeSettings(), PmxLikeDrawing(), null, new[] { "Boundary", "Lot Line" });
+        Assert.True(again.For("Lot Line")!.CanDraw);
+        Assert.Equal("V-PROP-LOTL-E", again.For("Lot Line")!.Layer);
+    }
 }

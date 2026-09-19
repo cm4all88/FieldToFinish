@@ -47,6 +47,9 @@ namespace FieldCodes.Cad.Ui
         private Label _gate, _figureStart;
         private Button _build;
         private Image _pageImage;
+        private Bitmap _scaledBase;
+        private string _scaledKey;
+        private const double MaxZoomedPixels = 40e6;
         private int _pageShown = -1;
         private string _selected;
 
@@ -333,26 +336,49 @@ namespace FieldCodes.Cad.Ui
                 if (_pageImage != null) { _pageImage.Dispose(); _pageImage = null; }
                 if (!string.IsNullOrEmpty(p.ImagePath) && File.Exists(p.ImagePath))
                 {
-                    try { using (var fs = new FileStream(p.ImagePath, FileMode.Open, FileAccess.Read)) _pageImage = Image.FromStream(fs); }
+                    // Copied out of the stream: GDI+ keeps reading a stream-backed image lazily, and the
+                    // stream is closed here.
+                    try
+                    {
+                        using (var fs = new FileStream(p.ImagePath, FileMode.Open, FileAccess.Read))
+                        using (var loaded = Image.FromStream(fs))
+                            _pageImage = new Bitmap(loaded);
+                    }
                     catch (Exception) { _pageImage = null; }
                 }
                 _pageShown = page;
                 if (_pageNumber.SelectedIndex != page - 1) _pageNumber.SelectedIndex = page - 1;
             }
             var zoom = new[] { 0.25, 0.5, 0.75, 1.0, 1.5, 2.0 }[Math.Max(0, _zoom.SelectedIndex)];
-            var width = (int)Math.Max(1, (p.WidthPx > 0 ? p.WidthPx : 1000) * zoom);
-            var height = (int)Math.Max(1, (p.HeightPx > 0 ? p.HeightPx : 1000) * zoom);
-            var bitmap = new Bitmap(width, height);
+            // A large sheet at 300 dpi is over 100 million pixels; the zoomed copy is capped so GDI+
+            // can hold it, and the page is scaled once per zoom rather than on every row.
+            var pageWidth = p.WidthPx > 0 ? p.WidthPx : 1000;
+            var pageHeight = p.HeightPx > 0 ? p.HeightPx : 1000;
+            var budget = Math.Sqrt(MaxZoomedPixels / Math.Max(1.0, pageWidth * pageHeight));
+            if (zoom > budget) zoom = budget;
+            var width = (int)Math.Max(1, pageWidth * zoom);
+            var height = (int)Math.Max(1, pageHeight * zoom);
+            var scaledKey = page + ":" + width + "x" + height;
+            if (_scaledBase == null || _scaledKey != scaledKey)
+            {
+                if (_scaledBase != null) _scaledBase.Dispose();
+                _scaledBase = new Bitmap(width, height);
+                _scaledKey = scaledKey;
+                using (var g = Graphics.FromImage(_scaledBase))
+                {
+                    g.Clear(Color.White);
+                    if (_pageImage != null) g.DrawImage(_pageImage, 0, 0, width, height);
+                    else
+                    {
+                        // No page image (sidecar without images): draw the text boxes so the review still points somewhere.
+                        using (var pen = new Pen(Color.Gray))
+                            foreach (var line in p.Lines) g.DrawRectangle(pen, (float)(line.Box.X * zoom), (float)(line.Box.Y * zoom), (float)Math.Max(1, line.Box.Width * zoom), (float)Math.Max(1, line.Box.Height * zoom));
+                    }
+                }
+            }
+            var bitmap = new Bitmap(_scaledBase);
             using (var g = Graphics.FromImage(bitmap))
             {
-                g.Clear(Color.White);
-                if (_pageImage != null) g.DrawImage(_pageImage, 0, 0, width, height);
-                else
-                {
-                    // No page image (sidecar without images): draw the text boxes so the review still points somewhere.
-                    using (var pen = new Pen(Color.Gray))
-                        foreach (var line in p.Lines) g.DrawRectangle(pen, (float)(line.Box.X * zoom), (float)(line.Box.Y * zoom), (float)Math.Max(1, line.Box.Width * zoom), (float)Math.Max(1, line.Box.Height * zoom));
-                }
                 var call = highlightCallId != null ? _session.Project.FindCall(highlightCallId) : null;
                 if (call != null && call.Source != null && call.Source.Page == page && call.Source.Box != null)
                 {
@@ -532,6 +558,7 @@ namespace FieldCodes.Cad.Ui
             if (disposing)
             {
                 if (_pageImage != null) _pageImage.Dispose();
+                if (_scaledBase != null) _scaledBase.Dispose();
                 if (_page != null && _page.Image != null) _page.Image.Dispose();
             }
             base.Dispose(disposing);

@@ -92,6 +92,9 @@ namespace FieldCodes.Cad
             var cache = CacheFolder(path);
             if (settings.KeepPageImages) Directory.CreateDirectory(cache);
 
+            // No engine, no reading: said once, up front, rather than as a note on every page.
+            Engine(settings.OcrLanguage);
+
             var pages = RenderPages(path, settings.OcrDpi, say);
             var number = 0;
             foreach (var bitmap in pages)
@@ -99,7 +102,9 @@ namespace FieldCodes.Cad
                 number++;
                 using (bitmap)
                 {
-                    var page = new DocumentPage { Number = number, WidthPx = bitmap.Width, HeightPx = bitmap.Height, Dpi = settings.OcrDpi };
+                    // A scanned image keeps its own resolution; the dpi is what the page-space ordering scales by.
+                    var dpi = bitmap.HorizontalResolution >= 50 ? (int)Math.Round(bitmap.HorizontalResolution) : settings.OcrDpi;
+                    var page = new DocumentPage { Number = number, WidthPx = bitmap.Width, HeightPx = bitmap.Height, Dpi = dpi };
                     if (settings.KeepPageImages)
                     {
                         page.ImagePath = Path.Combine(cache, "page-" + number.ToString("000", CultureInfo.InvariantCulture) + ".png");
@@ -112,6 +117,7 @@ namespace FieldCodes.Cad
                     {
                         var before = hits.Count;
                         try { hits.AddRange(ReadRotated(bitmap, rotation, settings.OcrLanguage)); }
+                        catch (ConfigException) { throw; }
                         catch (Exception ex)
                         {
                             result.Notes.Add("Page " + number + " at " + rotation + "°: OCR failed (" + ex.Message + ").");
@@ -163,13 +169,15 @@ namespace FieldCodes.Cad
             return LoadImagePages(path, say);
         }
 
+        /// <summary>One page at a time: a multi-page TIFF at 300 dpi is hundreds of megabytes per page,
+        /// and the reader is done with each before the next is made.</summary>
         private static IEnumerable<Bitmap> LoadImagePages(string path, Action<string> say)
         {
-            var pages = new List<Bitmap>();
             using (var image = Image.FromFile(path))
             {
                 var dimension = new FrameDimension(image.FrameDimensionsList[0]);
                 var count = Math.Max(1, image.GetFrameCount(dimension));
+                say(count + " page(s) in the image file");
                 for (var i = 0; i < count; i++)
                 {
                     image.SelectActiveFrame(dimension, i);
@@ -180,16 +188,13 @@ namespace FieldCodes.Cad
                         g.Clear(Color.White);
                         g.DrawImage(image, 0, 0, image.Width, image.Height);
                     }
-                    pages.Add(copy);
+                    yield return copy;
                 }
             }
-            say(pages.Count + " page(s) in the image file");
-            return pages;
         }
 
         private static IEnumerable<Bitmap> RenderPdf(string path, int dpi, Action<string> say)
         {
-            var pages = new List<Bitmap>();
             var file = Windows.Storage.StorageFile.GetFileFromPathAsync(Path.GetFullPath(path)).AsTask().GetAwaiter().GetResult();
             var document = Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file).AsTask().GetAwaiter().GetResult();
             say(document.PageCount + " page(s) in the PDF");
@@ -220,12 +225,11 @@ namespace FieldCodes.Cad
                                 g.Clear(Color.White);
                                 g.DrawImage(decoded, 0, 0, decoded.Width, decoded.Height);
                             }
-                            pages.Add(copy);
+                            yield return copy;
                         }
                     }
                 }
             }
-            return pages;
         }
 
         // ------------------------------------------------------------ OCR passes
@@ -304,10 +308,11 @@ namespace FieldCodes.Cad
         }
 
         private static Windows.Media.Ocr.OcrEngine _engine;
+        private static string _engineLanguage;
 
         private static Windows.Media.Ocr.OcrEngine Engine(string language)
         {
-            if (_engine != null) return _engine;
+            if (_engine != null && string.Equals(_engineLanguage, language ?? string.Empty, StringComparison.OrdinalIgnoreCase)) return _engine;
             Windows.Media.Ocr.OcrEngine engine = null;
             if (!string.IsNullOrWhiteSpace(language))
             {
@@ -318,6 +323,7 @@ namespace FieldCodes.Cad
             if (engine == null)
                 throw new ConfigException("Windows OCR is not available for language \"" + language + "\" on this machine. Install the language's OCR pack (Settings > Time & Language), or use the Sidecar engine.");
             _engine = engine;
+            _engineLanguage = language ?? string.Empty;
             return engine;
         }
 

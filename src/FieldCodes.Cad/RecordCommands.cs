@@ -194,6 +194,14 @@ namespace FieldCodes.Cad
                 }
                 RecordDrafter.PlaceLabels(db, tr, e, project, settings, standards, outcome, byCall, kept);
                 project.Built.RemoveAll(b => b.Role == "Label" || b.Role == "Mask" || b.Role == "Table");
+                foreach (var id in kept)
+                {
+                    var entity = tr.GetObject(id, OpenMode.ForRead) as AcEntity;
+                    var stamp = entity != null ? Ownership.Read(entity) : null;
+                    if (stamp == null) continue;
+                    var call = project.FindCall(stamp.TagText);
+                    project.Built.Add(new BuiltEntity { Handle = entity.Handle.ToString(), Role = "Label", CallId = stamp.TagText, Figure = call != null ? call.Figure : null, Layer = entity.Layer });
+                }
                 project.Built.AddRange(outcome.Built);
                 DrawingStore.SaveRecordProject(db, tr, project);
                 foreach (var m in outcome.Messages) e.WriteMessage("\n  " + m);
@@ -451,9 +459,14 @@ namespace FieldCodes.Cad
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
+                // The review can give a course an object type no call had when the standard was
+                // first checked; resolve again from what the calls say now.
+                standards = Resolve(settings, RecordDrafter.Inventory(db, tr), project);
+                foreach (var issue in standards.Issues.Where(i => i.Severity == "Missing"))
+                    ed.WriteMessage("\n  WITHHELD: " + issue.Entity + " " + issue.Resource + " " + issue.Name + ": " + issue.Effect);
                 if (rebuild)
                 {
-                    var kept = RecordDrafter.Erase(db, tr, project, settings, true, true, false);
+                    RecordDrafter.Erase(db, tr, project, settings, true, true, false);
                     project.Built.Clear();
                 }
                 var outcome = RecordDrafter.Build(db, tr, ed, project, settings, standards, true);

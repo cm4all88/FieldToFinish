@@ -159,7 +159,13 @@ namespace FieldCodes.Cad
                 var meta = Metadata(project, tc, s);
                 meta.SharedWith.AddRange(sl.Owners.Skip(1).Select(o => o.Value));
                 WriteMetadata(tr, entity, meta);
-                var built = new BuiltEntity { Handle = entity.Handle.ToString(), Role = kind == FtfEntityKind.RecordCurve ? "Curve" : "Line", CallId = tc.Call.Id, Figure = owner.Key, Layer = std.Layer, Fingerprint = EasementAnnotation.Fingerprint(new[] { tc.Course }) };
+                // The fingerprint is taken from the entity as AutoCAD holds it (an arc always runs
+                // counter-clockwise), the same way HandEdits reads it back; a clockwise course would
+                // otherwise never match its own fingerprint.
+                string extractProblem;
+                var asDrawn = EasementCommands.Extract(entity, out extractProblem);
+                var built = new BuiltEntity { Handle = entity.Handle.ToString(), Role = kind == FtfEntityKind.RecordCurve ? "Curve" : "Line", CallId = tc.Call.Id, Figure = owner.Key, Layer = std.Layer,
+                                              Fingerprint = EasementAnnotation.Fingerprint(asDrawn ?? new[] { tc.Course }) };
                 built.SharedWith.AddRange(sl.Owners.Skip(1).Select(o => o.Value));
                 outcome.Built.Add(built);
                 byCall[tc.Call.Id] = entity.ObjectId;
@@ -363,6 +369,21 @@ namespace FieldCodes.Cad
                 if (kept == null || !CadUtil.TryMeasureText(kept, out w, out h, out ox, out oy)) continue;
                 var ext = kept.GeometricExtents;
                 obstacles.Add(new LabelObstacle { X = (ext.MinPoint.X + ext.MaxPoint.X) / 2, Y = (ext.MinPoint.Y + ext.MaxPoint.Y) / 2, Width = w, Height = h, What = "kept label" });
+
+                // Every mask of the project was erased with the labels; a kept text label gets a new one
+                // under its present position.
+                var keptText = kept as DBText;
+                var keptStamp = Ownership.Read(kept);
+                if (s.Mask && keptText != null && keptStamp != null)
+                {
+                    var maskId = TextMask.Place(db, tr, keptText, LabelAnchor(keptText), keptText.Rotation, keptText.Height, keptText.LayerId);
+                    if (!maskId.IsNull)
+                    {
+                        var wipeout = (AcEntity)tr.GetObject(maskId, OpenMode.ForWrite);
+                        Ownership.Stamp(wipeout, project.Id, settings.Version, FtfEntityKind.RecordMask, null, keptStamp.TagText);
+                        outcome.Built.Add(new BuiltEntity { Handle = wipeout.Handle.ToString(), Role = "Mask", CallId = keptStamp.TagText, Layer = kept.Layer });
+                    }
+                }
             }
 
             var plan = RecordLabelPlanner.Plan(outcome.Traverses, outcome.Shared, obstacles, options);
@@ -387,7 +408,7 @@ namespace FieldCodes.Cad
                 {
                     var styleName = call.Kind == CallKind.Curve ? std.CurveLabelStyle : std.LineLabelStyle;
                     string problem;
-                    var labelId = CivilLabels.CreateSegmentLabel(db, tr, entityId, label.AlongRatio, styleName, std.LabelLayer, out problem);
+                    var labelId = CivilLabels.CreateSegmentLabel(db, tr, entityId, new Point3d(label.X, label.Y, 0), styleName, std.LabelLayer, out problem);
                     if (!labelId.IsNull)
                     {
                         var entity = (AcEntity)tr.GetObject(labelId, OpenMode.ForWrite);
@@ -657,10 +678,26 @@ namespace FieldCodes.Cad
             {
                 var entity = tr.GetObject(pair.Key, OpenMode.ForRead) as AcEntity;
                 if (entity == null) continue;
-                var position = CadUtil.PositionOf(entity);
-                if (pair.Value.WasMovedByHand(position, tolerance)) moved.Add(pair.Key);
+                var text = entity as DBText;
+                if (text != null)
+                {
+                    // Stamped with the alignment point it was placed at; AutoCAD fills Position in
+                    // from it, so Position is not what was stamped.
+                    if (pair.Value.WasMovedByHand(LabelAnchor(text), tolerance)) moved.Add(pair.Key);
+                    continue;
+                }
+                // A Civil 3D label says itself whether someone dragged it.
+                if (CivilLabels.WasDragged(entity)) moved.Add(pair.Key);
             }
             return moved;
+        }
+
+        /// <summary>The point a text label is placed by: its alignment point unless it is left/base
+        /// justified, where the insertion point is the only one AutoCAD keeps.</summary>
+        private static Point3d LabelAnchor(DBText text)
+        {
+            return text.HorizontalMode == TextHorizontalMode.TextLeft && text.VerticalMode == TextVerticalMode.TextBase
+                ? text.Position : text.AlignmentPoint;
         }
 
         /// <summary>Whether the built geometry differs from what the project recorded at build time (a hand edit).</summary>
@@ -740,8 +777,9 @@ namespace FieldCodes.Cad
             return ObjectId.Null;
         }
 
-        /// <summary>A Civil 3D general line/curve label on the entity at the ratio along it, on the layer. Null id and a reason when it cannot be made.</summary>
-        public static ObjectId CreateSegmentLabel(Database db, Transaction tr, ObjectId entityId, double ratio, string styleName, string layer, out string problem)
+        /// <summary>A Civil 3D general line/curve label on the entity at the point of it nearest <paramref name="near"/>
+        /// (the label's planned spot), on the layer. Null id and a reason when it cannot be made.</summary>
+        public static ObjectId CreateSegmentLabel(Database db, Transaction tr, ObjectId entityId, Point3d near, string styleName, string layer, out string problem)
         {
             problem = null;
             var entity = tr.GetObject(entityId, OpenMode.ForRead) as AcEntity;
@@ -750,6 +788,17 @@ namespace FieldCodes.Cad
             if (styleId.IsNull) { problem = "label style \"" + styleName + "\" not found"; return ObjectId.Null; }
             try
             {
+                // The ratio Civil 3D wants runs along the entity as AutoCAD holds it (an arc from its
+                // counter-clockwise start), which is not always the course's own direction: measure it
+                // from the nearest point instead of trusting a direction.
+                var ratio = 0.5;
+                var curve = entity as Curve;
+                if (curve != null)
+                {
+                    var closest = curve.GetClosestPointTo(near, false);
+                    var span = curve.EndParam - curve.StartParam;
+                    if (Math.Abs(span) > 1e-12) ratio = (curve.GetParameterAtPoint(closest) - curve.StartParam) / span;
+                }
                 var labelId = Autodesk.Civil.DatabaseServices.GeneralSegmentLabel.Create(entityId, Math.Max(0.05, Math.Min(0.95, ratio)), styleId);
                 if (labelId.IsNull) { problem = "Civil 3D returned no label"; return ObjectId.Null; }
                 if (!string.IsNullOrEmpty(layer))
@@ -765,6 +814,17 @@ namespace FieldCodes.Cad
                 problem = ex.Message;
                 return ObjectId.Null;
             }
+        }
+
+        /// <summary>Whether a Civil 3D label was dragged from its computed spot. False for anything else.</summary>
+        public static bool WasDragged(AcEntity entity)
+        {
+            try
+            {
+                var label = entity as Autodesk.Civil.DatabaseServices.Label;
+                return label != null && label.Dragged;
+            }
+            catch (System.Exception) { return false; }
         }
 
         public static string StyleNameOf(Transaction tr, AcEntity entity)

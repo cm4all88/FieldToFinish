@@ -155,7 +155,9 @@ namespace FieldCodes.RecordSurvey
             {
                 var r = new ResolvedEntityStandard { Standard = standard, TextHeight = standard.TextHeightPlotted * inventory.Scale };
                 result.Entities[standard.Name] = r;
-                if (!needed.Contains(standard.Name)) { r.CanDraw = standard.Enabled; continue; }
+                // A standard no call needs is not checked against the drawing, so it is not drawable
+                // either: a course given that type later (in the review) must be resolved again first.
+                if (!needed.Contains(standard.Name)) { r.CanDraw = false; r.LayerDecision = "NotResolved"; continue; }
 
                 // ---- layer
                 if (string.IsNullOrWhiteSpace(standard.Layer))
