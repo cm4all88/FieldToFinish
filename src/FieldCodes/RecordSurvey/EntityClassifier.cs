@@ -81,8 +81,9 @@ namespace FieldCodes.RecordSurvey
         private static readonly Regex MonumentBare = new Regex(
             @"^\s*(?:\d+/\d+""?|5/8|1/2|3/4)?\s*(?:REBAR|IRON\s+PIPE|MON(?:UMENT)?\.?\s+IN\s+CASE|BRASS\s+(?:CAP|DISK)|CONC(?:RETE)?\s+MON)\b", O);
         private static readonly Regex Basis = new Regex(@"\bBASIS\s+OF\s+BEARINGS?\b", O);
-        private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?", O);
-        private static readonly Regex ScaleBare = new Regex(@"^\s*1\s*(?:""|''|INCH|IN\.?)\s*=\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?\s*$", O);
+        // The 1 of 1" = 100' is read as I, l or | as often as not.
+        private static readonly Regex ScaleRx = new Regex(@"\bSCALE\s*:?\s*[1Il|]\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?", O);
+        private static readonly Regex ScaleBare = new Regex(@"^\s*[1Il|]\s*(?:""|''|INCH|IN\.?)\s*=\s*(?<n>\d{1,4})\s*(?:'|FT\.?|FEET)?\s*$", O);
         // The word SCALE on its own line and the value on the next: "SCALE" / "1 INCH = 100 FEET", or just "lOO FEET".
         private static readonly Regex ScaleWord = new Regex(@"^\s*(?:GRAPHIC\s+)?SCALE\s*:?\s*(?:[1Il]\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)?\s*)?[|]?\s*$", O);
         private static readonly Regex ScaleValue = new Regex(@"^\s*(?:1\s*(?:""|''|INCH|IN\.?)?\s*(?:=|-)\s*)?(?<n>[0-9OIlSB]{1,4})\s*(?:'|FT\.?|FEET)\s*$", O);

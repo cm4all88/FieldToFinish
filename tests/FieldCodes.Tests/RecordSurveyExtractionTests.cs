@@ -66,6 +66,10 @@ public sealed class RecordSurveyExtractionTests
         var lookAlike = Extract(L("SCALE", 1200, 3000), L("lOO FEET", 1190, 3040), L("N 89°42'18\" E 150.00'", 400, 900));
         Assert.Equal(100.0, lookAlike.Document.ScaleFeetPerInch);
 
+        // The 1 read as a bar, the whole statement on one (rejoined, sideways) line.
+        var bar = CallExtractor.Extract(Doc(new DocumentLine("SCALE | INCH = 100 FEET", new PageBox(5735, 2346, 55, 860, -90), 0.15)), new ExtractionOptions());
+        Assert.Equal(100.0, bar.Document.ScaleFeetPerInch);
+
         // The "=" was not read, leaving a gap on the same line: still the scale.
         var inline = CallExtractor.Extract(Doc(
             new DocumentLine("SCALE I INCH", new PageBox(2483, 1845, 477, 48), 0.53),
