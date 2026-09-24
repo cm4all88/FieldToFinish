@@ -1,7 +1,8 @@
 # Headless live-smoke run of FTFRECORD in real Civil 3D via accoreconsole.
 # Reads the synthetic King County short plat fixture through the Sidecar engine (no OCR
-# needed), approves every call at or above the review threshold, starts Lot 1 at 500,500 and
-# lets Lot 2 sit on the shared line, builds, checks, labels, rebuilds and checks again.
+# needed), approves every call at or above the review threshold, starts Lot 1 at 500,500 (Lot 2
+# is placed through the line the two share, so there is exactly one start prompt), builds,
+# checks, labels, rebuilds and checks again.
 # Output: record_out.log, outrecord.dwg, outrecord.<project>.ftfrecord.json and the QC report.
 # The settings beside the seed (ftf-settings.json) create the missing layers so the stock NCS
 # template can take the geometry, and place plain-text labels (no Civil 3D label style is named).
