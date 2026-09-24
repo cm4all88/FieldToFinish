@@ -787,7 +787,11 @@ namespace FieldCodes.Cad
             problem = null;
             var entity = tr.GetObject(entityId, OpenMode.ForRead) as AcEntity;
             var isArc = entity is Arc;
-            var styleId = FindStyle(db, tr, styleName, !isArc);
+            // Civil 3D takes both label styles at once and uses the one that fits the segment, so the style name is
+            // looked up in both collections; the entity's own kind is the one that has to be there.
+            var lineStyleId = FindStyle(db, tr, styleName, true);
+            var curveStyleId = FindStyle(db, tr, styleName, false);
+            var styleId = isArc ? curveStyleId : lineStyleId;
             if (styleId.IsNull) { problem = "label style \"" + styleName + "\" not found"; return ObjectId.Null; }
             try
             {
@@ -802,7 +806,7 @@ namespace FieldCodes.Cad
                     var span = curve.EndParam - curve.StartParam;
                     if (Math.Abs(span) > 1e-12) ratio = (curve.GetParameterAtPoint(closest) - curve.StartParam) / span;
                 }
-                var labelId = Autodesk.Civil.DatabaseServices.GeneralSegmentLabel.Create(entityId, Math.Max(0.05, Math.Min(0.95, ratio)), styleId);
+                var labelId = Autodesk.Civil.DatabaseServices.GeneralSegmentLabel.Create(entityId, Math.Max(0.05, Math.Min(0.95, ratio)), lineStyleId, curveStyleId);
                 if (labelId.IsNull) { problem = "Civil 3D returned no label"; return ObjectId.Null; }
                 if (!string.IsNullOrEmpty(layer))
                 {

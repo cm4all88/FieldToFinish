@@ -1413,9 +1413,10 @@ namespace Autodesk.Civil.DatabaseServices
 
     public sealed class GeneralSegmentLabel : Label
     {
-        public static ObjectId Create(ObjectId entityId, double ratio, ObjectId labelStyleId) { return ObjectId.Null; }
-        public static ObjectId Create(ObjectId entityId, double ratio) { return ObjectId.Null; }
-        public static ObjectId Create(ObjectId entityId, double ratio, ObjectId labelStyleId, bool prefixWithLabelStyle) { return ObjectId.Null; }
+        // The two overloads Civil 3D 2024 really has (checked against AeccDbMgd.dll): a segment label takes the line
+        // and the curve style together and uses the one that fits the segment.
+        public static ObjectId Create(ObjectId featureId, double ratio) { return ObjectId.Null; }
+        public static ObjectId Create(ObjectId featureId, double ratio, ObjectId lineLabelStyleId, ObjectId curveLabelStyleId) { return ObjectId.Null; }
         public double Ratio { get; set; }
         public ObjectId FeatureId { get; }
     }
