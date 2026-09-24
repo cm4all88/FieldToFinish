@@ -445,6 +445,18 @@ namespace FieldCodes.Cad
                 return gate.Ready;
             }
 
+            return ShowReview(doc, session, text, standards, inventory, settings);
+        }
+
+        /// <summary>
+        /// The review window. Kept in its own method that is never inlined: accoreconsole overflows its stack while
+        /// JIT-compiling a method that names a dialog type and ShowModalDialog, even on a path it never runs, which
+        /// would take the headless review down with it.
+        /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static bool ShowReview(AcDocument doc, ReviewSession session, DocumentText text, StandardsResolution standards,
+                                       DrawingInventory inventory, FtfSettings settings)
+        {
             using (var form = new Ui.RecordReviewForm(doc, session, text, standards, inventory, settings))
             {
                 var result = AcadApp.ShowModalDialog(form);
