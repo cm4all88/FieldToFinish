@@ -56,6 +56,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
 
+    <!-- Windows OCR and PDF rendering for FTFRECORD (Windows.Media.Ocr, Windows.Data.Pdf):
+         the Windows 10 SDK contracts make the in-box WinRT engines callable from .NET
+         Framework 4.8. Nothing else is installed on the machine; the OCR languages are the
+         ones Windows has. The package is confined to RecordDocumentReader.cs, and a failure to
+         load it is reported by FTFRECORD rather than taking the plugin down. Set the Sidecar
+         OCR engine in Settings > Recorded Surveys to run without it. -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22621.2" />
+
     <!-- WinForms for the setup window. Framework assemblies, never copied local. -->
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />

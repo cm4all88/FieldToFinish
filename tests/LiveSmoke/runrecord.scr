@@ -1,0 +1,14 @@
+NETLOAD "C:\dev\FieldToFinish\src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll"
+OSNAPCOORD
+1
+ZOOM E
+FTFRECORD
+C:\dev\FieldToFinish\tests\FieldCodes.Tests\Samples\short-plat-sample.ocr.json
+500,500
+FTFRECORDCHECK
+FTFRECORDLABEL
+FTFRECORDREBUILD
+FTFRECORDCHECK
+SAVEAS
+2018
+"C:\dev\FieldToFinish\tests\LiveSmoke\outrecord.dwg"

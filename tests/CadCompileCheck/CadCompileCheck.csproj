@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591;CA1416</NoWarn>
+    <RootNamespace>FieldCodes.Cad</RootNamespace>
+    <AssemblyName>CadCompileCheck</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <ProjectReference Include="..\..\src\FieldCodes\FieldCodes.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Stubs/*.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\RecordCommands.cs" Link="RecordCommands.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\RecordDrafter.cs" Link="RecordDrafter.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\RecordDocumentReader.cs" Link="RecordDocumentReader.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\Ui\RecordReviewForm.cs" Link="Ui\RecordReviewForm.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\Setup\RecordSurveyPage.cs" Link="Setup\RecordSurveyPage.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\Ownership.cs" Link="Ownership.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\DrawingStore.cs" Link="DrawingStore.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\CadUtil.cs" Link="CadUtil.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\FtfSession.cs" Link="FtfSession.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\TextMask.cs" Link="TextMask.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\Setup\DrawingResources.cs" Link="Setup\DrawingResources.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\Setup\SetupPage.cs" Link="Setup\SetupPage.cs" />
+  </ItemGroup>
+</Project>

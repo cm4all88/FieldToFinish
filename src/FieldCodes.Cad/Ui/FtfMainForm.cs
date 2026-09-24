@@ -1095,6 +1095,26 @@ namespace FieldCodes.Cad.Ui
                 "close-together spots never overlap.");
             CommandRow(stack, "FTFRUN",
                 "The whole pipeline in one go -- the same thing as Process Drawing.");
+
+            CommandGroup(stack, "Recorded surveys");
+            CommandRow(stack, "FTFRECORD",
+                "Upload a recorded plat, short plat, Record of Survey or BLA (PDF/TIFF/JPG/PNG). " +
+                "The document is read, the bearings, distances, curves, lots, monuments and " +
+                "record references are extracted with a confidence for each, and a review " +
+                "table shows every call against the page. Approve, edit or reject, then Build: " +
+                "the geometry is traversed from the written calls, never traced from the picture.");
+            CommandRow(stack, "FTFRECORDCHECK",
+                "Compares the drawing with the record: bearing, distance and curve mismatches, " +
+                "closure per lot, shared boundaries, duplicates, missing lines, labels and " +
+                "monuments, and layer/style against the standard. Reports; adjusts nothing.");
+            CommandRow(stack, "FTFRECORDLABEL",
+                "Places or refreshes the bearing/distance, curve, lot and record-vs-measured " +
+                "labels for a reconstructed survey, in the office standard.");
+            CommandRow(stack, "FTFRECORDSOURCE",
+                "Click a reconstructed line: which document, sheet and call it came from, the " +
+                "record and measured values, confidence, and the spot on the page.");
+            CommandRow(stack, "FTFRECORDREBUILD",
+                "Reopens the review for a stored record and rebuilds the geometry after edits.");
             CommandRow(stack, "FTFCLEAN",
                 "Removes everything FTF created, including hand-placed labels.");
 

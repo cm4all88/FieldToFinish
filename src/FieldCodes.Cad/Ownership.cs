@@ -86,7 +86,26 @@ namespace FieldCodes.Cad
         /// <summary>Border or inserted title block.</summary>
         ExhibitBorder = 33,
         /// <summary>Width dimensions drawn on the sheet.</summary>
-        ExhibitDimension = 34
+        ExhibitDimension = 34,
+
+        // Recorded survey reconstruction (FTFRECORD). Deliberate production drafting like the
+        // easements: FTFCLEAN leaves it alone; FTFRECORDREBUILD manages it per project.
+        // PointNumber = project id, TagText = call / monument id.
+
+        /// <summary>A course of a recorded survey built from its written call (a line).</summary>
+        RecordLine = 35,
+        /// <summary>A curve of a recorded survey built from its stated elements.</summary>
+        RecordCurve = 36,
+        /// <summary>A bearing/distance or curve label on a reconstructed course (plain text or Civil 3D label).</summary>
+        RecordLabel = 37,
+        /// <summary>The wipeout under a record label.</summary>
+        RecordMask = 38,
+        /// <summary>A monument symbol at a reconstructed corner.</summary>
+        RecordMonument = 39,
+        /// <summary>The line/curve table for tagged courses.</summary>
+        RecordTable = 40,
+        /// <summary>Lot, tract and area text inside a figure.</summary>
+        RecordText = 41
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

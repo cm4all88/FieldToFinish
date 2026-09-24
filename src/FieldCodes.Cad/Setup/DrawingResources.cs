@@ -22,6 +22,11 @@ namespace FieldCodes.Cad.Setup
         public IList<string> Blocks { get; private set; }
         public IList<string> Linetypes { get; private set; }
 
+        /// <summary>Civil 3D general line and curve label styles, for the Recorded Surveys
+        /// standards page. Empty in a drawing without Civil 3D styles.</summary>
+        public IList<string> LineLabelStyles { get; private set; }
+        public IList<string> CurveLabelStyles { get; private set; }
+
         /// <summary>
         /// Styles with a non-zero height. AutoCAD ignores a text height set in code for
         /// these, so choosing one silently overrides the height setting.
@@ -41,6 +46,8 @@ namespace FieldCodes.Cad.Setup
             Layers = new List<string>();
             Blocks = new List<string>();
             Linetypes = new List<string>();
+            LineLabelStyles = new List<string>();
+            CurveLabelStyles = new List<string>();
             FixedHeightTextStyles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             Scale = 1.0;
             AnnotationScaleName = "(none)";
@@ -65,6 +72,8 @@ namespace FieldCodes.Cad.Setup
             ReadLayers(db, tr);
             ReadBlocks(db, tr);
             ReadLinetypes(db, tr);
+            LineLabelStyles = CivilLabels.LineLabelStyleNames(db, tr);
+            CurveLabelStyles = CivilLabels.CurveLabelStyleNames(db, tr);
         }
 
         private void ReadTextStyles(Database db, Transaction tr)

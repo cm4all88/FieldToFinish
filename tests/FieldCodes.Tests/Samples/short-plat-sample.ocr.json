@@ -1,0 +1,410 @@
+{
+ "schema": "ftf-record-ocr-1",
+ "document": "SP-2019-0042-sample.pdf",
+ "reader": "synthetic fixture (no real document)",
+ "readUtc": "2026-09-19T00:00:00Z",
+ "pages": [
+  {
+   "number": 1,
+   "widthPx": 2550,
+   "heightPx": 3300,
+   "dpi": 300,
+   "lines": [
+    {
+     "text": "SHORT PLAT NO. SP-2019-0042",
+     "box": {
+      "x": 700,
+      "y": 120,
+      "w": 378,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.99,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "A PORTION OF THE NE 1/4 OF THE SE 1/4 OF SECTION 14, TOWNSHIP 24 NORTH, RANGE 5 EAST, W.M.",
+     "box": {
+      "x": 400,
+      "y": 170,
+      "w": 1260,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "KING COUNTY, WASHINGTON",
+     "box": {
+      "x": 900,
+      "y": 210,
+      "w": 322,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "AFN 20190815000123",
+     "box": {
+      "x": 2100,
+      "y": 120,
+      "w": 252,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "SHEET 2 OF 3",
+     "box": {
+      "x": 2200,
+      "y": 3200,
+      "w": 168,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "SCALE: 1\" = 50'",
+     "box": {
+      "x": 2100,
+      "y": 3100,
+      "w": 210,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "BASIS OF BEARINGS: WASHINGTON STATE PLANE COORDINATE SYSTEM, NORTH ZONE, NAD 83/2011",
+     "box": {
+      "x": 300,
+      "y": 3000,
+      "w": 1176,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.95,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "R1: AFN 9807150123, VOL. 121 OF SURVEYS, PG. 45",
+     "box": {
+      "x": 300,
+      "y": 3060,
+      "w": 658,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.94,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "LEGEND",
+     "box": {
+      "x": 2000,
+      "y": 2400,
+      "w": 84,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "FOUND MONUMENT AS NOTED",
+     "box": {
+      "x": 2000,
+      "y": 2440,
+      "w": 322,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "SET 5/8\" REBAR & CAP LS 54321",
+     "box": {
+      "x": 2000,
+      "y": 2480,
+      "w": 406,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.95,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "NOTES:",
+     "box": {
+      "x": 300,
+      "y": 2600,
+      "w": 84,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "1. THIS SURVEY WAS PERFORMED WITH A 3\" TOTAL STATION.",
+     "box": {
+      "x": 300,
+      "y": 2640,
+      "w": 742,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "N.E. 8TH STREET",
+     "box": {
+      "x": 1200,
+      "y": 2900,
+      "w": 210,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "JANE Q. SURVEYOR, PLS NO. 54321",
+     "box": {
+      "x": 1900,
+      "y": 3000,
+      "w": 434,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "N 89\u00b042'18\" E  150.00'",
+     "box": {
+      "x": 895.9940354137111,
+      "y": 843.6830856546508,
+      "w": 308,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "S 00\u00b017'42\" E  120.00'",
+     "box": {
+      "x": 1387.8416023037018,
+      "y": 1241.3613996402703,
+      "w": 308,
+      "h": 28,
+      "rot": -90.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "S 89\u00b042'18\" W  150.00'",
+     "box": {
+      "x": 899.7010983662703,
+      "y": 1643.6735423165887,
+      "w": 308,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "N 00\u00b017'42\" W  120.00'",
+     "box": {
+      "x": 407.8535314762796,
+      "y": 1245.995228330969,
+      "w": 308,
+      "h": 28,
+      "rot": 90.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "LOT 1",
+     "box": {
+      "x": 1016.8475668899907,
+      "y": 1243.6783139856198,
+      "w": 70,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.99,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "FOUND 1/2\" REBAR & CAP LS 12345",
+     "box": {
+      "x": 223.0,
+      "y": 816.0,
+      "w": 434,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.93,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "SET 5/8\" REBAR & CAP LS 54321",
+     "box": {
+      "x": 1456.9880708274222,
+      "y": 811.3661713093014,
+      "w": 406,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.93,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "N 89\u00b042'18\" E  100.00'",
+     "box": {
+      "x": 1645.9840944365633,
+      "y": 839.8215617457353,
+      "w": 308,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "S 00\u00b017'42\" E  100.00'",
+     "box": {
+      "x": 2572.2546686296573,
+      "y": 1293.6726356487818,
+      "w": 308,
+      "h": 28,
+      "rot": -90.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "S 89\u00b037'41\" W  197.35'",
+     "box": {
+      "x": 1941.7472059866022,
+      "y": 1637.5126436145808,
+      "w": 308,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.96,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "C1",
+     "box": {
+      "x": 2378.3450885558977,
+      "y": 895.9767821109051,
+      "w": 28,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.98,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "LOT 2",
+     "box": {
+      "x": 2058.893674510323,
+      "y": 1237.517415283612,
+      "w": 70,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.99,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "CURVE TABLE",
+     "box": {
+      "x": 1800,
+      "y": 2000,
+      "w": 154,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "CURVE   RADIUS   DELTA   LENGTH   CHORD BEARING   CHORD",
+     "box": {
+      "x": 1700,
+      "y": 2040,
+      "w": 770,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.97,
+     "words": [],
+     "pass": 0.0
+    },
+    {
+     "text": "C1   250.00'   22\u00b055'06\"   100.00'   S 78\u00b050'09\" E   99.33'",
+     "box": {
+      "x": 1700,
+      "y": 2080,
+      "w": 826,
+      "h": 28,
+      "rot": 0.0
+     },
+     "conf": 0.95,
+     "words": [],
+     "pass": 0.0
+    }
+   ],
+   "image": null
+  }
+ ],
+ "notes": [
+  "Synthetic sample modelled on a King County short plat; all names, numbers and calls are fictional."
+ ]
+}

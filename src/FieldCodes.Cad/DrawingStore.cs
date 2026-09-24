@@ -163,6 +163,39 @@ namespace FieldCodes.Cad
             obj.Erase();
         }
 
+        // ------------------------------------------------------------- record surveys
+
+        private const string RecordsKey = "RECORDS";
+
+        /// <summary>Every recorded-survey project stored in the drawing (FTFRECORD).</summary>
+        public static IList<FieldCodes.RecordSurvey.RecordSurveyProject> LoadRecordProjects(Database db, Transaction tr)
+        {
+            var records = new List<FieldCodes.RecordSurvey.RecordSurveyProject>();
+            var dict = SubDictionary(tr, db, RecordsKey, false);
+            if (dict == null) return records;
+            foreach (DBDictionaryEntry entry in dict)
+            {
+                try { records.Add(FieldCodes.RecordSurvey.RecordSurveyProject.FromJson(ReadText(tr, dict, entry.Key))); }
+                catch (ConfigException) { }
+            }
+            return records;
+        }
+
+        public static void SaveRecordProject(Database db, Transaction tr, FieldCodes.RecordSurvey.RecordSurveyProject project)
+        {
+            WriteText(tr, SubDictionary(tr, db, RecordsKey, true), project.Id, project.ToJson());
+        }
+
+        public static void DeleteRecordProject(Database db, Transaction tr, string id)
+        {
+            var dict = SubDictionary(tr, db, RecordsKey, false);
+            if (dict == null || !dict.Contains(id)) return;
+            var obj = tr.GetObject(dict.GetAt(id), OpenMode.ForWrite);
+            dict.UpgradeOpen();
+            dict.Remove(id);
+            obj.Erase();
+        }
+
         // ----------------------------------------------------------------- profile
 
         /// <summary>The drafting profile this drawing selected, or null. Read in its
