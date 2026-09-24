@@ -6,7 +6,9 @@
 //               LENGTH/DIRECTION headings); "Block" switches its stamp to a surveyor-chosen block.
 // CLEANSCALE    sets the exhibit to a scale as if the drafter chose it (then FTFEXHIBITREBUILD).
 // CLEANHATCH    changes the construction area hatch's pattern scale by hand.
-// CLEANVERIFY   checks what is stored and drawn for the stage named: CREATED, RESCALED, HANDHATCH, STAMPED.
+// CLEANHAND     the drafter moves a course label and types over two title block attributes.
+// CLEANVERIFY   checks what is stored and drawn for the stage named: CREATED, RESCALED, HANDHATCH, STAMPED,
+//               TITLEBLOCK, HANDKEPT.
 //
 // Compiled with the .NET Framework csc (C# 5 only).
 using System;
@@ -30,6 +32,8 @@ namespace FtfCleanupTest
         private static int _failures;
         private static double _handScale;
         private static double _createdPatternScale;
+        private static string _movedKey;
+        private static Point3d _movedTo;
 
         static CleanupTestCommands()
         {
@@ -96,6 +100,28 @@ namespace FtfCleanupTest
                 var ring = new AcDb.Circle(Point3d.Origin, Vector3d.ZAxis, 0.75);
                 stamp.AppendEntity(ring);
                 tr.AddNewlyCreatedDBObject(ring, true);
+
+                // A title block like the office's: a job number, a note, and person fields -- two of them carrying
+                // initials of their own, as an office block's defaults can.
+                var tb = new AcDb.BlockTableRecord { Name = "TEST_TB" };
+                bt.Add(tb);
+                tr.AddNewlyCreatedDBObject(tb, true);
+                var frame = new AcDb.Polyline();
+                frame.AddVertexAt(0, new Point2d(0, 0), 0, 0, 0);
+                frame.AddVertexAt(1, new Point2d(3, 0), 0, 0, 0);
+                frame.AddVertexAt(2, new Point2d(3, 0.6), 0, 0, 0);
+                frame.AddVertexAt(3, new Point2d(0, 0.6), 0, 0, 0);
+                frame.Closed = true;
+                tb.AppendEntity(frame);
+                tr.AddNewlyCreatedDBObject(frame, true);
+                var y = 0.05;
+                foreach (var def in new[] { new[] { "JOBNO", "" }, new[] { "NOTE", "ORIGINAL" }, new[] { "DRAWNBY", "" }, new[] { "CHECKEDBY", "JRD" }, new[] { "APPROVEDBY", "XX" } })
+                {
+                    var att = new AcDb.AttributeDefinition(new Point3d(0.1, y, 0), def[1], def[0], def[0], db.Textstyle) { Height = 0.08 };
+                    tb.AppendEntity(att);
+                    tr.AddNewlyCreatedDBObject(att, true);
+                    y += 0.1;
+                }
                 tr.Commit();
             }
             doc.Editor.WriteMessage("\nCLEANSEED: done.\n");
@@ -117,8 +143,64 @@ namespace FtfCleanupTest
             x.LineTableHeadings = "LENGTH/DIRECTION";
             x.Scales = "10,20,30,40,50,60,100";
             s.Easements.AskTableLocation = false;
+            if (string.Equals(x.StampMode, "TitleBlock", StringComparison.OrdinalIgnoreCase))
+            {
+                // An older profile that maps an approval field and a fixed name. Saving it is refused now; written as it
+                // might already be on disk, the exhibit must still not fill those fields.
+                x.StampMode = "Block";
+                x.TitleBlockName = "TEST_TB";
+                x.TitleBlockX = 1.0; x.TitleBlockY = 0.1;
+                x.TitleBlockAttributes = "JobNo={projectNumber}; CheckedBy={checkedBy}; ApprovedBy={checkedBy}; DrawnBy=CMM; Note={parcel}";
+                var refused = false;
+                try { FieldCodes.Settings.FtfSettings.SaveProfile("LIVESMOKE CLEANUP", s); }
+                catch (FieldCodes.ConfigException) { refused = true; }
+                Check(ed, refused, "a profile mapping ApprovedBy, or a fixed name into DrawnBy, cannot be saved");
+                System.IO.File.WriteAllText(FieldCodes.Settings.FtfSettings.ProfilePath("LIVESMOKE CLEANUP"), Newtonsoft.Json.JsonConvert.SerializeObject(s, Newtonsoft.Json.Formatting.Indented));
+                ed.WriteMessage("\nCLEANPROFILE: LIVESMOKE CLEANUP written with the TEST_TB title block.\n");
+                return;
+            }
             FieldCodes.Settings.FtfSettings.SaveProfile("LIVESMOKE CLEANUP", s);
             ed.WriteMessage("\nCLEANPROFILE: LIVESMOKE CLEANUP saved (stamp " + x.StampMode + ").\n");
+        }
+
+        /// <summary>The drafter moves the first course label and types over two title block attributes.</summary>
+        [CommandMethod("CLEANHAND")]
+        public void Hand()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            using (var tr = doc.Database.TransactionManager.StartTransaction())
+            {
+                var x = Exhibits(tr, doc.Database).First();
+                var label = x.Items.First(i => i.Kind == "LABEL");
+                var text = (AcDb.MText)tr.GetObject(Resolve(tr, doc.Database, label.Handle).ObjectId, AcDb.OpenMode.ForWrite);
+                text.Location = text.Location + new Vector3d(0.25, 0.15, 0);
+                _movedKey = label.Key;
+                _movedTo = text.Location;
+                var border = x.Items.First(i => i.Key == "BORDER");
+                var block = (AcDb.BlockReference)tr.GetObject(Resolve(tr, doc.Database, border.Handle).ObjectId, AcDb.OpenMode.ForRead);
+                foreach (AcDb.ObjectId id in block.AttributeCollection)
+                {
+                    var att = (AcDb.AttributeReference)tr.GetObject(id, AcDb.OpenMode.ForWrite);
+                    if (att.Tag == "NOTE") att.TextString = "EDITED BY HAND";
+                    if (att.Tag == "JOBNO") att.TextString = "9999";
+                }
+                tr.Commit();
+            }
+            doc.Editor.WriteMessage("\nCLEANHAND: label " + _movedKey + " moved; NOTE and JOBNO typed over.\n");
+        }
+
+        private static Dictionary<string, string> Attributes(AcDb.Transaction tr, AcDb.Database db, FieldCodes.Exhibits.ExhibitRecord x)
+        {
+            var result = new Dictionary<string, string>();
+            var border = x.Items.FirstOrDefault(i => i.Key == "BORDER");
+            var block = border == null ? null : Resolve(tr, db, border.Handle) as AcDb.BlockReference;
+            if (block == null) return result;
+            foreach (AcDb.ObjectId id in block.AttributeCollection)
+            {
+                var att = (AcDb.AttributeReference)tr.GetObject(id, AcDb.OpenMode.ForRead);
+                result[att.Tag] = att.TextString;
+            }
+            return result;
         }
 
         /// <summary>The drafter changes the exhibit viewport's scale by hand (unlocked, scale set, centre kept).</summary>
@@ -252,6 +334,33 @@ namespace FtfCleanupTest
                         var t = table == null ? null : Resolve(tr, db, table.Handle) as AcDb.Table;
                         if (t != null) Check(ed, t.Cells[1, 1].TextString == "LENGTH" && t.Cells[1, 2].TextString == "DIRECTION", "the line table uses the LENGTH / DIRECTION headings");
                         else ed.WriteMessage("\n   (no line table at this scale: every course fits along its line)");
+                    }
+                    if (stage == "TITLEBLOCK")
+                    {
+                        var a = Attributes(tr, db, exhibit);
+                        var messages = string.Join(" | ", exhibit.Review.Select(n => n.Message).ToArray());
+                        ed.WriteMessage("\n   TEST_TB: " + string.Join(", ", a.Select(kv => kv.Key + "=" + kv.Value).ToArray()));
+                        Check(ed, a.Count == 5, "the office title block is placed with its attributes");
+                        Check(ed, a.ContainsKey("JOBNO") && a["JOBNO"] == "5543744009" && a.ContainsKey("NOTE") && a["NOTE"] == "LOT C", "mapped fields carry the exhibit's own values (job number, parcel)");
+                        Check(ed, a.ContainsKey("APPROVEDBY") && a["APPROVEDBY"] == "XX" && messages.Contains("APPROVEDBY was not filled"),
+                              "the approval field is never filled by FTF, even when an older profile maps it");
+                        Check(ed, a.ContainsKey("DRAWNBY") && a["DRAWNBY"] == string.Empty && messages.Contains("DRAWNBY was not filled"),
+                              "a fixed name in the profile is not written into a person field");
+                        Check(ed, messages.Contains("CHECKEDBY shows the block's own value \"JRD\"") && messages.Contains("APPROVEDBY shows the block's own value \"XX\""),
+                              "initials the block itself carries are flagged, not passed off as this exhibit's");
+                    }
+                    if (stage == "HANDKEPT" || stage == "HANDKEPT2")
+                    {
+                        var a = Attributes(tr, db, exhibit);
+                        var messages = string.Join(" | ", exhibit.Review.Select(n => n.Message).ToArray());
+                        Check(ed, a.ContainsKey("NOTE") && a["NOTE"] == "EDITED BY HAND" && a.ContainsKey("JOBNO") && a["JOBNO"] == "9999",
+                              stage + ": title block values typed by hand survive the rebuild (" + string.Join(", ", a.Select(kv => kv.Key + "=" + kv.Value).ToArray()) + ")");
+                        Check(ed, messages.Contains("keeps the value typed by hand"), stage + ": the kept hand values are listed for review");
+                        var moved = exhibit.Items.FirstOrDefault(i => i.Key == _movedKey);
+                        var text = moved == null ? null : Resolve(tr, db, moved.Handle) as AcDb.MText;
+                        Check(ed, text != null && text.Location.DistanceTo(_movedTo) < 1e-6 && moved.HandPosition,
+                              stage + ": the course label moved by hand stays where the drafter put it" + (text == null ? " (missing)" : " (" + text.Location.DistanceTo(_movedTo).ToString("0.####", C) + " in away)"));
+                        Check(ed, messages.Contains("stays where it was moved by hand"), stage + ": the kept label is listed for review");
                     }
                     if (stage == "STAMPED")
                     {

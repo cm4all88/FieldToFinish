@@ -78,6 +78,14 @@ namespace FieldCodes.Exhibits
         [JsonProperty("y")] public double Y { get; set; }
         /// <summary>Moves by hand are kept on a rebuild (tables, title, notes, legend, north arrow...).</summary>
         [JsonProperty("keepPosition")] public bool KeepPosition { get; set; }
+
+        /// <summary>A label the drafter moved: kept where they put it on later rebuilds while its text stays the same.</summary>
+        [JsonProperty("handPosition")] public bool HandPosition { get; set; }
+        public bool ShouldSerializeHandPosition() { return HandPosition; }
+
+        /// <summary>For a block: every attribute value FTF wrote (tag -> value), to spot values the drafter changed.</summary>
+        [JsonProperty("attributes")] public Dictionary<string, string> Attributes { get; set; }
+        public bool ShouldSerializeAttributes() { return Attributes != null && Attributes.Count > 0; }
     }
 
     /// <summary>Which easement an exhibit shows, and what it looked like when the exhibit was built.</summary>
