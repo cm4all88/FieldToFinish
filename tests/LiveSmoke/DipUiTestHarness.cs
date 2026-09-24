@@ -597,6 +597,40 @@ namespace FtfUiTest
                 Shot("03-notes-read");
             }, 3000);
 
+            // Find all connections: every open pipe at once; the sure ones connect, the rest are listed --------
+            add("find all connections", () => Click("Find all connections"), 500);
+            add("sure pairs confirmed, the rest listed", () =>
+            {
+                Check(StatusOf("1045", 0) == "Confirmed->1046" && StatusOf("1045", 1) == "Confirmed->1047",
+                      "12 RCP N -> CB 1046 and 18 RCP SW -> SDMH 1047 confirmed automatically (" + StatusOf("1045", 0) + ", " + StatusOf("1045", 1) + ")");
+                // One connection holds both ends; which end it is written from is whichever pipe the pairing took first.
+                var c = Project.ConnectionFor(S("1045").Id, S("1045").Field.Pipes[0].Id);
+                var ends = c == null ? new string[0] : new[] { c.FromPipeId, c.ToPipeId };
+                Check(c != null && ends.Contains(S("1045").Field.Pipes[0].Id) && ends.Contains(S("1046").Field.Pipes[0].Id) &&
+                      c.Basis.Any(b => b.StartsWith("Confirmed automatically by Find all connections")),
+                      "each is one connection holding both observed ends, and says Find all connections confirmed it");
+                Check(Project.ConnectionFor(S("1046").Id, S("1046").Field.Pipes[0].Id) == c, "the far end shares that one connection");
+                var list = Field<ListView>("_proposalList");
+                var rows = list.Items.Cast<ListViewItem>().Select(i => string.Join(" | ", i.SubItems.Cast<ListViewItem.ListViewSubItem>().Select(x => x.Text).ToArray())).ToList();
+                foreach (var r in rows) Log("   row: " + r);
+                Check(Field<TabControl>("_tabs").SelectedIndex == 1 && Shown(Field<Control>("_proposalPanel")), "the Map tab shows what was found");
+                Check(rows.Count(r => r.Contains("Confirmed automatically")) == 2, "two rows confirmed automatically");
+                // 1048 is not in the drawing's dip data yet, so the east pipe has nothing to run to.
+                Check(rows.Any(r => r.StartsWith("SDMH 1045:  E 8\" PVC") && r.Contains("Nothing found") && r.Contains("no surveyed structure")),
+                      "8 PVC E says no surveyed structure lies that way yet");
+                Check(rows.Any(r => r.Contains("? 10\" RCP") && r.Contains("Nothing found") && r.Contains("no direction")), "the pipe with no direction says why nothing was found");
+                Check(rows.Count == 5 && rows.Count(r => r.Contains("18\" RCP")) == 1 && rows.Count(r => r.Contains("12\" RCP")) == 1,
+                      "each pipe is listed once: a confirmed pair is one row, not one per end (" + rows.Count + " rows)");
+                Log("   summary: " + Field<Label>("_proposalSummary").Text);
+                Shot("03b-find-all");
+                Send("_.U ");
+            }, 4000);
+            add("one undo takes it all back", () =>
+            {
+                Check(StatusOf("1045", 0) == "none" && StatusOf("1045", 1) == "none", "Undo removed every connection Find all connections made (" + StatusOf("1045", 0) + ", " + StatusOf("1045", 1) + ")");
+                Tab(0);
+            }, 4000);
+
             // Connections -------------------------------------------------------
             add("enter the manhole diameter", () =>
             {

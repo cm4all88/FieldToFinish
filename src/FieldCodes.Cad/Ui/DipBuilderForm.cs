@@ -165,6 +165,11 @@ namespace FieldCodes.Cad.Ui
         // map tab
         private ConnectionMapView _projectMap;
         private Label _projectSummary;
+        private Panel _proposalPanel;
+        private ListView _proposalList;
+        private Label _proposalSummary;
+        // The last Find all connections: what it worked out for each pipe that had no connection.
+        private IList<BatchProposal> _proposals;
 
         // warnings
         private Panel _warningsPanel;
@@ -755,7 +760,8 @@ namespace FieldCodes.Cad.Ui
             connPanel.Controls.Add(_candidateCaption);
             connPanel.Controls.Add(_connectionState);
             connPanel.Controls.Add(Row(
-                Btn("Find connections", OnFindConnections, true),
+                Btn("Find all connections", OnFindAll, true),
+                Btn("Find connections", OnFindConnections),
                 Btn("Confirm selected", OnConfirm),
                 Btn("Pick a different structure...", OnManualPick),
                 Btn("Leave unresolved", OnLeaveUnresolved),
@@ -763,7 +769,7 @@ namespace FieldCodes.Cad.Ui
                 Btn("Draw this structure's pipes", (s, e) => OnDraw(false)),
                 Advanced(Btn("Draw all confirmed pipes", (s, e) => OnDraw(true)))));
             _connectionGroup = Step("3", "Connections",
-                "Select a pipe and find where it runs. Nothing connects until you confirm. The list shows each pipe and where it goes.",
+                "Find all connections searches every pipe at once and connects the sure ones (a matching pipe observed at both ends); the rest are listed on the Map tab to confirm. Or select one pipe and find where it runs.",
                 connPanel, 5);
             scroll.Controls.Add(_connectionGroup);
 
@@ -986,16 +992,163 @@ namespace FieldCodes.Cad.Ui
 
             _projectSummary = new Label { AutoSize = true, ForeColor = Muted, Font = F(10f, false), Margin = new Padding(8, 7, 0, 0) };
             var row = Row(
-                Btn("Draw all confirmed pipes", (s, e) => OnDraw(true), true),
+                Btn("Find all connections", OnFindAll, true),
+                Btn("Draw all confirmed pipes", (s, e) => OnDraw(true)),
                 Btn("Label all structures", OnLabelAll),
                 Btn("Refresh", (s, e) => { RefreshMapSummary(); _projectMap.Invalidate(); }),
                 _projectSummary);
             row.BackColor = Ground;
             row.Padding = new Padding(0, 0, 0, 6);
 
+            // What Find all connections found, pipe by pipe: confirmed, to review, or nothing found.
+            _proposalList = new ListView
+            {
+                Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = true,
+                BorderStyle = BorderStyle.FixedSingle, Font = F(10f, false)
+            };
+            _proposalList.Columns.Add("Pipe", 280);
+            _proposalList.Columns.Add("Runs to", 150);
+            _proposalList.Columns.Add("Result", 260);
+            _proposalList.Columns.Add("Why", 500);
+            _proposalList.DoubleClick += (s, e) => OpenProposal();
+            _proposalSummary = new Label { Dock = DockStyle.Top, AutoSize = false, Height = 26, ForeColor = Ink, Font = F(10f, false), TextAlign = ContentAlignment.MiddleLeft };
+            var proposalButtons = Row(
+                Btn("Confirm selected", OnConfirmProposals, true),
+                Btn("Open structure", (s, e) => OpenProposal()),
+                Hint("Double-click a pipe to open its structure. Confirmed automatically only when a matching pipe was observed at both ends."));
+            proposalButtons.BackColor = Surface;
+            _proposalPanel = new Panel { Dock = DockStyle.Bottom, Height = 300, BackColor = Surface, Padding = new Padding(12, 8, 12, 12), Visible = false };
+            _proposalPanel.Controls.Add(_proposalList);
+            _proposalPanel.Controls.Add(proposalButtons);
+            _proposalPanel.Controls.Add(_proposalSummary);
+
             page.Controls.Add(card);
+            page.Controls.Add(_proposalPanel);
             page.Controls.Add(row);
             return page;
+        }
+
+        // ============================================================ find all connections
+
+        /// <summary>
+        /// Searches every pipe that is not connected yet, pairs them across the project, confirms the high-confidence
+        /// pairs (a matching pipe observed at both ends), and lists the rest for the drafter. One command: one Undo
+        /// takes back everything it confirmed.
+        /// </summary>
+        private void OnFindAll(object sender, EventArgs e)
+        {
+            _grid.EndEdit();
+            var posted = DipSession.Post("find all connections", (db, tr, ed, project, settings, version) =>
+            {
+                var found = ConnectionBatch.FindAll(project, settings.Dips);
+                var confirmed = ConnectionBatch.ConfirmHigh(project, found, settings.Dips);
+                _proposals = found;
+                ed.WriteMessage("\nDip Builder: {0} pipe(s) searched -- {1} confirmed automatically, {2} to review, {3} with nothing found.",
+                                found.Count, confirmed, found.Count(p => !p.AutoConfirmed && p.ToStructureId != null), found.Count(p => p.ToStructureId == null));
+                if (confirmed > 0) ed.WriteMessage("\n  Undo takes back every connection it confirmed.");
+                return confirmed > 0;
+            });
+            if (!posted) return;
+            _tabs.SelectedIndex = 1;
+            Say("Finding connections for every pipe not connected yet...", Muted);
+        }
+
+        private void RefreshProposals()
+        {
+            if (_proposalPanel == null) return;
+            var project = DipSession.Project;
+            if (_proposals == null || project == null) { _proposalPanel.Visible = false; _projectMap.Proposals = null; return; }
+            _proposalPanel.Visible = true;
+            _projectMap.Proposals = _proposals;
+            int auto = 0, review = 0, nothing = 0, done = 0;
+            _proposalList.BeginUpdate();
+            _proposalList.Items.Clear();
+            foreach (var p in _proposals)
+            {
+                var from = project.Structure(p.FromStructureId);
+                var pipe = project.Pipe(p.FromStructureId, p.PipeId);
+                if (from == null || pipe == null) continue;
+                var to = p.ToStructureId == null ? null : project.Structure(p.ToStructureId);
+                var c = project.ConnectionFor(from.Id, pipe.Id);
+                string result;
+                Color color;
+                if (c != null && c.IsAccepted)
+                {
+                    var other = project.Structure(c.FromStructureId == from.Id ? c.ToStructureId : c.FromStructureId);
+                    var byFindAll = c.Basis.Contains(ConnectionBatch.AutoBasis);
+                    result = (byFindAll ? "Confirmed automatically" : StatusWords(c.Status)) + (other != null && (to == null || other.Id != to.Id) ? " -> " + other.Label : string.Empty);
+                    color = Good;
+                    if (byFindAll) auto++; else done++;
+                }
+                else if (c != null)
+                {
+                    result = StatusWords(c.Status);
+                    color = Muted;
+                    done++;
+                }
+                else if (to != null)
+                {
+                    result = "Suggested -- " + p.Confidence.ToString().ToLowerInvariant() + " confidence, not connected";
+                    color = p.Confidence == Confidence.Low ? Muted : Warn;
+                    review++;
+                }
+                else
+                {
+                    result = "Nothing found";
+                    color = Bad;
+                    nothing++;
+                }
+                var item = new ListViewItem(new[]
+                {
+                    from.Label + ":  " + Summary(pipe),
+                    to != null ? to.Label : "-",
+                    result,
+                    p.NothingBecause ?? string.Join("; ", p.Basis.ToArray())
+                }) { Tag = p, UseItemStyleForSubItems = false };
+                item.SubItems[2].ForeColor = color;
+                _proposalList.Items.Add(item);
+            }
+            _proposalList.EndUpdate();
+            _proposalSummary.Text = _proposals.Count + " pipe(s) searched:  " + auto + " confirmed automatically,  " + review + " to review" +
+                                    (done > 0 ? ",  " + done + " settled since" : string.Empty) + ",  " + nothing + " with nothing found.";
+            _projectMap.Invalidate();
+        }
+
+        private List<BatchProposal> SelectedProposals()
+        {
+            return _proposalList.SelectedItems.Cast<ListViewItem>().Select(i => i.Tag as BatchProposal).Where(p => p != null).ToList();
+        }
+
+        /// <summary>Confirms the selected suggestions, each exactly as Confirm selected does for one pipe.</summary>
+        private void OnConfirmProposals(object sender, EventArgs e)
+        {
+            var chosen = SelectedProposals().Where(p => p.ToStructureId != null).ToList();
+            if (chosen.Count == 0) { Say("Select one or more suggested pipes in the list first.", Muted); return; }
+            var posted = DipSession.Post("confirm suggested connections", (db, tr, ed, project, settings, version) =>
+            {
+                var count = 0;
+                foreach (var p in chosen)
+                {
+                    var from = project.Structure(p.FromStructureId);
+                    var pipe = project.Pipe(p.FromStructureId, p.PipeId);
+                    var to = project.Structure(p.ToStructureId);
+                    if (from == null || pipe == null || to == null || project.ConnectionFor(from.Id, pipe.Id) != null) continue;
+                    var candidate = ConnectionFinder.ManualCandidate(project, from, pipe, to, settings.Dips);
+                    ConnectionFinder.Accept(project, from, pipe, candidate, false, null);
+                    count++;
+                }
+                ed.WriteMessage("\nDip Builder: {0} suggested connection(s) confirmed.", count);
+                return count > 0;
+            });
+            if (posted) Say("Confirming the selected suggestions...", Muted);
+        }
+
+        private void OpenProposal()
+        {
+            var p = SelectedProposals().FirstOrDefault();
+            if (p == null) return;
+            OpenStructure(p.FromStructureId);
+            SelectPipe(p.PipeId);
         }
 
         private void OpenStructure(string structureId)
@@ -1184,6 +1337,7 @@ namespace FieldCodes.Cad.Ui
             RefreshStructure();
             RefreshReview();
             RefreshMapSummary();
+            RefreshProposals();
             if (DipSession.LastMessage != null) Say(DipSession.LastMessage, Bad);
             FitAll();
             _map.Invalidate();
@@ -2564,6 +2718,9 @@ namespace FieldCodes.Cad.Ui
         /// <summary>Structures the last connection search offered, drawn highlighted.</summary>
         public IList<string> Candidates { get; set; }
 
+        /// <summary>The last Find all connections: runs it suggested and nobody has confirmed are drawn dashed.</summary>
+        public IList<BatchProposal> Proposals { get; set; }
+
         /// <summary>Show every structure in the project rather than the neighbourhood.</summary>
         public bool ShowAll { get; set; }
 
@@ -2666,6 +2823,17 @@ namespace FieldCodes.Cad.Ui
                     }
                 }
             }
+
+            // Runs Find all connections suggested that are not confirmed: dashed, amber for medium, grey for low.
+            if (ShowAll && Proposals != null)
+                foreach (var p in Proposals.Where(p => p.ToStructureId != null && project.ConnectionFor(p.FromStructureId, p.PipeId) == null))
+                {
+                    var a = shown.FirstOrDefault(s => s.Id == p.FromStructureId);
+                    var b = shown.FirstOrDefault(s => s.Id == p.ToStructureId);
+                    if (a == null || b == null) continue;
+                    using (var pen = new Pen(p.Confidence == Confidence.Low ? DipBuilderForm.Muted : DipBuilderForm.Warn, 2f) { DashStyle = DashStyle.Dash })
+                        g.DrawLine(pen, at(a.Cad.Easting, a.Cad.Northing), at(b.Cad.Easting, b.Cad.Northing));
+                }
 
             // pipes not connected yet
             var selectedPipe = _selectedPipeId();
