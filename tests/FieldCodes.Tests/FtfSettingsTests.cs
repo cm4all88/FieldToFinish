@@ -1,8 +1,11 @@
-using FieldCodes;
+﻿using FieldCodes;
 using FieldCodes.Settings;
 
 namespace FieldCodes.Tests;
 
+// Both classes drive the same static FtfSettings.ProfileDirectoryOverride, so they share a
+// collection: xunit runs classes in parallel, and one clearing it mid-test fails the other.
+[Collection("drafting profiles")]
 public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
 {
     private readonly RulesFixture _fx;

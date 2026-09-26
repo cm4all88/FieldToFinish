@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.Civil.DatabaseServices;
@@ -36,6 +37,25 @@ namespace FieldCodes.Cad
             return (BlockTableRecord)tr.GetObject(id, mode);
         }
 
+        /// <summary>
+        /// The drawing's own layer for the family a name belongs to: for "V-ESMT-PATT-E" it looks for "V-ESMT-E",
+        /// then "V-ESMT". Null when the drawing has no layer in that family.
+        /// </summary>
+        private static LayerTableRecord FamilyLayer(LayerTable table, Transaction tr, string name)
+        {
+            var parts = (name ?? string.Empty).Split('-');
+            if (parts.Length < 3) return null;
+            var suffix = parts[parts.Length - 1];
+            for (var keep = parts.Length - 1; keep >= 2; keep--)
+            {
+                var stem = string.Join("-", parts.Take(keep).ToArray());
+                foreach (var candidate in new[] { stem + "-" + suffix, stem })
+                    if (!string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase) && table.Has(candidate))
+                        return (LayerTableRecord)tr.GetObject(table[candidate], OpenMode.ForRead);
+            }
+            return null;
+        }
+
         /// <summary>Returns the layer's id, creating it if it does not exist.</summary>
         public static ObjectId EnsureLayer(Database db, Transaction tr, string name)
         {
@@ -44,10 +64,21 @@ namespace FieldCodes.Cad
             var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
             if (table.Has(name)) return table[name];
 
+            // A new layer in a family the drawing already has (V-ESMT-PATT-E beside V-ESMT-E) takes that family's
+            // look, so it reads as the office's rather than plain white. FTF is not deciding a standard here: it
+            // follows the layer the office drew, and the drafter can set it afterwards.
+            var family = FamilyLayer(table, tr, name);
             table.UpgradeOpen();
             using (var record = new LayerTableRecord())
             {
                 record.Name = name;
+                if (family != null)
+                {
+                    // Colour and lineweight only: the family's linetype belongs to its lines (V-ESMT-E is HIDDEN2),
+                    // and hatch, text and dimension layers are drawn continuous.
+                    record.Color = family.Color;
+                    record.LineWeight = family.LineWeight;
+                }
                 var id = table.Add(record);
                 tr.AddNewlyCreatedDBObject(record, true);
                 return id;

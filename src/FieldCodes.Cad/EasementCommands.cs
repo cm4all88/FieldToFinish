@@ -83,7 +83,17 @@ namespace FieldCodes.Cad
             public List<string> Notes;
             public double Tolerance;
             public double UnitsPerFoot;
+
+            /// <summary>The office settings, as the profile has them: what the preview starts from.</summary>
             public EasementSettings Settings;
+
+            /// <summary>The settings this easement will actually be drafted with -- a separate copy the
+            /// preview's drafting panel edits. The office settings are never changed.</summary>
+            public EasementSettings Drafting;
+
+            /// <summary>Drawing units per plotted unit, so the preview shows text and hatch at the size
+            /// they will really be drawn at on this drawing's annotation scale.</summary>
+            public double PlotScale;
 
             /// <summary>The temporary construction easement, split by the same lines; null when there is none.</summary>
             public TrimResult TemporarySplit;
@@ -497,6 +507,7 @@ namespace FieldCodes.Cad
                         AnglePoints = job.AnglePoints.Select(a => a.Point).ToList(), Purpose = job.Purpose,
                         Notes = main.Warnings.Concat(temporary != null ? temporary.Warnings.Select(w => "Temporary: " + w) : new string[0]).ToList(),
                         Tolerance = tolerance, UnitsPerFoot = settings.General.UnitsPerFoot, Settings = es, Keep = new List<int> { 1 },
+                        Drafting = es.Copy(), PlotScale = CadUtil.DrawingUnitsPerPlottedUnit(db),
                         TemporarySplit = temporary != null ? temporary.Split : null, TemporaryWidth = job.TemporaryWidth,
                         Commencement = job.Poc != null ? job.Poc.Point : (P2?)null,
                         TerminusCorner = job.TerminusCorner != null ? job.TerminusCorner.Point : (P2?)null
@@ -504,6 +515,10 @@ namespace FieldCodes.Cad
                     if (!Choose(ed, preview)) { ed.WriteMessage("\nSTRIPEASEMENT: cancelled -- nothing drawn.\n"); return false; }
                     keep = preview.Keep;
                     job.Purpose = preview.Purpose;
+                    // Only what the drafter changed is stored, so a later profile change still
+                    // reaches everything they left alone.
+                    record.Drafting = EasementDrafting.Difference(es, preview.Drafting);
+                    if (temporaryRecord != null) temporaryRecord.Drafting = record.Drafting;
                 }
             }
 
@@ -530,11 +545,21 @@ namespace FieldCodes.Cad
             return true;
         }
 
+        /// <summary>
+        /// The office easement settings with this easement's own preview choices laid over
+        /// them. The office settings are never changed, so a choice made for one easement
+        /// does not follow the drafter into the next command.
+        /// </summary>
+        internal static EasementSettings EsFor(EasementRecord record, FtfSettings settings)
+        {
+            return record != null && record.Drafting != null ? record.Drafting.ApplyTo(settings.Easements) : settings.Easements;
+        }
+
         private static bool Finish(Database db, Transaction tr, Editor ed, FtfSettings settings, string rulesVersion, EasementJob job,
                                    EasementRecord record, Shape shape, WidthSpec width, string purpose, List<int> keep, bool isTemporary,
                                    string groupId, double tolerance)
         {
-            var es = settings.Easements;
+            var es = EsFor(record, settings);
             var built = shape.Built;
             var boundary = built.Boundary;
             var warnings = shape.Warnings.ToList();
@@ -791,7 +816,7 @@ namespace FieldCodes.Cad
                                   bool trimmed, List<List<Course>> centerParts, Point3d? tablePosition, bool temporary,
                                   WidthSpec outerWidth, EasementComposition.Composed composed)
         {
-            var es = settings.Easements;
+            var es = EsFor(record, settings);
             var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
             var textHeight = es.TextHeightPlotted * scale;
             var styleId = Setup.DrawingResources.FindTextStyle(db, tr, es.TextStyle);
@@ -817,8 +842,8 @@ namespace FieldCodes.Cad
             else
             {
                 outline = EasementComposition.DraftRegions(db, tr, ed, composed, add, temporary ? es.TemporaryLayer : es.BoundaryLayer,
-                    temporary ? !string.IsNullOrWhiteSpace(pattern) : es.DrawHatch, pattern, temporary ? es.TemporaryLayer : es.HatchLayer,
-                    es.HatchScale * scale, es.TextLayer, styleId, textHeight, es.ToleranceFt * settings.General.UnitsPerFoot);
+                    temporary ? !string.IsNullOrWhiteSpace(pattern) : es.DrawHatch, pattern, temporary ? es.TemporaryHatch() : es.HatchLayer,
+                    es.HatchScale * scale, temporary ? es.TemporaryText() : es.TextLayer, styleId, textHeight, es.ToleranceFt * settings.General.UnitsPerFoot);
             }
 
             // A temporary construction easement shares the easement's centerline, sidelines and
@@ -845,7 +870,7 @@ namespace FieldCodes.Cad
                 {
                     var hatch = new Hatch();
                     hatch.SetDatabaseDefaults(db);
-                    add(hatch, FtfEntityKind.EasementHatch, temporary ? es.TemporaryLayer : es.HatchLayer);
+                    add(hatch, FtfEntityKind.EasementHatch, temporary ? es.TemporaryHatch() : es.HatchLayer);
                     hatch.PatternScale = es.HatchScale * scale;
                     hatch.SetHatchPattern(HatchPatternType.PreDefined, pattern);
                     hatch.Associative = false;
@@ -877,7 +902,7 @@ namespace FieldCodes.Cad
             title.Rotation = Readable(Math.Atan2(direction.Y, direction.X));
             title.Contents = string.Join("\\P", new[] { record.Title }
                 .Concat(EasementAnnotation.AreaLines(record.AreaSquareFeet, es, record.Purpose)).Select(Escape).ToArray());
-            add(title, FtfEntityKind.EasementText, es.TextLayer);
+            add(title, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
 
             if (es.DrawWidthDimensions)
                 DrawWidthDimension(db, tr, ed, es, record, longest, boundary, add, scale, es.ToleranceFt * settings.General.UnitsPerFoot,
@@ -933,7 +958,7 @@ namespace FieldCodes.Cad
                                            new Point3d(line.X, line.Y, 0), string.Empty, styleId);
             dim.SetDatabaseDefaults(db);
             dim.DimensionStyle = styleId;
-            add(dim, FtfEntityKind.EasementDimension, es.DimensionLayer);
+            add(dim, FtfEntityKind.EasementDimension, record.IsTemporary ? es.TemporaryDimensions() : es.DimensionLayer);
         }
 
         private static void DirectLabels(Database db, EasementRecord record, IList<Course> boundary, EasementSettings es,
@@ -960,7 +985,7 @@ namespace FieldCodes.Cad
                 text.Location = new Point3d(at.X, at.Y, 0);
                 text.Rotation = Readable(Math.Atan2(dir.Y, dir.X));
                 text.Contents = string.Join("\\P", lines.Select(Escape).ToArray());
-                add(text, FtfEntityKind.EasementText, es.TextLayer);
+                add(text, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
             }
         }
 
@@ -996,7 +1021,7 @@ namespace FieldCodes.Cad
                 text.Location = new Point3d(at.X, at.Y, 0);
                 text.Rotation = Readable(Math.Atan2(dir.Y, dir.X));
                 text.Contents = string.Join("\\P", lines.Select(Escape).ToArray());
-                add(text, FtfEntityKind.EasementText, es.TextLayer);
+                add(text, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
             }
 
             var rows = plan.Where(p => p.InTable).Select(p => p.Data).ToList();
@@ -1010,7 +1035,7 @@ namespace FieldCodes.Cad
                                         EasementSettings es, ObjectId styleId, double textHeight, FtfSettings settings,
                                         WidthSpec outerWidth, List<string> drafted, string version)
         {
-            var layerId = ProductionLayers.Get(db, tr, es.TextLayer, settings);
+            var layerId = ProductionLayers.Get(db, tr, record.IsTemporary ? es.TemporaryText() : es.TextLayer, settings);
             var first = parts[0][0];
             var lastPart = parts[parts.Count - 1];
             var last = lastPart[lastPart.Count - 1];
@@ -1058,7 +1083,7 @@ namespace FieldCodes.Cad
                 tag.Location = new Point3d(at.X, at.Y, 0);
                 tag.Rotation = Readable(Math.Atan2(dir.Y, dir.X));
                 tag.Contents = Escape(d.Id);
-                add(tag, FtfEntityKind.EasementText, es.TextLayer);
+                add(tag, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
             }
             Tables(db, tr, ed, record.BoundaryCourses, boundary, es, textHeight, add, tablePosition);
         }
@@ -1712,6 +1737,8 @@ namespace FieldCodes.Cad
                 Id = record.Id, CreatedUtc = record.CreatedUtc, Profile = DrawingStore.ReadProfileName(db), GroupId = record.GroupId, Legal = record.Legal,
                 ExhibitGroup = record.ExhibitGroup, Exclusions = record.Exclusions, Components = record.Components, RebuiltUtc = DateTime.UtcNow,
                 HatchScales = record.HatchScales, HatchPatternScaleByHand = record.HatchPatternScaleByHand,
+                // A rebuild redraws what the drafter chose in the preview, not the profile default.
+                Drafting = record.Drafting,
                 LegalStatus = record.Legal != null ? "DRAFT OUT OF DATE - rebuilt " + reason + "; write the draft again with FTFEASEMENTLEGAL" : record.LegalStatus
             };
             var before = record.AreaSquareFeet;

@@ -26,6 +26,15 @@ namespace FieldCodes.Settings
         /// <summary>Outline of a temporary construction easement.</summary>
         [JsonProperty("temporaryLayer")] public string TemporaryLayer { get; set; }
 
+        /// <summary>
+        /// A temporary construction easement's hatch, text and width dimensions have their own layers so one exhibit
+        /// can show the permanent easement and hide the temporary one (and the other way round) in its viewport.
+        /// Empty puts them on the temporary easement's own layer.
+        /// </summary>
+        [JsonProperty("temporaryHatchLayer")] public string TemporaryHatchLayer { get; set; }
+        [JsonProperty("temporaryTextLayer")] public string TemporaryTextLayer { get; set; }
+        [JsonProperty("temporaryDimensionLayer")] public string TemporaryDimensionLayer { get; set; }
+
         /// <summary>Hatch for a temporary construction easement; empty draws its outline only.</summary>
         [JsonProperty("temporaryHatchPattern")] public string TemporaryHatchPattern { get; set; }
 
@@ -111,7 +120,11 @@ namespace FieldCodes.Settings
             TextLayer = "V-ESMT-TEXT-E";
             TableLayer = "V-ESMT-TABL-E";
             TemporaryLayer = "V-ESMT-TEMP-E";
-            TemporaryHatchPattern = string.Empty;
+            TemporaryHatchLayer = "V-ESMT-TEMP-PATT-E";
+            TemporaryTextLayer = "V-ESMT-TEMP-TEXT-E";
+            TemporaryDimensionLayer = "V-ESMT-TEMP-DIMS-E";
+            // A temporary construction easement is hatched like any other easement, in its own pattern.
+            TemporaryHatchPattern = "ANSI37";
             TemporaryPurpose = "TEMPORARY CONSTRUCTION";
             AreaLayer = "V-ESMT-CONS-E";
             AreaHatchPattern = "ANSI37";
@@ -161,10 +174,38 @@ namespace FieldCodes.Settings
             MinimumClosurePrecision = 10000;
         }
 
+        /// <summary>The layer a temporary construction easement's hatch goes on; its own layer when none is set.</summary>
+        public string TemporaryHatch()
+        {
+            return string.IsNullOrWhiteSpace(TemporaryHatchLayer) ? TemporaryLayer : TemporaryHatchLayer;
+        }
+
+        /// <summary>The layer a temporary construction easement's title, area and course text goes on.</summary>
+        public string TemporaryText()
+        {
+            return string.IsNullOrWhiteSpace(TemporaryTextLayer) ? TextLayer : TemporaryTextLayer;
+        }
+
+        /// <summary>The layer a temporary construction easement's width dimensions go on.</summary>
+        public string TemporaryDimensions()
+        {
+            return string.IsNullOrWhiteSpace(TemporaryDimensionLayer) ? DimensionLayer : TemporaryDimensionLayer;
+        }
+
+        /// <summary>
+        /// A separate copy of these settings. One easement's choices in the preview must
+        /// never change the office settings the next command reads.
+        /// </summary>
+        public EasementSettings Copy()
+        {
+            return JsonConvert.DeserializeObject<EasementSettings>(JsonConvert.SerializeObject(this));
+        }
+
         public void Validate(ICollection<string> problems)
         {
             foreach (var layer in new[] { BoundaryLayer, SidelineLayer, CenterlineLayer, HatchLayer,
-                                          DimensionLayer, TextLayer, TableLayer, TemporaryLayer, AreaLayer })
+                                          DimensionLayer, TextLayer, TableLayer, TemporaryLayer, TemporaryHatchLayer, TemporaryTextLayer,
+                                          TemporaryDimensionLayer, AreaLayer })
                 if (string.IsNullOrWhiteSpace(layer))
                 {
                     problems.Add("Easements: every easement layer needs a name.");

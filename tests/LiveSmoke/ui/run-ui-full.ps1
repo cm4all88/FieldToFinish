@@ -1,4 +1,4 @@
-# Rebuilds the UI harness, installs the plugin, stages the harness in the trusted
+﻿# Rebuilds the UI harness, installs the plugin, stages the harness in the trusted
 # bundle folder, runs the Civil 3D window test, then removes the harness again.
 param([ValidateSet('Dips', 'Easements', 'All')][string]$Suite = 'All')
 $ErrorActionPreference = 'Continue'
@@ -22,7 +22,10 @@ Copy-Item -LiteralPath "$smoke\DipUiTestHarness.dll" -Destination $bundle -Force
 Get-ChildItem $here -Filter '*.png' | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
 Copy-Item -LiteralPath "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D (Imperial) NCS.dwt" -Destination "$here\dip-ui-test.dwg" -Force
 
-& (Join-Path $here 'run-ui.ps1') -TimeoutMinutes 9 -Suite $Suite
+# Both suites in one session need roughly twice as long as one.
+$minutes = 9
+if ($Suite -eq 'All') { $minutes = 18 }
+& (Join-Path $here 'run-ui.ps1') -TimeoutMinutes $minutes -Suite $Suite
 
 for ($i = 0; $i -lt 12 -and (Get-Process acad -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Seconds 5 }
 Remove-Item -LiteralPath "$bundle\DipUiTestHarness.dll" -ErrorAction SilentlyContinue

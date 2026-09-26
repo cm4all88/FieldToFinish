@@ -1,4 +1,4 @@
-// Interactive UI test of the Dip Builder WINDOW inside full Civil 3D.
+﻿// Interactive UI test of the Dip Builder WINDOW inside full Civil 3D.
 //
 // UISEED   builds a realistic small storm network: structure COGO points and a
 //          pipe somebody already drew by hand.
@@ -146,6 +146,14 @@ namespace FtfUiTest
         {
             Directory.CreateDirectory(OutDir);
             _log = new StreamWriter(Path.Combine(OutDir, "ui-test.log"), false, Encoding.UTF8) { AutoFlush = true };
+            // The AutoCAD text window goes to its own log beside this one, so a command that
+            // stops at an unexpected prompt can be read back afterwards instead of guessed at.
+            try
+            {
+                AcApp.SetSystemVariable("LOGFILEPATH", OutDir);
+                AcApp.SetSystemVariable("LOGFILEMODE", 1);
+            }
+            catch (System.Exception ex) { Log("command-line log not started: " + ex.Message); }
             _drawingPath = AcApp.DocumentManager.MdiActiveDocument.Name;
             Log("UI test started " + DateTime.Now.ToString("s") + " on " + _drawingPath);
             Log("Screen working area " + Screen.PrimaryScreen.WorkingArea + ", DPI " + DpiOf());
@@ -189,6 +197,7 @@ namespace FtfUiTest
                 if ((DateTime.Now - _busySince).TotalSeconds > 45)
                 {
                     Log("STUCK in " + doc.CommandInProgress + " at step " + _steps[_index].Name + " -- cancelling");
+                    foreach (var line in CommandLineTail(15)) Log("   | " + line);
                     Shot("stuck-" + _index);
                     doc.SendStringToExecute("\x03\x03", true, false, false);
                     _busySince = DateTime.Now;
@@ -205,6 +214,29 @@ namespace FtfUiTest
             try { step.Run(); }
             catch (System.Exception ex) { Fail("step threw: " + ex.GetType().Name + ": " + ex.Message); }
             _last = DateTime.Now;
+        }
+
+        /// <summary>The last lines of the AutoCAD text window, from its own log file: what a
+        /// stuck command is actually prompting for.</summary>
+        private static string[] CommandLineTail(int count)
+        {
+            try
+            {
+                var file = Directory.GetFiles(OutDir, "*.log")
+                                    .Where(f => !f.EndsWith("ui-test.log", StringComparison.OrdinalIgnoreCase))
+                                    .OrderBy(f => File.GetLastWriteTimeUtc(f)).LastOrDefault();
+                if (file == null) return new[] { "(no command-line log)" };
+                var lines = new List<string>();
+                using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var reader = new StreamReader(stream))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                        if (line.Trim().Length > 0) lines.Add(line.TrimEnd());
+                }
+                return lines.Skip(Math.Max(0, lines.Count - count)).ToArray();
+            }
+            catch (System.Exception ex) { return new[] { "(command-line log unreadable: " + ex.Message + ")" }; }
         }
 
         private static void Log(string text) { if (_log != null) _log.WriteLine(text); }
@@ -1269,6 +1301,9 @@ namespace FtfUiTest
                 var purpose = (TextBox)form.GetType().GetField("_purpose", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form);
                 purpose.Text = "drainage";
                 Check(FindButton(form, "Draw easement").Enabled, "Draw easement is available with piece " + number + " kept");
+
+                // ---- the drafting panel: what it will look like, before anything is drawn
+                CheckDrafting(form);
                 ShotForm(form, "22-easement-preview-overshoot-picked");
                 ClickOn(form, "Draw easement");
             } });
@@ -1292,6 +1327,25 @@ namespace FtfUiTest
                 Check(r.CommencementTie != null && r.CommencementAlong != null,
                       "the tie from the Point of Commencement runs along the top lot line (" + (r.CommencementTie == null ? "none" : r.CommencementTie.Length.ToString("0.00", CultureInfo.InvariantCulture) + "'") + ")");
                 Check(r.EndsOn != null && r.TerminusTie != null, "the terminus is on the side lot line and tied to its corner");
+
+                // What the drafting panel was set to is what was drawn, and it is stored with
+                // the easement so a rebuild draws it the same way.
+                Check(r.Drafting != null && r.Drafting.HatchPattern == "ANSI38",
+                      "the hatch pattern picked in the preview is stored with the easement (" + (r.Drafting == null ? "nothing stored" : r.Drafting.HatchPattern) + ")");
+                Check(r.Drafting != null && r.Drafting.TextLayer == null && r.Drafting.BoundaryLayer == null,
+                      "only what was changed is stored; the layers still follow the profile");
+                var drawnB = EasementTexts(r.Id);
+                foreach (var line in drawnB.Where(x => x.StartsWith("HATCH", StringComparison.Ordinal) || x.StartsWith("DIM", StringComparison.Ordinal))) Log("   " + line);
+                Check(drawnB.Any(x => x.StartsWith("HATCH ANSI38 ", StringComparison.Ordinal)), "the easement is hatched with the pattern picked in the preview");
+                if (temporary != null)
+                {
+                    var drawnT = EasementTexts(temporary.Id);
+                    foreach (var line in drawnT.Where(x => x.StartsWith("HATCH", StringComparison.Ordinal))) Log("   temporary: " + line);
+                    Check(drawnT.Any(x => x.StartsWith("HATCH ANSI37 ", StringComparison.Ordinal)),
+                          "the temporary construction easement gets its own hatch pattern");
+                    Check(temporary.Drafting != null && temporary.Drafting.HatchPattern == "ANSI38",
+                          "the temporary easement remembers the same drafting choices");
+                }
             }, 4000);
             add("draft legal description for easement B", () => Send("FTFEASEMENTLEGAL 6299.272,5149.918 "), 2500);
             s.Add(new Step { Name = "fill in the legal description window", WhileBusy = true, Modal = "LegalDescriptionForm", Delay = 2500, Run = () =>
@@ -1449,6 +1503,61 @@ namespace FtfUiTest
         }
 
         /// <summary>Text, leader and table contents drafted for one easement, as "KIND text".</summary>
+        /// <summary>
+        /// The preview's drafting panel: it starts from the office settings, it shows the
+        /// drafting live on the plan, and what is changed there is what gets drawn.
+        /// </summary>
+        private static void CheckDrafting(Form form)
+        {
+            Func<string, object> field = name => form.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form);
+            var canvas = (Control)field("_canvas");
+            Func<string, object> canvasValue = name => canvas.GetType().GetProperty(name).GetValue(canvas, null);
+            var drafting = (FieldCodes.Settings.EasementSettings)form.GetType()
+                .GetProperty("Chosen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form, null);
+
+            var hatchOn = (CheckBox)field("_hatchOn");
+            var pattern = (ComboBox)field("_hatchPattern");
+            var temporaryOn = (CheckBox)field("_temporaryHatchOn");
+            var temporaryPattern = (ComboBox)field("_temporaryHatchPattern");
+            var where = (ComboBox)field("_labelWhere");
+            var layers = (Dictionary<string, TextBox>)field("_layerBoxes");
+
+            Check(hatchOn != null && pattern != null, "the preview has a drafting panel with the hatch on it");
+            Check(temporaryOn != null && temporaryPattern != null, "a temporary construction easement gets its own hatch setting");
+            Check(pattern.Text == drafting.HatchPattern, "the panel starts from the office hatch pattern (" + pattern.Text + ")");
+            Check(temporaryPattern.Text == "ANSI37", "the temporary easement starts from its own office pattern (" + temporaryPattern.Text + ")");
+            Log("   layers offered: " + string.Join(", ", layers.Select(x => x.Key + "=" + x.Value.Text).ToArray()));
+            Check(layers.ContainsKey("Hatch") && layers.ContainsKey("Dimensions") && layers.ContainsKey("Temporary hatch"),
+                  "the layers each piece goes on can be seen and changed");
+            Check(layers["Hatch"].Text == drafting.HatchLayer, "the layer boxes show the profile's layers");
+
+            // The plan preview draws what the panel says.
+            Check((string)canvasValue("HatchPattern") == drafting.HatchPattern, "the plan shows the hatch");
+            Check((string)canvasValue("TemporaryHatchPattern") == "ANSI37", "the plan shows the temporary hatch separately");
+            var labels = (System.Collections.IList)canvasValue("Labels");
+            Check(canvasValue("Title") != null && labels != null && labels.Count > 0,
+                  "the plan shows the title and the course labels (" + (labels == null ? 0 : labels.Count) + ")");
+            Check(canvasValue("Dimension") != null, "the plan shows the width dimension");
+
+            // Turning the hatch off takes it off the plan; back on puts it back.
+            hatchOn.Checked = false;
+            Check((string)canvasValue("HatchPattern") == null, "unticking the hatch takes it off the plan");
+            hatchOn.Checked = true;
+
+            // The centerline is what gets labelled; switching to the outline moves the labels.
+            var centerlineLabels = labels.Count;
+            where.SelectedIndex = 1;
+            var outlineLabels = ((System.Collections.IList)canvasValue("Labels")).Count;
+            Check(outlineLabels != centerlineLabels || !drafting.LabelCenterline,
+                  "labelling the outline instead of the centerline changes the plan (" + centerlineLabels + " -> " + outlineLabels + ")");
+            where.SelectedIndex = 0;
+            Check(drafting.LabelCenterline, "back to labelling the centerline");
+
+            // A different hatch for this easement only.
+            pattern.Text = "ANSI38";
+            Check(drafting.HatchPattern == "ANSI38" && (string)canvasValue("HatchPattern") == "ANSI38", "a new pattern reaches the plan at once");
+        }
+
         private static List<string> EasementTexts(string id)
         {
             var list = new List<string>();
@@ -1467,6 +1576,10 @@ namespace FtfUiTest
                     if (!owned) continue;
                     var mt = e as AcDb.MText;
                     if (mt != null) list.Add("TEXT " + mt.Text.Replace("\r\n", " / "));
+                    var hatch = e as AcDb.Hatch;
+                    if (hatch != null) list.Add("HATCH " + hatch.PatternName + " on " + e.Layer);
+                    var dim = e as AcDb.Dimension;
+                    if (dim != null) list.Add("DIM " + dim.DimensionStyleName + " on " + e.Layer);
                     var ml = e as AcDb.MLeader;
                     if (ml != null && ml.MText != null) list.Add("LEADER " + ml.MText.Text);
                     var tb = e as AcDb.Table;

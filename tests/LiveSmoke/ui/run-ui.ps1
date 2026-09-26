@@ -12,6 +12,7 @@ $lines += 'ZOOM E', $command
 [IO.File]::WriteAllLines((Join-Path $here 'run-ui.scr'), $lines)
 $log = Join-Path $here 'ui-test.log'
 if (Test-Path $log) { Remove-Item -LiteralPath $log }
+Get-ChildItem $here -Filter 'dip-ui-test_*.log' | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
 
 $acad = 'C:\Program Files\Autodesk\AutoCAD 2024\acad.exe'
 $arguments = '"' + (Join-Path $here 'dip-ui-test.dwg') + '" /product C3D /language en-US /nologo /b "' + (Join-Path $here 'run-ui.scr') + '"'

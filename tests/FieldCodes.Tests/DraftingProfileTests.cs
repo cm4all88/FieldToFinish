@@ -1,4 +1,4 @@
-using FieldCodes.Settings;
+﻿using FieldCodes.Settings;
 
 namespace FieldCodes.Tests;
 
@@ -7,6 +7,9 @@ namespace FieldCodes.Tests;
 /// it. A project file beside the drawing still overrides; a missing profile is
 /// reported rather than silently replaced.
 /// </summary>
+// Both classes drive the same static FtfSettings.ProfileDirectoryOverride, so they share a
+// collection: xunit runs classes in parallel, and one clearing it mid-test fails the other.
+[Collection("drafting profiles")]
 public sealed class DraftingProfileTests : IClassFixture<RulesFixture>
 {
     private readonly RulesFixture _fx;

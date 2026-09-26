@@ -50,7 +50,9 @@ namespace FieldCodes.Cad
                                                  chosen.Any(c => (c.GroupId != null && c.GroupId == r.GroupId) || (!string.IsNullOrWhiteSpace(c.ExhibitGroup) && c.ExhibitGroup == r.ExhibitGroup))).ToList();
                 if (related.Count > 0)
                 {
-                    var include = EasementCommands.Keyword(ed, "\nInclude " + related.Count + " grouped easement(s) (" + string.Join(", ", related.Select(r => r.Title).ToArray()) + ") [Yes/No] <Yes>: ", "Yes", "Yes", "No");
+                    // Each easement usually gets its own exhibit, so a grouped one (a temporary construction easement
+                    // beside its permanent easement) is left off unless the drafter asks for it.
+                    var include = EasementCommands.Keyword(ed, "\nAlso show " + related.Count + " grouped easement(s) on this exhibit (" + string.Join(", ", related.Select(r => r.Title).ToArray()) + ") [Yes/No] <No>: ", "No", "Yes", "No");
                     if (include == null) return;
                     if (include == "Yes") chosen.AddRange(related);
                 }
@@ -2060,20 +2062,20 @@ namespace FieldCodes.Cad
             var dir = c.DirectionAt(c.Length / 2);
             var text = label.InTable ? label.Data.Id : string.Join("\\P", label.Lines.Select(EasementCommands.Escape).ToArray());
             var lineCount = label.InTable ? 1 : label.Lines.Count;
-            // On paper: beside the line, clear of the easement.
-            double offsetModel;
-            if (r.IsArea) offsetModel = outward * 0;
-            else offsetModel = label.IsTie ? 0 : outerLeft;
-            var basePoint = mid + dir.LeftNormal() * (r.IsArea && !label.IsTie ? 0 : offsetModel);
+            // On paper: beside the line it belongs to. A strip easement alone on its sheet is labelled along its
+            // centerline -- the line its calls are written from. When the drafter put more than one easement of the
+            // same group on one sheet they share that centerline, so the labels are kept out at the sideline instead.
+            var offsetModel = SharesTheSheet(r) ? (label.IsTie ? 0 : outerLeft) : 0;
+            var basePoint = mid + dir.LeftNormal() * offsetModel;
             var paper = Paper(basePoint);
             var normal = ExhibitPlanner.Rotate(dir.LeftNormal() * (r.IsArea && !label.IsTie ? outward : 1), _twist);
             var offsetIn = _xs.TextHeightIn * (0.9 * lineCount + 0.4);
             var at = new P2(paper.X + normal.X * offsetIn, paper.Y + normal.Y * offsetIn);
             if (!label.InTable)
             {
-                // The other side of its line when that side is plainly clearer (a parcel label, a leader or another label
-                // in the way); otherwise the usual side. Strips go beyond their other sideline.
-                var otherBase = r.IsArea || label.IsTie ? mid : mid - dir.LeftNormal() * OuterRight(r);
+                // The other side of its line when that side is plainly clearer (a parcel label, a leader or another
+                // label in the way); otherwise the usual side.
+                var otherBase = SharesTheSheet(r) && !label.IsTie ? mid - dir.LeftNormal() * OuterRight(r) : mid;
                 var otherPaper = Paper(otherBase);
                 var other = new P2(otherPaper.X - normal.X * offsetIn, otherPaper.Y - normal.Y * offsetIn);
                 var th = _xs.TextHeightIn;
@@ -2090,6 +2092,12 @@ namespace FieldCodes.Cad
             }
             Text("LABEL:" + r.Id + ":" + n, "LABEL", text, new Point3d(at.X, at.Y, 0), _xs.TextHeightIn, AttachmentPoint.MiddleCenter, PaperAngle(dir), _xs.AnnotationLayer, false,
                  "Course label " + text.Replace("\\P", " ").Replace("%%d", "°"));
+        }
+
+        /// <summary>True when another easement of the same group is on this sheet, sharing this one's centerline.</summary>
+        private bool SharesTheSheet(EasementRecord r)
+        {
+            return r.GroupId != null && _records.Any(x => x.Id != r.Id && x.GroupId == r.GroupId);
         }
 
         private double OuterRight(EasementRecord r)

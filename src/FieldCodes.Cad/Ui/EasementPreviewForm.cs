@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
 using FieldCodes.Easements;
+using FieldCodes.Settings;
 
 namespace FieldCodes.Cad.Ui
 {
@@ -30,9 +31,26 @@ namespace FieldCodes.Cad.Ui
         private readonly Label _notes;
         private readonly Button _draw;
 
+        // The drafting panel. These are not readonly: they are built in a helper the
+        // constructor calls, not in the constructor body.
+        private CheckBox _hatchOn;
+        private ComboBox _hatchPattern;
+        private CheckBox _temporaryHatchOn;
+        private ComboBox _temporaryHatchPattern;
+        private ComboBox _labelWhere;
+        private CheckBox _centerlineOn;
+        private CheckBox _sidelinesOn;
+        private CheckBox _widthDimensions;
+        private CheckBox _pointLabelsOn;
+        private readonly Dictionary<string, TextBox> _layerBoxes = new Dictionary<string, TextBox>();
+        private bool _loading;
+
         public EasementPreviewForm(EasementCommands.TrimPreview preview)
         {
             _preview = preview;
+            // The drafting panel edits this easement's own copy. Without one it would be
+            // editing the office settings, which must never change from here.
+            if (_preview.Drafting == null) _preview.Drafting = _preview.Settings.Copy();
             _keep = new HashSet<int>(preview.Keep ?? new List<int> { 1 });
 
             DipBuilderForm.UseTheme(ThemePreference.LoadDark());
@@ -44,16 +62,16 @@ namespace FieldCodes.Cad.Ui
             ForeColor = DipBuilderForm.Ink;
             Font = DipBuilderForm.F(10.5f, false);
             var area = Screen.FromPoint(Cursor.Position).WorkingArea;
-            ClientSize = new Size(Math.Min(1180, area.Width - 60), Math.Min(760, area.Height - 60));
-            MinimumSize = new Size(Math.Min(820, area.Width), Math.Min(520, area.Height));
+            ClientSize = new Size(Math.Min(1460, area.Width - 60), Math.Min(800, area.Height - 60));
+            MinimumSize = new Size(Math.Min(1040, area.Width), Math.Min(560, area.Height));
 
             // Header.
             var header = new Panel { Dock = DockStyle.Top, BackColor = DipBuilderForm.Surface, Padding = new Padding(20, 12, 20, 10) };
-            var heading = new Label { AutoSize = true, Text = "Keep the pieces that make the easement", Font = DipBuilderForm.F(15f, true), ForeColor = DipBuilderForm.Ink };
+            var heading = new Label { AutoSize = true, Text = "Check the easement before it is drawn", Font = DipBuilderForm.F(15f, true), ForeColor = DipBuilderForm.Ink };
             var guide = new Label
             {
                 AutoSize = true, ForeColor = DipBuilderForm.Muted, Margin = new Padding(1, 4, 0, 0),
-                Text = "Click a piece to keep or remove it. Scroll to zoom, drag to pan, double-click to fit."
+                Text = "Click a piece to keep or remove it; set the drafting on the left. Nothing is drawn until Draw easement."
             };
             var headerText = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
             headerText.Controls.Add(heading);
@@ -126,8 +144,197 @@ namespace FieldCodes.Cad.Ui
 
             Controls.Add(_canvas);
             Controls.Add(side);
+            Controls.Add(BuildDrafting());
             Controls.Add(header);
+            LoadDrafting();
             Recalculate(true);
+        }
+
+        /// <summary>The settings this easement will be drafted with -- the drafting panel's copy.</summary>
+        private EasementSettings Chosen { get { return _preview.Drafting; } }
+
+        /// <summary>
+        /// The drafting panel: hatch, course labels, width dimensions and the layers each
+        /// piece goes on, as the office profile has them. Changing one changes this
+        /// easement only; the office settings are never written to from here.
+        /// </summary>
+        private Panel BuildDrafting()
+        {
+            var panel = new Panel { Dock = DockStyle.Left, Width = 306, BackColor = DipBuilderForm.Surface, Padding = new Padding(18, 14, 14, 14) };
+            panel.Paint += (s, e) => { using (var pen = new Pen(DipBuilderForm.Rule)) e.Graphics.DrawLine(pen, panel.Width - 1, 0, panel.Width - 1, panel.Height); };
+            var stack = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            var width = panel.Width - panel.Padding.Horizontal - 20;
+
+            stack.Controls.Add(Caption("Hatch"));
+            _hatchOn = Tick("Hatch the easement");
+            _hatchOn.CheckedChanged += (s, e) => Changed(() => { Chosen.DrawHatch = _hatchOn.Checked; _hatchPattern.Enabled = _hatchOn.Checked; });
+            stack.Controls.Add(_hatchOn);
+            _hatchPattern = Patterns(width, Chosen.HatchPattern);
+            _hatchPattern.TextChanged += (s, e) => Changed(() => Chosen.HatchPattern = _hatchPattern.Text.Trim());
+            stack.Controls.Add(_hatchPattern);
+
+            if (_preview.TemporarySplit != null)
+            {
+                _temporaryHatchOn = Tick("Hatch the temporary easement");
+                _temporaryHatchOn.CheckedChanged += (s, e) => Changed(() =>
+                {
+                    _temporaryHatchPattern.Enabled = _temporaryHatchOn.Checked;
+                    Chosen.TemporaryHatchPattern = _temporaryHatchOn.Checked
+                        ? (_temporaryHatchPattern.Text.Trim().Length > 0 ? _temporaryHatchPattern.Text.Trim() : "ANSI37")
+                        : string.Empty;
+                });
+                stack.Controls.Add(_temporaryHatchOn);
+                _temporaryHatchPattern = Patterns(width, Chosen.TemporaryHatchPattern);
+                _temporaryHatchPattern.TextChanged += (s, e) => Changed(() =>
+                {
+                    if (_temporaryHatchOn.Checked) Chosen.TemporaryHatchPattern = _temporaryHatchPattern.Text.Trim();
+                });
+                stack.Controls.Add(_temporaryHatchPattern);
+            }
+
+            stack.Controls.Add(Caption("Course labels"));
+            _labelWhere = new ComboBox
+            {
+                Width = width, DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat,
+                BackColor = DipBuilderForm.Dark ? DipBuilderForm.Calculated : Color.White, ForeColor = DipBuilderForm.Ink,
+                Font = DipBuilderForm.F(10f, false), Margin = new Padding(0, 2, 0, 12)
+            };
+            _labelWhere.Items.AddRange(new object[] { "Along the centerline", "Around the outline", "In a line / curve table", "No course labels" });
+            _labelWhere.SelectedIndexChanged += (s, e) => Changed(ApplyLabelChoice);
+            stack.Controls.Add(_labelWhere);
+
+            stack.Controls.Add(Caption("Lines and dimensions"));
+            _centerlineOn = Tick("Draw the centerline");
+            _centerlineOn.CheckedChanged += (s, e) => Changed(() => Chosen.DrawCenterline = _centerlineOn.Checked);
+            stack.Controls.Add(_centerlineOn);
+            _sidelinesOn = Tick("Draw the sidelines");
+            _sidelinesOn.CheckedChanged += (s, e) => Changed(() => Chosen.DrawSidelines = _sidelinesOn.Checked);
+            stack.Controls.Add(_sidelinesOn);
+            _widthDimensions = Tick("Dimension the width");
+            _widthDimensions.CheckedChanged += (s, e) => Changed(() => Chosen.DrawWidthDimensions = _widthDimensions.Checked);
+            stack.Controls.Add(_widthDimensions);
+            stack.Controls.Add(new Label
+            {
+                AutoSize = true, MaximumSize = new Size(width, 0), ForeColor = DipBuilderForm.Muted,
+                Font = DipBuilderForm.F(9f, false), Margin = new Padding(20, 0, 0, 10),
+                Text = string.IsNullOrWhiteSpace(Chosen.DimensionStyleOverride)
+                    ? "in the drawing's current dimension style"
+                    : "in dimension style " + Chosen.DimensionStyleOverride
+            });
+            _pointLabelsOn = Tick("Label the POC, POB and terminus");
+            _pointLabelsOn.CheckedChanged += (s, e) => Changed(() => Chosen.DrawPointLabels = _pointLabelsOn.Checked);
+            stack.Controls.Add(_pointLabelsOn);
+
+            stack.Controls.Add(Caption("Layers"));
+            LayerBox(stack, width, "Boundary", Chosen.BoundaryLayer, v => Chosen.BoundaryLayer = v);
+            LayerBox(stack, width, "Hatch", Chosen.HatchLayer, v => Chosen.HatchLayer = v);
+            LayerBox(stack, width, "Text", Chosen.TextLayer, v => Chosen.TextLayer = v);
+            LayerBox(stack, width, "Dimensions", Chosen.DimensionLayer, v => Chosen.DimensionLayer = v);
+            LayerBox(stack, width, "Centerline", Chosen.CenterlineLayer, v => Chosen.CenterlineLayer = v);
+            LayerBox(stack, width, "Sidelines", Chosen.SidelineLayer, v => Chosen.SidelineLayer = v);
+            if (_preview.TemporarySplit != null)
+            {
+                LayerBox(stack, width, "Temporary outline", Chosen.TemporaryLayer, v => Chosen.TemporaryLayer = v);
+                LayerBox(stack, width, "Temporary hatch", Chosen.TemporaryHatchLayer, v => Chosen.TemporaryHatchLayer = v);
+                LayerBox(stack, width, "Temporary text", Chosen.TemporaryTextLayer, v => Chosen.TemporaryTextLayer = v);
+                LayerBox(stack, width, "Temporary dimensions", Chosen.TemporaryDimensionLayer, v => Chosen.TemporaryDimensionLayer = v);
+            }
+            stack.Controls.Add(new Label
+            {
+                AutoSize = true, MaximumSize = new Size(width, 0), ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9f, false),
+                Margin = new Padding(0, 6, 0, 0),
+                Text = "These start from the office profile. What you change here is drawn for this easement and kept with it, so a rebuild draws it the same way."
+            });
+
+            panel.Controls.Add(stack);
+            return panel;
+        }
+
+        /// <summary>Puts the settings on the controls, without treating that as a change.</summary>
+        private void LoadDrafting()
+        {
+            _loading = true;
+            _hatchOn.Checked = Chosen.DrawHatch;
+            _hatchPattern.Enabled = Chosen.DrawHatch;
+            if (_temporaryHatchOn != null)
+            {
+                _temporaryHatchOn.Checked = !string.IsNullOrWhiteSpace(Chosen.TemporaryHatchPattern);
+                _temporaryHatchPattern.Enabled = _temporaryHatchOn.Checked;
+            }
+            _labelWhere.SelectedIndex = Chosen.LabelMode == EasementLabelMode.None ? 3
+                : Chosen.LabelCenterline ? 0
+                : Chosen.LabelMode == EasementLabelMode.Table ? 2 : 1;
+            _centerlineOn.Checked = Chosen.DrawCenterline;
+            _sidelinesOn.Checked = Chosen.DrawSidelines;
+            _widthDimensions.Checked = Chosen.DrawWidthDimensions;
+            _pointLabelsOn.Checked = Chosen.DrawPointLabels;
+            _loading = false;
+        }
+
+        private void ApplyLabelChoice()
+        {
+            switch (_labelWhere.SelectedIndex)
+            {
+                case 0:
+                    Chosen.LabelCenterline = true;
+                    if (Chosen.LabelMode == EasementLabelMode.None) Chosen.LabelMode = EasementLabelMode.Auto;
+                    break;
+                case 1: Chosen.LabelCenterline = false; Chosen.LabelMode = EasementLabelMode.Direct; break;
+                case 2: Chosen.LabelCenterline = false; Chosen.LabelMode = EasementLabelMode.Table; break;
+                default: Chosen.LabelCenterline = false; Chosen.LabelMode = EasementLabelMode.None; break;
+            }
+        }
+
+        private void Changed(Action apply)
+        {
+            if (_loading) return;
+            apply();
+            Recalculate(true);
+        }
+
+        private CheckBox Tick(string text)
+        {
+            return new CheckBox
+            {
+                Text = text, AutoSize = true, ForeColor = DipBuilderForm.Ink, Font = DipBuilderForm.F(10f, false),
+                FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 2, 0, 4)
+            };
+        }
+
+        /// <summary>The office hatch patterns, with whatever the profile uses first. The list is
+        /// a shortcut, not a limit: the drawing's pattern file decides what is possible.</summary>
+        private ComboBox Patterns(int width, string current)
+        {
+            var box = new ComboBox
+            {
+                Width = width, FlatStyle = FlatStyle.Flat, Font = DipBuilderForm.F(10f, false),
+                BackColor = DipBuilderForm.Dark ? DipBuilderForm.Calculated : Color.White, ForeColor = DipBuilderForm.Ink,
+                Margin = new Padding(20, 0, 0, 10)
+            };
+            foreach (var name in new[] { "ANSI31", "ANSI32", "ANSI33", "ANSI37", "ANSI38", "DOTS", "GRAVEL", "EARTH", "SOLID" })
+                box.Items.Add(name);
+            var now = (current ?? string.Empty).Trim();
+            if (now.Length > 0 && !box.Items.Contains(now)) box.Items.Insert(0, now);
+            box.Text = now;
+            return box;
+        }
+
+        private void LayerBox(Control stack, int width, string caption, string value, Action<string> write)
+        {
+            stack.Controls.Add(new Label
+            {
+                AutoSize = true, Text = caption, ForeColor = DipBuilderForm.Muted,
+                Font = DipBuilderForm.F(9f, false), Margin = new Padding(0, 2, 0, 0)
+            });
+            var box = new TextBox
+            {
+                Width = width, Text = value ?? string.Empty, BorderStyle = BorderStyle.FixedSingle,
+                BackColor = DipBuilderForm.Dark ? DipBuilderForm.Calculated : Color.White, ForeColor = DipBuilderForm.Ink,
+                Font = DipBuilderForm.F(10f, false), Margin = new Padding(0, 0, 0, 6)
+            };
+            box.TextChanged += (s, e) => { if (!_loading) write(box.Text.Trim()); };
+            stack.Controls.Add(box);
+            _layerBoxes[caption] = box;
         }
 
         private static Label Caption(string text)
@@ -222,6 +429,17 @@ namespace FieldCodes.Cad.Ui
             _ties.Text = string.Join("\n", ties.ToArray());
             _tiesCaption.Visible = _ties.Visible = ties.Count > 0;
 
+            // What the drafting will look like, at the size it will really be drawn.
+            var plot = Math.Max(1e-9, _preview.PlotScale);
+            _canvas.TextHeight = Chosen.TextHeightPlotted * plot;
+            _canvas.HatchSpacing = Chosen.HatchScale * plot * HatchPatternSpacing;
+            _canvas.HatchPattern = Chosen.DrawHatch ? Chosen.HatchPattern : null;
+            _canvas.TemporaryHatchPattern = Chosen.TemporaryHatchPattern;
+            _canvas.Labels = new List<PreviewLabel>();
+            _canvas.Title = null;
+            _canvas.Dimension = null;
+            if (merged != null && parts != null && parts.Count > 0) BuildDraftingPreview(merged, parts);
+
             var total = _preview.Split.Pieces.Count;
             _pieces.Text = total == 1
                 ? "One piece -- the trim lines do not divide the strip."
@@ -231,6 +449,115 @@ namespace FieldCodes.Cad.Ui
             _notes.Text = _preview.Notes.Count == 0 ? string.Empty : "Notes:\n" + string.Join("\n", _preview.Notes.Select(n => "- " + n).ToArray());
             _draw.Enabled = failure == null;
             _canvas.Invalidate();
+        }
+
+        /// <summary>
+        /// ANSI31 and its family draw their lines 0.125 drawing units apart at scale 1.
+        /// The preview uses that to show the hatch at the density it will really have.
+        /// </summary>
+        private const double HatchPatternSpacing = 0.125;
+
+        private const string Degree = "\u00b0";
+
+        /// <summary>
+        /// The title, course labels and width dimension exactly where the command would
+        /// draw them, so what the drafter sees is what the drawing gets. The geometry is
+        /// not touched: this only reads it.
+        /// </summary>
+        private void BuildDraftingPreview(IList<Course> boundary, List<List<Course>> parts)
+        {
+            var es = Chosen;
+            var height = _canvas.TextHeight;
+            var longest = parts.OrderByDescending(EasementBuilder.RouteLength).First();
+            var outer = _preview.TemporaryWidth ?? _preview.Width;
+
+            // Title and area, along the middle of the strip.
+            P2 direction;
+            var middle = EasementAnnotation.LabelPoint(longest, _preview.Width, out direction);
+            if (!StripTrim.Inside(boundary, middle)) middle = StripTrim.PointInside(boundary, _preview.Tolerance);
+            var titleLines = new List<string> { _title.Text };
+            titleLines.AddRange(_area.Text.Split('\n'));
+            _canvas.Title = new PreviewLabel
+            {
+                At = middle, Rotation = EasementCommands.Readable(Math.Atan2(direction.Y, direction.X)), Lines = titleLines
+            };
+
+            if (es.LabelMode != EasementLabelMode.None)
+            {
+                if (es.LabelCenterline)
+                {
+                    var ties = new List<CourseData>();
+                    if (_preview.Commencement.HasValue && _canvas.Beginning.HasValue)
+                        ties.Add(EasementAnnotation.Describe(Course.Line(_preview.Commencement.Value, _canvas.Beginning.Value)));
+                    CourseData terminusTie = null;
+                    if (_preview.TerminusCorner.HasValue && _canvas.Terminus.HasValue)
+                        terminusTie = EasementAnnotation.Describe(Course.Line(_canvas.Terminus.Value, _preview.TerminusCorner.Value));
+
+                    foreach (var label in EasementAnnotation.PlanLabels(ties, parts.SelectMany(part => part), terminusTie, es, height, Degree))
+                    {
+                        var lines = label.InTable ? new List<string> { label.Data.Id } : label.Lines.ToList();
+                        var clearance = label.IsTie ? 0.0 : outer.Left;
+                        Add(label.Data.Course, lines, clearance + height * (0.9 * lines.Count + 0.4));
+                    }
+                }
+                else if (es.LabelMode == EasementLabelMode.Direct)
+                {
+                    var outward = Loops.SignedArea(boundary) > 0 ? -1.0 : 1.0;
+                    foreach (var d in EasementAnnotation.Number(boundary, es))
+                    {
+                        var lines = d.Course.Kind == CourseKind.Line
+                            ? new List<string> { EasementAnnotation.LineText(d, es, Degree) }
+                            : EasementAnnotation.CurveLines(d, es, Degree).ToList();
+                        Add(d.Course, lines, outward * height * (0.9 * lines.Count + 0.5));
+                    }
+                }
+                else
+                {
+                    // Table: each course is tagged on the plan and listed in the table.
+                    var outward = Loops.SignedArea(boundary) > 0 ? -1.0 : 1.0;
+                    foreach (var d in EasementAnnotation.Number(boundary, es))
+                        Add(d.Course, new List<string> { d.Id }, outward * height * 1.2);
+                }
+            }
+
+            if (es.DrawWidthDimensions) BuildWidthDimension(boundary, longest, height);
+        }
+
+        /// <summary>One course label, offset from the middle of its course to the left.</summary>
+        private void Add(Course c, List<string> lines, double offset)
+        {
+            var mid = c.PointAt(c.Length / 2.0);
+            var dir = c.DirectionAt(c.Length / 2.0);
+            _canvas.Labels.Add(new PreviewLabel
+            {
+                At = mid + dir.LeftNormal() * offset,
+                Rotation = EasementCommands.Readable(Math.Atan2(dir.Y, dir.X)),
+                Lines = lines
+            });
+        }
+
+        /// <summary>Where the width dimension lands: a quarter of the way along, or the first
+        /// place after that where a trim has not narrowed the strip -- as the command does.</summary>
+        private void BuildWidthDimension(IList<Course> boundary, List<Course> centerline, double height)
+        {
+            var length = EasementBuilder.RouteLength(centerline);
+            foreach (var fraction in new[] { 0.25, 0.5, 0.75, 0.125, 0.375, 0.625, 0.875 })
+            {
+                P2 direction;
+                var at = EasementBuilder.PointAtStation(centerline, length * fraction, out direction);
+                var normal = direction.LeftNormal();
+                var left = at + normal * _preview.Width.Left;
+                var right = at - normal * _preview.Width.Right;
+                if (!StripTrim.OnOutline(boundary, left, _preview.Tolerance * 10) ||
+                    !StripTrim.OnOutline(boundary, right, _preview.Tolerance * 10)) continue;
+
+                _canvas.Dimension = new PreviewDimension
+                {
+                    Left = left, Right = right, Offset = direction * (height * 3.0),
+                    Text = EasementAnnotation.Distance((_preview.Width.Left + _preview.Width.Right) / _preview.UnitsPerFoot, _preview.Settings)
+                };
+                return;
+            }
         }
 
         private void Accept()
@@ -257,6 +584,25 @@ namespace FieldCodes.Cad.Ui
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
     }
 
+    /// <summary>One piece of drafted text in the preview, where the command would put it.</summary>
+    internal sealed class PreviewLabel
+    {
+        public P2 At;
+        public double Rotation;
+        public IList<string> Lines;
+    }
+
+    /// <summary>The width dimension: across the strip, with its dimension line offset along it.</summary>
+    internal sealed class PreviewDimension
+    {
+        public P2 Left;
+        public P2 Right;
+
+        /// <summary>How far along the easement the dimension line sits, away from the two sidelines.</summary>
+        public P2 Offset;
+        public string Text;
+    }
+
     /// <summary>The trimmed strip drawn to scale: pieces, trim lines, the easement line
     /// and its angle points. North is up.</summary>
     internal sealed class TrimCanvas : Control
@@ -274,6 +620,16 @@ namespace FieldCodes.Cad.Ui
 
         /// <summary>Pieces of the temporary construction easement that are kept.</summary>
         public HashSet<int> TemporaryKeep { get; set; }
+
+        /// <summary>The drafting as it will be drawn: hatch, text and the width dimension, all
+        /// at the size the drawing's annotation scale gives them.</summary>
+        public string HatchPattern { get; set; }
+        public string TemporaryHatchPattern { get; set; }
+        public double HatchSpacing { get; set; }
+        public double TextHeight { get; set; }
+        public IList<PreviewLabel> Labels { get; set; }
+        public PreviewLabel Title { get; set; }
+        public PreviewDimension Dimension { get; set; }
         public P2? Beginning { get; set; }
         public P2? Terminus { get; set; }
 
@@ -306,8 +662,10 @@ namespace FieldCodes.Cad.Ui
             if (_preview.TerminusCorner.HasValue) yield return _preview.TerminusCorner.Value;
         }
 
-        /// <summary>The band along the bottom kept for the legend.</summary>
-        private int LegendBand { get { return Font.Height + 22; } }
+        /// <summary>The band along the bottom kept for the legend, one row per line it needs.</summary>
+        private int LegendBand { get { return _legendRows * (Font.Height + 6) + 16; } }
+
+        private int _legendRows = 1;
 
         private Rectangle View { get { return new Rectangle(0, 0, Width, Math.Max(1, Height - LegendBand)); } }
 
@@ -359,6 +717,12 @@ namespace FieldCodes.Cad.Ui
 
         protected override void OnPaint(PaintEventArgs e)
         {
+            var rows = LegendRows();
+            if (rows != _legendRows)
+            {
+                _legendRows = rows;
+                if (!_userMoved) Fit();
+            }
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(BackColor);
@@ -378,8 +742,9 @@ namespace FieldCodes.Cad.Ui
                 if (path.Length < 3) continue;
                 var kept = _keep.Contains(piece.Number);
                 var hover = piece.Number == _hover;
-                using (var fill = new SolidBrush(Color.FromArgb(kept ? (hover ? 150 : 110) : (hover ? 60 : 0), DipBuilderForm.Accent)))
+                using (var fill = new SolidBrush(Color.FromArgb(kept ? (hover ? 90 : 60) : (hover ? 60 : 0), DipBuilderForm.Accent)))
                     g.FillPolygon(fill, path);
+                if (kept) PaintHatch(g, path, HatchPattern, DipBuilderForm.Ink);
                 using (var pen = new Pen(kept ? DipBuilderForm.Accent : DipBuilderForm.Muted, kept ? 2.2f : 1.4f))
                 {
                     if (!kept) pen.DashStyle = DashStyle.Dash;
@@ -393,7 +758,8 @@ namespace FieldCodes.Cad.Ui
                 {
                     var path = Path(piece.Loop);
                     if (path.Length < 3) continue;
-                    using (var fill = new SolidBrush(Color.FromArgb(35, DipBuilderForm.Accent))) g.FillPolygon(fill, path);
+                    using (var fill = new SolidBrush(Color.FromArgb(25, DipBuilderForm.Accent))) g.FillPolygon(fill, path);
+                    PaintHatch(g, path, TemporaryHatchPattern, DipBuilderForm.Muted);
                     using (var pen = new Pen(DipBuilderForm.Accent, 1.4f) { DashStyle = DashStyle.Dash }) g.DrawPolygon(pen, path);
                 }
 
@@ -438,6 +804,8 @@ namespace FieldCodes.Cad.Ui
                     g.FillEllipse(dot, s.X - 5, s.Y - 5, 10, 10);
                 }
 
+            PaintDrafting(g);
+
             // Piece numbers, only when there is a choice to make.
             if (_preview.Split.Pieces.Count > 1)
                 foreach (var piece in _preview.Split.Pieces)
@@ -463,6 +831,148 @@ namespace FieldCodes.Cad.Ui
             DrawLegend(g);
         }
 
+        /// <summary>
+        /// The drafted text and the width dimension, drawn at the size they will really be:
+        /// text too small to read here will be too small on the sheet as well.
+        /// </summary>
+        private void PaintDrafting(Graphics g)
+        {
+            if (Labels != null)
+                foreach (var label in Labels) PaintLabel(g, label, DipBuilderForm.Ink);
+            if (Title != null) PaintLabel(g, Title, DipBuilderForm.Ink);
+            if (Dimension != null) PaintDimension(g, Dimension);
+        }
+
+        private void PaintLabel(Graphics g, PreviewLabel label, Color color)
+        {
+            var px = (float)(TextHeight * _scale);
+            if (label == null || label.Lines == null || label.Lines.Count == 0) return;
+            if (px < 3.5f) return;                       // smaller than this is a smudge; zoom in to read it
+
+            var state = g.Save();
+            var at = ToScreen(label.At);
+            g.TranslateTransform(at.X, at.Y);
+            g.RotateTransform((float)(-label.Rotation * 180.0 / Math.PI));
+            // A CAD text height is the height of a capital; a font's em box is taller.
+            using (var font = new Font(Font.FontFamily, px * 1.35f, FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var brush = new SolidBrush(color))
+            {
+                var step = px * 1.5f;
+                var y = -step * label.Lines.Count / 2f;
+                foreach (var line in label.Lines)
+                {
+                    var size = g.MeasureString(line, font);
+                    g.DrawString(line, font, brush, -size.Width / 2f, y);
+                    y += step;
+                }
+            }
+            g.Restore(state);
+        }
+
+        private void PaintDimension(Graphics g, PreviewDimension dim)
+        {
+            var left = ToScreen(dim.Left);
+            var right = ToScreen(dim.Right);
+            var a = ToScreen(dim.Left + dim.Offset);
+            var b = ToScreen(dim.Right + dim.Offset);
+            using (var pen = new Pen(DipBuilderForm.Ink, 1f))
+            {
+                g.DrawLine(pen, left, a);
+                g.DrawLine(pen, right, b);
+                g.DrawLine(pen, a, b);
+                Arrow(g, pen, a, b);
+                Arrow(g, pen, b, a);
+            }
+            var px = (float)(TextHeight * _scale);
+            if (px < 3.5f || string.IsNullOrEmpty(dim.Text)) return;
+            var middle = new P2((dim.Left.X + dim.Right.X) / 2 + dim.Offset.X,
+                                (dim.Left.Y + dim.Right.Y) / 2 + dim.Offset.Y);
+            var direction = dim.Right - dim.Left;
+            PaintLabel(g, new PreviewLabel
+            {
+                At = middle + direction.Normalized().LeftNormal() * (TextHeight * 0.8),
+                Rotation = EasementCommands.Readable(Math.Atan2(direction.Y, direction.X)),
+                Lines = new List<string> { dim.Text }
+            }, DipBuilderForm.Ink);
+        }
+
+        private static void Arrow(Graphics g, Pen pen, PointF tip, PointF from)
+        {
+            var dx = from.X - tip.X;
+            var dy = from.Y - tip.Y;
+            var length = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (length < 1f) return;
+            dx /= length;
+            dy /= length;
+            const float size = 8f;
+            var baseX = tip.X + dx * size;
+            var baseY = tip.Y + dy * size;
+            using (var brush = new SolidBrush(pen.Color))
+                g.FillPolygon(brush, new[]
+                {
+                    tip,
+                    new PointF(baseX - dy * size / 3f, baseY + dx * size / 3f),
+                    new PointF(baseX + dy * size / 3f, baseY - dx * size / 3f)
+                });
+        }
+
+        /// <summary>
+        /// The hatch pattern inside one piece. The lines are drawn at the spacing the
+        /// pattern will really have, so a hatch that will plot as a solid smudge looks
+        /// like one here. Only the ANSI family's angles are known; anything else is
+        /// shown as 45-degree lines rather than guessed at.
+        /// </summary>
+        private void PaintHatch(Graphics g, PointF[] path, string pattern, Color color)
+        {
+            var name = (pattern ?? string.Empty).Trim().ToUpperInvariant();
+            if (name.Length == 0 || path.Length < 3) return;
+
+            if (name == "SOLID")
+            {
+                using (var brush = new SolidBrush(Color.FromArgb(70, color))) g.FillPolygon(brush, path);
+                return;
+            }
+
+            var spacing = (float)(HatchSpacing * _scale);
+            if (spacing < 3f) spacing = 3f;              // denser than this is a smudge on screen
+            var angles = name == "ANSI37" || name == "ANSI33" ? new[] { 45.0, -45.0 } : new[] { 45.0 };
+
+            var clip = g.Clip;
+            using (var shape = new GraphicsPath())
+            {
+                shape.AddPolygon(path);
+                g.SetClip(shape, CombineMode.Intersect);
+                using (var pen = new Pen(Color.FromArgb(130, color), 1f))
+                    foreach (var angle in angles) HatchLines(g, pen, path, angle, spacing);
+                g.Clip = clip;
+            }
+            clip.Dispose();
+        }
+
+        private static void HatchLines(Graphics g, Pen pen, PointF[] path, double degrees, float spacing)
+        {
+            float minX = path.Min(q => q.X), maxX = path.Max(q => q.X);
+            float minY = path.Min(q => q.Y), maxY = path.Max(q => q.Y);
+            var cx = (minX + maxX) / 2f;
+            var cy = (minY + maxY) / 2f;
+            var reach = (float)Math.Sqrt((maxX - minX) * (maxX - minX) + (maxY - minY) * (maxY - minY)) / 2f + spacing;
+
+            var radians = degrees * Math.PI / 180.0;
+            var dx = (float)Math.Cos(radians);
+            var dy = (float)-Math.Sin(radians);
+            var nx = -dy;
+            var ny = dx;
+
+            var steps = (int)Math.Ceiling(reach / spacing);
+            if (steps > 400) return;                     // far too dense to be worth drawing
+            for (var i = -steps; i <= steps; i++)
+            {
+                var ox = cx + nx * i * spacing;
+                var oy = cy + ny * i * spacing;
+                g.DrawLine(pen, ox - dx * reach, oy - dy * reach, ox + dx * reach, oy + dy * reach);
+            }
+        }
+
         private void DrawNorth(Graphics g)
         {
             var cx = Width - 26f;
@@ -481,24 +991,51 @@ namespace FieldCodes.Cad.Ui
             TextRenderer.DrawText(g, "N", Font, new Point((int)cx - size.Width / 2, (int)top + 20), DipBuilderForm.Ink);
         }
 
+        /// <summary>What the legend explains: how to draw each mark, and what it is called.</summary>
+        private List<KeyValuePair<Action<Graphics, int, int>, string>> LegendItems()
+        {
+            var items = new List<KeyValuePair<Action<Graphics, int, int>, string>>();
+            Action<Action<Graphics, int, int>, string> add = (mark, text) =>
+                items.Add(new KeyValuePair<Action<Graphics, int, int>, string>(mark, text));
+
+            add((g, x, y) => { using (var p = new Pen(RouteColor, 1.8f) { DashStyle = DashStyle.DashDot }) g.DrawLine(p, x, y, x + 22, y); }, "easement line");
+            add((g, x, y) => { using (var b = new SolidBrush(AngleColor)) g.FillEllipse(b, x + 6, y - 5, 10, 10); }, "angle points");
+            add((g, x, y) => { using (var p = new Pen(TrimColor, 2f)) g.DrawLine(p, x, y, x + 22, y); }, "trim lines");
+            add((g, x, y) => { using (var b = new SolidBrush(Color.FromArgb(110, DipBuilderForm.Accent))) g.FillRectangle(b, x + 2, y - 7, 18, 14); }, "kept");
+            add((g, x, y) => { using (var p = new Pen(DipBuilderForm.Muted, 1.4f) { DashStyle = DashStyle.Dash }) g.DrawRectangle(p, x + 2, y - 7, 18, 14); }, "left out");
+            if (_preview.TemporarySplit != null)
+                add((g, x, y) => { using (var p = new Pen(DipBuilderForm.Accent, 1.4f) { DashStyle = DashStyle.Dash }) g.DrawRectangle(p, x + 2, y - 7, 18, 14); }, "temporary");
+            return items;
+        }
+
+        /// <summary>How many rows the legend needs at this width. A narrow window wraps it
+        /// rather than dropping what the marks mean.</summary>
+        private int LegendRows()
+        {
+            var rows = 1;
+            var x = 16;
+            foreach (var item in LegendItems())
+            {
+                var needed = 28 + TextRenderer.MeasureText(item.Value, Font).Width + 18;
+                if (x > 16 && x + needed > Width - 8) { rows++; x = 16; }
+                x += needed;
+            }
+            return rows;
+        }
+
         private void DrawLegend(Graphics g)
         {
-            var y = View.Height + LegendBand / 2;
+            var row = 0;
             var x = 16;
-            Action<Action<int>, string> item = (mark, text) =>
+            foreach (var item in LegendItems())
             {
-                mark(x);
-                x += 28;
-                TextRenderer.DrawText(g, text, Font, new Point(x, y - Font.Height / 2), DipBuilderForm.Muted);
-                x += TextRenderer.MeasureText(text, Font).Width + 18;
-            };
-            item(at => { using (var p = new Pen(RouteColor, 1.8f) { DashStyle = DashStyle.DashDot }) g.DrawLine(p, at, y, at + 22, y); }, "easement line");
-            item(at => { using (var b = new SolidBrush(AngleColor)) g.FillEllipse(b, at + 6, y - 5, 10, 10); }, "angle points");
-            item(at => { using (var p = new Pen(TrimColor, 2f)) g.DrawLine(p, at, y, at + 22, y); }, "trim lines");
-            item(at => { using (var b = new SolidBrush(Color.FromArgb(110, DipBuilderForm.Accent))) g.FillRectangle(b, at + 2, y - 7, 18, 14); }, "kept");
-            item(at => { using (var p = new Pen(DipBuilderForm.Muted, 1.4f) { DashStyle = DashStyle.Dash }) g.DrawRectangle(p, at + 2, y - 7, 18, 14); }, "left out");
-            if (_preview.TemporarySplit != null)
-                item(at => { using (var p = new Pen(DipBuilderForm.Accent, 1.4f) { DashStyle = DashStyle.Dash }) g.DrawRectangle(p, at + 2, y - 7, 18, 14); }, "temporary");
+                var needed = 28 + TextRenderer.MeasureText(item.Value, Font).Width + 18;
+                if (x > 16 && x + needed > Width - 8) { row++; x = 16; }
+                var y = View.Height + 10 + row * (Font.Height + 6) + Font.Height / 2;
+                item.Key(g, x, y);
+                TextRenderer.DrawText(g, item.Value, Font, new Point(x + 28, y - Font.Height / 2), DipBuilderForm.Muted);
+                x += needed;
+            }
         }
 
         private int PieceAt(Point p)

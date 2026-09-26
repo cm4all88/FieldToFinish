@@ -176,6 +176,11 @@ namespace FieldCodes.Easements
         [JsonProperty("areaSqFt")] public double AreaSquareFeet { get; set; }
         [JsonProperty("acres")] public double Acres { get; set; }
 
+        /// <summary>What the drafter chose in the preview -- hatch, labels, dimensions, layers.
+        /// Null (or a missing field) follows the office profile, so a rebuild picks up a profile
+        /// change the drafter did not override.</summary>
+        [JsonProperty("drafting", NullValueHandling = NullValueHandling.Ignore)] public EasementDrafting Drafting { get; set; }
+
         [JsonProperty("warnings")] public List<string> Warnings { get; set; }
         [JsonProperty("drafted")] public List<string> DraftedHandles { get; set; }
 

@@ -109,6 +109,7 @@ namespace FtfRealWorld
                                 foreach (var d in e.RouteCourses ?? new List<FieldCodes.Easements.CourseData>()) sb.AppendLine("  route " + CourseText(d));
                                 foreach (var d in e.BoundaryCourses ?? new List<FieldCodes.Easements.CourseData>()) sb.AppendLine("  boundary " + CourseText(d));
                                 foreach (var hatch in HatchesOf(tr, db, e.Id)) sb.AppendLine("  hatch " + hatch);
+                                foreach (var layer in LayersOf(tr, db, e)) sb.AppendLine("  layer " + layer);
                                 var lotLines = typeof(FieldCodes.Easements.EasementRecord).GetProperty("LotLines");
                                 var lines = lotLines == null ? null : lotLines.GetValue(e, null) as System.Collections.ICollection;
                                 if (lines != null) sb.AppendLine("  lot lines " + lines.Count);
@@ -282,6 +283,35 @@ namespace FtfRealWorld
         {
             var p = typeof(FieldCodes.Exhibits.ExhibitRecord).GetProperty("StampBlock");
             return p == null ? null : p.GetValue(x, null) as string;
+        }
+
+        /// <summary>
+        /// The layers this easement's drafted objects went on, with what each layer looks like, so a run shows both
+        /// the office layer names and the colour a layer FTF had to create took from its family.
+        /// </summary>
+        private static IEnumerable<string> LayersOf(Transaction tr, Database db, FieldCodes.Easements.EasementRecord e)
+        {
+            var names = new List<string>();
+            foreach (var handle in e.DraftedHandles ?? new List<string>())
+            {
+                long value;
+                ObjectId oid;
+                if (!long.TryParse(handle, System.Globalization.NumberStyles.HexNumber, C, out value)) continue;
+                if (!db.TryGetObjectId(new Handle(value), out oid) || oid.IsErased) continue;
+                var entity = tr.GetObject(oid, OpenMode.ForRead) as Entity;
+                if (entity != null && !names.Contains(entity.Layer)) names.Add(entity.Layer);
+            }
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+            var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            var result = new List<string>();
+            foreach (var name in names)
+            {
+                if (!table.Has(name)) { result.Add(name + " (not in the drawing)"); continue; }
+                var layer = (LayerTableRecord)tr.GetObject(table[name], OpenMode.ForRead);
+                var linetype = ((LinetypeTableRecord)tr.GetObject(layer.LinetypeObjectId, OpenMode.ForRead)).Name;
+                result.Add(string.Format(C, "{0} colour {1} linetype {2}", name, layer.Color.ColorIndex, linetype));
+            }
+            return result;
         }
 
         /// <summary>The easement's model-space hatches: pattern, pattern scale and line spacing (drawing units).</summary>

@@ -53,7 +53,7 @@ $x.FitMargin = 0.08               # the office exhibits fill the viewport closel
 # First match wins. Parcel, ROW, section and control layers have no Hide rule: they stay as context.
 # Office exhibits show no topography; the survey base's topo, TIN and point layers are hidden, improvements (V-SURF) only where
 # they are a source of the easement (an excluded building, say). V-TEXT-ESMT/FEE/TCE hold other exhibits' labels (Kenmore).
-$x.ViewportLayerRules = 'V-ESMT-E=Relevant; V-ESMT-TEMP-E=Relevant; V-ESMT-CONS-E=Relevant; V-CTRL-PMX_-PNTS-E=Show; V-CTRL-OTHE-PNTS-E=Hide; *-PNTS-E=Hide; V-TOPO-*=Hide; V-TINN-*=Hide; V-SURF-*=Relevant; C-BNDY-LIMT*=Hide; V-TEXT-ESMT*=Hide; V-TEXT-FEE*=Hide; V-TEXT-TCE*=Hide'
+$x.ViewportLayerRules = 'V-ESMT-*=Relevant; V-CTRL-PMX_-PNTS-E=Show; V-CTRL-OTHE-PNTS-E=Hide; *-PNTS-E=Hide; V-TOPO-*=Hide; V-TINN-*=Hide; V-SURF-*=Relevant; C-BNDY-LIMT*=Hide; V-TEXT-ESMT*=Hide; V-TEXT-FEE*=Hide; V-TEXT-TCE*=Hide'
 
 # Annotation: Survey text (romans, 0.75 wide) at 0.08; leaders xPMX SURV Text Arrow Anno; dimensions PMX SURV ANNO.
 $x.TextStyle = 'Survey'; $x.TextHeightIn = 0.08
@@ -76,13 +76,23 @@ $x.NotesX = 1.12; $x.NotesY = 2.0; $x.Notes = ''
 
 # Easement drafting in model space: the office's layer and hatch for the permanent easement, its area wording.
 $e = $s.Easements
-$e.BoundaryLayer = 'V-ESMT-E'
-# The office template defines V-ESMT-E (cyan, HIDDEN2) and V-ESMT-TEXT-E for easements; temporary and construction-area
-# outlines go there too (told apart by hatch), and FTF's model labels, dimensions and tables share the text layer.
-$e.TemporaryLayer = 'V-ESMT-E'; $e.AreaLayer = 'V-ESMT-E'
-$e.TextLayer = 'V-ESMT-TEXT-E'; $e.DimensionLayer = 'V-ESMT-TEXT-E'; $e.TableLayer = 'V-ESMT-TEXT-E'
+# The V-ESMT family, one sub-layer per kind of object, so an exhibit can show the permanent easement and hide the
+# temporary one in its viewport (as the Kenmore exhibits do with their own per-easement layers).
+$e.BoundaryLayer = 'V-ESMT-E'; $e.SidelineLayer = 'V-ESMT-E'; $e.CenterlineLayer = 'V-ESMT-CNTR-E'
+$e.HatchLayer = 'V-ESMT-PATT-E'
+$e.TextLayer = 'V-ESMT-TEXT-E'; $e.DimensionLayer = 'V-ESMT-DIMS-E'; $e.TableLayer = 'V-ESMT-TABL-E'
+$e.TemporaryLayer = 'V-ESMT-TEMP-E'; $e.TemporaryHatchLayer = 'V-ESMT-TEMP-PATT-E'
+$e.TemporaryTextLayer = 'V-ESMT-TEMP-TEXT-E'; $e.TemporaryDimensionLayer = 'V-ESMT-TEMP-DIMS-E'
+$e.AreaLayer = 'V-ESMT-CONS-E'
 $e.HatchPattern = 'ANSI31'
-$e.HatchLayer = 'V-ESMT-E'
+# A temporary construction easement is hatched in its own pattern, as the Kenmore TCE is.
+$e.TemporaryHatchPattern = 'ANSI37'
+# Width dimensions use the office survey dimension style, in model space as well as on the sheet.
+$e.DimensionStyleOverride = 'PMX SURV ANNO'
+
+# Recorded surveys (FTFRECORD): the office survey text style. Layers keep FTF's defaults, which are the office
+# V-PROP/V-ALGN/V-ESMT names; no PMX label style is named until one is measured from a drawing.
+$s.RecordSurvey.TextStyle = 'Survey'
 $e.HatchScale = 0.25              # ANSI31 at 0.25 per plotted inch, as the office hatch reads at 1" = 60'
 $e.AskTableLocation = $false        # model-space tables are hidden in the exhibit viewport; do not stop to ask where they go
 $e.AreaFormat = 'APPROX {purpose} EASEMENT AREA = {sqft} SF'   # reference reads APPROX EASEMENT AREA; the purpose tells a permanent and a temporary easement apart on one sheet
