@@ -437,6 +437,7 @@ namespace FieldCodes.Cad.Ui
             _canvas.TemporaryHatchPattern = Chosen.TemporaryHatchPattern;
             _canvas.Labels = new List<PreviewLabel>();
             _canvas.Title = null;
+            _canvas.Area = null;
             _canvas.Dimension = null;
             if (merged != null && parts != null && parts.Count > 0) BuildDraftingPreview(merged, parts);
 
@@ -471,15 +472,22 @@ namespace FieldCodes.Cad.Ui
             var longest = parts.OrderByDescending(EasementBuilder.RouteLength).First();
             var outer = _preview.TemporaryWidth ?? _preview.Width;
 
-            // Title and area, along the middle of the strip.
+            // The title on a leader and the area beside the easement, where the command puts
+            // them: clear of the hatch and of the course labels.
             P2 direction;
-            var middle = EasementAnnotation.LabelPoint(longest, _preview.Width, out direction);
-            if (!StripTrim.Inside(boundary, middle)) middle = StripTrim.PointInside(boundary, _preview.Tolerance);
-            var titleLines = new List<string> { _title.Text };
-            titleLines.AddRange(_area.Text.Split('\n'));
+            var anchor = EasementAnnotation.LabelPoint(longest, _preview.Width, out direction);
+            if (!StripTrim.Inside(boundary, anchor)) anchor = StripTrim.PointInside(boundary, _preview.Tolerance);
+            var away = direction.LeftNormal();
+            var titleAt = anchor + away * (outer.Left + height * 2.0);
             _canvas.Title = new PreviewLabel
             {
-                At = middle, Rotation = EasementCommands.Readable(Math.Atan2(direction.Y, direction.X)), Lines = titleLines
+                At = titleAt, Rotation = 0, Masked = es.LabelMask, LeaderFrom = anchor,
+                Lines = new List<string> { _title.Text }
+            };
+            _canvas.Area = new PreviewLabel
+            {
+                At = titleAt + away * (height * 2.0), Rotation = 0, Masked = es.LabelMask,
+                Lines = _area.Text.Split('\n').ToList()
             };
 
             if (es.LabelMode != EasementLabelMode.None)
@@ -532,7 +540,8 @@ namespace FieldCodes.Cad.Ui
             {
                 At = mid + dir.LeftNormal() * offset,
                 Rotation = EasementCommands.Readable(Math.Atan2(dir.Y, dir.X)),
-                Lines = lines
+                Lines = lines,
+                Masked = Chosen.LabelMask
             });
         }
 
@@ -590,6 +599,12 @@ namespace FieldCodes.Cad.Ui
         public P2 At;
         public double Rotation;
         public IList<string> Lines;
+
+        /// <summary>Drawn with the office's background mask behind it.</summary>
+        public bool Masked;
+
+        /// <summary>Set when the text is on a leader: the point the leader runs to.</summary>
+        public P2? LeaderFrom;
     }
 
     /// <summary>The width dimension: across the strip, with its dimension line offset along it.</summary>
@@ -629,6 +644,7 @@ namespace FieldCodes.Cad.Ui
         public double TextHeight { get; set; }
         public IList<PreviewLabel> Labels { get; set; }
         public PreviewLabel Title { get; set; }
+        public PreviewLabel Area { get; set; }
         public PreviewDimension Dimension { get; set; }
         public P2? Beginning { get; set; }
         public P2? Terminus { get; set; }
@@ -840,6 +856,7 @@ namespace FieldCodes.Cad.Ui
             if (Labels != null)
                 foreach (var label in Labels) PaintLabel(g, label, DipBuilderForm.Ink);
             if (Title != null) PaintLabel(g, Title, DipBuilderForm.Ink);
+            if (Area != null) PaintLabel(g, Area, DipBuilderForm.Ink);
             if (Dimension != null) PaintDimension(g, Dimension);
         }
 
@@ -849,8 +866,12 @@ namespace FieldCodes.Cad.Ui
             if (label == null || label.Lines == null || label.Lines.Count == 0) return;
             if (px < 3.5f) return;                       // smaller than this is a smudge; zoom in to read it
 
-            var state = g.Save();
             var at = ToScreen(label.At);
+            if (label.LeaderFrom.HasValue)
+                using (var pen = new Pen(color, 1f))
+                    g.DrawLine(pen, ToScreen(label.LeaderFrom.Value), at);
+
+            var state = g.Save();
             g.TranslateTransform(at.X, at.Y);
             g.RotateTransform((float)(-label.Rotation * 180.0 / Math.PI));
             // A CAD text height is the height of a capital; a font's em box is taller.
@@ -858,7 +879,13 @@ namespace FieldCodes.Cad.Ui
             using (var brush = new SolidBrush(color))
             {
                 var step = px * 1.5f;
-                var y = -step * label.Lines.Count / 2f;
+                var widest = label.Lines.Max(line => g.MeasureString(line, font).Width);
+                var top = -step * label.Lines.Count / 2f;
+                if (label.Masked)
+                    using (var back = new SolidBrush(BackColor))
+                        g.FillRectangle(back, -widest / 2f - px * 0.25f, top - px * 0.25f,
+                                        widest + px * 0.5f, step * label.Lines.Count + px * 0.5f);
+                var y = top;
                 foreach (var line in label.Lines)
                 {
                     var size = g.MeasureString(line, font);

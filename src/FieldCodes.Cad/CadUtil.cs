@@ -175,6 +175,42 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>
+        /// The background mask the office puts behind its labels: on, 1.5x the text box,
+        /// filled with the drawing's background colour, so a label reads over a hatch. Does
+        /// nothing when the office has turned masks off.
+        /// </summary>
+        public static void Mask(MText text, bool on)
+        {
+            if (text == null) return;
+            text.BackgroundFill = on;
+            if (!on) return;
+            text.UseBackgroundColor = true;
+            text.BackgroundScaleFactor = 1.5;
+        }
+
+        /// <summary>
+        /// A colour from an office setting: an ACI number (1..255) or one of the seven
+        /// names AutoCAD gives the first colours. Null when the setting is empty or is not
+        /// one FTF can read -- the caller then leaves the object ByLayer rather than
+        /// guessing at what was meant.
+        /// </summary>
+        public static Autodesk.AutoCAD.Colors.Color ColorFrom(string setting)
+        {
+            var text = (setting ?? string.Empty).Trim();
+            if (text.Length == 0) return null;
+
+            short index;
+            if (short.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out index))
+                return index >= 0 && index <= 256 ? Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, index) : null;
+
+            var names = new[] { "red", "yellow", "green", "cyan", "blue", "magenta", "white" };
+            for (var i = 0; i < names.Length; i++)
+                if (string.Equals(text, names[i], StringComparison.OrdinalIgnoreCase))
+                    return Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, (short)(i + 1));
+            return null;
+        }
+
+        /// <summary>
         /// A leader-only multileader from the anchor to the label box corner. The
         /// office standard: anything with a leader is an MLEADER entity, never the
         /// legacy Leader. Content-free on purpose -- the label text is its own
@@ -212,7 +248,7 @@ namespace FieldCodes.Cad
                                                ObjectId styleId, ObjectId layerId,
                                                Point3d textLocation, Point3d anchor)
         {
-            return NewLeaderedLabel(db, tr, contents, textHeight, styleId, layerId, textLocation, anchor, ObjectId.Null);
+            return NewLeaderedLabel(db, tr, contents, textHeight, styleId, layerId, textLocation, anchor, ObjectId.Null, false);
         }
 
         /// <summary>As above with a named multileader style (<paramref name="leaderStyleId"/>); Null uses the current one.</summary>
@@ -220,6 +256,15 @@ namespace FieldCodes.Cad
                                                string contents, double textHeight,
                                                ObjectId styleId, ObjectId layerId,
                                                Point3d textLocation, Point3d anchor, ObjectId leaderStyleId)
+        {
+            return NewLeaderedLabel(db, tr, contents, textHeight, styleId, layerId, textLocation, anchor, leaderStyleId, false);
+        }
+
+        /// <summary>As above, with the office's background mask behind the text.</summary>
+        public static MLeader NewLeaderedLabel(Database db, Transaction tr,
+                                               string contents, double textHeight,
+                                               ObjectId styleId, ObjectId layerId,
+                                               Point3d textLocation, Point3d anchor, ObjectId leaderStyleId, bool mask)
         {
             var leader = new MLeader();
             leader.SetDatabaseDefaults(db);
@@ -234,6 +279,7 @@ namespace FieldCodes.Cad
                 text.Contents = contents;
                 text.TextHeight = textHeight;
                 text.Location = textLocation;
+                Mask(text, mask);
                 leader.MText = text;
             }
             leader.TextLocation = textLocation;

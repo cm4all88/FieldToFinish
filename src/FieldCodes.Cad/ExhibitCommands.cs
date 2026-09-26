@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -942,6 +942,16 @@ namespace FieldCodes.Cad
                 var action = ExhibitSettings.ActionFor(rules, layer.Name);
                 if (action != null) byLayer[layer.Name] = action;
             }
+
+            // The sheet draws this exhibit's own course labels, point labels, area, tables and width
+            // dimensions itself, placed for this sheet. FTF's model-space wording for the same
+            // easements is therefore hidden in this viewport, or every label would read twice. Only
+            // the layers FTF drafts onto are touched; anything else the office keeps there stays.
+            var ftfAnnotation = FtfAnnotationLayers().Where(table.Has).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var name in ftfAnnotation) byLayer[name] = ExhibitSettings.Hide;
+            if (ftfAnnotation.Count > 0)
+                Note("Info", "VIEWPORT", "This sheet draws the course labels, area and dimensions itself, so FTF's model-space wording for the same easements is hidden in this viewport: " +
+                     string.Join(", ", ftfAnnotation.ToArray()) + ". Model space is unchanged.");
             var relevance = LayerRelevance(byLayer.Where(kv => kv.Value == ExhibitSettings.Relevant).Select(kv => kv.Key).ToList(), vp);
 
             var freeze = new ObjectIdCollection();
@@ -1177,6 +1187,18 @@ namespace FieldCodes.Cad
             public int Related;
             public int Unrelated;
             public int Other;
+        }
+
+        /// <summary>The layers FTF drafts its own easement wording onto -- what this sheet redraws.</summary>
+        private IEnumerable<string> FtfAnnotationLayers()
+        {
+            foreach (var r in _records)
+            {
+                var es = EasementCommands.EsFor(r, _settings);
+                yield return r.IsTemporary ? es.TemporaryText() : es.TextLayer;
+                yield return r.IsTemporary ? es.TemporaryDimensions() : es.DimensionLayer;
+                yield return es.TableLayer;
+            }
         }
 
         /// <summary>

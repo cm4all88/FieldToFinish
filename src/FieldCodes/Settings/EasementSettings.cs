@@ -49,6 +49,21 @@ namespace FieldCodes.Settings
         /// <summary>Purpose written in a temporary construction easement's title.</summary>
         [JsonProperty("temporaryPurpose")] public string TemporaryPurpose { get; set; }
 
+        /// <summary>
+        /// A background mask behind FTF's easement labels, as every label in the office
+        /// exhibits has (mask on, 1.5x, the drawing's background colour). Without it the
+        /// hatch reads straight through the text.
+        /// </summary>
+        [JsonProperty("labelMask")] public bool LabelMask { get; set; }
+
+        /// <summary>
+        /// Colour for the easement hatch itself, on the object rather than from its layer
+        /// (an ACI number or a colour name; empty leaves it ByLayer). The office exhibits
+        /// set the permanent easement's hatch red and leave the temporary one ByLayer.
+        /// </summary>
+        [JsonProperty("hatchColor")] public string HatchColor { get; set; }
+        [JsonProperty("temporaryHatchColor")] public string TemporaryHatchColor { get; set; }
+
         [JsonProperty("drawCenterline")] public bool DrawCenterline { get; set; }
         [JsonProperty("drawSidelines")] public bool DrawSidelines { get; set; }
         [JsonProperty("drawHatch")] public bool DrawHatch { get; set; }
@@ -133,6 +148,9 @@ namespace FieldCodes.Settings
             AreaAreaFormat = "APPROX. {purpose} AREA = {sqft} SF";
             AreaLegalFormat = "SAID {purpose} AREA CONTAINING {sqft} SQUARE FEET, MORE OR LESS.";
 
+            LabelMask = true;
+            HatchColor = string.Empty;
+            TemporaryHatchColor = string.Empty;
             DrawCenterline = false;
             DrawSidelines = false;
             DrawHatch = true;

@@ -837,6 +837,7 @@ namespace FieldCodes.Cad
                 text.Location = new Point3d(at.X, at.Y, 0);
                 text.Rotation = rotation;
                 text.Contents = string.Join("\\P", lines.Where(l => !string.IsNullOrEmpty(l)).Select(EasementCommands.Escape).ToArray());
+                CadUtil.Mask(text, _settings.Easements.LabelMask);
                 Add(text, FtfEntityKind.EasementText, _settings.Easements.TextLayer);
             }
 
@@ -867,7 +868,8 @@ namespace FieldCodes.Cad
                 var at = point + away * (TextHeight * 8.0);
                 var entity = CadUtil.NewLeaderedLabel(_db, _tr, EasementCommands.Escape(text), TextHeight, _style,
                                                       ProductionLayers.Get(_db, _tr, _settings.Easements.TextLayer, _settings),
-                                                      new Point3d(at.X, at.Y, 0), new Point3d(point.X, point.Y, 0));
+                                                      new Point3d(at.X, at.Y, 0), new Point3d(point.X, point.Y, 0),
+                                                      ObjectId.Null, _settings.Easements.LabelMask);
                 Ownership.Stamp(entity, _record.Id, _version, FtfEntityKind.EasementText, null, _record.Title);
                 _drafted.Add(entity.Handle.ToString());
             }
@@ -876,7 +878,7 @@ namespace FieldCodes.Cad
             {
                 EasementComposition.DraftRegions(_db, _tr, _ed, composed, Add, layer, hatch, pattern, hatchLayer,
                     _settings.Easements.HatchScale * CadUtil.DrawingUnitsPerPlottedUnit(_db), _settings.Easements.TextLayer, _style, TextHeight,
-                    _settings.Easements.ToleranceFt * _settings.General.UnitsPerFoot);
+                    _settings.Easements.ToleranceFt * _settings.General.UnitsPerFoot, _settings.Easements.LabelMask);
             }
 
             public void Finish()

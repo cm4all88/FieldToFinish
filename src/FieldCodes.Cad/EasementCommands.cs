@@ -843,7 +843,7 @@ namespace FieldCodes.Cad
             {
                 outline = EasementComposition.DraftRegions(db, tr, ed, composed, add, temporary ? es.TemporaryLayer : es.BoundaryLayer,
                     temporary ? !string.IsNullOrWhiteSpace(pattern) : es.DrawHatch, pattern, temporary ? es.TemporaryHatch() : es.HatchLayer,
-                    es.HatchScale * scale, temporary ? es.TemporaryText() : es.TextLayer, styleId, textHeight, es.ToleranceFt * settings.General.UnitsPerFoot);
+                    es.HatchScale * scale, temporary ? es.TemporaryText() : es.TextLayer, styleId, textHeight, es.ToleranceFt * settings.General.UnitsPerFoot, es.LabelMask);
             }
 
             // A temporary construction easement shares the easement's centerline, sidelines and
@@ -871,6 +871,10 @@ namespace FieldCodes.Cad
                     var hatch = new Hatch();
                     hatch.SetDatabaseDefaults(db);
                     add(hatch, FtfEntityKind.EasementHatch, temporary ? es.TemporaryHatch() : es.HatchLayer);
+                    // The office sets the permanent easement's hatch colour on the object and leaves the
+                    // temporary one ByLayer; an empty setting leaves it ByLayer here too.
+                    var colour = CadUtil.ColorFrom(temporary ? es.TemporaryHatchColor : es.HatchColor);
+                    if (colour != null) hatch.Color = colour;
                     hatch.PatternScale = es.HatchScale * scale;
                     hatch.SetHatchPattern(HatchPatternType.PreDefined, pattern);
                     hatch.Associative = false;
@@ -887,22 +891,36 @@ namespace FieldCodes.Cad
                 }
             }
 
-            // Title and area in the middle of the strip, reading along it.
+            // The title and the area are kept off the plan, as the office exhibits keep them: the
+            // title on a leader pointing at the easement, the area on its own horizontal line beside
+            // it. Written across the strip they would sit on the hatch and on the course labels.
             P2 direction;
-            var middle = EasementAnnotation.LabelPoint(longest, record.Width, out direction);
-            if (trimmed && !StripTrim.Inside(boundary, middle)) middle = StripTrim.PointInside(boundary, es.ToleranceFt * settings.General.UnitsPerFoot);
-            // The temporary easement's title sits outside it, beside the easement's own.
-            if (temporary) middle = middle - direction.LeftNormal() * (record.Width.Right + textHeight * 3.0);
-            var title = new MText();
-            title.SetDatabaseDefaults(db);
-            if (!styleId.IsNull) title.TextStyleId = styleId;
-            title.TextHeight = textHeight;
-            title.Attachment = AttachmentPoint.MiddleCenter;
-            title.Location = new Point3d(middle.X, middle.Y, 0);
-            title.Rotation = Readable(Math.Atan2(direction.Y, direction.X));
-            title.Contents = string.Join("\\P", new[] { record.Title }
-                .Concat(EasementAnnotation.AreaLines(record.AreaSquareFeet, es, record.Purpose)).Select(Escape).ToArray());
-            add(title, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
+            var anchor = EasementAnnotation.LabelPoint(longest, record.Width, out direction);
+            if (trimmed && !StripTrim.Inside(boundary, anchor)) anchor = StripTrim.PointInside(boundary, es.ToleranceFt * settings.General.UnitsPerFoot);
+            var textLayer = record.IsTemporary ? es.TemporaryText() : es.TextLayer;
+            var outward = direction.LeftNormal() * (temporary ? -1.0 : 1.0);
+            // Clear of the easement, and of any temporary easement around it. The temporary
+            // easement's own wording goes out the other side so the two do not meet.
+            var clearance = (temporary ? record.Width.Right : (outerWidth ?? record.Width).Left) + textHeight * 2.0;
+            var titleAt = anchor + outward * clearance;
+
+            var callout = CadUtil.NewLeaderedLabel(db, tr, Escape(record.Title), textHeight, styleId,
+                                                   ProductionLayers.Get(db, tr, textLayer, settings),
+                                                   new Point3d(titleAt.X, titleAt.Y, 0), new Point3d(anchor.X, anchor.Y, 0),
+                                                   ObjectId.Null, es.LabelMask);
+            Ownership.Stamp(callout, record.Id, version, FtfEntityKind.EasementText, null, record.Title);
+            drafted.Add(callout.Handle.ToString());
+
+            var areaText = new MText();
+            areaText.SetDatabaseDefaults(db);
+            if (!styleId.IsNull) areaText.TextStyleId = styleId;
+            areaText.TextHeight = textHeight;
+            areaText.Attachment = AttachmentPoint.TopLeft;
+            var areaAt = titleAt + outward * (textHeight * 2.0);
+            areaText.Location = new Point3d(areaAt.X, areaAt.Y, 0);
+            areaText.Contents = string.Join("\\P", EasementAnnotation.AreaLines(record.AreaSquareFeet, es, record.Purpose).Select(Escape).ToArray());
+            CadUtil.Mask(areaText, es.LabelMask);
+            add(areaText, FtfEntityKind.EasementText, textLayer);
 
             if (es.DrawWidthDimensions)
                 DrawWidthDimension(db, tr, ed, es, record, longest, boundary, add, scale, es.ToleranceFt * settings.General.UnitsPerFoot,
@@ -985,6 +1003,7 @@ namespace FieldCodes.Cad
                 text.Location = new Point3d(at.X, at.Y, 0);
                 text.Rotation = Readable(Math.Atan2(dir.Y, dir.X));
                 text.Contents = string.Join("\\P", lines.Select(Escape).ToArray());
+                CadUtil.Mask(text, es.LabelMask);
                 add(text, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
             }
         }
@@ -1021,6 +1040,7 @@ namespace FieldCodes.Cad
                 text.Location = new Point3d(at.X, at.Y, 0);
                 text.Rotation = Readable(Math.Atan2(dir.Y, dir.X));
                 text.Contents = string.Join("\\P", lines.Select(Escape).ToArray());
+                CadUtil.Mask(text, es.LabelMask);
                 add(text, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
             }
 
@@ -1046,7 +1066,8 @@ namespace FieldCodes.Cad
                 if (string.IsNullOrWhiteSpace(text)) return;
                 var at = point + away * reach;
                 var entity = CadUtil.NewLeaderedLabel(db, tr, Escape(text), textHeight, styleId, layerId,
-                                                      new Point3d(at.X, at.Y, 0), new Point3d(point.X, point.Y, 0));
+                                                      new Point3d(at.X, at.Y, 0), new Point3d(point.X, point.Y, 0),
+                                                      ObjectId.Null, es.LabelMask);
                 Ownership.Stamp(entity, record.Id, version, FtfEntityKind.EasementText, null, record.Title);
                 drafted.Add(entity.Handle.ToString());
             };
@@ -1083,6 +1104,7 @@ namespace FieldCodes.Cad
                 tag.Location = new Point3d(at.X, at.Y, 0);
                 tag.Rotation = Readable(Math.Atan2(dir.Y, dir.X));
                 tag.Contents = Escape(d.Id);
+                CadUtil.Mask(tag, es.LabelMask);
                 add(tag, FtfEntityKind.EasementText, record.IsTemporary ? es.TemporaryText() : es.TextLayer);
             }
             Tables(db, tr, ed, record.BoundaryCourses, boundary, es, textHeight, add, tablePosition);

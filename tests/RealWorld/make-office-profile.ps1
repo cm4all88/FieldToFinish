@@ -1,4 +1,4 @@
-# Writes the "PMX SURVEY EXHIBIT" FTF profile from the office's own exhibit standard, as measured
+﻿# Writes the "PMX SURVEY EXHIBIT" FTF profile from the office's own exhibit standard, as measured
 # from delivered exhibits and the office templates (see tests\RealWorld\OFFICE-STANDARD.md).
 # The generic FTF defaults are not changed; this is a separate named profile.
 #   make-office-profile.ps1 [-Out <file>]   (default: config\profiles\PMX SURVEY EXHIBIT.json)
@@ -87,6 +87,9 @@ $e.AreaLayer = 'V-ESMT-CONS-E'
 $e.HatchPattern = 'ANSI31'
 # A temporary construction easement is hatched in its own pattern, as the Kenmore TCE is.
 $e.TemporaryHatchPattern = 'ANSI37'
+# The reference exhibits set the permanent easement's hatch colour on the object (red) and leave the
+# temporary one ByLayer: dumps\SV-2169171001-ESMT-28052700104100.txt hatch "... associative True color red".
+$e.HatchColor = 'red'
 # Width dimensions use the office survey dimension style, in model space as well as on the sheet.
 $e.DimensionStyleOverride = 'PMX SURV ANNO'
 

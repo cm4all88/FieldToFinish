@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -287,7 +287,7 @@ namespace FieldCodes.Cad
         /// </summary>
         internal static Polyline DraftRegions(Database db, Transaction tr, Editor ed, Composed composed, Action<AcEntity, FtfEntityKind, string> add,
                                               string outlineLayer, bool hatch, string pattern, string hatchLayer, double hatchScale,
-                                              string textLayer, ObjectId textStyle, double textHeight, double tolerance)
+                                              string textLayer, ObjectId textStyle, double textHeight, double tolerance, bool mask)
         {
             Polyline primaryOutline = null;
             var regions = new List<KeyValuePair<string, RegionShape>> { new KeyValuePair<string, RegionShape>(null, composed.Primary) };
@@ -315,6 +315,7 @@ namespace FieldCodes.Cad
                     tag.Attachment = AttachmentPoint.MiddleCenter;
                     tag.Location = new Point3d(at.X, at.Y, 0);
                     tag.Contents = kv.Key ?? "A";
+                    CadUtil.Mask(tag, mask);
                     add(tag, FtfEntityKind.EasementText, textLayer);
                 }
             }

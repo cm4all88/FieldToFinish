@@ -156,11 +156,23 @@ namespace FtfRealWorld
             var e = tr.GetObject(id, OpenMode.ForRead) as Entity;
             if (e == null) return;
             var mt = e as MText;
-            if (mt != null) { w(string.Format(C, "{0} MTEXT layer {1} style {2} h {3:0.###} rot {4:0.#} at {5:0.###},{6:0.###} attach {7} w {8:0.###} mask {9}: {10}", where, e.Layer, Name(tr, mt.TextStyleId), mt.TextHeight, mt.Rotation * 180 / Math.PI, mt.Location.X, mt.Location.Y, mt.Attachment, mt.Width, mt.BackgroundFill, Clip(mt.Contents))); return; }
+            if (mt != null) { w(string.Format(C, "{0} MTEXT layer {1} style {2} h {3:0.###} rot {4:0.#} at {5:0.###},{6:0.###} attach {7} w {8:0.###} mask {9}: {10}", where, e.Layer, Name(tr, mt.TextStyleId), mt.TextHeight, mt.Rotation * 180 / Math.PI, mt.Location.X, mt.Location.Y, mt.Attachment, mt.Width, Mask(mt), Clip(mt.Contents))); return; }
             var t = e as DBText;
             if (t != null) { w(string.Format(C, "{0} TEXT layer {1} style {2} h {3:0.###} rot {4:0.#} at {5:0.###},{6:0.###} just {7}: {8}", where, e.Layer, Name(tr, t.TextStyleId), t.Height, t.Rotation * 180 / Math.PI, t.Position.X, t.Position.Y, t.Justify, Clip(t.TextString))); return; }
             var ml = e as MLeader;
-            if (ml != null) { w(string.Format(C, "{0} MLEADER layer {1} style {2} scale {3} arrow {4} text h {5}: {6}", where, e.Layer, Name(tr, ml.MLeaderStyle), ml.Scale, ml.ArrowSize, ml.MText == null ? 0 : ml.MText.TextHeight, ml.MText == null ? "" : Clip(ml.MText.Contents))); return; }
+            if (ml != null)
+            {
+                // Where the text sits and where the arrow lands: what tells a callout beside the
+                // plan apart from one written across it.
+                var at = ml.TextLocation;
+                var arrow = "-";
+                try { if (ml.LeaderCount > 0) arrow = string.Format(C, "{0:0.###},{1:0.###}", ml.GetFirstVertex(0).X, ml.GetFirstVertex(0).Y); }
+                catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                w(string.Format(C, "{0} MLEADER layer {1} style {2} scale {3} arrow {4} text h {5} at {6:0.###},{7:0.###} points to {8} mask {9}: {10}",
+                    where, e.Layer, Name(tr, ml.MLeaderStyle), ml.Scale, ml.ArrowSize, ml.MText == null ? 0 : ml.MText.TextHeight,
+                    at.X, at.Y, arrow, ml.MText == null ? "-" : Mask(ml.MText), ml.MText == null ? "" : Clip(ml.MText.Contents)));
+                return;
+            }
             var ld = e as Leader;
             if (ld != null) { w(string.Format(C, "{0} LEADER layer {1} dimstyle {2} vertices {3}", where, e.Layer, Name(tr, ld.DimensionStyle), ld.NumVertices)); return; }
             var d = e as Dimension;
@@ -335,6 +347,14 @@ namespace FtfRealWorld
         }
 
         private static double SafeArea(Hatch h) { try { return h.Area; } catch (Autodesk.AutoCAD.Runtime.Exception) { return -1; } }
+        /// <summary>An MText's background mask: off, or on with its size factor and fill colour.</summary>
+        private static string Mask(MText mt)
+        {
+            if (mt == null || !mt.BackgroundFill) return "False";
+            var colour = mt.UseBackgroundColor ? "drawing background" : (mt.BackgroundFillColor == null ? "?" : mt.BackgroundFillColor.ColorNameForDisplay);
+            return string.Format(C, "True x{0:0.##} {1}", mt.BackgroundScaleFactor, colour);
+        }
+
         private static string Clip(string s) { s = (s ?? "").Replace("\r", " ").Replace("\n", " "); return s.Length > 160 ? s.Substring(0, 160) + "..." : s; }
 
         private static string Name(Transaction tr, ObjectId id)
