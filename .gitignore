@@ -70,3 +70,6 @@ checkpoints/**/source.tar.gz
 
 # Screenshots the UI test runs write (rewritten every run)
 tests/LiveSmoke/ui/*.png
+
+# The record suite's output beside the seed drawing
+tests/LiveSmoke/seedrecord.*
