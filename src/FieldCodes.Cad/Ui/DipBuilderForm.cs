@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -1810,6 +1810,11 @@ namespace FieldCodes.Cad.Ui
             public string Material;
             public ObservedDirection Direction;
             public MeasurementReference Reference;
+
+            /// <summary>True when the drafter picked the reference in the panel rather than leaving
+            /// the office convention to supply it. From the table this is false: a cell the drafter
+            /// changed is handled by the change itself.</summary>
+            public bool ReferenceFromDrafter;
             public FlowRole Role;
             public List<string> Conditions;
             public string Notes;
@@ -1851,7 +1856,9 @@ namespace FieldCodes.Cad.Ui
                               : pipe.Reference == MeasurementReference.TopOfPipe ? MeasurementReference.Invert : pipe.Reference;
 
                 var before = ConnectionFinder.Describe(pipe) + " MD " + Num(pipe.MeasuredDip) + " " + pipe.Reference;
-                var confirming = pipe.ReferenceUnconfirmed && reference != MeasurementReference.Unspecified;
+                var confirming = (pipe.ReferenceUnconfirmed ||
+                                  (edit.ReferenceFromDrafter && pipe.ReferenceBasis == ReferenceBasis.FieldNoteConvention)) &&
+                                 reference != MeasurementReference.Unspecified;
                 var referenceChanged = !confirming && pipe.Reference != reference;
                 var measurementChanged = pipe.WidthIn != width || pipe.HeightIn != (height ?? width) || pipe.Shape != shape ||
                                          (pipe.Material ?? string.Empty) != material || pipe.MeasuredDip != dip ||
@@ -2167,6 +2174,7 @@ namespace FieldCodes.Cad.Ui
                 {
                     Width = copy.WidthIn, Height = copy.HeightIn, Shape = pipe.Shape, Material = copy.Material ?? string.Empty,
                     Direction = copy.Direction, Dip = copy.MeasuredDip, Reference = entry.Reference,
+                    ReferenceFromDrafter = entry.ReferenceFromDrafter,
                     Role = pipe.Role, Conditions = pipe.Conditions.ToList(), Notes = pipe.Notes,
                     Prefilled = entry.Prefilled ?? new List<string>()
                 });
@@ -2195,18 +2203,40 @@ namespace FieldCodes.Cad.Ui
 
             var observation = entry.Create();
             var newId = observation.Id;
+            var connected = false;
             var added = DipSession.Post("add pipe", (db, tr, ed, project, settings, version) =>
             {
                 var structure = project.Structure(structureId);
                 if (structure == null) return false;
                 structure.Field.Pipes.Add(observation);
+                // Connected while the drafter is still typing, not in a pass at the end -- and only
+                // when the same pipe was observed at both ends, which is all Find all connections
+                // confirms on its own. Everything else waits for the drafter, as before.
+                connected = ConnectionBatch.ConnectAsEntered(project, settings.Dips, structureId, observation.Id);
+                if (connected)
+                {
+                    var c = project.ConnectionFor(structureId, observation.Id);
+                    var to = c != null ? project.Structure(c.ToStructureId) : null;
+                    if (to != null) ed.WriteMessage("\nDip Builder: {0} connects to {1}.", ConnectionFinder.Describe(observation), to.Label);
+                }
                 return true;
             });
             if (!added) return;
             _pipeId = newId;
-            Say("Added " + Summary(observation) + " at " + s.Label + (next ? ". Next pipe:" : "."), Good);
+            var where = connected ? ConnectedWords(structureId, newId) : string.Empty;
+            Say("Added " + Summary(observation) + where + " at " + s.Label + (next ? ". Next pipe:" : "."), Good);
             if (next) OpenQuickEntry(s, null);
             else CloseQuickEntry();
+        }
+
+        /// <summary>" -- connects to CB 1046" when a pipe found its far end as it was entered.</summary>
+        private static string ConnectedWords(string structureId, string pipeId)
+        {
+            var project = DipSession.Project;
+            if (project == null) return string.Empty;
+            var c = project.ConnectionFor(structureId, pipeId);
+            var to = c != null ? project.Structure(c.ToStructureId) : null;
+            return to != null ? " -- connects to " + to.Label : string.Empty;
         }
 
         // ============================================================ pipe cards

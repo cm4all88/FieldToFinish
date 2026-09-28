@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using FieldCodes.Settings;
@@ -114,6 +114,26 @@ namespace FieldCodes.Utilities
                 });
 
             return proposals.OrderBy(p => Rank(p.Confidence)).ToList();
+        }
+
+        /// <summary>
+        /// The same search, run for one pipe the moment it is entered, so the connection is
+        /// found while the drafter is still typing rather than in a pass at the end. Only a
+        /// pipe observed at both ends is confirmed -- exactly what Find all connections
+        /// confirms on its own -- and the pairing still looks at the whole project, so a pipe
+        /// another structure has already claimed is not taken. Returns true when it connected.
+        /// </summary>
+        public static bool ConnectAsEntered(UtilityProject project, UtilitySettings settings, string structureId, string pipeId)
+        {
+            if (project == null || structureId == null || pipeId == null) return false;
+            if (project.ConnectionFor(structureId, pipeId) != null) return false;
+
+            // A pair is listed once, from whichever end the search led with, so this pipe may be
+            // either the proposal's own pipe or the matching pipe at the far end.
+            var mine = FindAll(project, settings)
+                .Where(p => (p.FromStructureId == structureId && p.PipeId == pipeId) || p.MatchingPipeId == pipeId)
+                .ToList();
+            return ConfirmHigh(project, mine, settings) > 0;
         }
 
         /// <summary>

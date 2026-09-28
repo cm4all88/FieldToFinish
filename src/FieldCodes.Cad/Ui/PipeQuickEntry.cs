@@ -93,29 +93,35 @@ namespace FieldCodes.Cad.Ui
                 Line(Hint("or type"), _directionTyped, Hint("N45E, AZ215")),
                 _directionNote);
 
-            _sizes = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(250, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
+            _sizes = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(RowWidth, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
             _sizeTyped = SmallBox(70);
             _sizeTyped.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedSize(); } };
             _sizeUse = Choice("Use size", null, (s, e) => UseTypedSize(), 0);
-            _sizeSection = Section("Size (in)", 260, _sizes, Line(Hint("Any size"), _sizeTyped, _sizeUse));
+            _sizeSection = Section("Size", RowWidth + 20, _sizes, Line(Hint("Other"), _sizeTyped, _sizeUse));
 
-            _materials = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(260, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
+            _materials = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(RowWidth, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
             _materialTyped = SmallBox(120);
             _materialTyped.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedMaterial(); } };
             _materialUse = Choice("Use material", null, (s, e) => UseTypedMaterial(), 0);
-            _materialSection = Section("Material", 270, _materials, Line(Hint("Other"), _materialTyped, _materialUse));
+            _materialSection = Section("Type", RowWidth + 20, _materials, Line(Hint("Other"), _materialTyped, _materialUse));
 
             _dip = SmallBox(80);
             _dip.TextChanged += (s, e) => { ReadDip(false); UpdatePreview(); };
             _dip.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Submit(false); } };
             _references = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(230, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
-            var measureSection = Section("Measure down", 240,
+            var measureSection = Section("Measure down", RowWidth + 20,
                 Line(Hint("MD (ft)"), _dip),
                 Hint("Measured to"),
                 _references);
 
-            _sections = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = false, WrapContents = true, BackColor = Color.Transparent, Margin = Padding.Empty };
-            _sections.Controls.AddRange(new Control[] { directionSection, _sizeSection, _materialSection, measureSection });
+            // Laid out the way the drafter drew it: the compass, then the type, then the size,
+            // one under the other with everything on screen at once. Nothing to go looking for.
+            _sections = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top, AutoSize = false, WrapContents = false, FlowDirection = FlowDirection.TopDown,
+                BackColor = Color.Transparent, Margin = Padding.Empty, AutoScroll = true
+            };
+            _sections.Controls.AddRange(new Control[] { directionSection, _materialSection, _sizeSection, measureSection });
 
             _preview = new Label { AutoSize = true, Font = new Font("Consolas", 11.5f, FontStyle.Bold), ForeColor = DipBuilderForm.Ink, Margin = new Padding(0, 6, 16, 0) };
             _problem = new Label { AutoSize = true, ForeColor = DipBuilderForm.Bad, Margin = new Padding(0, 8, 12, 0) };
@@ -457,6 +463,7 @@ namespace FieldCodes.Cad.Ui
                 Material = _entry.Material,
                 MeasuredDip = _entry.MeasuredDip,
                 Reference = _entry.Reference,
+                ReferenceFromDrafter = _entry.ReferenceFromDrafter,
                 // Copied values stay marked as copied until the drafter clicks, types or changes them here.
                 Prefilled = _prefilledStart.Where(f => !_touched.Contains(f)).ToList(),
                 PrefilledFrom = _prefilledFrom
@@ -490,6 +497,12 @@ namespace FieldCodes.Cad.Ui
             var height = Padding.Vertical + _top.Height + 2 + _sections.Height + _bottom.Height + 4;
             if (Height != height) Height = height;
         }
+
+        /// <summary>
+        /// Five buttons to a row, as the drafter drew the sheet: wide enough for five of the
+        /// widest button and its margins, so a row never breaks into an odd shape.
+        /// </summary>
+        private const int RowWidth = 300;
 
         private static Panel Section(string caption, int width, params Control[] rows)
         {

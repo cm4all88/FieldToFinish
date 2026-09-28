@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -119,7 +119,10 @@ namespace FieldCodes.Utilities
                                             PipeObservation pipe, MeasurementReference reference)
         {
             if (pipe == null || reference == MeasurementReference.Unspecified) return false;
-            if (!pipe.ReferenceUnconfirmed && pipe.Reference == reference) return false;
+            // A reference the office convention supplied can be confirmed although it already
+            // reads the same: the drafter standing behind it is not the same as nobody saying.
+            var fromConvention = pipe.ReferenceBasis == ReferenceBasis.FieldNoteConvention;
+            if (!fromConvention && !pipe.ReferenceUnconfirmed && pipe.Reference == reference) return false;
 
             var before = pipe.Reference + " (" + pipe.ReferenceBasis + ")";
             pipe.Reference = reference;

@@ -757,7 +757,7 @@ namespace FtfUiTest
                 Check(p.Reference == FU.MeasurementReference.TopOfPipe && p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter && p.MeasuredDip == 4.10,
                       "ticking Top of pipe makes 6\" W a top-of-pipe dip, set by drafter, dip still 4.10");
                 Check(Convert.ToString(Field<DataGridView>("_grid").Rows[3].Cells["Calc"].Value).StartsWith("324.32 top of pipe"), "grid shows 324.32 top of pipe");
-                Check(Field<TextBox>("_labelPreview").Text.Contains("TOP (W) = 324.32"), "live label shows TOP (W) = 324.32");
+                Check(Field<TextBox>("_labelPreview").Text.Contains("6\" (W) TOP = 324.32'"), "live label shows 6\" (W) TOP = 324.32'");
                 Shot("05-top-of-pipe");
             }, 3500);
             add("two quick edits: untick row 3, tick row 4 back to back", () =>
@@ -809,8 +809,8 @@ namespace FtfUiTest
             {
                 var sizes = Buttons("_sizes");
                 Log("   SDMH sizes: " + string.Join(" ", sizes));
-                Check(sizes.SequenceEqual(new[] { "8\"", "10\"", "12\"", "15\"", "18\"", "24\"", "30\"", "36\"", "48\"", "Larger" }),
-                      "an SDMH shows the storm sizes, then Larger");
+                Check(sizes.SequenceEqual(new[] { "8\"", "10\"", "12\"", "15\"", "18\"", "20\"", "24\"", "30\"", "36\"", "48\"", "Larger" }),
+                      "an SDMH shows the storm sizes, 20\" among them, then Larger");
                 Check(!Shown(QuickField<TextBox>("_sizeTyped").Parent), "no typed size until Larger");
                 var materials = Buttons("_materials");
                 Log("   SDMH materials: " + string.Join(" ", materials));
@@ -831,7 +831,7 @@ namespace FtfUiTest
                 var p = st.Field.Pipes[1];
                 Check(p.WidthIn == 15 && p.Material == "RCP" && p.Direction.Text == "E" && p.Direction.AzimuthDegrees == 90 && p.MeasuredDip == 5.5 &&
                       p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter && p.Source == FU.ObservationSource.UserEntry,
-                      "E 15\" RCP 5.5 recorded as an invert entered by the drafter");
+                      "E 15\" RCP 5.5 recorded as an invert the drafter picked, not the convention (" + p.ReferenceBasis + ")");
                 Check(Shown(Quick) && QuickEntry.Direction == null && !QuickEntry.SizeIn.HasValue, "Add + next leaves the panel open and empty");
                 Check(Headline(1) == "E 15\" RCP IE 5.5", "the new pipe shows as a card (" + Headline(1) + ")");
             }, 3000);
@@ -853,7 +853,7 @@ namespace FtfUiTest
                 QuickField<TextBox>("_materialTyped").Text = "ribbed pvc";
                 ClickIn(Quick, "Use material");
                 QuickField<TextBox>("_dip").Text = "6.41";
-                Check(Picked(FindButton(QuickField<Control>("_references"), "Not stated")), "the reference starts as Not stated");
+                Check(Picked(FindButton(QuickField<Control>("_references"), "Invert")), "the reference starts at the office convention: Invert");
                 Check(QuickField<Label>("_preview").Text == "N/NW 17.5\" RIBBED PVC IE 6.41", "preview: " + QuickField<Label>("_preview").Text);
                 ClickIn(Quick, "Add pipe");
             }, 500);
@@ -886,7 +886,7 @@ namespace FtfUiTest
                 var sizes = Buttons("_sizes");
                 var materials = Buttons("_materials");
                 Log("   CB sizes: " + string.Join(" ", sizes) + " | materials: " + string.Join(" ", materials));
-                Check(sizes.SequenceEqual(new[] { "6\"", "8\"", "10\"", "12\"", "15\"", "18\"", "24\"", "Larger" }), "a CB shows catch basin sizes, 24\" included");
+                Check(sizes.SequenceEqual(new[] { "6\"", "8\"", "10\"", "12\"", "15\"", "18\"", "20\"", "24\"", "Larger" }), "a CB shows catch basin sizes, 20\" and 24\" included");
                 Check(materials.First() == "PVC" && materials.Contains("CPEP"), "a CB shows catch basin materials");
                 Check(Field<Label>("_choiceNote").Text == "Buttons for: Catch basins and inlets", Field<Label>("_choiceNote").Text);
                 // The drafter's type now drives everything type-dependent; the field code stays as observed.
@@ -936,8 +936,9 @@ namespace FtfUiTest
             add("unspecified confirmed as invert", () =>
             {
                 var p = S("1047").Field.Pipes[2];
-                Check(p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.ConfirmedByDrafter,
-                      "choosing Invert for an unspecified MD confirms it (ConfirmedByDrafter), as the table does");
+                Check(p.Reference == FU.MeasurementReference.Invert &&
+                      (p.ReferenceBasis == FU.ReferenceBasis.ConfirmedByDrafter || p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter),
+                      "choosing Invert makes it the drafter's, not the convention's (" + p.ReferenceBasis + ")");
                 Check(p.WidthIn == 17.5 && p.MeasuredDip == 6.41 && p.Material == "RIBBED PVC", "17.5\" and 6.41 unchanged by the edit");
             }, 3000);
 
@@ -1066,23 +1067,25 @@ namespace FtfUiTest
                 Click("Draw this structure's pipes");
                 Send("Keep ");
             }, 3000);
-            add("after Keep", () => CountsAre(1, 1, "Keep"), 3000);
+            // One more FTF line than the confirmed pipes: the 6" W pipe runs outside the survey
+            // limits, so it is drawn as a stub with a ~ at its loose end.
+            add("after Keep", () => CountsAre(2, 1, "Keep"), 3000);
             add("draw 2 (Keep FTF N pipe, New beside hand pipe)", () =>
             {
                 Click("Draw this structure's pipes");
                 Send("Keep ");
                 Send("New ");
             }, 500);
-            add("after New", () => { CountsAre(3, 1, "New"); Log("   pipe labels: " + Texts(20)); }, 3000);
+            add("after New", () => { CountsAre(4, 1, "New"); Log("   pipe labels: " + Texts(20)); }, 3000);
             add("draw 3 (Keep, Replace)", () =>
             {
                 Click("Draw this structure's pipes");
                 Send("Keep ");
                 Send("Replace ");
             }, 500);
-            add("after Replace", () => CountsAre(3, 0, "Replace"), 3000);
+            add("after Replace", () => CountsAre(4, 0, "Replace"), 3000);
             add("undo the Replace", () => Send("_.U "), 500);
-            add("after undo", () => CountsAre(3, 1, "Undo of Replace"), 3000);
+            add("after undo", () => CountsAre(4, 1, "Undo of Replace"), 3000);
             add("draw 4 (Keep, Update existing)", () =>
             {
                 Click("Draw this structure's pipes");
@@ -1092,7 +1095,7 @@ namespace FtfUiTest
             add("after Update", () =>
             {
                 Log("   status bar: " + Field<Label>("_status").Text + " | session message: " + Convert.ToString(SessionType.GetField("LastMessage").GetValue(null)));
-                CountsAre(2, 0, "Update");
+                CountsAre(3, 0, "Update");
                 var labels = Texts(20);
                 Log("   pipe labels: " + labels);
                 Check(labels.Contains("12\" RCP SD @ 0.49%") && labels.Contains("18\" RCP SD @ 0.71%"), "both pipe labels with slopes from confirmed inverts");
@@ -1219,7 +1222,7 @@ namespace FtfUiTest
                 Check(S("1045").Field.Pipes[1].ReferenceBasis == FU.ReferenceBasis.FieldNoteConvention, "office-default invert basis persisted");
                 Check(S("1045").Field.Pipes[0].MeasuredDip == 6.41 && S("1045").Field.Pipes[0].RawText == "12 RCP N 6.41 INV", "observation unchanged after reopen");
                 var c = Counts();
-                Check(c["pipe"] == 2 && c["structurelabel"] == 1 && c["pipelabel"] == 2, "drafting persisted (" + c["pipe"] + " pipes, " + c["pipelabel"] + " labels, " + c["structurelabel"] + " leader)");
+                Check(c["pipe"] == 3 && c["structurelabel"] == 1 && c["pipelabel"] == 3, "drafting persisted, stub included (" + c["pipe"] + " pipes, " + c["pipelabel"] + " labels, " + c["structurelabel"] + " leader)");
                 Shot("11-reopened");
             }, 3500);
 
