@@ -1,4 +1,4 @@
-using FieldCodes.Settings;
+﻿using FieldCodes.Settings;
 using FieldCodes.Utilities;
 
 namespace FieldCodes.Tests;
@@ -74,7 +74,8 @@ public sealed class DipFieldRealityTests
         };
         structure.Field.Pipes.Add(new QuickPipeEntry
         {
-            Direction = DirectionShortcuts.For("N"), SizeIn = 6, Material = "CONC", MeasuredDip = 6.0
+            Direction = DirectionShortcuts.For("N"), SizeIn = 6, Material = "CONC", MeasuredDip = 6.0,
+            Reference = MeasurementReference.Invert            // as the drafter picks it in the panel
         }.Create());
 
         var lines = UtilityLabelFormatter.StructureLabel(new UtilityProject { Structures = { structure } }, structure, Settings);

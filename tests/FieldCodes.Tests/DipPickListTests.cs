@@ -239,19 +239,20 @@ public sealed class DipPickListTests
     }
 
     [Fact]
-    public void AnUnmarkedDipInThePanelIsAnInvertByTheOfficeConvention()
+    public void AnUnmarkedDipStaysUnspecifiedEvenWithTheOfficeConvention()
     {
         var settings = new UtilitySettings();
-        Assert.True(settings.UnmarkedDipsAreInvertsByConvention);
+        Assert.True(settings.UnmarkedDipsAreInvertsByConvention);   // the office default is on...
         var pipe = new QuickPipeEntry
         {
             Direction = DirectionShortcuts.For("N/NW"), SizeIn = 12, Material = "RCP", MeasuredDip = 6.41
         }.Create();
-        // A measure down is to the invert unless it is noted otherwise, as in the field notes.
-        Assert.Equal(MeasurementReference.Invert, pipe.Reference);
-        // And it says the convention supplied it, not the drafter.
-        Assert.Equal(ReferenceBasis.FieldNoteConvention, pipe.ReferenceBasis);
-        Assert.Equal("N/NW 12\" RCP IE 6.41", QuickPipeEntry.Summary(pipe, settings));
+        // ...and still the panel never decides what a measure down was taken to. The drafter
+        // picks it; nothing picked is nothing said.
+        Assert.Equal(MeasurementReference.Unspecified, pipe.Reference);
+        Assert.Equal(ReferenceBasis.NotStated, pipe.ReferenceBasis);
+        Assert.True(pipe.ReferenceUnconfirmed);
+        Assert.Equal("N/NW 12\" RCP 6.41 Unspecified", QuickPipeEntry.Summary(pipe, settings));
     }
 
     [Fact]

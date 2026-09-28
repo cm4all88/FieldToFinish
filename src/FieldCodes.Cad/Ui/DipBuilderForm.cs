@@ -761,16 +761,10 @@ namespace FieldCodes.Cad.Ui
             connPanel.Controls.Add(_connectionState);
             connPanel.Controls.Add(Row(
                 Btn("Find all connections", OnFindAll, true),
-                Btn("Find connections", OnFindConnections),
                 Btn("Confirm selected", OnConfirm),
-                Btn("Pick a different structure...", OnManualPick),
-                Btn("Leave unresolved", OnLeaveUnresolved),
-                Btn("Runs outside survey limits", OnOutsideLimits),
                 Btn("Draw this structure's pipes", (s, e) => OnDraw(false)),
                 Advanced(Btn("Draw all confirmed pipes", (s, e) => OnDraw(true)))));
-            _connectionGroup = Step("3", "Connections",
-                "Find all connections searches every pipe at once and connects the sure ones (a matching pipe observed at both ends); the rest are listed on the Map tab to confirm. Or select one pipe and find where it runs.",
-                connPanel, 5);
+            _connectionGroup = Step(null, "Connections", null, connPanel, 5);
             scroll.Controls.Add(_connectionGroup);
 
             // 2 pipes -----------------------------------------------------------
@@ -870,9 +864,10 @@ namespace FieldCodes.Cad.Ui
             pipePanel.Controls.Add(_cards);
             pipePanel.Controls.Add(_quick);
             pipePanel.Controls.Add(Row(_addPipe, _back, _choiceNote));
-            scroll.Controls.Add(Step("2", "Pipes",
-                "+ Add pipe records a pipe the way the field book reads: direction, size, material, then the MD and what it was measured to. " +
-                "The buttons are the usual choices for this kind of structure; anything else can still be entered.",
+            // No step numbers: these are not a wizard, and a structure rarely needs the third at
+            // all. No standing paragraph of instructions either -- it is read once and then sits
+            // in the way of every structure after that.
+            scroll.Controls.Add(Step(null, "Pipes", null,
                 pipePanel, () => _advancedToggle != null && _advancedToggle.Checked ? 6 : 0));
 
             // 1 structure -------------------------------------------------------
@@ -920,9 +915,7 @@ namespace FieldCodes.Cad.Ui
                 Advanced(Caption("Type", 12)), Advanced(_type),
                 Advanced(Caption("System", 6)), Advanced(_system),
                 Advanced(Btn("Reload from drawing", (s, e) => { DipSession.Reload(); DipSession.Post("reload", (db, tr, ed, p, st, v) => false); }))));
-            scroll.Controls.Add(Step("1", "Structure",
-                "Pick the structure's survey point; rim, position and description come from the drawing. Then enter its size and the bottom and water MDs.",
-                structurePanel, 0));
+            scroll.Controls.Add(Step(null, "Structure", null, structurePanel, 0));
 
             _side = BuildSidePanel();
             page.Controls.Add(scroll);
@@ -2319,23 +2312,47 @@ namespace FieldCodes.Cad.Ui
             }
             card.Detail.Text = string.Join("  ·  ", facts.ToArray());
 
+            // A pipe shows what it needs and nothing else. A settled, drawn pipe has two
+            // buttons; a pipe with something to sort out grows the button that sorts it. The
+            // rest -- picking a different structure, leaving it unresolved, marking it outside
+            // the survey, deleting it -- live behind "More", where they stay reachable without
+            // being in the way of a normal structure.
             card.Action("Edit", (x, e) => { SelectPipe(pipeId); OnEditPipe(); });
-            card.Action("Connects to...", (x, e) => { SelectPipe(pipeId); OnManualPick(x, e); });
-            card.Action("Suggest", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); });
+
+            var drawable = c != null && c.IsAccepted && c.ToStructureId != null;
+            if (c == null)
+                card.Action("Find where it runs", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); }, true, true);
+            else if (!c.IsAccepted && c.Status != ConnectionStatus.OutsideSurveyLimits)
+                card.Action("Resolve", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); }, true, true);
+
+            if (drawable && !c.Drafted)
+            {
+                var connectionId = c.Id;
+                card.Action("Draw pipe + label", (x, e) => { SelectPipe(pipeId); OnDrawPipe(connectionId); }, true, true);
+            }
             if (other != null)
             {
                 var otherId = other.Id;
                 card.Action("Open " + other.Label, (x, e) => OpenStructure(otherId));
             }
-            var drawable = c != null && c.IsAccepted && c.ToStructureId != null;
-            if (drawable)
+            if (issues.Count > 0)
+                card.Action(issues.Count == 1 ? "Show issue" : "Show issues",
+                            (x, e) => { SelectPipe(pipeId); _warningsOpen = true; FitAll(); UpdateWarningsHeader(); });
+
+            var more = new List<KeyValuePair<string, EventHandler>>
+            {
+                new KeyValuePair<string, EventHandler>("Connects to...", (x, e) => { SelectPipe(pipeId); OnManualPick(x, e); }),
+                new KeyValuePair<string, EventHandler>("Suggest where it runs", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); }),
+                new KeyValuePair<string, EventHandler>("Leave unresolved", (x, e) => { SelectPipe(pipeId); OnLeaveUnresolved(x, e); }),
+                new KeyValuePair<string, EventHandler>("Runs outside survey limits", (x, e) => { SelectPipe(pipeId); OnOutsideLimits(x, e); })
+            };
+            if (drawable && c.Drafted)
             {
                 var connectionId = c.Id;
-                card.Action(c.Drafted ? "Redraw pipe + label" : "Draw pipe + label", (x, e) => { SelectPipe(pipeId); OnDrawPipe(connectionId); }, true, !c.Drafted);
+                more.Add(new KeyValuePair<string, EventHandler>("Redraw pipe + label", (x, e) => { SelectPipe(pipeId); OnDrawPipe(connectionId); }));
             }
-            if (issues.Count > 0)
-                card.Action("Show issues", (x, e) => { SelectPipe(pipeId); _warningsOpen = true; FitAll(); UpdateWarningsHeader(); });
-            card.Action("Delete", (x, e) => { SelectPipe(pipeId); OnDeletePipe(x, e); });
+            more.Add(new KeyValuePair<string, EventHandler>("Delete pipe", (x, e) => { SelectPipe(pipeId); OnDeletePipe(x, e); }));
+            card.More("More", more);
             return card;
         }
 

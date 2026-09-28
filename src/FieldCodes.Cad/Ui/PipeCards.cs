@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -16,6 +16,7 @@ namespace FieldCodes.Cad.Ui
         public readonly Label Headline;
         public readonly Label Detail;
         public readonly FlowLayoutPanel Actions;
+        private readonly FlowLayoutPanel _more;
         private bool _selected;
 
         /// <summary>Raised when the card itself (not one of its buttons) is clicked.</summary>
@@ -32,6 +33,8 @@ namespace FieldCodes.Cad.Ui
             Headline = new Label { Dock = DockStyle.Top, AutoSize = false, Font = new Font("Consolas", 12f, FontStyle.Bold), ForeColor = DipBuilderForm.Ink, UseMnemonic = false };
             Detail = new Label { Dock = DockStyle.Top, AutoSize = false, Font = DipBuilderForm.F(9.75f, false), ForeColor = DipBuilderForm.Muted, UseMnemonic = false };
             Actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = false, WrapContents = true, BackColor = Color.Transparent, Padding = new Padding(0, 4, 0, 0) };
+            _more = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = false, WrapContents = true, BackColor = Color.Transparent, Visible = false, Padding = new Padding(0, 0, 0, 2) };
+            Controls.Add(_more);
             Controls.Add(Actions);
             Controls.Add(Detail);
             Controls.Add(Headline);
@@ -64,10 +67,58 @@ namespace FieldCodes.Cad.Ui
             };
             b.FlatAppearance.BorderColor = primary ? DipBuilderForm.Accent : DipBuilderForm.ButtonBorder;
             b.FlatAppearance.MouseOverBackColor = primary ? DipBuilderForm.AccentHover : DipBuilderForm.AccentSoft;
-            b.Click += click;
+            if (click != null) b.Click += click;
             Actions.Controls.Add(b);
             return b;
         }
+
+        /// <summary>
+        /// The actions a normal structure never needs, behind one button: picking a different
+        /// structure, leaving a pipe unresolved, marking it outside the survey, redrawing,
+        /// deleting. They open in the card itself rather than a popup, so they can be read and
+        /// reached with the keyboard -- one click away, never in the way.
+        /// </summary>
+        public Button More(string text, IEnumerable<KeyValuePair<string, EventHandler>> items)
+        {
+            var list = items.Where(i => i.Value != null).ToList();
+            if (list.Count == 0) return null;
+
+            foreach (var item in list)
+            {
+                var click = item.Value;
+                var extra = new Button
+                {
+                    Text = item.Key, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlatStyle = FlatStyle.Flat,
+                    Font = DipBuilderForm.F(9f, false), Margin = new Padding(0, 0, 5, 3), Padding = new Padding(2, 0, 2, 0),
+                    BackColor = DipBuilderForm.Surface, ForeColor = DipBuilderForm.Ink, Cursor = Cursors.Hand, UseMnemonic = false
+                };
+                extra.FlatAppearance.BorderColor = DipBuilderForm.ButtonBorder;
+                extra.FlatAppearance.MouseOverBackColor = DipBuilderForm.AccentSoft;
+                extra.Click += (s, e) => click(this, EventArgs.Empty);
+                _more.Controls.Add(extra);
+            }
+
+            var b = Action(text, null);
+            b.Click += (s, e) =>
+            {
+                MoreOpen = !MoreOpen;
+                b.Text = MoreOpen ? text + " \u25b4" : text;
+                var list2 = Parent as IFitsWidth;
+                if (list2 != null) list2.FitWidth(Width);
+                Parent?.PerformLayout();
+            };
+            return b;
+        }
+
+        /// <summary>Whether the extra actions are showing.</summary>
+        public bool MoreOpen
+        {
+            get { return _more.Visible; }
+            set { _more.Visible = value; }
+        }
+
+        /// <summary>The extra actions, for a test to reach without opening them.</summary>
+        public IEnumerable<Button> MoreActions { get { return _more.Controls.OfType<Button>(); } }
 
         public int FitWidth(int width)
         {
@@ -76,7 +127,8 @@ namespace FieldCodes.Cad.Ui
             Headline.Height = TextRenderer.MeasureText(Headline.Text.Length == 0 ? "X" : Headline.Text, Headline.Font, new Size(inner, 0), TextFormatFlags.WordBreak).Height + 2;
             Detail.Height = Detail.Text.Length == 0 ? 0 : TextRenderer.MeasureText(Detail.Text, Detail.Font, new Size(inner, 0), TextFormatFlags.WordBreak).Height + 2;
             Actions.Height = Actions.GetPreferredSize(new Size(inner, 0)).Height;
-            Height = Padding.Vertical + Headline.Height + Detail.Height + Actions.Height;
+            _more.Height = _more.Visible ? _more.GetPreferredSize(new Size(inner, 0)).Height : 0;
+            Height = Padding.Vertical + Headline.Height + Detail.Height + Actions.Height + _more.Height;
             return Height;
         }
     }

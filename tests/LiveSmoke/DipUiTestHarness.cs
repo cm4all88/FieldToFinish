@@ -272,6 +272,15 @@ namespace FtfUiTest
             return Window.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(Window) as T;
         }
 
+        /// <summary>Opens a card's More actions if they are not already open, then presses one.</summary>
+        private static void CardMore(int index, string text)
+        {
+            var card = Card(index);
+            var open = (bool)card.GetType().GetProperty("MoreOpen").GetValue(card, null);
+            if (!open) ClickIn(card, "More");
+            ClickIn(Card(index), text);
+        }
+
         private static Button FindButton(Control root, string text)
         {
             foreach (Control c in root.Controls)
@@ -697,7 +706,8 @@ namespace FtfUiTest
                 Check(Field<TextBox>("_labelPreview").Text.StartsWith("SDMH 1045 48\""), "label header reads SDMH 1045 48\"");
             }, 3500);
 
-            add("find connections for 12 RCP N", () => { SelectPipeRow(0); Click("Find connections"); }, 500);
+            // Finding where one pipe runs is on the pipe's own card now, not in a section below.
+            add("find connections for 12 RCP N", () => ClickIn(Card(0), "Find where it runs"), 500);
             add("candidates shown, nothing confirmed", () =>
             {
                 var list = Field<ListView>("_candidateList");
@@ -712,13 +722,13 @@ namespace FtfUiTest
             add("confirm CB 1046", () => { Field<ListView>("_candidateList").Items[0].Selected = true; Click("Confirm selected"); }, 300);
             add("confirmed", () => Check(StatusOf("1045", 0) == "Confirmed->1046", "12 RCP N confirmed to 1046 (" + StatusOf("1045", 0) + ")"), 3000);
 
-            add("find connections for 18 RCP SW", () => { SelectPipeRow(1); Click("Find connections"); }, 500);
+            add("find connections for 18 RCP SW", () => ClickIn(Card(1), "Find where it runs"), 500);
             add("change the suggestion: pick 1048 instead", () =>
             {
                 var list = Field<ListView>("_candidateList");
                 Check(list.Items.Count >= 1 && list.Items[0].Text == "SDMH 1047", "SDMH 1047 suggested for 18 RCP SW");
                 Send("_.ZOOM _C 5120,5000 30 ");
-                Click("Pick a different structure...");
+                CardMore(1, "Connects to...");
                 Send("5120,5000 ");
                 Send("UI TEST CHANGE\n");
             }, 800);
@@ -726,7 +736,7 @@ namespace FtfUiTest
             {
                 Check(StatusOf("1045", 1) == "ManualOverride->1048", "manual pick recorded as ManualOverride to 1048 (" + StatusOf("1045", 1) + ")");
                 SelectPipeRow(1);
-                Click("Find connections");
+                CardMore(1, "Suggest where it runs");
             }, 3000);
             add("change back to 1047", () =>
             {
@@ -735,9 +745,9 @@ namespace FtfUiTest
             }, 800);
             add("changed back", () => Check(StatusOf("1045", 1) == "Confirmed->1047", "suggestion changed back to 1047 (" + StatusOf("1045", 1) + ")"), 3000);
 
-            add("leave 8 PVC E unresolved", () => { SelectPipeRow(2); Click("Leave unresolved"); }, 500);
+            add("leave 8 PVC E unresolved", () => CardMore(2, "Leave unresolved"), 500);
             add("left unresolved", () => Check(StatusOf("1045", 2) == "LeftUnresolved->?", "8 PVC E left unresolved (" + StatusOf("1045", 2) + ")"), 3000);
-            add("mark 6\" W as running outside the survey limits", () => { SelectPipeRow(3); Click("Runs outside survey limits"); }, 500);
+            add("mark 6\" W as running outside the survey limits", () => CardMore(3, "Runs outside survey limits"), 500);
             add("outside limits recorded", () =>
             {
                 Check(StatusOf("1045", 3) == "OutsideSurveyLimits->?", "6\" W recorded as outside survey limits (" + StatusOf("1045", 3) + ")");
@@ -831,7 +841,7 @@ namespace FtfUiTest
                 var p = st.Field.Pipes[1];
                 Check(p.WidthIn == 15 && p.Material == "RCP" && p.Direction.Text == "E" && p.Direction.AzimuthDegrees == 90 && p.MeasuredDip == 5.5 &&
                       p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter && p.Source == FU.ObservationSource.UserEntry,
-                      "E 15\" RCP 5.5 recorded as an invert the drafter picked, not the convention (" + p.ReferenceBasis + ")");
+                      "E 15\" RCP 5.5 recorded as an invert entered by the drafter");
                 Check(Shown(Quick) && QuickEntry.Direction == null && !QuickEntry.SizeIn.HasValue, "Add + next leaves the panel open and empty");
                 Check(Headline(1) == "E 15\" RCP IE 5.5", "the new pipe shows as a card (" + Headline(1) + ")");
             }, 3000);
@@ -853,8 +863,8 @@ namespace FtfUiTest
                 QuickField<TextBox>("_materialTyped").Text = "ribbed pvc";
                 ClickIn(Quick, "Use material");
                 QuickField<TextBox>("_dip").Text = "6.41";
-                Check(Picked(FindButton(QuickField<Control>("_references"), "Invert")), "the reference starts at the office convention: Invert");
-                Check(QuickField<Label>("_preview").Text == "N/NW 17.5\" RIBBED PVC IE 6.41", "preview: " + QuickField<Label>("_preview").Text);
+                Check(!Picked(FindButton(QuickField<Control>("_references"), "Invert")), "nothing is picked for the drafter: the reference starts unset");
+                Check(QuickField<Label>("_preview").Text == "N/NW 17.5\" RIBBED PVC 6.41 Unspecified", "preview: " + QuickField<Label>("_preview").Text);
                 ClickIn(Quick, "Add pipe");
             }, 500);
             add("17.5 and the custom material kept; MD unspecified", () =>
@@ -866,10 +876,10 @@ namespace FtfUiTest
                 Check(p.WidthIn == 17.5 && p.HeightIn == 17.5, "17.5\" kept exactly (" + p.WidthIn + ")");
                 Check(p.Material == "RIBBED PVC", "custom material kept (" + p.Material + ")");
                 Check(p.Direction.Text == "N/NW" && p.Direction.AzimuthDegrees == 337.5, "N/NW recorded at 337.5");
-                Check(p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.FieldNoteConvention,
-                      "an MD with nothing noted is an invert by the office convention, and says the convention gave it");
+                Check(p.Reference == FU.MeasurementReference.Unspecified && p.ReferenceBasis == FU.ReferenceBasis.NotStated,
+                      "an MD with nothing picked stays Unspecified: FTF does not decide what it was measured to");
                 Check(!Shown(Quick) && Field<Button>("_addPipe").Enabled, "Add pipe closes the panel");
-                Check(Headline(2) == "N/NW 17.5\" RIBBED PVC IE 6.41", "card: " + Headline(2));
+                Check(Headline(2) == "N/NW 17.5\" RIBBED PVC 6.41 Unspecified", "card: " + Headline(2));
                 Check(Field<TextBox>("_labelPreview").Text.Contains("(N/NW)"), "the structure label lists the N/NW pipe");
                 Shot("05c-pipe-cards");
             }, 3000);
@@ -936,9 +946,8 @@ namespace FtfUiTest
             add("unspecified confirmed as invert", () =>
             {
                 var p = S("1047").Field.Pipes[2];
-                Check(p.Reference == FU.MeasurementReference.Invert &&
-                      (p.ReferenceBasis == FU.ReferenceBasis.ConfirmedByDrafter || p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter),
-                      "choosing Invert makes it the drafter's, not the convention's (" + p.ReferenceBasis + ")");
+                Check(p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.ConfirmedByDrafter,
+                      "choosing Invert for an unspecified MD confirms it (ConfirmedByDrafter), as the table does");
                 Check(p.WidthIn == 17.5 && p.MeasuredDip == 6.41 && p.Material == "RIBBED PVC", "17.5\" and 6.41 unchanged by the edit");
             }, 3000);
 
@@ -946,7 +955,8 @@ namespace FtfUiTest
             add("N/NW pipe: Connects to... 1048", () =>
             {
                 Send("_.ZOOM _C 5120,5000 30 ");
-                ClickIn(Card(2), "Connects to...");
+                // Picking the far structure by hand is behind More: a normal pipe never needs it.
+                CardMore(2, "Connects to...");
                 Send("5120,5000 ");
                 Send("UI TEST WALK\n");
             }, 800);
@@ -958,6 +968,8 @@ namespace FtfUiTest
                 Log("   card: " + Headline(2) + "  |  " + Detail(2));
                 Check(Detail(2).Contains("picked by drafter") && Detail(2).Contains("not drawn yet") && Detail(2).Contains("no slope yet"), "card shows where it goes, not drawn, no slope yet");
                 Check(ButtonStarting(Card(2), "Open ") != null && FindButton(Card(2), "Draw pipe + label") != null, "card offers Open and Draw pipe + label");
+                Check(FindButton(Card(2), "Suggest") == null && FindButton(Card(2), "Delete") == null,
+                      "a connected pipe does not carry Suggest or Delete on its face");
                 ClickIn(Card(2), "Draw pipe + label");
             }, 3000);
             add("drawn from the card", () =>
@@ -965,7 +977,11 @@ namespace FtfUiTest
                 var c = Counts();
                 // 17.5" is over the 12" double-line threshold, so the pipe is two lines with one label.
                 Check(c["pipe"] == 2 && c["pipelabel"] == 1, "Draw pipe + label drew the pipe (double line) and its label (" + c["pipe"] + ", " + c["pipelabel"] + ")");
-                Check(Detail(2).Contains("drawn") && FindButton(Card(2), "Redraw pipe + label") != null, "the card now says drawn");
+                // Drawn: the card stops offering Draw, and Redraw moves out of the way into More.
+                Check(Detail(2).Contains("drawn") && FindButton(Card(2), "Draw pipe + label") == null &&
+                      ((System.Collections.IEnumerable)Card(2).GetType().GetProperty("MoreActions").GetValue(Card(2), null))
+                          .Cast<Button>().Any(b => b.Text == "Redraw pipe + label"),
+                      "the card now says drawn, and Redraw is under More");
                 Shot("05d-card-connected");
                 Send("_.U ");
             }, 3000);
@@ -994,8 +1010,8 @@ namespace FtfUiTest
                 Check(e.Direction != null && e.Direction.Text == "S/SE" && e.SizeIn == 17.5 && e.Material == "RIBBED PVC",
                       "opposite direction, size and material copied (S/SE 17.5\" RIBBED PVC)");
                 Check(!e.MeasuredDip.HasValue && QuickField<TextBox>("_dip").Text == "" &&
-                      e.Reference == FU.MeasurementReference.Invert && !e.ReferenceFromDrafter,
-                      "the MD starts empty and the reference starts at the office convention -- neither copied from 1047");
+                      e.Reference == FU.MeasurementReference.Unspecified,
+                      "the MD and reference start empty -- never copied from 1047");
                 Check(CompassSelected == "S/SE" && (bool)Compass.GetType().GetProperty("SelectedIsPrefilled").GetValue(Compass, null), "the copied direction shows lighter on the compass");
                 Check(Shown(QuickField<Label>("_prefillNote")) && QuickField<Label>("_prefillNote").Text.Contains("Copied from SDMH 1047"), "the panel says what was copied");
                 Check(FindButton(Quick, "Add matching pipe") != null && !Shown(FindButton(Quick, "Add + next")), "one explicit Add matching pipe");

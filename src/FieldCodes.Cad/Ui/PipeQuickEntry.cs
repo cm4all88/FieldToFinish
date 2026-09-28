@@ -109,10 +109,11 @@ namespace FieldCodes.Cad.Ui
             _dip.TextChanged += (s, e) => { ReadDip(false); UpdatePreview(); };
             _dip.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Submit(false); } };
             _references = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(230, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
-            var measureSection = Section("Measure down", RowWidth + 20,
-                Line(Hint("MD (ft)"), _dip),
-                Hint("Measured to"),
-                _references);
+            // Direction, type, size, measured to, then the MD: the reference is picked before the
+            // number is typed, so the drafter is not asked to go back for it.
+            var measureSection = Section("Measured to", RowWidth + 20,
+                _references,
+                Line(Hint("MD (ft)"), _dip));
 
             // Laid out the way the drafter drew it: the compass, then the type, then the size,
             // one under the other with everything on screen at once. Nothing to go looking for.
@@ -179,10 +180,9 @@ namespace FieldCodes.Cad.Ui
             _entry.Material = from.Material;
             // The measure down is never carried over from another structure.
             _entry.MeasuredDip = connectionId != null ? null : from.MeasuredDip;
-            // A new pipe starts at the office convention -- a measure down is to the invert unless
-            // it is noted otherwise. Editing keeps whatever the pipe already says, and how it got
-            // that value.
-            _entry.Reference = editing != null ? editing.Reference : MeasurementReference.Invert;
+            // Nothing is assumed about a new pipe's measure down: the drafter picks what it was
+            // taken to. Editing keeps whatever the pipe already says.
+            _entry.Reference = editing != null ? editing.Reference : MeasurementReference.Unspecified;
             _entry.ReferenceFromDrafter = editing != null && editing.ReferenceBasis == ReferenceBasis.EnteredByDrafter;
             _prefilledStart = (from.Prefilled ?? new List<string>()).ToList();
             _prefilledFrom = from.PrefilledFrom;

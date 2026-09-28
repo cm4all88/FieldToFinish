@@ -20,8 +20,11 @@ namespace FieldCodes.Utilities
         public double? MeasuredDip { get; set; }
         public MeasurementReference Reference { get; set; }
 
-        /// <summary>True once the drafter has picked what the measure down was taken to, rather
-        /// than leaving the office's invert convention to supply it.</summary>
+        /// <summary>
+        /// True once the drafter has picked what the measure down was taken to. It matters for a
+        /// pipe read from field notes, where the office convention may already have supplied an
+        /// invert: picking it here confirms it as the drafter's.
+        /// </summary>
         public bool ReferenceFromDrafter { get; set; }
 
         public const string DirectionField = "direction";
@@ -34,16 +37,7 @@ namespace FieldCodes.Utilities
         /// <summary>The pipe they were copied from, in words.</summary>
         public string PrefilledFrom { get; set; }
 
-        /// <summary>
-        /// A measure down entered in the panel is to the invert unless the drafter says
-        /// otherwise -- the same convention the field notes are read with. Ticking Top of
-        /// pipe or Springline says otherwise; so does choosing Not stated.
-        /// </summary>
-        public QuickPipeEntry()
-        {
-            Prefilled = new List<string>();
-            Reference = MeasurementReference.Invert;
-        }
+        public QuickPipeEntry() { Prefilled = new List<string>(); }
 
         /// <summary>A new observation, entered by the drafter.</summary>
         public PipeObservation Create()
@@ -51,10 +45,10 @@ namespace FieldCodes.Utilities
             var pipe = new PipeObservation { Source = ObservationSource.UserEntry };
             ApplyTo(pipe);
             pipe.Reference = Reference;
-            // Told apart on the label and in the review: what the drafter chose, and what the
-            // office convention supplied because nothing was noted.
-            pipe.ReferenceBasis = Reference == MeasurementReference.Unspecified ? ReferenceBasis.NotStated
-                : ReferenceFromDrafter ? ReferenceBasis.EnteredByDrafter : ReferenceBasis.FieldNoteConvention;
+            // What the drafter picked is the drafter's. Nothing picked stays unspecified: FTF
+            // does not decide what a measure down was taken to.
+            pipe.ReferenceBasis = Reference == MeasurementReference.Unspecified
+                ? ReferenceBasis.NotStated : ReferenceBasis.EnteredByDrafter;
             pipe.Prefilled = (Prefilled ?? new List<string>()).Distinct().ToList();
             pipe.PrefilledFrom = pipe.Prefilled.Count > 0 ? PrefilledFrom : null;
             return pipe;
