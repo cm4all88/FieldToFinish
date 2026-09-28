@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -9,17 +9,28 @@ using FieldCodes.Utilities;
 
 namespace FieldCodes.Cad.Ui
 {
-    /// <summary>A control whose height follows from the width it is given.</summary>
+    /// <summary>A control that lays itself out to a width and reports the height it needs.</summary>
     internal interface IFitsWidth
     {
         void FitWidth(int width);
     }
 
     /// <summary>
-    /// The Add pipe panel: record a pipe the way it reads in the field book, in a few clicks.
-    /// Direction (16 buttons) -> size (the usual ones for this structure, Larger for the rest or a typed size) ->
-    /// material (the usual ones, More... for the rest or a typed one) -> measure down and what it was measured to.
-    /// Every choice is a shortcut, never a rule: whatever was observed can be entered as it was observed.
+    /// Capturing one pipe, the way the field book is read out: size, then type, then direction,
+    /// then the measure down.
+    ///
+    /// One row of chips says what the pipe is so far, and ONE chooser strip opens under it. The
+    /// strip is the same strip at every step -- it holds the sizes, then the materials, then the
+    /// sixteen directions -- so the screen does not grow and there is nothing to navigate back
+    /// from. Choosing advances to the next step on its own; choosing a direction closes the strip
+    /// and puts the caret in the measure down, which is the only thing normally typed. Enter
+    /// finishes the pipe. There is no Add button: Enter is the end of typing the number, not
+    /// another step.
+    ///
+    /// Nothing is filled in for the drafter except the measurement reference, which starts at the
+    /// office's configured default (invert) and is visible as a chip so it can be seen and
+    /// changed. Size, type and direction are unknown until chosen, and the measure down cannot be
+    /// typed until they are, so Enter can never save half a pipe.
     /// </summary>
     internal sealed class PipeQuickEntry : Panel, IFitsWidth
     {
@@ -29,139 +40,105 @@ namespace FieldCodes.Cad.Ui
         public const string UsualMaterialsText = "Usual materials";
         public const string UnknownDirection = "?";
 
-        // Pipe references the panel offers first; the rest of the model's references sit under More.
-        private static readonly MeasurementReference[] MainReferences =
+        /// <summary>Which chooser the one strip is currently holding.</summary>
+        private enum Step { None, Size, Type, Direction, Reference }
+
+        private static readonly MeasurementReference[] References =
         {
-            MeasurementReference.Unspecified, MeasurementReference.Invert,
-            MeasurementReference.TopOfPipe, MeasurementReference.Springline
+            MeasurementReference.Invert, MeasurementReference.TopOfPipe, MeasurementReference.Springline,
+            MeasurementReference.BottomOfStructure, MeasurementReference.WaterLevel, MeasurementReference.Unspecified
         };
 
         private readonly Label _title;
-        private readonly FlowLayoutPanel _sections;
-        private readonly CompassPicker _compass;
-        private readonly TextBox _directionTyped;
-        private readonly Label _directionNote;
-        private readonly FlowLayoutPanel _sizes;
-        private readonly TextBox _sizeTyped;
-        private readonly Button _sizeUse;
-        private readonly FlowLayoutPanel _materials;
-        private readonly TextBox _materialTyped;
-        private readonly Button _materialUse;
+        private readonly FlowLayoutPanel _chips;
+        private readonly Button _sizeChip, _typeChip, _dirChip, _refChip;
         private readonly TextBox _dip;
-        private readonly FlowLayoutPanel _references;
+        private readonly Label _enterHint;
+        private readonly Panel _strip;
         private readonly Label _preview;
         private readonly Label _problem;
-        private readonly Button _add;
-        private readonly Button _addNext;
-        private readonly FlowLayoutPanel _bottom;
-        private readonly Panel _sizeSection, _materialSection;
+        private readonly Label _prefillNote;
+        private readonly FlowLayoutPanel _top;
 
-        private PipeChoiceSet _choices = new PipeChoiceSet();
-        private bool _largerShown, _moreShown, _moreReferencesShown;
         private readonly QuickPipeEntry _entry = new QuickPipeEntry();
+        private PipeChoiceSet _choices = new PipeChoiceSet();
+        private Func<PipeObservation, string> _summary = p => string.Empty;
+        private Step _step = Step.None;
+        private bool _largerShown, _moreShown, _dialShown;
         private List<string> _prefilledStart = new List<string>();
         private string _prefilledFrom;
         private readonly HashSet<string> _touched = new HashSet<string>();
-        private readonly Label _prefillNote;
-        private readonly FlowLayoutPanel _top;
-        private Func<PipeObservation, string> _summary = p => QuickPipeEntry.Summary(p, null);
 
-        /// <summary>The pipe being edited, or null when a new pipe is being added.</summary>
+        /// <summary>The pipe being edited, or null when a new one is being captured.</summary>
         public string EditingPipeId { get; private set; }
 
-        /// <summary>Raised with the entry and whether the panel should stay open for the next pipe.</summary>
+        /// <summary>The connection whose far end is being entered, or null.</summary>
+        public string CompletingConnectionId { get; private set; }
+
+        /// <summary>Raised when Enter finishes a pipe. The bool asks for another empty slot.</summary>
         public event Action<QuickPipeEntry, bool> Submitted;
         public event EventHandler Cancelled;
 
         public PipeQuickEntry()
         {
-            BackColor = DipBuilderForm.Calculated;
-            Padding = new Padding(12, 8, 12, 8);
-            Margin = Padding.Empty;
+            BackColor = DipBuilderForm.Surface;
+            Padding = new Padding(0, 2, 0, 2);
 
-            _title = new Label { AutoSize = true, Font = DipBuilderForm.F(11f, true), ForeColor = DipBuilderForm.Ink, Margin = new Padding(0, 0, 0, 6) };
-
-            // Direction: a compass, north up. Click the way the field notes say; ? in the middle when not recorded.
-            _compass = new CompassPicker { Margin = new Padding(0, 0, 0, 4) };
-            _compass.DirectionPicked += PickDirection;
-            _directionTyped = SmallBox(110);
-            _directionTyped.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedDirection(); } };
-            _directionTyped.Leave += (s, e) => { if (_directionTyped.Text.Trim().Length > 0) UseTypedDirection(); };
-            _directionNote = new Label { AutoSize = true, ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9f, false), Margin = new Padding(0, 2, 0, 0), MaximumSize = new Size(260, 0) };
-            var directionSection = Section("Direction", 310,
-                _compass,
-                Line(Hint("or type"), _directionTyped, Hint("N45E, AZ215")),
-                _directionNote);
-
-            _sizes = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(RowWidth, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
-            _sizeTyped = SmallBox(70);
-            _sizeTyped.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedSize(); } };
-            _sizeUse = Choice("Use size", null, (s, e) => UseTypedSize(), 0);
-            _sizeSection = Section("Size", RowWidth + 20, _sizes, Line(Hint("Other"), _sizeTyped, _sizeUse));
-
-            _materials = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(RowWidth, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
-            _materialTyped = SmallBox(120);
-            _materialTyped.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedMaterial(); } };
-            _materialUse = Choice("Use material", null, (s, e) => UseTypedMaterial(), 0);
-            _materialSection = Section("Type", RowWidth + 20, _materials, Line(Hint("Other"), _materialTyped, _materialUse));
-
-            _dip = SmallBox(80);
-            _dip.TextChanged += (s, e) => { ReadDip(false); UpdatePreview(); };
-            _dip.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Submit(false); } };
-            _references = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(230, 0), Margin = Padding.Empty, BackColor = Color.Transparent };
-            // Direction, type, size, measured to, then the MD: the reference is picked before the
-            // number is typed, so the drafter is not asked to go back for it.
-            var measureSection = Section("Measured to", RowWidth + 20,
-                _references,
-                Line(Hint("MD (ft)"), _dip));
-
-            // Laid out the way the drafter drew it: the compass, then the type, then the size,
-            // one under the other with everything on screen at once. Nothing to go looking for.
-            _sections = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top, AutoSize = false, WrapContents = false, FlowDirection = FlowDirection.TopDown,
-                BackColor = Color.Transparent, Margin = Padding.Empty, AutoScroll = true
-            };
-            _sections.Controls.AddRange(new Control[] { directionSection, _materialSection, _sizeSection, measureSection });
-
-            _preview = new Label { AutoSize = true, Font = new Font("Consolas", 11.5f, FontStyle.Bold), ForeColor = DipBuilderForm.Ink, Margin = new Padding(0, 6, 16, 0) };
-            _problem = new Label { AutoSize = true, ForeColor = DipBuilderForm.Bad, Margin = new Padding(0, 8, 12, 0) };
-            _add = Choice("Add pipe", null, (s, e) => Submit(false), 0);
-            _addNext = Choice("Add + next", null, (s, e) => Submit(true), 0);
-            var cancel = Choice("Cancel", null, (s, e) => { if (Cancelled != null) Cancelled(this, EventArgs.Empty); }, 0);
-            MakePrimary(_add);
-            _bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = false, WrapContents = true, BackColor = Color.Transparent };
-            _bottom.Controls.AddRange(new Control[] { _preview, _add, _addNext, cancel, _problem });
-
+            _title = new Label { AutoSize = true, ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9.5f, false), UseMnemonic = false, Margin = new Padding(0, 0, 0, 3) };
             _prefillNote = new Label
             {
-                AutoSize = true, ForeColor = DipBuilderForm.Warn, Font = DipBuilderForm.F(9.75f, false), Margin = new Padding(0, 0, 0, 6),
-                MaximumSize = new Size(1000, 0), Visible = false, UseMnemonic = false
+                AutoSize = true, ForeColor = DipBuilderForm.Warn, Font = DipBuilderForm.F(9.5f, false),
+                MaximumSize = new Size(1000, 0), Visible = false, UseMnemonic = false, Margin = new Padding(0, 0, 0, 4)
             };
-            var top = _top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Color.Transparent };
-            top.Controls.Add(_title);
-            top.Controls.Add(_prefillNote);
+            _top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Color.Transparent };
+            _top.Controls.Add(_title);
+            _top.Controls.Add(_prefillNote);
 
-            Controls.Add(_sections);
-            Controls.Add(_bottom);
-            Controls.Add(top);
-            Paint += (s, e) => e.Graphics.DrawRectangle(new Pen(DipBuilderForm.Accent), 0, 0, Width - 1, Height - 1);
+            _sizeChip = Chip("Size", () => Open(Step.Size));
+            _typeChip = Chip("Type", () => Open(Step.Type));
+            _dirChip = Chip("Direction", () => Open(Step.Direction));
+            _refChip = Chip("IE", () => Open(Step.Reference));
+
+            _dip = new TextBox
+            {
+                Width = 130, Font = new Font("Consolas", 13f, FontStyle.Regular), BorderStyle = BorderStyle.FixedSingle,
+                BackColor = DipBuilderForm.Dark ? DipBuilderForm.Calculated : Color.White, ForeColor = DipBuilderForm.Ink,
+                Margin = new Padding(4, 0, 6, 3), Enabled = false
+            };
+            _dip.TextChanged += (s, e) => { ReadDip(false); UpdatePreview(); };
+            _dip.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Submit(); }
+                else if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; Cancel(); }
+            };
+            _enterHint = new Label { AutoSize = true, ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9f, false), Margin = new Padding(0, 7, 0, 0), Text = "↵ saves" };
+
+            _chips = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, BackColor = Color.Transparent, Margin = Padding.Empty };
+            _chips.Controls.AddRange(new Control[] { _sizeChip, _typeChip, _dirChip, _refChip, _dip, _enterHint });
+
+            _strip = new Panel { Dock = DockStyle.Top, BackColor = DipBuilderForm.Ground, Padding = new Padding(8, 6, 8, 6), Visible = false };
+
+            _preview = new Label { Dock = DockStyle.Top, AutoSize = false, Height = 20, Font = new Font("Consolas", 10f, FontStyle.Regular), ForeColor = DipBuilderForm.Muted, UseMnemonic = false };
+            _problem = new Label { Dock = DockStyle.Top, AutoSize = false, Height = 0, ForeColor = DipBuilderForm.Bad, Font = DipBuilderForm.F(9.5f, false), UseMnemonic = false };
+
+            Controls.Add(_problem);
+            Controls.Add(_preview);
+            Controls.Add(_strip);
+            Controls.Add(_chips);
+            Controls.Add(_top);
         }
 
         // ------------------------------------------------------------- opening
 
-        /// <summary>The connection whose far end is being completed, or null.</summary>
-        public string CompletingConnectionId { get; private set; }
-
-        /// <summary>Opens the panel for a new pipe (editing null) or for an existing observation.</summary>
         public void Begin(PipeChoiceSet choices, PipeObservation editing, string structureLabel, Func<PipeObservation, string> summary)
         {
             Start(choices, editing != null ? QuickPipeEntry.From(editing) : new QuickPipeEntry(), editing, null, structureLabel, null, summary);
         }
 
         /// <summary>
-        /// Opens the panel to enter this structure's end of a connected pipe, starting from what the other end says:
-        /// the opposite direction, size and material, shown lighter as copied. The measure down starts empty.
+        /// Opens to enter this structure's end of a connected pipe, starting from what the other
+        /// end says: the opposite direction, size and material, marked as copied. The measure down
+        /// starts empty -- it is this structure's own observation.
         /// </summary>
         public void BeginComplete(PipeChoiceSet choices, QuickPipeEntry prefill, string connectionId, string structureLabel,
                                   string sourceLabel, Func<PipeObservation, string> summary)
@@ -169,292 +146,379 @@ namespace FieldCodes.Cad.Ui
             Start(choices, prefill, null, connectionId, structureLabel, sourceLabel, summary);
         }
 
+        /// <summary>The words above the chips: which pipe of how many, or what is being edited.</summary>
+        public string SlotText { get; set; }
+
         private void Start(PipeChoiceSet choices, QuickPipeEntry from, PipeObservation editing, string connectionId,
                            string structureLabel, string sourceLabel, Func<PipeObservation, string> summary)
         {
             _summary = summary ?? _summary;
             EditingPipeId = editing != null ? editing.Id : null;
             CompletingConnectionId = connectionId;
+
             _entry.Direction = from.Direction;
             _entry.SizeIn = from.SizeIn;
             _entry.Material = from.Material;
-            // The measure down is never carried over from another structure.
             _entry.MeasuredDip = connectionId != null ? null : from.MeasuredDip;
-            // Nothing is assumed about a new pipe's measure down: the drafter picks what it was
-            // taken to. Editing keeps whatever the pipe already says.
-            _entry.Reference = editing != null ? editing.Reference : MeasurementReference.Unspecified;
+            // The office's configured default, visible on its chip and one click to change. An
+            // edit keeps whatever the pipe already says.
+            _entry.Reference = editing != null ? editing.Reference : MeasurementReference.Invert;
             _entry.ReferenceFromDrafter = editing != null && editing.ReferenceBasis == ReferenceBasis.EnteredByDrafter;
             _prefilledStart = (from.Prefilled ?? new List<string>()).ToList();
             _prefilledFrom = from.PrefilledFrom;
             _touched.Clear();
 
-            _title.Text = connectionId != null ? "Complete pipe from " + sourceLabel + " at " + structureLabel
-                        : editing != null ? "Edit pipe at " + structureLabel : "Add pipe at " + structureLabel;
-            _add.Text = connectionId != null ? "Add matching pipe" : editing != null ? "Save pipe" : "Add pipe";
-            _addNext.Visible = editing == null && connectionId == null;
+            _title.Text = connectionId != null ? "Complete pipe from " + sourceLabel
+                        : editing != null ? "Edit pipe" : SlotText ?? "New pipe";
             _prefillNote.Text = _prefilledStart.Count == 0 ? string.Empty
                 : "Copied from " + (_prefilledFrom ?? "the connected pipe") + ": " + string.Join(", ", _prefilledStart.ToArray()) +
-                  " (shown lighter). Click a value to confirm or change it as observed here" +
-                  (connectionId != null ? ", then enter the MD measured here." : ".");
+                  ". Change any of it as observed here" + (connectionId != null ? ", then enter the MD measured here." : ".");
             _prefillNote.Visible = _prefillNote.Text.Length > 0;
-            _directionTyped.Text = string.Empty;
-            _sizeTyped.Text = string.Empty;
-            _materialTyped.Text = string.Empty;
+
             _dip.Text = _entry.MeasuredDip.HasValue ? QuickPipeEntry.Exact(_entry.MeasuredDip.Value) : string.Empty;
             _problem.Text = string.Empty;
-            _moreReferencesShown = !MainReferences.Contains(_entry.Reference);
-            SetChoices(choices);
-            // A value no button shows (a field-measured 17.5", a material off every list) sits in its typed box.
-            if (_entry.SizeIn.HasValue && !_choices.CommonSizes.Concat(_choices.LargerSizes).Any(v => Same(v, _entry.SizeIn.Value)))
-                _sizeTyped.Text = QuickPipeEntry.Exact(_entry.SizeIn.Value);
-            if (!string.IsNullOrEmpty(_entry.Material) && !_choices.CommonMaterials.Concat(_choices.MoreMaterials).Contains(_entry.Material))
-                _materialTyped.Text = _entry.Material;
+            _largerShown = _moreShown = _dialShown = false;
+            _choices = choices ?? new PipeChoiceSet();
+
+            RefreshChips();
+            // A fresh pipe opens on its first question, so the three choices are three clicks.
+            Open(_entry.SizeIn.HasValue ? (_entry.Material != null ? Step.None : Step.Type) : Step.Size);
+            if (Complete()) FocusDip();
         }
 
-        /// <summary>New buttons for a changed structure type or system; what was already chosen is kept.</summary>
+        /// <summary>New buttons for a changed structure type or system; what was chosen is kept.</summary>
         public void SetChoices(PipeChoiceSet choices)
         {
             _choices = choices ?? new PipeChoiceSet();
-            // A value the structure's usual list lacks opens the longer list, so it is seen as chosen.
-            _largerShown = _entry.SizeIn.HasValue && !_choices.CommonSizes.Any(v => Same(v, _entry.SizeIn.Value));
-            _moreShown = !string.IsNullOrEmpty(_entry.Material) && !_choices.CommonMaterials.Contains(_entry.Material);
-            BuildSizes();
-            BuildMaterials();
-            BuildReferences();
-            ShowDirection();
+            RefreshChips();
+            if (_step != Step.None) Open(_step);
             UpdatePreview();
             FitWidth(Width);
         }
 
         public string ChoiceRule { get { return _choices.RuleName; } }
 
-        // ----------------------------------------------------------- direction
+        // --------------------------------------------------------------- chips
 
-        /// <summary>Copied values the drafter has not clicked, typed or changed yet.</summary>
-        private bool StillPrefilled(string field) { return _prefilledStart.Contains(field) && !_touched.Contains(field); }
+        private Button Chip(string text, Action click)
+        {
+            var b = new Button
+            {
+                Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlatStyle = FlatStyle.Flat,
+                Font = DipBuilderForm.F(10f, false), Margin = new Padding(0, 0, 5, 3), Padding = new Padding(6, 2, 6, 2),
+                Cursor = Cursors.Hand, UseMnemonic = false
+            };
+            b.Click += (s, e) => click();
+            return b;
+        }
+
+        /// <summary>
+        /// A chip either names what it is waiting for, or shows the value. The one FTF is waiting
+        /// on next is the only one that stands out, so the eye is led along the row.
+        /// </summary>
+        private void Dress(Button chip, string label, string value, bool next)
+        {
+            var has = !string.IsNullOrEmpty(value);
+            chip.Text = has ? value : label;
+            chip.Font = has ? new Font("Consolas", 10.5f, FontStyle.Regular) : DipBuilderForm.F(10f, false);
+            chip.ForeColor = has ? DipBuilderForm.Ink : next ? DipBuilderForm.Accent : DipBuilderForm.Muted;
+            chip.BackColor = has ? DipBuilderForm.Surface : DipBuilderForm.Ground;
+            chip.FlatAppearance.BorderColor = has ? DipBuilderForm.ButtonBorder : next ? DipBuilderForm.Accent : DipBuilderForm.Rule;
+            chip.FlatAppearance.MouseOverBackColor = DipBuilderForm.AccentSoft;
+        }
+
+        private void RefreshChips()
+        {
+            var size = _entry.SizeIn.HasValue ? SizeText(_entry.SizeIn.Value) : null;
+            var type = string.IsNullOrWhiteSpace(_entry.Material) ? null : _entry.Material;
+            var dir = _entry.Direction != null ? DirectionShortcuts.ButtonFor(_entry.Direction) : null;
+            if (_entry.Direction != null && string.IsNullOrEmpty(dir)) dir = _entry.Direction.Text;
+
+            Dress(_sizeChip, "Size", size, size == null);
+            Dress(_typeChip, "Type", type, size != null && type == null);
+            Dress(_dirChip, "Direction", dir, size != null && type != null && dir == null);
+            Dress(_refChip, "IE", ReferenceChip(_entry.Reference) + " ▾", false);
+            _refChip.ForeColor = DipBuilderForm.Muted;
+
+            var ready = Complete();
+            _dip.Enabled = ready;
+            _enterHint.Visible = ready;
+            UpdatePreview();
+        }
+
+        private bool Complete()
+        {
+            return _entry.SizeIn.HasValue && !string.IsNullOrWhiteSpace(_entry.Material) && _entry.Direction != null;
+        }
+
+        private static string ReferenceChip(MeasurementReference reference)
+        {
+            switch (reference)
+            {
+                case MeasurementReference.Invert: return "IE";
+                case MeasurementReference.TopOfPipe: return "TOP";
+                case MeasurementReference.Springline: return "SPR";
+                case MeasurementReference.BottomOfStructure: return "BOT";
+                case MeasurementReference.WaterLevel: return "WL";
+                default: return "not stated";
+            }
+        }
+
+        private static string ReferenceWords(MeasurementReference reference)
+        {
+            switch (reference)
+            {
+                case MeasurementReference.Invert: return "Invert";
+                case MeasurementReference.TopOfPipe: return "Top of pipe";
+                case MeasurementReference.Springline: return "Springline";
+                case MeasurementReference.BottomOfStructure: return "Bottom";
+                case MeasurementReference.WaterLevel: return "Water";
+                default: return "Not stated";
+            }
+        }
+
+        // -------------------------------------------------------------- strip
+
+        /// <summary>Puts one chooser in the strip. Step.None closes it.</summary>
+        private void Open(Step step)
+        {
+            _step = step;
+            _strip.SuspendLayout();
+            foreach (Control c in _strip.Controls.Cast<Control>().ToList()) { _strip.Controls.Remove(c); c.Dispose(); }
+
+            var row = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, BackColor = Color.Transparent, Margin = Padding.Empty };
+            switch (step)
+            {
+                case Step.Size: BuildSizes(row); break;
+                case Step.Type: BuildMaterials(row); break;
+                case Step.Direction: BuildDirections(row); break;
+                case Step.Reference: BuildReferences(row); break;
+            }
+            if (step != Step.None) _strip.Controls.Add(row);
+            _strip.Visible = step != Step.None;
+            _strip.ResumeLayout();
+            RefreshChips();
+            FitWidth(Width);
+        }
+
+        private Button Choice(string text, Action click, bool quiet = false)
+        {
+            var b = new Button
+            {
+                Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlatStyle = FlatStyle.Flat,
+                Font = quiet ? DipBuilderForm.F(9.5f, false) : new Font("Consolas", 10.5f, FontStyle.Regular),
+                Margin = new Padding(0, 0, 4, 3), Padding = new Padding(6, 2, 6, 2), Cursor = Cursors.Hand,
+                BackColor = DipBuilderForm.Surface, ForeColor = quiet ? DipBuilderForm.Muted : DipBuilderForm.Ink, UseMnemonic = false
+            };
+            b.FlatAppearance.BorderColor = DipBuilderForm.ButtonBorder;
+            b.FlatAppearance.MouseOverBackColor = DipBuilderForm.AccentSoft;
+            b.Click += (s, e) => click();
+            return b;
+        }
+
+        private TextBox SmallBox(int width, string text = "")
+        {
+            return new TextBox
+            {
+                Width = width, Text = text, BorderStyle = BorderStyle.FixedSingle, Font = DipBuilderForm.F(10f, false),
+                BackColor = DipBuilderForm.Dark ? DipBuilderForm.Calculated : Color.White, ForeColor = DipBuilderForm.Ink,
+                Margin = new Padding(0, 1, 4, 3)
+            };
+        }
+
+        private void BuildSizes(FlowLayoutPanel row)
+        {
+            var sizes = _largerShown ? _choices.LargerSizes : _choices.CommonSizes;
+            foreach (var value in sizes)
+            {
+                var v = value;
+                row.Controls.Add(Choice(SizeText(v), () => PickSize(v)));
+            }
+            row.Controls.Add(Choice(_largerShown ? CommonSizesText : LargerText, () => { _largerShown = !_largerShown; Open(Step.Size); }, true));
+            if (_largerShown)
+            {
+                var typed = SmallBox(70);
+                typed.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedSize(typed.Text); } };
+                row.Controls.Add(typed);
+                row.Controls.Add(Choice("Use", () => UseTypedSize(typed.Text), true));
+            }
+        }
+
+        private void BuildMaterials(FlowLayoutPanel row)
+        {
+            var materials = _moreShown ? _choices.MoreMaterials : _choices.CommonMaterials;
+            foreach (var value in materials)
+            {
+                var v = value;
+                row.Controls.Add(Choice(v, () => PickMaterial(v)));
+            }
+            row.Controls.Add(Choice(_moreShown ? UsualMaterialsText : MoreText, () => { _moreShown = !_moreShown; Open(Step.Type); }, true));
+            if (_moreShown)
+            {
+                var typed = SmallBox(120);
+                typed.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; PickMaterial(typed.Text); } };
+                row.Controls.Add(typed);
+                row.Controls.Add(Choice("Use", () => PickMaterial(typed.Text), true));
+            }
+        }
+
+        /// <summary>
+        /// The sixteen, in compass order, as two rows of eight -- read and hit like any other
+        /// list. A typed bearing or azimuth covers anything off the sixteen, and the dial is
+        /// there for anyone who would rather aim.
+        /// </summary>
+        private void BuildDirections(FlowLayoutPanel row)
+        {
+            if (_dialShown)
+            {
+                var dial = new CompassPicker { Width = 150, Height = 150, Margin = new Padding(0, 0, 8, 3) };
+                dial.DirectionPicked += PickDirection;
+                if (_entry.Direction != null) dial.Selected = DirectionShortcuts.ButtonFor(_entry.Direction);
+                row.Controls.Add(dial);
+            }
+            else
+            {
+                var grid = new TableLayoutPanel { ColumnCount = 8, RowCount = 2, AutoSize = true, Margin = new Padding(0, 0, 0, 3), BackColor = Color.Transparent };
+                for (var i = 0; i < 8; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12.5f));
+                foreach (var name in DirectionShortcuts.Names)
+                {
+                    var n = name;
+                    var b = Choice(n, () => PickDirection(n));
+                    b.Margin = new Padding(0, 0, 3, 3);
+                    b.AutoSize = false;
+                    b.Width = 56;
+                    b.Height = 26;
+                    grid.Controls.Add(b);
+                }
+                row.Controls.Add(grid);
+            }
+
+            var line = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Color.Transparent, Margin = Padding.Empty };
+            var typed = SmallBox(150);
+            typed.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; UseTypedDirection(typed.Text); } };
+            line.Controls.Add(new Label { Text = "or", AutoSize = true, ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9.5f, false), Margin = new Padding(0, 5, 5, 0) });
+            line.Controls.Add(typed);
+            line.Controls.Add(Choice("Use", () => UseTypedDirection(typed.Text), true));
+            line.Controls.Add(Choice(UnknownDirection, () => PickDirection(UnknownDirection), true));
+            line.Controls.Add(Choice(_dialShown ? "rows" : "◎ dial", () => { _dialShown = !_dialShown; Open(Step.Direction); }, true));
+            row.Controls.Add(line);
+        }
+
+        private void BuildReferences(FlowLayoutPanel row)
+        {
+            foreach (var reference in References)
+            {
+                var r = reference;
+                var b = Choice(ReferenceWords(r), () => PickReference(r), r == MeasurementReference.Unspecified);
+                if (r == _entry.Reference)
+                {
+                    b.BackColor = DipBuilderForm.AccentSoft;
+                    b.FlatAppearance.BorderColor = DipBuilderForm.Accent;
+                }
+                row.Controls.Add(b);
+            }
+        }
+
+        // -------------------------------------------------------------- picking
+
+        private void PickSize(double inches)
+        {
+            _touched.Add(QuickPipeEntry.SizeField);
+            _entry.SizeIn = inches;
+            Advance(Step.Size);
+        }
+
+        private void UseTypedSize(string text)
+        {
+            double value;
+            if (!double.TryParse((text ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) || value <= 0)
+            {
+                Problem("Enter the size in inches, as it was measured.");
+                return;
+            }
+            PickSize(value);
+        }
+
+        private void PickMaterial(string material)
+        {
+            var value = (material ?? string.Empty).Trim().ToUpperInvariant();
+            if (value.Length == 0) { Problem("Enter the material, or pick one."); return; }
+            _touched.Add(QuickPipeEntry.MaterialField);
+            _entry.Material = value;
+            Advance(Step.Type);
+        }
 
         private void PickDirection(string name)
         {
             _touched.Add(QuickPipeEntry.DirectionField);
             _entry.Direction = name == UnknownDirection ? ObservedDirection.Unknown("?") : DirectionShortcuts.For(name);
-            _directionTyped.Text = string.Empty;
-            ShowDirection();
-            UpdatePreview();
+            Advance(Step.Direction);
         }
 
-        private void UseTypedDirection()
+        private void UseTypedDirection(string text)
         {
-            var text = _directionTyped.Text.Trim();
-            if (text.Length == 0) return;
-            var d = DirectionShortcuts.Parse(text);
-            if (d == null) { _problem.Text = "\"" + text + "\" is not a direction (N/NE, N45E, AZ215, ?)."; return; }
-            _problem.Text = string.Empty;
+            var direction = DirectionShortcuts.Parse(text);
+            if (direction == null) { Problem("That is not a direction FTF can read. Try N, N/NE, a bearing or an azimuth."); return; }
             _touched.Add(QuickPipeEntry.DirectionField);
-            _entry.Direction = d;
-            ShowDirection();
-            UpdatePreview();
+            _entry.Direction = direction;
+            Advance(Step.Direction);
         }
 
-        private void ShowDirection()
+        private void PickReference(MeasurementReference reference)
         {
-            var button = DirectionShortcuts.ButtonFor(_entry.Direction);
-            var unknown = _entry.Direction != null && !_entry.Direction.IsKnown && _entry.Direction.Text == "?";
-            _compass.Selected = unknown ? CompassPicker.Unknown : button;
-            _compass.SelectedIsPrefilled = StillPrefilled(QuickPipeEntry.DirectionField);
-            // A bearing or azimuth from the notes has no button; it is kept exactly as observed.
-            _directionNote.Text = _entry.Direction != null && _entry.Direction.IsKnown && button == null
-                ? "Kept as observed: " + _entry.Direction.Text
-                : string.Empty;
+            _entry.Reference = reference;
+            _entry.ReferenceFromDrafter = true;
+            Advance(Step.Reference);
         }
 
-        // ---------------------------------------------------------------- size
-
-        private void BuildSizes()
+        /// <summary>
+        /// Moves to whatever is still unanswered after this step, or closes the strip and takes
+        /// the caret to the measure down when the pipe is described.
+        /// </summary>
+        private void Advance(Step from)
         {
-            _sizes.SuspendLayout();
-            _sizes.Controls.Clear();
-            var list = _largerShown ? _choices.LargerSizes : _choices.CommonSizes;
-            foreach (var v in list)
-            {
-                var size = v;
-                var b = Choice(SizeText(size), "size", (s, e) => { _touched.Add(QuickPipeEntry.SizeField); _entry.SizeIn = size; _sizeTyped.Text = string.Empty; MarkSize(); UpdatePreview(); }, 46);
-                _sizes.Controls.Add(b);
-            }
-            _sizes.Controls.Add(Choice(_largerShown ? CommonSizesText : LargerText, null, (s, e) =>
-            {
-                _largerShown = !_largerShown;
-                BuildSizes();
-                FitWidth(Width);
-            }, 0));
-            _sizes.ResumeLayout();
-            // Any size can be typed from the longer list: a field-measured 17.5" is kept as 17.5".
-            _sizeTyped.Parent.Visible = _largerShown;
-            MarkSize();
+            Problem(null);
+            if (!_entry.SizeIn.HasValue) { Open(Step.Size); return; }
+            if (string.IsNullOrWhiteSpace(_entry.Material)) { Open(Step.Type); return; }
+            if (_entry.Direction == null) { Open(Step.Direction); return; }
+            Open(Step.None);
+            FocusDip();
         }
 
-        private void UseTypedSize()
+        private void FocusDip()
         {
-            var text = _sizeTyped.Text.Trim();
-            if (text.Length == 0) return;
-            double v;
-            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out v) || double.IsNaN(v) || double.IsInfinity(v) || v <= 0)
-            {
-                _problem.Text = "Size \"" + text + "\" is not a positive number of inches.";
-                return;
-            }
-            _problem.Text = string.Empty;
-            _touched.Add(QuickPipeEntry.SizeField);
-            _entry.SizeIn = v;
-            MarkSize();
-            UpdatePreview();
+            if (!_dip.Enabled) return;
+            _dip.Focus();
+            _dip.SelectionStart = _dip.Text.Length;
         }
 
-        private void MarkSize()
-        {
-            foreach (Control c in _sizes.Controls)
-            {
-                var b = c as Button;
-                if (b == null || b.Tag as string != "size") continue;
-                Mark(b, _entry.SizeIn.HasValue && b.Text == SizeText(_entry.SizeIn.Value), StillPrefilled(QuickPipeEntry.SizeField));
-            }
-        }
+        // ------------------------------------------------------------ finishing
 
-        public static string SizeText(double inches) { return QuickPipeEntry.Exact(inches) + "\""; }
-
-        // ------------------------------------------------------------ material
-
-        private void BuildMaterials()
-        {
-            _materials.SuspendLayout();
-            _materials.Controls.Clear();
-            foreach (var m in _moreShown ? _choices.MoreMaterials : _choices.CommonMaterials)
-            {
-                var material = m;
-                _materials.Controls.Add(Choice(material, "material", (s, e) =>
-                {
-                    _touched.Add(QuickPipeEntry.MaterialField);
-                    _entry.Material = material;
-                    _materialTyped.Text = string.Empty;
-                    MarkMaterial();
-                    UpdatePreview();
-                    _dip.Focus();
-                }, 52));
-            }
-            _materials.Controls.Add(Choice(_moreShown ? UsualMaterialsText : MoreText, null, (s, e) =>
-            {
-                _moreShown = !_moreShown;
-                BuildMaterials();
-                FitWidth(Width);
-            }, 0));
-            _materials.ResumeLayout();
-            _materialTyped.Parent.Visible = _moreShown;
-            MarkMaterial();
-        }
-
-        private void UseTypedMaterial()
-        {
-            var text = _materialTyped.Text.Trim();
-            if (text.Length == 0) return;
-            _problem.Text = string.Empty;
-            _touched.Add(QuickPipeEntry.MaterialField);
-            _entry.Material = text.ToUpperInvariant();
-            MarkMaterial();
-            UpdatePreview();
-        }
-
-        private void MarkMaterial()
-        {
-            foreach (Control c in _materials.Controls)
-            {
-                var b = c as Button;
-                if (b == null || b.Tag as string != "material") continue;
-                Mark(b, string.Equals(b.Text, _entry.Material, StringComparison.OrdinalIgnoreCase), StillPrefilled(QuickPipeEntry.MaterialField));
-            }
-        }
-
-        // ------------------------------------------------------- measure down
-
-        private void BuildReferences()
-        {
-            _references.SuspendLayout();
-            _references.Controls.Clear();
-            var shown = _moreReferencesShown
-                ? (IEnumerable<MeasurementReference>)Enum.GetValues(typeof(MeasurementReference)).Cast<MeasurementReference>()
-                : MainReferences;
-            foreach (var r in shown)
-            {
-                var reference = r;
-                var b = Choice(ReferenceWords(reference), "reference", (s, e) =>
-                {
-                    _entry.Reference = reference;
-                    _entry.ReferenceFromDrafter = true;
-                    MarkReferences();
-                    UpdatePreview();
-                }, 0);
-                b.Name = reference.ToString();
-                _references.Controls.Add(b);
-            }
-            if (!_moreReferencesShown)
-                _references.Controls.Add(Choice(MoreText, null, (s, e) => { _moreReferencesShown = true; BuildReferences(); FitWidth(Width); }, 0));
-            _references.ResumeLayout();
-            MarkReferences();
-        }
-
-        private void MarkReferences()
-        {
-            foreach (Control c in _references.Controls)
-            {
-                var b = c as Button;
-                if (b == null || b.Tag as string != "reference") continue;
-                Mark(b, b.Name == _entry.Reference.ToString());
-            }
-        }
-
-        internal static string ReferenceWords(MeasurementReference reference)
-        {
-            switch (reference)
-            {
-                case MeasurementReference.Unspecified: return "Not stated";
-                case MeasurementReference.TopOfPipe: return "Top of pipe";
-                case MeasurementReference.BottomOfStructure: return "Bottom of structure";
-                case MeasurementReference.WaterLevel: return "Water level";
-                case MeasurementReference.TopOfGrate: return "Top of grate";
-                case MeasurementReference.TopOfCasting: return "Top of casting";
-                default: return reference.ToString();
-            }
-        }
-
-        private bool ReadDip(bool report)
+        private bool ReadDip(bool required)
         {
             var text = _dip.Text.Trim();
-            if (text.Length == 0) { _entry.MeasuredDip = null; return true; }
-            double v;
-            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out v) && v >= 0 && !double.IsNaN(v) && !double.IsInfinity(v))
+            if (text.Length == 0)
             {
-                _entry.MeasuredDip = v;
+                _entry.MeasuredDip = null;
+                if (required) { Problem("Type the measure down, then press Enter."); return false; }
+                Problem(null);
                 return true;
             }
-            if (report) _problem.Text = "MD \"" + text + "\" is not a measure down (0 or more feet below the rim).";
-            return false;
+            double value;
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                Problem("The measure down must be a number in feet.");
+                return false;
+            }
+            _entry.MeasuredDip = value;
+            Problem(null);
+            return true;
         }
 
-        // -------------------------------------------------------------- submit
-
-        private void Submit(bool next)
+        private void Submit()
         {
+            if (!Complete()) { Problem("Choose the size, type and direction first."); return; }
             if (!ReadDip(true)) return;
-            // Typed values not yet applied with their buttons are still what the drafter means.
-            if (_directionTyped.Text.Trim().Length > 0) UseTypedDirection();
-            // A typed box still holding the value it started with (a copied 17.5") is not a new entry.
-            double typedSize;
-            if (_largerShown && _sizeTyped.Text.Trim().Length > 0 &&
-                !(double.TryParse(_sizeTyped.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out typedSize) &&
-                  _entry.SizeIn.HasValue && Same(typedSize, _entry.SizeIn.Value)))
-                UseTypedSize();
-            if (_moreShown && _materialTyped.Text.Trim().Length > 0 &&
-                !string.Equals(_materialTyped.Text.Trim(), _entry.Material, StringComparison.OrdinalIgnoreCase))
-                UseTypedMaterial();
-            if (_problem.Text.Length > 0) return;
 
             var entry = new QuickPipeEntry
             {
@@ -464,119 +528,49 @@ namespace FieldCodes.Cad.Ui
                 MeasuredDip = _entry.MeasuredDip,
                 Reference = _entry.Reference,
                 ReferenceFromDrafter = _entry.ReferenceFromDrafter,
-                // Copied values stay marked as copied until the drafter clicks, types or changes them here.
+                // Copied values stay marked as copied until the drafter changes them here.
                 Prefilled = _prefilledStart.Where(f => !_touched.Contains(f)).ToList(),
                 PrefilledFrom = _prefilledFrom
             };
-            if (Submitted != null) Submitted(entry, next);
+            // A new pipe asks for the next empty slot; an edit or a completion does not.
+            if (Submitted != null) Submitted(entry, EditingPipeId == null && CompletingConnectionId == null);
         }
 
-        /// <summary>What the panel would record right now.</summary>
-        public QuickPipeEntry Current { get { return _entry; } }
+        private void Cancel()
+        {
+            if (Cancelled != null) Cancelled(this, EventArgs.Empty);
+        }
+
+        private void Problem(string text)
+        {
+            _problem.Text = text ?? string.Empty;
+            _problem.Height = _problem.Text.Length == 0 ? 0 : _problem.Font.Height + 4;
+        }
 
         private void UpdatePreview()
         {
-            var pipe = new PipeObservation();
-            _entry.ApplyTo(pipe);
-            pipe.Reference = _entry.Reference;
-            _preview.Text = _summary(pipe);
-            _preview.ForeColor = _entry.MeasuredDip.HasValue && _entry.Reference == MeasurementReference.Unspecified ? DipBuilderForm.Warn : DipBuilderForm.Ink;
+            if (!Complete()) { _preview.Text = string.Empty; return; }
+            var pipe = _entry.Create();
+            _preview.Text = _summary != null ? _summary(pipe) : QuickPipeEntry.Summary(pipe, new UtilitySettings());
         }
 
-        // -------------------------------------------------------------- layout
+        // ----------------------------------------------------------- housekeeping
+
+        public static string SizeText(double inches) { return QuickPipeEntry.Exact(inches) + "\""; }
 
         public void FitWidth(int width)
         {
-            if (width <= 0) return;
-            var inner = Math.Max(200, width - Padding.Horizontal);
-            _sections.Width = inner;
-            _sections.Height = _sections.GetPreferredSize(new Size(inner, 0)).Height;
-            _bottom.Height = _bottom.GetPreferredSize(new Size(inner, 0)).Height;
-            _prefillNote.MaximumSize = new Size(inner, 0);
-            _top.Height = _top.GetPreferredSize(new Size(inner, 0)).Height;
-            var height = Padding.Vertical + _top.Height + 2 + _sections.Height + _bottom.Height + 4;
-            if (Height != height) Height = height;
+            Width = width;
+            var inner = Math.Max(160, width - Padding.Horizontal);
+            _top.Width = inner;
+            _chips.Width = inner;
+            _chips.Height = _chips.GetPreferredSize(new Size(inner, 0)).Height;
+            _strip.Width = inner;
+            _strip.Height = _strip.Visible
+                ? _strip.Controls.Cast<Control>().Sum(c => c.GetPreferredSize(new Size(inner - _strip.Padding.Horizontal, 0)).Height) + _strip.Padding.Vertical
+                : 0;
+            _preview.Height = _preview.Text.Length == 0 ? 0 : 20;
+            Height = Padding.Vertical + _top.Height + _chips.Height + _strip.Height + _preview.Height + _problem.Height;
         }
-
-        /// <summary>
-        /// Five buttons to a row, as the drafter drew the sheet: wide enough for five of the
-        /// widest button and its margins, so a row never breaks into an odd shape.
-        /// </summary>
-        private const int RowWidth = 300;
-
-        private static Panel Section(string caption, int width, params Control[] rows)
-        {
-            var flow = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, Width = width,
-                MinimumSize = new Size(width, 0), MaximumSize = new Size(width, 0), BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 14, 6)
-            };
-            flow.Controls.Add(new Label { Text = caption, AutoSize = true, Font = DipBuilderForm.F(9.5f, true), ForeColor = DipBuilderForm.Muted, Margin = new Padding(0, 0, 0, 3) });
-            flow.Controls.AddRange(rows);
-            return flow;
-        }
-
-        private static FlowLayoutPanel Line(params Control[] controls)
-        {
-            var f = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 0), BackColor = Color.Transparent };
-            f.Controls.AddRange(controls);
-            return f;
-        }
-
-        private static Label Hint(string text)
-        {
-            return new Label { Text = text, AutoSize = true, ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9f, false), Margin = new Padding(0, 6, 4, 0) };
-        }
-
-        private static TextBox SmallBox(int width)
-        {
-            return new TextBox
-            {
-                Width = width, BorderStyle = BorderStyle.FixedSingle, Margin = new Padding(0, 2, 4, 2), Font = DipBuilderForm.F(10.5f, true),
-                BackColor = DipBuilderForm.Dark ? DipBuilderForm.Surface : Color.White, ForeColor = DipBuilderForm.Ink
-            };
-        }
-
-        /// <summary>A flat button; tag says which group of choices it belongs to (it shows as picked when chosen).</summary>
-        private static Button Choice(string text, string group, EventHandler click, int minWidth)
-        {
-            var b = new Button
-            {
-                Text = text, Tag = group, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlatStyle = FlatStyle.Flat,
-                BackColor = DipBuilderForm.Surface, ForeColor = DipBuilderForm.Ink, Font = DipBuilderForm.F(9.5f, true),
-                Margin = new Padding(0, 0, 4, 4), Padding = new Padding(2, 0, 2, 0), Cursor = Cursors.Hand,
-                MinimumSize = new Size(minWidth, 0), UseMnemonic = false
-            };
-            b.FlatAppearance.BorderColor = DipBuilderForm.ButtonBorder;
-            b.FlatAppearance.MouseOverBackColor = DipBuilderForm.AccentSoft;
-            b.Click += click;
-            return b;
-        }
-
-        private static void MakePrimary(Button b)
-        {
-            b.BackColor = DipBuilderForm.Accent;
-            b.ForeColor = Color.White;
-            b.FlatAppearance.BorderColor = DipBuilderForm.Accent;
-            b.FlatAppearance.MouseOverBackColor = DipBuilderForm.AccentHover;
-        }
-
-        /// <summary>Shows a choice as picked (filled) or not; a copied value that is not confirmed yet is lighter.</summary>
-        private static void Mark(Button b, bool picked, bool prefilled = false)
-        {
-            b.BackColor = picked ? (prefilled ? DipBuilderForm.AccentSoft : DipBuilderForm.Accent) : DipBuilderForm.Surface;
-            b.ForeColor = picked && !prefilled ? Color.White : DipBuilderForm.Ink;
-            b.FlatAppearance.BorderColor = picked ? DipBuilderForm.Accent : DipBuilderForm.ButtonBorder;
-            b.FlatAppearance.BorderSize = picked && prefilled ? 2 : 1;
-        }
-
-        /// <summary>True when the button shows as picked (for the tests and for screen readers' sake).</summary>
-        internal static bool IsPicked(Button b) { return b.BackColor == DipBuilderForm.Accent; }
-
-        /// <summary>True when the button shows a copied value that has not been confirmed here.</summary>
-        internal static bool IsPrefilledPick(Button b) { return b.BackColor == DipBuilderForm.AccentSoft && b.FlatAppearance.BorderSize == 2; }
-
-        private static bool Same(double a, double b) { return Math.Abs(a - b) < 1e-9; }
     }
 }

@@ -890,9 +890,17 @@ namespace FieldCodes.Cad.Ui
                 Btn("Confirm unmarked dips as inverts", (s, e) => OnConfirmInvert(true)),
                 Btn("Move up", (s, e) => MovePipe(-1)),
                 Btn("Move down", (s, e) => MovePipe(1)))));
+            // Asked once, at an empty structure, and only as a counter for the slot wording.
+            _countRow = Row(Hint("How many pipes?"),
+                CountButton(1), CountButton(2), CountButton(3), CountButton(4), CountButton(5),
+                Btn("+", (s, e) => SetExpected(_expectedPipes + 1)),
+                Hint("or just start"));
+            _countRow.Visible = false;
+
             pipePanel.Controls.Add(_cards);
             pipePanel.Controls.Add(_quick);
             pipePanel.Controls.Add(Row(_addPipe, _back, _choiceNote));
+            pipePanel.Controls.Add(_countRow);
             // No step numbers: these are not a wizard, and a structure rarely needs the third at
             // all. No standing paragraph of instructions either -- it is read once and then sits
             // in the way of every structure after that.
@@ -1501,6 +1509,7 @@ namespace FieldCodes.Cad.Ui
                 RefreshConnectionsList(s);
                 RefreshCards(s);
                 RefreshConnectionSummary(s);
+                RefreshCountRow(s);
                 // The Add pipe buttons follow the structure: a type changed to CB shows a catch basin's sizes.
                 var choices = ChoicesFor(s);
                 _choiceNote.Text = "Buttons for: " + choices.RuleName;
@@ -2195,17 +2204,68 @@ namespace FieldCodes.Cad.Ui
             return QuickPipeEntry.Summary(p, _settings != null ? _settings.Dips : null);
         }
 
+        private Control _countRow;
+
+        private Button CountButton(int n)
+        {
+            return Btn(n.ToString(CultureInfo.InvariantCulture), (s, e) => SetExpected(n));
+        }
+
+        /// <summary>
+        /// Remembers how many pipes the drafter says are here, so the slot can say "Pipe 2 of 3",
+        /// and opens the first one. Nothing is created: an unused slot never becomes a record.
+        /// </summary>
+        private void SetExpected(int count)
+        {
+            _expectedPipes = Math.Max(1, count);
+            var s = Current;
+            if (s == null) return;
+            if (!_quickOpen) OpenQuickEntry(s, null);
+            else { _quick.SlotText = SlotWords(s, null); }
+            RefreshCountRow(s);
+        }
+
+        private string _countStructureId;
+
+        /// <summary>The count is offered at a structure with nothing entered and nothing in progress,
+        /// and it belongs to that structure: opening another one forgets it.</summary>
+        private void RefreshCountRow(StructureRecord s)
+        {
+            if (_countRow == null) return;
+            var id = s != null ? s.Id : null;
+            if (!string.Equals(id, _countStructureId, StringComparison.Ordinal)) { _countStructureId = id; _expectedPipes = 0; }
+            _countRow.Visible = s != null && s.Field.Pipes.Count == 0 && _expectedPipes == 0 && !_quickOpen;
+        }
+
         private void OnAddPipe(object sender, EventArgs e)
         {
             var s = Current;
-            if (s == null) { Say("Select a structure first (step 1).", Bad); return; }
+            if (s == null) { Say("Select a structure first.", Bad); return; }
             _grid.EndEdit();   // a half-typed cell is saved, not lost
+            if (_expectedPipes > 0 && s.Field.Pipes.Count >= _expectedPipes) _expectedPipes = s.Field.Pipes.Count + 1;
             OpenQuickEntry(s, null);
-            Say("Click the direction, size and material, then the MD and what it was measured to.", Muted);
+        }
+
+        /// <summary>
+        /// How many pipes the drafter said this structure has. It is a counter for the slot
+        /// wording only -- "Pipe 2 of 3" -- and never becomes project data: a slot nobody filled
+        /// is nothing at all, and finding a fourth pipe just adds one.
+        /// </summary>
+        private int _expectedPipes;
+
+        /// <summary>Which pipe of how many is being entered, for the words above the chips.</summary>
+        private string SlotWords(StructureRecord s, PipeObservation editing)
+        {
+            if (editing != null) return "Edit pipe";
+            var next = (s == null ? 0 : s.Field.Pipes.Count) + 1;
+            return _expectedPipes > 0 && next <= _expectedPipes
+                ? "Pipe " + next.ToString(CultureInfo.InvariantCulture) + " of " + _expectedPipes.ToString(CultureInfo.InvariantCulture)
+                : "Pipe " + next.ToString(CultureInfo.InvariantCulture);
         }
 
         private void OpenQuickEntry(StructureRecord s, PipeObservation editing)
         {
+            _quick.SlotText = SlotWords(s, editing);
             _quick.Begin(ChoicesFor(s), editing, s.Label, Summary);
             _quick.Visible = _quickOpen = true;
             _addPipe.Enabled = false;
