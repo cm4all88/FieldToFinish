@@ -1,4 +1,4 @@
-using FieldCodes.Settings;
+﻿using FieldCodes.Settings;
 using FieldCodes.Utilities;
 using Newtonsoft.Json;
 
@@ -54,7 +54,7 @@ public sealed class DipPickListTests
         Assert.Equal("Culverts", culvert.RuleName);
         Assert.Equal("Any structure", other.RuleName);
 
-        Assert.Equal(new double[] { 6, 8, 10, 12, 15, 18, 24 }, cb.CommonSizes);
+        Assert.Equal(new double[] { 6, 8, 10, 12, 15, 18, 20, 24 }, cb.CommonSizes);
         Assert.NotEqual(cb.CommonSizes, sdmh.CommonSizes);
         Assert.NotEqual(sdmh.CommonSizes, ssmh.CommonSizes);
         Assert.Equal("VCP", ssmh.CommonMaterials[0]);
@@ -78,7 +78,7 @@ public sealed class DipPickListTests
     {
         var cb = new UtilitySettings().PipeChoicesFor("CB", UtilitySystem.Storm);
         // Usual sizes are shortcuts, not a range: a CB still reaches 30" to 60" through Larger.
-        Assert.Equal(new double[] { 4, 21, 27, 30, 36, 42, 48, 54, 60 }, cb.LargerSizes);
+        Assert.Equal(new double[] { 4, 9, 21, 27, 30, 36, 42, 48, 54, 60 }, cb.LargerSizes);
         Assert.Empty(cb.LargerSizes.Intersect(cb.CommonSizes));
 
         // A rule with no larger list borrows the any-structure sizes, minus its own.
@@ -210,7 +210,7 @@ public sealed class DipPickListTests
         var pipe = new QuickPipeEntry
         {
             Direction = DirectionShortcuts.For("N/NW"), SizeIn = 17.5, Material = "ribbed pvc", MeasuredDip = 6.415,
-            Reference = MeasurementReference.Invert
+            Reference = MeasurementReference.Invert, ReferenceFromDrafter = true
         }.Create();
         Assert.Equal(17.5, pipe.WidthIn);
         Assert.Equal(17.5, pipe.HeightIn);
@@ -239,19 +239,45 @@ public sealed class DipPickListTests
     }
 
     [Fact]
-    public void AnUnmarkedDipStaysUnspecifiedEvenWithTheOfficeConvention()
+    public void AnUnmarkedDipInThePanelIsAnInvertByTheOfficeConvention()
     {
         var settings = new UtilitySettings();
-        Assert.True(settings.UnmarkedDipsAreInvertsByConvention);   // the office default is on...
+        Assert.True(settings.UnmarkedDipsAreInvertsByConvention);
         var pipe = new QuickPipeEntry
         {
             Direction = DirectionShortcuts.For("N/NW"), SizeIn = 12, Material = "RCP", MeasuredDip = 6.41
         }.Create();
-        // ...and still the panel never turns an unmarked MD into an invert.
+        // A measure down is to the invert unless it is noted otherwise, as in the field notes.
+        Assert.Equal(MeasurementReference.Invert, pipe.Reference);
+        // And it says the convention supplied it, not the drafter.
+        Assert.Equal(ReferenceBasis.FieldNoteConvention, pipe.ReferenceBasis);
+        Assert.Equal("N/NW 12\" RCP IE 6.41", QuickPipeEntry.Summary(pipe, settings));
+    }
+
+    [Fact]
+    public void ChoosingNotStatedInThePanelStillLeavesItUnspecified()
+    {
+        var pipe = new QuickPipeEntry
+        {
+            Direction = DirectionShortcuts.For("N"), SizeIn = 12, MeasuredDip = 6.41,
+            Reference = MeasurementReference.Unspecified, ReferenceFromDrafter = true
+        }.Create();
+
         Assert.Equal(MeasurementReference.Unspecified, pipe.Reference);
         Assert.Equal(ReferenceBasis.NotStated, pipe.ReferenceBasis);
         Assert.True(pipe.ReferenceUnconfirmed);
-        Assert.Equal("N/NW 12\" RCP 6.41 Unspecified", QuickPipeEntry.Summary(pipe, settings));
+    }
+
+    [Fact]
+    public void AReferenceTheDrafterPicksSaysSo()
+    {
+        var pipe = new QuickPipeEntry
+        {
+            Direction = DirectionShortcuts.For("N"), SizeIn = 12, MeasuredDip = 6.41,
+            Reference = MeasurementReference.TopOfPipe, ReferenceFromDrafter = true
+        }.Create();
+
+        Assert.Equal(ReferenceBasis.EnteredByDrafter, pipe.ReferenceBasis);
     }
 
     [Fact]

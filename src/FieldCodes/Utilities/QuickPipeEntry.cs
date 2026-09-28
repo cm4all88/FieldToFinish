@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -20,6 +20,10 @@ namespace FieldCodes.Utilities
         public double? MeasuredDip { get; set; }
         public MeasurementReference Reference { get; set; }
 
+        /// <summary>True once the drafter has picked what the measure down was taken to, rather
+        /// than leaving the office's invert convention to supply it.</summary>
+        public bool ReferenceFromDrafter { get; set; }
+
         public const string DirectionField = "direction";
         public const string SizeField = "size";
         public const string MaterialField = "material";
@@ -30,7 +34,16 @@ namespace FieldCodes.Utilities
         /// <summary>The pipe they were copied from, in words.</summary>
         public string PrefilledFrom { get; set; }
 
-        public QuickPipeEntry() { Prefilled = new List<string>(); }
+        /// <summary>
+        /// A measure down entered in the panel is to the invert unless the drafter says
+        /// otherwise -- the same convention the field notes are read with. Ticking Top of
+        /// pipe or Springline says otherwise; so does choosing Not stated.
+        /// </summary>
+        public QuickPipeEntry()
+        {
+            Prefilled = new List<string>();
+            Reference = MeasurementReference.Invert;
+        }
 
         /// <summary>A new observation, entered by the drafter.</summary>
         public PipeObservation Create()
@@ -38,7 +51,10 @@ namespace FieldCodes.Utilities
             var pipe = new PipeObservation { Source = ObservationSource.UserEntry };
             ApplyTo(pipe);
             pipe.Reference = Reference;
-            pipe.ReferenceBasis = Reference == MeasurementReference.Unspecified ? ReferenceBasis.NotStated : ReferenceBasis.EnteredByDrafter;
+            // Told apart on the label and in the review: what the drafter chose, and what the
+            // office convention supplied because nothing was noted.
+            pipe.ReferenceBasis = Reference == MeasurementReference.Unspecified ? ReferenceBasis.NotStated
+                : ReferenceFromDrafter ? ReferenceBasis.EnteredByDrafter : ReferenceBasis.FieldNoteConvention;
             pipe.Prefilled = (Prefilled ?? new List<string>()).Distinct().ToList();
             pipe.PrefilledFrom = pipe.Prefilled.Count > 0 ? PrefilledFrom : null;
             return pipe;
@@ -51,7 +67,7 @@ namespace FieldCodes.Utilities
         /// </summary>
         public static QuickPipeEntry ForOtherEnd(PipeObservation source, string sourceLabel)
         {
-            var entry = new QuickPipeEntry { Reference = MeasurementReference.Unspecified };
+            var entry = new QuickPipeEntry();
             if (source == null) return entry;
             entry.Direction = DirectionShortcuts.Opposite(source.Direction);
             if (entry.Direction != null) entry.Prefilled.Add(DirectionField);

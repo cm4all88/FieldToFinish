@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -399,6 +399,8 @@ namespace FieldCodes.Cad
             var placed = 0;
             var styles = UtilityCadService.MissingStyles(db, tr, settings.Dips);
             if (styles != null) ed.WriteMessage("\n" + styles);
+            var scaleNote = UtilityCadService.ScaleNote(db, settings.Dips);
+            if (scaleNote != null) ed.WriteMessage("\n" + scaleNote);
             foreach (var structure in project.Structures.Where(s => s.Cad != null && s.Field.Pipes.Count > 0))
             {
                 if (UtilityCadService.StructureLabelLocation(db, tr, structure).HasValue) continue;
@@ -421,6 +423,8 @@ namespace FieldCodes.Cad
             var drawn = 0;
             var styles = UtilityCadService.MissingStyles(db, tr, settings.Dips);
             if (styles != null) ed.WriteMessage("\n" + styles);
+            var scaleNote = UtilityCadService.ScaleNote(db, settings.Dips);
+            if (scaleNote != null) ed.WriteMessage("\n" + scaleNote);
 
             foreach (var c in project.Connections.Where(c => c.IsAccepted && c.ToStructureId != null && filter(c)).ToList())
             {
@@ -478,7 +482,17 @@ namespace FieldCodes.Cad
                 drawn++;
             }
 
-            ed.WriteMessage("\nDip Builder: {0} pipe(s) drafted.", drawn);
+            // A pipe running outside the survey limits has no far structure to draw to, but the
+            // plan should still show that one leaves the structure that way.
+            var stubs = 0;
+            foreach (var c in project.Connections.Where(c => c.Status == ConnectionStatus.OutsideSurveyLimits && filter(c)).ToList())
+            {
+                UtilityCadService.EraseConnectionDrafting(db, tr, c.Id);
+                if (UtilityCadService.DrawOutsideLimitsStub(db, tr, project, c, settings, version).Count > 0) stubs++;
+            }
+
+            ed.WriteMessage("\nDip Builder: {0} pipe(s) drafted{1}.", drawn,
+                stubs > 0 ? ", and " + stubs + " stub(s) for pipes running outside the survey limits" : string.Empty);
             return drawn;
         }
 

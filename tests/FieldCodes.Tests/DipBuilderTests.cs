@@ -1,4 +1,4 @@
-using FieldCodes;
+﻿using FieldCodes;
 using FieldCodes.Settings;
 using FieldCodes.Utilities;
 using Newtonsoft.Json;
@@ -465,9 +465,9 @@ public sealed class DipBuilderTests
         {
             "SDMH 1045",
             "RIM = 328.42",
-            "IE IN (E) = 322.69 8\" PVC",
-            "IE IN (SW) = 321.40 18\" RCP",
-            "IE OUT (N) = 322.01 12\" RCP",
+            "8\" PVC (E) IN IE = 322.69'",
+            "18\" RCP (SW) IN IE = 321.40'",
+            "12\" RCP (N) OUT IE = 322.01'",
             "BOT = 320.60",
             "WL = 321.48"
         }, lines);
@@ -477,7 +477,7 @@ public sealed class DipBuilderTests
     public void AnUndippedPipeSaysSoInTheStructureLabel()
     {
         var s = Structure("PT 9 CB\n12 RCP N UTD", 100, 0, 0);
-        Assert.Contains("(N) 12\" RCP - NOT DIPPED", UtilityLabelFormatter.StructureLabel(Project(s), s, Settings));
+        Assert.Contains("12\" RCP (N) - NOT DIPPED", UtilityLabelFormatter.StructureLabel(Project(s), s, Settings));
     }
 
     // ===================================================== review & staleness

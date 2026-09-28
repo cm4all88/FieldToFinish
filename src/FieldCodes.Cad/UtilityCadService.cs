@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -230,6 +230,70 @@ namespace FieldCodes.Cad
         /// OBSERVED width when the pipe is wider than the profile threshold. Then its
         /// label. Returns the ids drawn.
         /// </summary>
+        /// <summary>
+        /// A pipe the drafter marked as running outside the survey limits: a short stub in the
+        /// direction it was observed, with a mark at the loose end saying it carries on. There
+        /// is no far structure to draw to, so the length is the office's, not a measurement --
+        /// and the stub carries no label, because nothing about the far end was surveyed.
+        /// </summary>
+        public static IList<ObjectId> DrawOutsideLimitsStub(Database db, Transaction tr, UtilityProject project,
+                                                            PipeConnection connection, FtfSettings settings,
+                                                            string rulesVersion)
+        {
+            var ids = new List<ObjectId>();
+            var us = settings.Dips;
+            var from = project.Structure(connection.FromStructureId);
+            var pipe = project.Pipe(connection.FromStructureId, connection.FromPipeId);
+            if (from == null || pipe == null || from.Cad == null) return ids;
+            if (us.OutsideLimitsStubFt <= 0) return ids;
+            if (pipe.Direction == null || !pipe.Direction.IsKnown || !pipe.Direction.AzimuthDegrees.HasValue) return ids;
+
+            Ownership.EnsureRegApp(db, tr);
+            var standard = us.Standard(from.System);
+            var pipeLayer = ProductionLayers.Get(db, tr, standard.PipeLayer, settings);
+            var tag = from.Field.PointNumber + ">outside limits";
+
+            var radians = FieldCodes.Geometry.Angles.CadDegreesToApiRadians(90.0 - pipe.Direction.AzimuthDegrees.Value);
+            var dir = new Vector3d(Math.Cos(radians), Math.Sin(radians), 0);
+            var left = new Vector3d(-dir.Y, dir.X, 0);
+            var a = new Point3d(from.Cad.Easting, from.Cad.Northing, 0);
+            var b = a + dir * (us.OutsideLimitsStubFt * settings.General.UnitsPerFoot);
+
+            if (PipeDraftingRules.DrawDoubleLine(pipe, us))
+            {
+                var half = PipeDraftingRules.HalfWidthFeet(pipe) * settings.General.UnitsPerFoot;
+                foreach (var side in new[] { 1.0, -1.0 })
+                    ids.Add(AddLine(db, tr, a + left * half * side, b + left * half * side, pipeLayer, connection.Id, tag, rulesVersion));
+                if (us.CenterlineWithDoubleLine) ids.Add(AddLine(db, tr, a, b, pipeLayer, connection.Id, tag, rulesVersion));
+            }
+            else
+                ids.Add(AddLine(db, tr, a, b, pipeLayer, connection.Id, tag, rulesVersion));
+
+            if (!string.IsNullOrWhiteSpace(us.OutsideLimitsMark))
+            {
+                var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
+                var textHeight = us.TextHeightPlotted * scale;
+                using (var text = new MText())
+                {
+                    text.SetDatabaseDefaults(db);
+                    var style = Setup.DrawingResources.FindTextStyle(db, tr, us.TextStyle);
+                    if (!style.IsNull) text.TextStyleId = style;
+                    text.Contents = us.OutsideLimitsMark;
+                    text.TextHeight = textHeight;
+                    text.Attachment = AttachmentPoint.MiddleCenter;
+                    text.Location = b + dir * (textHeight * 0.8);
+                    text.Rotation = radians;
+                    text.LayerId = ProductionLayers.Get(db, tr, standard.LabelLayer, settings);
+                    CadUtil.AddToModelSpace(db, tr, text);
+                    Ownership.Stamp(text, connection.Id, rulesVersion, FtfEntityKind.UtilityPipeLabel, null, tag);
+                    ids.Add(text.ObjectId);
+                }
+            }
+
+            connection.Drafted = true;
+            return ids;
+        }
+
         public static IList<ObjectId> DrawPipe(Database db, Transaction tr, UtilityProject project,
                                                PipeConnection connection, FtfSettings settings,
                                                string rulesVersion, bool labelOnly)
@@ -370,6 +434,21 @@ namespace FieldCodes.Cad
             if (string.IsNullOrWhiteSpace(name)) return ObjectId.Null;
             var styles = (DBDictionary)tr.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForRead);
             return styles.Contains(name) ? styles.GetAt(name) : ObjectId.Null;
+        }
+
+        /// <summary>
+        /// Says when the drawing's annotation scale would make FTF's labels too small to read:
+        /// at 1:1 a 0.08" callout is 0.08 drawing units, which is invisible over a manhole.
+        /// Null when the scale is set. Nothing is changed -- the scale is the drafter's.
+        /// </summary>
+        public static string ScaleNote(Database db, UtilitySettings us)
+        {
+            var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
+            if (scale > 1.0001) return null;
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "Dip Builder: this drawing has no annotation scale set (1:1), so a {0:0.##}\" label is drawn {0:0.##} " +
+                "units high and will look tiny. Set the annotation scale for the plan before drafting.",
+                us.TextHeightPlotted);
         }
 
         /// <summary>

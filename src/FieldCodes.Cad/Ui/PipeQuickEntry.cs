@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -173,7 +173,11 @@ namespace FieldCodes.Cad.Ui
             _entry.Material = from.Material;
             // The measure down is never carried over from another structure.
             _entry.MeasuredDip = connectionId != null ? null : from.MeasuredDip;
-            _entry.Reference = editing != null ? editing.Reference : MeasurementReference.Unspecified;
+            // A new pipe starts at the office convention -- a measure down is to the invert unless
+            // it is noted otherwise. Editing keeps whatever the pipe already says, and how it got
+            // that value.
+            _entry.Reference = editing != null ? editing.Reference : MeasurementReference.Invert;
+            _entry.ReferenceFromDrafter = editing != null && editing.ReferenceBasis == ReferenceBasis.EnteredByDrafter;
             _prefilledStart = (from.Prefilled ?? new List<string>()).ToList();
             _prefilledFrom = from.PrefilledFrom;
             _touched.Clear();
@@ -374,7 +378,13 @@ namespace FieldCodes.Cad.Ui
             foreach (var r in shown)
             {
                 var reference = r;
-                var b = Choice(ReferenceWords(reference), "reference", (s, e) => { _entry.Reference = reference; MarkReferences(); UpdatePreview(); }, 0);
+                var b = Choice(ReferenceWords(reference), "reference", (s, e) =>
+                {
+                    _entry.Reference = reference;
+                    _entry.ReferenceFromDrafter = true;
+                    MarkReferences();
+                    UpdatePreview();
+                }, 0);
                 b.Name = reference.ToString();
                 _references.Controls.Add(b);
             }

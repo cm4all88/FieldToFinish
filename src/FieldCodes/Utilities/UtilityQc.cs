@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -15,7 +15,8 @@ namespace FieldCodes.Utilities
         PipeTooLargeForStructure, SizeMismatch, MaterialMismatch, DirectionMismatch,
         MissingOppositePipe, DuplicatePipe, SuspiciousStacking, CrossingClearance,
         UnresolvedConnection, SubmergedPipe, SiltedPipe, BlockedPipe, UnableToDip,
-        UnknownDirection, NoCadPoint, StaleSurvey, MalformedNote, InvalidGeometry, UnconfirmedReference, StructureSizeMissing
+        UnknownDirection, NoCadPoint, StaleSurvey, MalformedNote, InvalidGeometry, UnconfirmedReference, StructureSizeMissing,
+        SizeNotMade
     }
 
     public sealed class QcFinding
@@ -119,6 +120,10 @@ namespace FieldCodes.Utilities
                         name + ": the dip does not say what it was measured to (assumed " +
                         DipElevations.Describe(settings.AssumedPipeReference) +
                         ", not confirmed). No slope is calculated until the reference is confirmed.", false, false);
+
+                var madeIn = SizeNotMade(pipe);
+                if (madeIn != null)
+                    Add(findings, QcCode.SizeNotMade, Severity.Info, s, pipe, null, name + ": " + madeIn, false, false);
 
                 if (!pipe.Direction.IsKnown)
                     Add(findings, QcCode.UnknownDirection, Severity.Warning, s, pipe, null,
@@ -350,6 +355,27 @@ namespace FieldCodes.Utilities
             ta = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / d;
             tb = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / d;
             return ta > 0.001 && ta < 0.999 && tb > 0.001 && tb < 0.999;
+        }
+
+        /// <summary>
+        /// A measured size that no pipe of that material is made in, with the likeliest reading.
+        /// Iron is the one that catches people out: nominal sizes go 8 then 10, and an 8" ductile
+        /// iron pipe is 9.05" across the outside, so a taped 9" is almost always an 8" measured
+        /// outside. The observation is kept as it was measured -- this only says what to check.
+        /// Null when there is nothing to say.
+        /// </summary>
+        public static string SizeNotMade(PipeObservation pipe)
+        {
+            if (pipe == null || !pipe.WidthIn.HasValue) return null;
+            var size = pipe.WidthIn.Value;
+            var material = (pipe.Material ?? string.Empty).Trim().ToUpperInvariant();
+            var iron = material == "DI" || material == "DIP" || material == "CI" || material == "CIP" || material == "IRON";
+            if (!iron) return null;
+
+            // AWWA C151 nominal sizes: 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24 and up. 9 is not one.
+            if (Math.Abs(size - 9.0) > 0.51) return null;
+            return "iron pipe is not made in 9\"; 8\" ductile iron measures 9.05\" outside, " +
+                   "so check whether this was measured outside. The 9\" you entered is kept.";
         }
 
         private static void Add(List<QcFinding> findings, QcCode code, Severity severity, StructureRecord s,

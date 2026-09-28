@@ -301,10 +301,19 @@ namespace FieldCodes.Cad
                 text.Contents = contents;
                 text.TextHeight = textHeight;
                 text.Location = textLocation;
+                // Justified to the side the leader comes from, so the lines of a callout line up
+                // against the landing instead of floating centred on it.
+                text.Attachment = textLocation.X >= anchor.X ? AttachmentPoint.MiddleLeft : AttachmentPoint.MiddleRight;
                 Mask(text, mask);
                 leader.MText = text;
             }
             leader.TextLocation = textLocation;
+            try
+            {
+                leader.TextAlignmentType = TextAlignmentType.LeftAlignment;
+                leader.TextAttachmentType = TextAttachmentType.AttachmentMiddle;
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { }
 
             leader.AddLeaderLine(anchor);
             leader.LayerId = layerId;

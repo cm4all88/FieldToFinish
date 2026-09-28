@@ -640,8 +640,9 @@ namespace FtfUiTest
                       "cards read like the field book");
                 var label = Field<TextBox>("_labelPreview").Text;
                 Log("   label preview:\r\n" + label);
-                Check(label.Contains("IE (N) = 322.01") && label.Contains("IE (SW) = 321.40") && label.Contains("TOP (E) = 323.19") &&
-                      label.Contains("BOT = 320.60"), "live label built from the observations");
+                Check(label.Contains("12\" RCP (N) IE = 322.01'") && label.Contains("18\" RCP (SW) IE = 321.40'") &&
+                      label.Contains("8\" PVC (E) TOP = 323.19'") && label.Contains("BOT = 320.60"),
+                      "live label reads size, material, direction, then the dip");
                 Shot("03-notes-read");
             }, 3000);
 
@@ -853,7 +854,7 @@ namespace FtfUiTest
                 ClickIn(Quick, "Use material");
                 QuickField<TextBox>("_dip").Text = "6.41";
                 Check(Picked(FindButton(QuickField<Control>("_references"), "Not stated")), "the reference starts as Not stated");
-                Check(QuickField<Label>("_preview").Text == "N/NW 17.5\" RIBBED PVC 6.41 Unspecified", "preview: " + QuickField<Label>("_preview").Text);
+                Check(QuickField<Label>("_preview").Text == "N/NW 17.5\" RIBBED PVC IE 6.41", "preview: " + QuickField<Label>("_preview").Text);
                 ClickIn(Quick, "Add pipe");
             }, 500);
             add("17.5 and the custom material kept; MD unspecified", () =>
@@ -865,10 +866,10 @@ namespace FtfUiTest
                 Check(p.WidthIn == 17.5 && p.HeightIn == 17.5, "17.5\" kept exactly (" + p.WidthIn + ")");
                 Check(p.Material == "RIBBED PVC", "custom material kept (" + p.Material + ")");
                 Check(p.Direction.Text == "N/NW" && p.Direction.AzimuthDegrees == 337.5, "N/NW recorded at 337.5");
-                Check(p.Reference == FU.MeasurementReference.Unspecified && p.ReferenceBasis == FU.ReferenceBasis.NotStated,
-                      "an MD with no reference stays Unspecified, even with the office invert convention on");
+                Check(p.Reference == FU.MeasurementReference.Invert && p.ReferenceBasis == FU.ReferenceBasis.FieldNoteConvention,
+                      "an MD with nothing noted is an invert by the office convention, and says the convention gave it");
                 Check(!Shown(Quick) && Field<Button>("_addPipe").Enabled, "Add pipe closes the panel");
-                Check(Headline(2) == "N/NW 17.5\" RIBBED PVC 6.41 Unspecified", "card: " + Headline(2));
+                Check(Headline(2) == "N/NW 17.5\" RIBBED PVC IE 6.41", "card: " + Headline(2));
                 Check(Field<TextBox>("_labelPreview").Text.Contains("(N/NW)"), "the structure label lists the N/NW pipe");
                 Shot("05c-pipe-cards");
             }, 3000);
@@ -991,8 +992,9 @@ namespace FtfUiTest
                 var e = QuickEntry;
                 Check(e.Direction != null && e.Direction.Text == "S/SE" && e.SizeIn == 17.5 && e.Material == "RIBBED PVC",
                       "opposite direction, size and material copied (S/SE 17.5\" RIBBED PVC)");
-                Check(!e.MeasuredDip.HasValue && e.Reference == FU.MeasurementReference.Unspecified && QuickField<TextBox>("_dip").Text == "",
-                      "the MD and reference start empty -- never copied from 1047");
+                Check(!e.MeasuredDip.HasValue && QuickField<TextBox>("_dip").Text == "" &&
+                      e.Reference == FU.MeasurementReference.Invert && !e.ReferenceFromDrafter,
+                      "the MD starts empty and the reference starts at the office convention -- neither copied from 1047");
                 Check(CompassSelected == "S/SE" && (bool)Compass.GetType().GetProperty("SelectedIsPrefilled").GetValue(Compass, null), "the copied direction shows lighter on the compass");
                 Check(Shown(QuickField<Label>("_prefillNote")) && QuickField<Label>("_prefillNote").Text.Contains("Copied from SDMH 1047"), "the panel says what was copied");
                 Check(FindButton(Quick, "Add matching pipe") != null && !Shown(FindButton(Quick, "Add + next")), "one explicit Add matching pipe");
@@ -1110,7 +1112,7 @@ namespace FtfUiTest
             {
                 var text = Texts(21);
                 Log("   structure label: " + text);
-                Check(text.Contains("SILTED 25%") && text.Contains("IE (N) = 322.01"), "edited leader placed as an MLeader with the edited text");
+                Check(text.Contains("SILTED 25%") && text.Contains("12\" RCP (N) IE = 322.01'"), "edited leader placed as an MLeader with the edited text");
                 Check(Project.Overrides.Any(o => o.What == "Structure label text"), "edited label text recorded as an override");
                 Shot("07-leader");
                 var map = Field<Control>("_map");

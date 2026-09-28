@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using FieldCodes.Utilities;
@@ -230,6 +230,17 @@ namespace FieldCodes.Settings
         /// value -- a pipe without a calculated slope simply omits "@ slope".</summary>
         [JsonProperty("pipeLabelFormat")] public string PipeLabelFormat { get; set; }
 
+        /// <summary>
+        /// How far a pipe that runs outside the survey limits is drawn, in feet: a stub in the
+        /// direction it was observed, so the plan shows a pipe leaves the structure that way.
+        /// Zero draws nothing.
+        /// </summary>
+        [JsonProperty("outsideLimitsStubFt")] public double OutsideLimitsStubFt { get; set; }
+
+        /// <summary>What is written at the loose end of that stub to say the pipe carries on
+        /// beyond the survey. Empty leaves the stub unmarked.</summary>
+        [JsonProperty("outsideLimitsMark")] public string OutsideLimitsMark { get; set; }
+
         [JsonProperty("structureHeaderFormat")] public string StructureHeaderFormat { get; set; }
         [JsonProperty("rimLineFormat")] public string RimLineFormat { get; set; }
         [JsonProperty("pipeLineFormat")] public string PipeLineFormat { get; set; }
@@ -331,10 +342,13 @@ namespace FieldCodes.Settings
             SlopeDecimals = 2;
 
             PipeLabelFormat = "{size} {material} {system}[ @ {slope}]";
+            OutsideLimitsStubFt = 5.0;
+            OutsideLimitsMark = "~";
             StructureHeaderFormat = "{code} {number}[ {size}]";
             RimLineFormat = "RIM = {rim}";
-            PipeLineFormat = "{prefix}[ {role}] ({direction}) = {elevation} {size} {material}";
-            UndippedPipeLineFormat = "({direction}) {size} {material} - NOT DIPPED";
+            // As the office writes a pipe on a structure callout: 6" CONC (N) IE = 154.35'
+            PipeLineFormat = "{size} {material} ({direction})[ {role}] {prefix} = {elevation}'";
+            UndippedPipeLineFormat = "{size} {material} ({direction}) - NOT DIPPED";
             BottomLineFormat = "BOT = {bottom}";
             WaterLineFormat = "WL = {water}";
             PrefixInvert = "IE";
@@ -434,22 +448,22 @@ namespace FieldCodes.Settings
                 {
                     Name = "Catch basins and inlets",
                     StructureCodes = { "CB", "CBR", "CBS", "DI", "INLET", "SDAD" },
-                    CommonSizes = { 6, 8, 10, 12, 15, 18, 24 },
-                    LargerSizes = { 4, 21, 27, 30, 36, 42, 48, 54, 60 },
+                    CommonSizes = { 6, 8, 10, 12, 15, 18, 20, 24 },
+                    LargerSizes = { 4, 9, 21, 27, 30, 36, 42, 48, 54, 60 },
                     CommonMaterials = { "PVC", "RCP", "CPEP", "HDPE", "CMP", "CONC", "UNK" }
                 },
                 new PipeChoiceRule
                 {
                     Name = "Storm", System = UtilitySystem.Storm,
-                    CommonSizes = { 8, 10, 12, 15, 18, 24, 30, 36, 48 },
-                    LargerSizes = { 4, 6, 21, 27, 33, 42, 54, 60, 66, 72, 84, 96, 108, 120 },
+                    CommonSizes = { 8, 10, 12, 15, 18, 20, 24, 30, 36, 48 },
+                    LargerSizes = { 4, 6, 9, 21, 27, 33, 42, 54, 60, 66, 72, 84, 96, 108, 120 },
                     CommonMaterials = { "RCP", "CMP", "PVC", "HDPE", "CPEP", "CONC", "UNK" }
                 },
                 new PipeChoiceRule
                 {
                     Name = "Sanitary", System = UtilitySystem.Sanitary,
                     CommonSizes = { 4, 6, 8, 10, 12, 15, 18, 24 },
-                    LargerSizes = { 21, 27, 30, 33, 36, 42, 48, 54, 60, 72 },
+                    LargerSizes = { 9, 20, 21, 27, 30, 33, 36, 42, 48, 54, 60, 72 },
                     CommonMaterials = { "VCP", "PVC", "RCP", "DI", "CONC", "UNK" }
                 },
                 new PipeChoiceRule
@@ -462,8 +476,8 @@ namespace FieldCodes.Settings
                 new PipeChoiceRule
                 {
                     Name = "Any structure",
-                    CommonSizes = { 4, 6, 8, 10, 12, 15, 18, 24, 30, 36, 42, 48 },
-                    LargerSizes = { 1, 1.25, 1.5, 2, 3, 14, 16, 20, 21, 27, 33, 54, 60, 66, 72, 78, 84, 90, 96, 102, 108, 120, 144 },
+                    CommonSizes = { 4, 6, 8, 10, 12, 15, 18, 20, 24, 30, 36, 42, 48 },
+                    LargerSizes = { 1, 1.25, 1.5, 2, 3, 9, 14, 16, 21, 27, 33, 54, 60, 66, 72, 78, 84, 90, 96, 102, 108, 120, 144 },
                     CommonMaterials = { "RCP", "PVC", "CMP", "HDPE", "VCP", "DI", "CONC", "UNK" }
                 }
             };

@@ -1,4 +1,4 @@
-using FieldCodes.Settings;
+﻿using FieldCodes.Settings;
 using FieldCodes.Utilities;
 
 namespace FieldCodes.Tests;
@@ -51,7 +51,7 @@ public sealed class DipReferenceDecisionTests
         Assert.Contains("does not say what it was measured to", slope.Explanation);
 
         Assert.DoesNotContain("@", UtilityLabelFormatter.PipeLabel(project, c, settings));
-        Assert.Contains("IE? (E) = 105.00 12\" RCP", UtilityLabelFormatter.StructureLabel(project, a, settings));
+        Assert.Contains("12\" RCP (E) IE? = 105.00'", UtilityLabelFormatter.StructureLabel(project, a, settings));
 
         var findings = UtilityQc.Evaluate(project, settings);
         Assert.Equal(2, findings.Count(f => f.Code == QcCode.UnconfirmedReference && !f.NeedsFieldRevisit));

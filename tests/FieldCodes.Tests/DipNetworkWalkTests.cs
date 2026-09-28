@@ -1,4 +1,4 @@
-using FieldCodes.Settings;
+﻿using FieldCodes.Settings;
 using FieldCodes.Utilities;
 using Newtonsoft.Json;
 
@@ -81,9 +81,11 @@ public sealed class DipNetworkWalkTests
         Assert.Equal("S/SE", prefill.Direction!.Text);
         Assert.Equal(17.5, prefill.SizeIn);
         Assert.Equal("RIBBED PVC", prefill.Material);
-        // The far end's measure down and reference are never copied.
+        // The far end's measure down is never copied; the reference starts at the office
+        // convention, the same as any pipe added by hand, not at the far end's value.
         Assert.Null(prefill.MeasuredDip);
-        Assert.Equal(MeasurementReference.Unspecified, prefill.Reference);
+        Assert.Equal(MeasurementReference.Invert, prefill.Reference);
+        Assert.False(prefill.ReferenceFromDrafter);
         Assert.Equal(new[] { "direction", "size", "material" }, prefill.Prefilled);
         Assert.StartsWith("SDMH 1047: ", prefill.PrefilledFrom);
 
@@ -112,9 +114,10 @@ public sealed class DipNetworkWalkTests
         Assert.Contains(w.Project.Overrides, o => o.What == "Pipe completed from connected pipe" && o.Target == w.Connection.Id);
         Assert.Empty(NetworkCompletion.Waiting(w.Project, w.B));
 
-        // Provenance: entered by the drafter, with the copied values marked as copied.
+        // Provenance: entered by the drafter, with the copied values marked as copied, and the
+        // reference credited to the office convention because the drafter did not pick one.
         Assert.Equal(ObservationSource.UserEntry, pipe.Source);
-        Assert.Equal(ReferenceBasis.EnteredByDrafter, pipe.ReferenceBasis);
+        Assert.Equal(ReferenceBasis.FieldNoteConvention, pipe.ReferenceBasis);
         Assert.Equal(new[] { "direction", "size", "material" }, pipe.Prefilled);
         Assert.StartsWith("SDMH 1047: ", pipe.PrefilledFrom);
     }
@@ -125,17 +128,26 @@ public sealed class DipNetworkWalkTests
         var w = Walk();
         Assert.Equal(SlopeBasis.MissingOppositeObservation, SlopeCalculator.Compute(w.Project, w.Connection).Basis);
 
-        // The far end entered with no stated reference: still no slope.
+        // The far end entered with nothing noted: an invert by the office convention, so the
+        // slope calculates from both dips.
         var entry = NetworkCompletion.Prefill(w.Project, w.Connection);
         entry.MeasuredDip = 6.9;
         var pipe = entry.Create();
         Assert.Null(NetworkCompletion.Complete(w.Project, w.Connection.Id, w.B.Id, pipe));
+
+        // Told "not stated" instead, there is still no slope: nothing says what was measured.
+        var notStated = entry.Create();
+        notStated.Reference = MeasurementReference.Unspecified;
+        notStated.ReferenceBasis = ReferenceBasis.NotStated;
+        w.B.Field.Pipes[w.B.Field.Pipes.Count - 1] = notStated;
+        w.Connection.ToPipeId = notStated.Id;
         var unconfirmed = SlopeCalculator.Compute(w.Project, w.Connection);
         Assert.Null(unconfirmed.SlopePercent);
         Assert.Equal(SlopeBasis.IncomparableReferences, unconfirmed.Basis);
 
-        // Confirmed as an invert: the ordinary calculation, from both field dips.
-        ObservationReview.ConfirmReference(w.Project, w.B, pipe, MeasurementReference.Invert);
+        // Back to the invert the convention gave it: the ordinary calculation, from both dips.
+        w.B.Field.Pipes[w.B.Field.Pipes.Count - 1] = pipe;
+        w.Connection.ToPipeId = pipe.Id;
         var slope = SlopeCalculator.Compute(w.Project, w.Connection);
         Assert.Equal(SlopeBasis.CalculatedFromBothObservations, slope.Basis);
         var expected = Math.Abs((326.00 - 6.41) - (327.90 - 6.9)) / SlopeCalculator.Distance(w.A, w.B) * 100;
