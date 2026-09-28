@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -22,6 +22,12 @@ namespace FieldCodes.Cad
             new Dictionary<string, ObjectId>(StringComparer.OrdinalIgnoreCase);
 
         public static ObjectId Get(Database db, Transaction tr, string configured, FtfSettings settings)
+        {
+            return Get(db, tr, configured, settings, null);
+        }
+
+        /// <summary>As above; <paramref name="look"/> says what a layer FTF has to create looks like.</summary>
+        public static ObjectId Get(Database db, Transaction tr, string configured, FtfSettings settings, CadUtil.LayerLook look)
         {
             if (!ReferenceEquals(_cacheOwner, tr))
             {
@@ -61,7 +67,7 @@ namespace FieldCodes.Cad
                     break;
             }
 
-            var result = CadUtil.EnsureLayer(db, tr, layer);
+            var result = CadUtil.EnsureLayer(db, tr, layer, look);
             Cache[configured ?? string.Empty] = result;
             return result;
         }

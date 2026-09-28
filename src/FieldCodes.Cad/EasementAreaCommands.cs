@@ -867,7 +867,8 @@ namespace FieldCodes.Cad
                 if (string.IsNullOrWhiteSpace(text)) return;
                 var at = point + away * (TextHeight * 8.0);
                 var entity = CadUtil.NewLeaderedLabel(_db, _tr, EasementCommands.Escape(text), TextHeight, _style,
-                                                      ProductionLayers.Get(_db, _tr, _settings.Easements.TextLayer, _settings),
+                                                      ProductionLayers.Get(_db, _tr, _settings.Easements.TextLayer, _settings,
+                                                          EasementCommands.LookFor(_settings.Easements, _settings.Easements.TextLayer)),
                                                       new Point3d(at.X, at.Y, 0), new Point3d(point.X, point.Y, 0),
                                                       ObjectId.Null, _settings.Easements.LabelMask);
                 Ownership.Stamp(entity, _record.Id, _version, FtfEntityKind.EasementText, null, _record.Title);

@@ -56,8 +56,28 @@ namespace FieldCodes.Cad
             return null;
         }
 
+        /// <summary>
+        /// What a new layer should look like when the office has said, rather than leaving it
+        /// to the family it sits in: a colour and a lineweight as they are written in the
+        /// settings. Either may be empty.
+        /// </summary>
+        public sealed class LayerLook
+        {
+            public string Color { get; set; }
+            public string LineWeight { get; set; }
+
+            public bool Says { get { return !string.IsNullOrWhiteSpace(Color) || !string.IsNullOrWhiteSpace(LineWeight); } }
+        }
+
         /// <summary>Returns the layer's id, creating it if it does not exist.</summary>
         public static ObjectId EnsureLayer(Database db, Transaction tr, string name)
+        {
+            return EnsureLayer(db, tr, name, null);
+        }
+
+        /// <summary>As above; <paramref name="look"/> is what the office says a new layer of this
+        /// kind looks like, and wins over the family it would otherwise follow.</summary>
+        public static ObjectId EnsureLayer(Database db, Transaction tr, string name, LayerLook look)
         {
             if (string.IsNullOrEmpty(name)) return db.Clayer;
 
@@ -78,6 +98,16 @@ namespace FieldCodes.Cad
                     // and hatch, text and dimension layers are drawn continuous.
                     record.Color = family.Color;
                     record.LineWeight = family.LineWeight;
+                }
+                if (look != null && look.Says)
+                {
+                    // The office has said what this kind of layer looks like. Annotation does not follow the
+                    // line it belongs to -- their text is green at 0.40 whatever it labels.
+                    var colour = ColorFrom(look.Color);
+                    if (colour != null) record.Color = colour;
+                    var weight = FieldCodes.Settings.LayerAppearance.LineWeightHundredths(look.LineWeight);
+                    if (weight.HasValue && Enum.IsDefined(typeof(LineWeight), weight.Value))
+                        record.LineWeight = (LineWeight)weight.Value;
                 }
                 var id = table.Add(record);
                 tr.AddNewlyCreatedDBObject(record, true);
@@ -196,18 +226,10 @@ namespace FieldCodes.Cad
         /// </summary>
         public static Autodesk.AutoCAD.Colors.Color ColorFrom(string setting)
         {
-            var text = (setting ?? string.Empty).Trim();
-            if (text.Length == 0) return null;
-
-            short index;
-            if (short.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out index))
-                return index >= 0 && index <= 256 ? Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, index) : null;
-
-            var names = new[] { "red", "yellow", "green", "cyan", "blue", "magenta", "white" };
-            for (var i = 0; i < names.Length; i++)
-                if (string.Equals(text, names[i], StringComparison.OrdinalIgnoreCase))
-                    return Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, (short)(i + 1));
-            return null;
+            var index = FieldCodes.Settings.LayerAppearance.ColorIndex(setting);
+            return index.HasValue
+                ? Autodesk.AutoCAD.Colors.Color.FromColorIndex(Autodesk.AutoCAD.Colors.ColorMethod.ByAci, index.Value)
+                : null;
         }
 
         /// <summary>

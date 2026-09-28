@@ -64,6 +64,25 @@ namespace FieldCodes.Settings
         [JsonProperty("hatchColor")] public string HatchColor { get; set; }
         [JsonProperty("temporaryHatchColor")] public string TemporaryHatchColor { get; set; }
 
+        /// <summary>
+        /// What a layer FTF has to create looks like. The office drawings have no easement
+        /// annotation layers of their own, so there is nothing to copy: their annotation is
+        /// green at 0.40 (V-TEXT, V-TEXT-E, V-PROP-TEXT) and their tables cyan at 0.40
+        /// (V-TEXT-TABL). Outline and hatch layers are left to follow the easement family.
+        /// Empty leaves the layer as the family gives it.
+        /// </summary>
+        [JsonProperty("textColor")] public string TextColor { get; set; }
+        [JsonProperty("textLineWeight")] public string TextLineWeight { get; set; }
+        [JsonProperty("tableColor")] public string TableColor { get; set; }
+        [JsonProperty("tableLineWeight")] public string TableLineWeight { get; set; }
+
+        /// <summary>
+        /// Colour written into the Point of Commencement / Beginning / Terminus labels
+        /// themselves, as the office exhibits write them ({\C4;POINT OF BEGINNING}). Empty
+        /// leaves them the colour of their layer.
+        /// </summary>
+        [JsonProperty("pointLabelColor")] public string PointLabelColor { get; set; }
+
         [JsonProperty("drawCenterline")] public bool DrawCenterline { get; set; }
         [JsonProperty("drawSidelines")] public bool DrawSidelines { get; set; }
         [JsonProperty("drawHatch")] public bool DrawHatch { get; set; }
@@ -149,6 +168,11 @@ namespace FieldCodes.Settings
             AreaLegalFormat = "SAID {purpose} AREA CONTAINING {sqft} SQUARE FEET, MORE OR LESS.";
 
             LabelMask = true;
+            TextColor = "green";
+            TextLineWeight = "0.40";
+            TableColor = "cyan";
+            TableLineWeight = "0.40";
+            PointLabelColor = "cyan";
             HatchColor = string.Empty;
             TemporaryHatchColor = string.Empty;
             DrawCenterline = false;

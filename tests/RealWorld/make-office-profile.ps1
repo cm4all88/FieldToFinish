@@ -90,6 +90,12 @@ $e.TemporaryHatchPattern = 'ANSI37'
 # The reference exhibits set the permanent easement's hatch colour on the object (red) and leave the
 # temporary one ByLayer: dumps\SV-2169171001-ESMT-28052700104100.txt hatch "... associative True color red".
 $e.HatchColor = 'red'
+# The office drawings have no easement annotation layers to copy, so a layer FTF creates follows their
+# annotation convention instead: V-TEXT / V-TEXT-E / V-PROP-TEXT are green at 0.40, V-TEXT-TABL cyan at 0.40,
+# and the point labels carry their colour in the text ({\C4;POINT OF BEGINNING}).
+$e.TextColor = 'green'; $e.TextLineWeight = '0.40'
+$e.TableColor = 'cyan'; $e.TableLineWeight = '0.40'
+$e.PointLabelColor = 'cyan'
 # Width dimensions use the office survey dimension style, in model space as well as on the sheet.
 $e.DimensionStyleOverride = 'PMX SURV ANNO'
 

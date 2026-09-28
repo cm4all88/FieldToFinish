@@ -714,6 +714,34 @@ namespace FieldCodes.Cad
             return null;
         }
 
+        /// <summary>
+        /// What a layer FTF has to create should look like. The office has no easement
+        /// annotation layers to copy, so the settings carry their annotation convention;
+        /// outline and hatch layers are left to follow the easement family in the drawing.
+        /// </summary>
+        internal static CadUtil.LayerLook LookFor(EasementSettings es, string layer)
+        {
+            if (es == null || string.IsNullOrWhiteSpace(layer)) return null;
+            Func<string, bool> same = other => string.Equals(layer, other, StringComparison.OrdinalIgnoreCase);
+            if (same(es.TableLayer)) return new CadUtil.LayerLook { Color = es.TableColor, LineWeight = es.TableLineWeight };
+            if (same(es.TextLayer) || same(es.DimensionLayer) || same(es.TemporaryText()) || same(es.TemporaryDimensions()))
+                return new CadUtil.LayerLook { Color = es.TextColor, LineWeight = es.TextLineWeight };
+            return null;
+        }
+
+        /// <summary>
+        /// Text with a colour written into it, the way the office exhibits write their point
+        /// labels ("{\\C4;POINT OF BEGINNING}"). Unset or unreadable leaves the text as it is,
+        /// taking the colour of its layer.
+        /// </summary>
+        internal static string Coloured(string mtext, string colour)
+        {
+            var index = FieldCodes.Settings.LayerAppearance.ColorIndex(colour);
+            return index.HasValue
+                ? "{\\C" + index.Value.ToString(CultureInfo.InvariantCulture) + ";" + mtext + "}"
+                : mtext;
+        }
+
         internal static double Sq(double v) { return v * v; }
 
         // ============================================================= clipping
@@ -826,7 +854,7 @@ namespace FieldCodes.Cad
             var drafted = new List<string>();
             Action<AcEntity, FtfEntityKind, string> add = (entity, kind, layer) =>
             {
-                entity.LayerId = ProductionLayers.Get(db, tr, layer, settings);
+                entity.LayerId = ProductionLayers.Get(db, tr, layer, settings, LookFor(es, layer));
                 CadUtil.AddToModelSpace(db, tr, entity);
                 Ownership.Stamp(entity, record.Id, version, kind, null, record.Title);
                 drafted.Add(entity.Handle.ToString());
@@ -905,7 +933,7 @@ namespace FieldCodes.Cad
             var titleAt = anchor + outward * clearance;
 
             var callout = CadUtil.NewLeaderedLabel(db, tr, Escape(record.Title), textHeight, styleId,
-                                                   ProductionLayers.Get(db, tr, textLayer, settings),
+                                                   ProductionLayers.Get(db, tr, textLayer, settings, LookFor(es, textLayer)),
                                                    new Point3d(titleAt.X, titleAt.Y, 0), new Point3d(anchor.X, anchor.Y, 0),
                                                    ObjectId.Null, es.LabelMask);
             Ownership.Stamp(callout, record.Id, version, FtfEntityKind.EasementText, null, record.Title);
@@ -1055,7 +1083,8 @@ namespace FieldCodes.Cad
                                         EasementSettings es, ObjectId styleId, double textHeight, FtfSettings settings,
                                         WidthSpec outerWidth, List<string> drafted, string version)
         {
-            var layerId = ProductionLayers.Get(db, tr, record.IsTemporary ? es.TemporaryText() : es.TextLayer, settings);
+            var pointLayer = record.IsTemporary ? es.TemporaryText() : es.TextLayer;
+            var layerId = ProductionLayers.Get(db, tr, pointLayer, settings, LookFor(es, pointLayer));
             var first = parts[0][0];
             var lastPart = parts[parts.Count - 1];
             var last = lastPart[lastPart.Count - 1];
@@ -1065,7 +1094,7 @@ namespace FieldCodes.Cad
             {
                 if (string.IsNullOrWhiteSpace(text)) return;
                 var at = point + away * reach;
-                var entity = CadUtil.NewLeaderedLabel(db, tr, Escape(text), textHeight, styleId, layerId,
+                var entity = CadUtil.NewLeaderedLabel(db, tr, Coloured(Escape(text), es.PointLabelColor), textHeight, styleId, layerId,
                                                       new Point3d(at.X, at.Y, 0), new Point3d(point.X, point.Y, 0),
                                                       ObjectId.Null, es.LabelMask);
                 Ownership.Stamp(entity, record.Id, version, FtfEntityKind.EasementText, null, record.Title);

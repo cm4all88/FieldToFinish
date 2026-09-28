@@ -1,9 +1,25 @@
-# Runs one accoreconsole script with a timeout, streaming output to a file so a
+﻿# Runs one accoreconsole script with a timeout, streaming output to a file so a
 # hung prompt still leaves a readable log.
 #   run-accore.ps1 <drawing> <script> <log> [timeoutSeconds]
 param([string]$Drawing, [string]$Script, [string]$Log, [int]$TimeoutSeconds = 300, [string]$Profile)
 
 $acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
+
+# accoreconsole loads the installed bundle, and a NETLOAD of the same assembly from the build
+# folder is then ignored. A run against a stale bundle looks like a pass but tests yesterday's
+# code, so say so loudly rather than let it pass quietly.
+$built = Join-Path (Split-Path -Parent $PSScriptRoot) '..\src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll'
+$installed = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle\Contents\2024\FieldCodes.Cad.dll'
+if ((Test-Path $built) -and (Test-Path $installed)) {
+    $b = (Get-Item $built).LastWriteTimeUtc
+    $i = (Get-Item $installed).LastWriteTimeUtc
+    if ($b -gt $i.AddSeconds(2)) {
+        Write-Host ('STALE PLUGIN: the installed bundle is from ' + $i.ToLocalTime().ToString('yyyy-MM-dd HH:mm') +
+                    ' but the build is from ' + $b.ToLocalTime().ToString('yyyy-MM-dd HH:mm') +
+                    '. Run deploy\install-dev.ps1 (Civil 3D must be closed); this run is testing the older code.')
+    }
+}
+
 $rawPath = "$Log.raw"
 $argsLine = '/i "' + $Drawing + '" /s "' + $Script + '" /product C3D /language en-US'
 if ($Profile) { $argsLine += ' /p "' + $Profile + '"' }
