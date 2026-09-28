@@ -449,11 +449,26 @@ namespace FtfUiTest
             return c.Status + "->" + (other != null ? other.Field.PointNumber : "?");
         }
 
+        /// <summary>
+        /// Clicks a button that asks for a point in the drawing, and answers it.
+        ///
+        /// The zoom is NOT sent here. Clicking the button queues the window's command, and a
+        /// zoom sent in the same breath lands in the same input queue: AutoCAD then reads the
+        /// queued command as the zoom's answer and the point as a command, and the window's
+        /// command is left typed at the prompt with nothing to finish it. The zoom goes in its
+        /// own step before this one (<see cref="ZoomTo"/>), which the harness only runs once
+        /// the command line is idle.
+        /// </summary>
         private static void PickPoint(string button, double x, double y)
         {
-            Send(string.Format(CultureInfo.InvariantCulture, "_.ZOOM _C {0},{1} 30 ", x, y));
             Click(button);
             Send(string.Format(CultureInfo.InvariantCulture, "{0},{1} ", x, y));
+        }
+
+        /// <summary>Puts the point in view, in a step of its own so it finishes before anything is clicked.</summary>
+        private static void ZoomTo(double x, double y)
+        {
+            Send(string.Format(CultureInfo.InvariantCulture, "_.ZOOM _C {0},{1} 30 ", x, y));
         }
 
         // Counts in the drawing ------------------------------------------------
@@ -572,6 +587,7 @@ namespace FtfUiTest
 
 
             // Select structure --------------------------------------------------
+            add("view select structure 1045 from the drawing", () => ZoomTo(5000, 5000), 500);
             add("select structure 1045 from the drawing", () => PickPoint("Select structure point...", 5000, 5000), 1500);
             add("point details populated", () =>
             {
@@ -755,6 +771,7 @@ namespace FtfUiTest
                 Check(st.Field.Pipes[3].Reference == FU.MeasurementReference.Invert && st.Field.Pipes[4].Reference == FU.MeasurementReference.TopOfPipe,
                       "both back-to-back edits were applied, neither dropped");
             }, 5000);
+            add("view select 1047", () => ZoomTo(4850, 4850), 500);
             add("select 1047", () => PickPoint("Select structure point...", 4850, 4850), 500);
             add("1047 read as invert by default", () =>
                 Check(S("1047").Field.Pipes[0].Reference == FU.MeasurementReference.Invert && S("1047").Field.Pipes[0].ReferenceBasis == FU.ReferenceBasis.FieldNoteConvention,
@@ -1040,6 +1057,7 @@ namespace FtfUiTest
             }, 3000);
 
             // Drawing with existing pipe choices ---------------------------------
+            add("view back to 1045", () => ZoomTo(5000, 5000), 500);
             add("back to 1045", () => PickPoint("Select structure point...", 5000, 5000), 500);
             add("draw 1 (existing hand pipe: Keep)", () =>
             {
@@ -1184,6 +1202,7 @@ namespace FtfUiTest
             // Drafted pipes and the leader now pass through the point; freeze their
             // layers so the pick lands on the COGO point, as a drafter would.
             add("freeze pipe layers", () => SetFrozen(true), 1000);
+            add("view pick 1045 in the reopened drawing", () => ZoomTo(5000, 5000), 500);
             add("pick 1045 in the reopened drawing", () => PickPoint("Select structure point...", 5000, 5000), 3000);
             add("thaw pipe layers", () => SetFrozen(false), 1000);
             add("persisted", () =>

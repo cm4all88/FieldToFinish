@@ -947,6 +947,16 @@ namespace FieldCodes.Cad
             // dimensions itself, placed for this sheet. FTF's model-space wording for the same
             // easements is therefore hidden in this viewport, or every label would read twice. Only
             // the layers FTF drafts onto are touched; anything else the office keeps there stays.
+            // A table the viewport cuts through -- a parcel line table the office left beside the
+            // easement, say -- is half a table on the sheet, which is never wanted. Its layer is
+            // hidden in this viewport (model space is untouched) and the review says so.
+            foreach (var name in CroppedTableLayers(vp).Where(table.Has).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                byLayer[name] = ExhibitSettings.Hide;
+                Note("Warning", "VIEWPORT", "A table on layer " + name + " is cut by the edge of the viewport, so it is hidden in it. " +
+                     "Thaw the layer in the viewport, or move the table in model space, if it belongs on this exhibit.");
+            }
+
             var ftfAnnotation = FtfAnnotationLayers().Where(table.Has).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             foreach (var name in ftfAnnotation) byLayer[name] = ExhibitSettings.Hide;
             if (ftfAnnotation.Count > 0)
@@ -1187,6 +1197,37 @@ namespace FieldCodes.Cad
             public int Related;
             public int Unrelated;
             public int Other;
+        }
+
+        /// <summary>
+        /// Layers holding a table that the viewport's view cuts through. Any kind of table
+        /// counts -- an AutoCAD one or a Civil 3D parcel or segment table -- because a table
+        /// is only readable whole.
+        /// </summary>
+        private IEnumerable<string> CroppedTableLayers(Viewport vp)
+        {
+            var halfW = vp.Width / 2 * _scale * _upf;
+            var halfH = vp.Height / 2 * _scale * _upf;
+            var corners = new[] { new P2(-halfW, -halfH), new P2(halfW, -halfH), new P2(halfW, halfH), new P2(-halfW, halfH) }
+                .Select(c => ExhibitPlanner.Rotate(c, -_twist) + _viewCenter).ToList();
+            double minX = corners.Min(c => c.X), minY = corners.Min(c => c.Y), maxX = corners.Max(c => c.X), maxY = corners.Max(c => c.Y);
+
+            var ms = (BlockTableRecord)_tr.GetObject(SymbolUtilityServices.GetBlockModelSpaceId(_db), OpenMode.ForRead);
+            foreach (ObjectId id in ms)
+            {
+                var dxf = id.ObjectClass == null ? string.Empty : id.ObjectClass.DxfName ?? string.Empty;
+                if (!dxf.EndsWith("TABLE", StringComparison.OrdinalIgnoreCase)) continue;
+                var entity = _tr.GetObject(id, OpenMode.ForRead) as AcEntity;
+                if (entity == null) continue;
+                Extents3d box;
+                try { box = entity.GeometricExtents; }
+                catch (Autodesk.AutoCAD.Runtime.Exception) { continue; }
+
+                // Cut through: part of it shows and part does not.
+                var showsSomething = box.MaxPoint.X > minX && box.MinPoint.X < maxX && box.MaxPoint.Y > minY && box.MinPoint.Y < maxY;
+                var whollyInside = box.MinPoint.X >= minX && box.MaxPoint.X <= maxX && box.MinPoint.Y >= minY && box.MaxPoint.Y <= maxY;
+                if (showsSomething && !whollyInside) yield return entity.Layer;
+            }
         }
 
         /// <summary>The layers FTF drafts its own easement wording onto -- what this sheet redraws.</summary>
@@ -2058,6 +2099,7 @@ namespace FieldCodes.Cad
                 mtext.Contents = contents;
                 mtext.TextHeight = _xs.TextHeightIn;
                 mtext.Location = position;
+                CadUtil.Mask(mtext, _xs.LabelMask);
                 entity.MText = mtext;
             }
             entity.TextLocation = position;
@@ -2188,6 +2230,7 @@ namespace FieldCodes.Cad
                     mtext.Contents = EasementCommands.Escape(text);
                     mtext.TextHeight = _xs.TextHeightIn;
                     mtext.Location = position;
+                    CadUtil.Mask(mtext, _xs.LabelMask);
                     entity.MText = mtext;
                 }
                 entity.TextLocation = position;
@@ -2638,13 +2681,9 @@ namespace FieldCodes.Cad
             text.Rotation = rotation;
             text.Contents = contents;
             if (width > 0) text.Width = width;           // wraps rather than running off the sheet
-            if (mask)
-            {
-                // Reads over the hatch.
-                text.BackgroundFill = true;
-                text.UseBackgroundColor = true;
-                text.BackgroundScaleFactor = 1.15;
-            }
+            // The office masks every label on its exhibits, so a label reads over whatever it
+            // sits on. A caller asking for one anyway keeps it when the profile has them off.
+            CadUtil.Mask(text, mask || _xs.LabelMask);
             Add(text, key, kind, kind == "LABEL" || kind == "AREALABEL" ? FtfEntityKind.ExhibitLabel : FtfEntityKind.ExhibitText, layer, contents, keepPosition, position);
             if (handPosition)
             {

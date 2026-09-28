@@ -45,11 +45,20 @@ if ($Office) { $args.Profile = 'PMX Survey Civil3D 2024' }
 if (Test-Path -LiteralPath $report) {
     $layouts = @(Select-String -LiteralPath $report -Pattern '^EXHIBIT (.+?): 1"' | ForEach-Object { $_.Matches[0].Groups[1].Value })
     if ($layouts) {
-        Get-ChildItem -LiteralPath $out -Filter 'plot-*.pdf' | Remove-Item
+        # A PDF open in a viewer cannot be replaced; that is not a reason to stop the suite.
+        Get-ChildItem -LiteralPath $out -Filter 'plot-*.pdf' | ForEach-Object {
+            $name = $_.Name
+            try { Remove-Item -LiteralPath $_.FullName -ErrorAction Stop }
+            catch { Write-Host ('LOCKED: ' + $name + ' is open elsewhere; its plot is skipped this run.') }
+        }
         $plot = @()
         foreach ($l in $layouts) { $plot += 'FTFEXHIBITPREVIEW'; $plot += $l }
         # A PNG of each sheet too, to look at the plotted result directly.
-        Get-ChildItem -LiteralPath $out -Filter 'view-*.png' | Remove-Item
+        Get-ChildItem -LiteralPath $out -Filter 'view-*.png' | ForEach-Object {
+            $name = $_.Name
+            try { Remove-Item -LiteralPath $_.FullName -ErrorAction Stop }
+            catch { Write-Host ('LOCKED: ' + $name + ' is open elsewhere; its view is skipped this run.') }
+        }
         foreach ($l in $layouts) { $plot += 'RWPNG'; $plot += $l; $plot += (Join-Path $out ('view-' + ($l -replace '[^A-Za-z0-9]+', '-') + '.png')) }
         $pscr = Join-Path $out 'plot.scr'
         Set-Content -LiteralPath $pscr -Encoding utf8 -Value (@('NETLOAD "' + "$bin\FieldCodes.Cad.dll" + '"', 'NETLOAD "' + "$here\RealWorldHarness.dll" + '"') + $plot)
@@ -62,7 +71,11 @@ if (Test-Path -LiteralPath $report) {
         $n = 0
         foreach ($m in (Select-String -LiteralPath (Join-Path $out 'plot.log') -Pattern '^FTFEXHIBITPREVIEW: (.+\.pdf)')) {
             $src = $m.Matches[0].Groups[1].Value.Trim()
-            if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $out ('plot-' + ($layouts[$n] -replace '[^A-Za-z0-9]+', '-') + '.pdf')) -Force }
+            $dest = Join-Path $out ('plot-' + ($layouts[$n] -replace '[^A-Za-z0-9]+', '-') + '.pdf')
+            if (Test-Path -LiteralPath $src) {
+                try { Copy-Item -LiteralPath $src -Destination $dest -Force -ErrorAction Stop }
+                catch { Write-Host ('LOCKED: ' + (Split-Path -Leaf $dest) + ' is open elsewhere; the old one is kept.') }
+            }
             $n++
         }
     }

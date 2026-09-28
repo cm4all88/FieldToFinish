@@ -211,7 +211,10 @@ namespace FtfRealWorld
                     dyn.Count > 0 ? " DYN: " + string.Join("; ", dyn.ToArray()) : ""));
                 return;
             }
-            if (where.Trim() == "PS")
+            // Anything with no printer of its own -- a Civil 3D table, say -- still shows where it is
+            // and what layer it is on, so it can be told apart from the drafting FTF put there.
+            var interesting = where.Trim() == "PS" || e.GetType().Name.IndexOf("Table", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (interesting)
             {
                 var extent = "";
                 try { var g = e.GeometricExtents; extent = string.Format(C, " ext {0:0.##},{1:0.##}-{2:0.##},{3:0.##}", g.MinPoint.X, g.MinPoint.Y, g.MaxPoint.X, g.MaxPoint.Y); } catch (Autodesk.AutoCAD.Runtime.Exception) { }

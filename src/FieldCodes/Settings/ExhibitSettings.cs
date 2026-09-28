@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -113,6 +113,13 @@ namespace FieldCodes.Settings
         [JsonProperty("infoY")] public double InfoY { get; set; }
 
         // Office standard: the drawings, blocks and styles an office's own exhibits use.
+        /// <summary>
+        /// A background mask behind every label on the sheet, as every label in the office
+        /// exhibits has: 1.5x the text box, the drawing's background colour. Without it a
+        /// course label reads over the linework and hatch it sits on.
+        /// </summary>
+        [JsonProperty("labelMask")] public bool LabelMask { get; set; }
+
         /// <summary>Plot style table set on the layout and used by FTFEXHIBITPREVIEW, e.g. "PMX Survey BW.ctb". Empty keeps the layout's.</summary>
         [JsonProperty("plotStyleTable")] public string PlotStyleTable { get; set; }
         /// <summary>A drawing or template the template layout is imported from when it is not already in the drawing.</summary>
@@ -289,6 +296,7 @@ namespace FieldCodes.Settings
             NotesX = 0.75; NotesY = 0.95;
 
             PlotStyleTable = string.Empty;
+            LabelMask = true;
             TemplateFile = string.Empty;
             BlockLibrary = string.Empty;
             BorderLeftIn = BorderBottomIn = BorderRightIn = BorderTopIn = 0;
