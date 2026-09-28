@@ -530,6 +530,9 @@ namespace FieldCodes.Cad.Ui
         private readonly List<Action> _fitters = new List<Action>();
         private Panel _scroll;
         private Control _connectionGroup;
+        private Panel _connectionDetail;
+        private Label _connectionSummary;
+        private Button _connectionReview;
 
         /// <summary>
         /// One numbered step: a white card with its number, title, one line of plain
@@ -754,17 +757,43 @@ namespace FieldCodes.Cad.Ui
             _candidateCaption = new Label { Dock = DockStyle.Top, AutoSize = false, ForeColor = Ink, TextAlign = ContentAlignment.BottomLeft };
             _connectionState = new Label { Dock = DockStyle.Top, AutoSize = false, ForeColor = Muted, Font = F(10f, false), Height = 26, TextAlign = ContentAlignment.MiddleLeft };
 
-            var connPanel = new Panel { BackColor = Surface };
-            connPanel.Controls.Add(_connections);
-            connPanel.Controls.Add(_candidateList);
-            connPanel.Controls.Add(_candidateCaption);
-            connPanel.Controls.Add(_connectionState);
-            connPanel.Controls.Add(Row(
+            // Collapsed to one line when every pipe has settled: how many are connected, how many
+            // want looking at, and a button that opens the batch work in place. Nothing is hidden
+            // from the drafter -- it is one click away and it says when that click is worth making.
+            // Fill, so the list inside it gets the panel's width the moment it is shown; the Step's
+            // own height comes from its fill lines, which go to zero while this is collapsed.
+            _connectionDetail = new Panel { BackColor = Surface, Dock = DockStyle.Fill };
+            _connectionDetail.Controls.Add(_connections);
+            _connectionDetail.Controls.Add(_candidateList);
+            _connectionDetail.Controls.Add(_candidateCaption);
+            _connectionDetail.Controls.Add(_connectionState);
+            _connectionDetail.Controls.Add(Row(
                 Btn("Find all connections", OnFindAll, true),
                 Btn("Confirm selected", OnConfirm),
                 Btn("Draw this structure's pipes", (s, e) => OnDraw(false)),
                 Advanced(Btn("Draw all confirmed pipes", (s, e) => OnDraw(true)))));
-            _connectionGroup = Step(null, "Connections", null, connPanel, 5);
+            _connectionDetail.Visible = false;
+
+            _connectionSummary = new Label
+            {
+                Dock = DockStyle.Top, AutoSize = false, Height = 26, ForeColor = Muted,
+                Font = F(10.5f, false), TextAlign = ContentAlignment.MiddleLeft, UseMnemonic = false
+            };
+            _connectionReview = Btn("Review", (s, e) =>
+            {
+                var opening = !_connectionDetail.Visible;
+                _connectionsOpenedByHand = opening;
+                ShowConnections(opening);
+            });
+            var summaryRow = Row(_connectionReview);
+            summaryRow.Dock = DockStyle.Top;
+
+            var connPanel = new Panel { BackColor = Surface };
+            connPanel.Controls.Add(_connectionDetail);
+            connPanel.Controls.Add(summaryRow);
+            connPanel.Controls.Add(_connectionSummary);
+            _connectionGroup = Step(null, "Connections", null, connPanel,
+                                    () => _connectionDetail != null && _connectionDetail.Visible ? 6 : 0);
             scroll.Controls.Add(_connectionGroup);
 
             // 2 pipes -----------------------------------------------------------
@@ -1354,6 +1383,47 @@ namespace FieldCodes.Cad.Ui
         /// <summary>The entered diameter or inside width, from whichever box the structure's shape shows.</summary>
         private string WidthText { get { return _roundSize ? _diameter.Text : _insideWidth.Text; } }
 
+        /// <summary>Opens or closes the batch connection controls, in place.</summary>
+        private void ShowConnections(bool open)
+        {
+            if (_connectionDetail == null) return;
+            _connectionDetail.Visible = open;
+            if (_connectionReview != null) _connectionReview.Text = open ? "Hide" : "Review";
+            FitAll();
+        }
+
+        /// <summary>
+        /// The one line the drafter sees when nothing needs them: how many pipes here are
+        /// connected and how many are waiting. A pipe with no direction cannot be searched for,
+        /// so it is counted as waiting only once it has one.
+        /// </summary>
+        private void RefreshConnectionSummary(StructureRecord s)
+        {
+            if (_connectionSummary == null) return;
+            var project = DipSession.Project;
+            int connected = 0, waiting = 0;
+            if (project != null && s != null)
+                foreach (var pipe in s.Field.Pipes)
+                {
+                    var c = project.ConnectionFor(s.Id, pipe.Id);
+                    if (c != null && c.IsAccepted) { connected++; continue; }
+                    if (c != null && (c.Status == ConnectionStatus.OutsideSurveyLimits || c.Status == ConnectionStatus.LeftUnresolved)) continue;
+                    if (pipe.Direction.IsKnown) waiting++;
+                }
+
+            _connectionSummary.Text = (waiting == 0 ? "\u2713  " : "\u26a0  ") +
+                connected + (connected == 1 ? " connected" : " connected") +
+                "  \u00b7  " + waiting + (waiting == 1 ? " needs review" : " need review");
+            _connectionSummary.ForeColor = waiting == 0 ? Muted : Warn;
+
+            // Something to sort out opens it, so the drafter is not hunting for the button; once
+            // it is all settled it closes again, unless they opened it themselves.
+            if (waiting > 0 && !_connectionDetail.Visible) ShowConnections(true);
+            else if (waiting == 0 && _connectionDetail.Visible && !_connectionsOpenedByHand) ShowConnections(false);
+        }
+
+        private bool _connectionsOpenedByHand;
+
         private void RefreshStructure()
         {
             var s = Current;
@@ -1430,6 +1500,7 @@ namespace FieldCodes.Cad.Ui
 
                 RefreshConnectionsList(s);
                 RefreshCards(s);
+                RefreshConnectionSummary(s);
                 // The Add pipe buttons follow the structure: a type changed to CB shows a catch basin's sizes.
                 var choices = ChoicesFor(s);
                 _choiceNote.Text = "Buttons for: " + choices.RuleName;
@@ -2339,13 +2410,20 @@ namespace FieldCodes.Cad.Ui
                 card.Action(issues.Count == 1 ? "Show issue" : "Show issues",
                             (x, e) => { SelectPipe(pipeId); _warningsOpen = true; FitAll(); UpdateWarningsHeader(); });
 
-            var more = new List<KeyValuePair<string, EventHandler>>
-            {
-                new KeyValuePair<string, EventHandler>("Connects to...", (x, e) => { SelectPipe(pipeId); OnManualPick(x, e); }),
-                new KeyValuePair<string, EventHandler>("Suggest where it runs", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); }),
-                new KeyValuePair<string, EventHandler>("Leave unresolved", (x, e) => { SelectPipe(pipeId); OnLeaveUnresolved(x, e); }),
-                new KeyValuePair<string, EventHandler>("Runs outside survey limits", (x, e) => { SelectPipe(pipeId); OnOutsideLimits(x, e); })
-            };
+            // Only what applies to this pipe. A pipe already marked as running outside the survey
+            // is not offered that again; a pipe with no direction cannot be searched for; a pipe
+            // that has not been drawn has nothing to redraw.
+            var more = new List<KeyValuePair<string, EventHandler>>();
+            var settled = c != null && (c.Status == ConnectionStatus.OutsideSurveyLimits || c.Status == ConnectionStatus.LeftUnresolved);
+            if (!settled || c.Status == ConnectionStatus.LeftUnresolved)
+                more.Add(new KeyValuePair<string, EventHandler>(other != null ? "Change where it connects" : "Connects to...",
+                    (x, e) => { SelectPipe(pipeId); OnManualPick(x, e); }));
+            if (p.Direction.IsKnown && other != null)
+                more.Add(new KeyValuePair<string, EventHandler>("Suggest where it runs", (x, e) => { SelectPipe(pipeId); OnFindConnections(x, e); }));
+            if (c == null || c.Status != ConnectionStatus.LeftUnresolved)
+                more.Add(new KeyValuePair<string, EventHandler>("Leave unresolved", (x, e) => { SelectPipe(pipeId); OnLeaveUnresolved(x, e); }));
+            if (c == null || c.Status != ConnectionStatus.OutsideSurveyLimits)
+                more.Add(new KeyValuePair<string, EventHandler>("Runs outside survey limits", (x, e) => { SelectPipe(pipeId); OnOutsideLimits(x, e); }));
             if (drawable && c.Drafted)
             {
                 var connectionId = c.Id;

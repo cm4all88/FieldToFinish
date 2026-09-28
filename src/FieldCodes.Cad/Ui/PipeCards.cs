@@ -98,11 +98,12 @@ namespace FieldCodes.Cad.Ui
                 _more.Controls.Add(extra);
             }
 
-            var b = Action(text, null);
+            // The caret is there before it is clicked, so the button reads as something that opens.
+            var b = Action(text + " \u25be", null);
             b.Click += (s, e) =>
             {
                 MoreOpen = !MoreOpen;
-                b.Text = MoreOpen ? text + " \u25b4" : text;
+                b.Text = MoreOpen ? text + " \u25b4" : text + " \u25be";
                 var list2 = Parent as IFitsWidth;
                 if (list2 != null) list2.FitWidth(Width);
                 Parent?.PerformLayout();

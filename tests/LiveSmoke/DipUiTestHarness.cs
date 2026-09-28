@@ -272,13 +272,20 @@ namespace FtfUiTest
             return Window.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(Window) as T;
         }
 
-        /// <summary>Opens a card's More actions if they are not already open, then presses one.</summary>
-        private static void CardMore(int index, string text)
+        /// <summary>
+        /// Opens a card's More actions if they are not already open, then presses the first of
+        /// the given labels that is there. More than one label because a card only offers what
+        /// applies: an unconnected pipe says "Connects to...", a connected one "Change where it
+        /// connects".
+        /// </summary>
+        private static void CardMore(int index, params string[] texts)
         {
             var card = Card(index);
             var open = (bool)card.GetType().GetProperty("MoreOpen").GetValue(card, null);
-            if (!open) ClickIn(card, "More");
-            ClickIn(Card(index), text);
+            if (!open) ClickIn(card, "More ▾");
+            foreach (var text in texts)
+                if (FindButton(Card(index), text) != null) { ClickIn(Card(index), text); return; }
+            Fail("no More action on card " + index + " called " + string.Join(" or ", texts));
         }
 
         private static Button FindButton(Control root, string text)
@@ -728,7 +735,7 @@ namespace FtfUiTest
                 var list = Field<ListView>("_candidateList");
                 Check(list.Items.Count >= 1 && list.Items[0].Text == "SDMH 1047", "SDMH 1047 suggested for 18 RCP SW");
                 Send("_.ZOOM _C 5120,5000 30 ");
-                CardMore(1, "Connects to...");
+                CardMore(1, "Change where it connects", "Connects to...");
                 Send("5120,5000 ");
                 Send("UI TEST CHANGE\n");
             }, 800);
@@ -956,7 +963,7 @@ namespace FtfUiTest
             {
                 Send("_.ZOOM _C 5120,5000 30 ");
                 // Picking the far structure by hand is behind More: a normal pipe never needs it.
-                CardMore(2, "Connects to...");
+                CardMore(2, "Connects to...", "Change where it connects");
                 Send("5120,5000 ");
                 Send("UI TEST WALK\n");
             }, 800);
@@ -1783,6 +1790,9 @@ namespace FtfUiTest
                     Log("   pipe cards at " + (int)(scale * 100) + "%: " + cards.Size);
                     Check(cards.Width >= 500 && cards.Height >= 60, "pipe cards usable at " + (int)(scale * 100) + "% (" + cards.Size + ")");
                     if (grid.Visible) Check(grid.Height >= 120 && grid.Width >= 500, "pipe table usable at " + (int)(scale * 100) + "% (" + grid.Size + ")");
+                    // A settled structure keeps the connections collapsed to a line, so open them
+                    // the way the drafter would before checking they are usable at this text size.
+                    type.GetMethod("ShowConnections", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(form, new object[] { true });
                     Check(list.Height >= 80 && list.Width >= 500, "connections list usable at " + (int)(scale * 100) + "% (" + list.Size + ")");
                     Check(preview.Height >= 80 && preview.Width >= 250, "leader preview usable at " + (int)(scale * 100) + "% (" + preview.Size + ")");
                 }
