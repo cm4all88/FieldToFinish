@@ -1517,6 +1517,10 @@ namespace FieldCodes.Cad.Ui
                 {
                     if (_quick.EditingPipeId != null && !s.Field.Pipes.Any(p => p.Id == _quick.EditingPipeId)) CloseQuickEntry();
                     else if (_quick.ChoiceRule != choices.RuleName) _quick.SetChoices(choices);
+                    // The pipe just entered is saved through the drawing, a moment after the next
+                    // slot opened, so the slot says which pipe it is only once that has landed.
+                    if (_quick.EditingPipeId == null && _quick.CompletingConnectionId == null)
+                        _quick.SlotText = SlotWords(s, null);
                 }
             }
             finally

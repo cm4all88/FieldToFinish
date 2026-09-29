@@ -108,8 +108,9 @@ namespace FieldCodes.Cad.Ui
             _dip.TextChanged += (s, e) => { ReadDip(false); UpdatePreview(); };
             _dip.KeyDown += (s, e) =>
             {
-                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Submit(); }
-                else if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; Cancel(); }
+                if (e.KeyCode != Keys.Enter && e.KeyCode != Keys.Escape) return;
+                e.SuppressKeyPress = true;
+                PressInMd(e.KeyCode);
             };
             _enterHint = new Label { AutoSize = true, ForeColor = DipBuilderForm.Muted, Font = DipBuilderForm.F(9f, false), Margin = new Padding(0, 7, 0, 0), Text = "↵ saves" };
 
@@ -146,8 +147,22 @@ namespace FieldCodes.Cad.Ui
             Start(choices, prefill, null, connectionId, structureLabel, sourceLabel, summary);
         }
 
-        /// <summary>The words above the chips: which pipe of how many, or what is being edited.</summary>
-        public string SlotText { get; set; }
+        /// <summary>
+        /// The words above the chips: which pipe of how many. Set while the slot is open -- the
+        /// pipe before it lands a moment after the slot opens -- it updates what the drafter reads.
+        /// </summary>
+        public string SlotText
+        {
+            get { return _slotText; }
+            set
+            {
+                _slotText = value;
+                if (Visible && EditingPipeId == null && CompletingConnectionId == null)
+                    _title.Text = value ?? "New pipe";
+            }
+        }
+
+        private string _slotText;
 
         private void Start(PipeChoiceSet choices, QuickPipeEntry from, PipeObservation editing, string connectionId,
                            string structureLabel, string sourceLabel, Func<PipeObservation, string> summary)
@@ -178,6 +193,7 @@ namespace FieldCodes.Cad.Ui
             _dip.Text = _entry.MeasuredDip.HasValue ? QuickPipeEntry.Exact(_entry.MeasuredDip.Value) : string.Empty;
             _problem.Text = string.Empty;
             _largerShown = _moreShown = _dialShown = false;
+            MdFocusAsked = false;
             _choices = choices ?? new PipeChoiceSet();
 
             RefreshChips();
@@ -457,7 +473,14 @@ namespace FieldCodes.Cad.Ui
 
         private void UseTypedDirection(string text)
         {
-            var direction = DirectionShortcuts.Parse(text);
+            // A drafter who types just a number means an azimuth -- a bare number is never a bearing.
+            var typed = (text ?? string.Empty).Trim();
+            double azimuth;
+            if (double.TryParse(typed, NumberStyles.Float, CultureInfo.InvariantCulture, out azimuth) &&
+                azimuth >= 0 && azimuth <= 360)
+                typed = "AZ" + typed;
+
+            var direction = DirectionShortcuts.Parse(typed);
             if (direction == null) { Problem("That is not a direction FTF can read. Try N, N/NE, a bearing or an azimuth."); return; }
             _touched.Add(QuickPipeEntry.DirectionField);
             _entry.Direction = direction;
@@ -488,8 +511,121 @@ namespace FieldCodes.Cad.Ui
         private void FocusDip()
         {
             if (!_dip.Enabled) return;
+            MdFocusAsked = true;
             _dip.Focus();
             _dip.SelectionStart = _dip.Text.Length;
+        }
+
+        /// <summary>
+        /// Enter finishes the pipe; Escape abandons the slot. Behind a method so the UI test can
+        /// press the key without a focused window -- everything but the WinForms plumbing runs.
+        /// </summary>
+        public void PressInMd(Keys key)
+        {
+            if (key == Keys.Enter) Submit();
+            else if (key == Keys.Escape) Cancel();
+        }
+
+        // ------------------------------------------------- what the panel has so far
+        // Read by the Dip UI test so it checks the contract rather than the controls.
+
+        public double? ChosenSize { get { return _entry.SizeIn; } }
+        public string ChosenType { get { return _entry.Material; } }
+
+        public string ChosenDirection
+        {
+            get
+            {
+                if (_entry.Direction == null) return null;
+                var name = DirectionShortcuts.ButtonFor(_entry.Direction);
+                return string.IsNullOrEmpty(name) ? _entry.Direction.Text : name;
+            }
+        }
+
+        public double? ChosenAzimuth { get { return _entry.Direction != null ? _entry.Direction.AzimuthDegrees : null; } }
+        public MeasurementReference ChosenReference { get { return _entry.Reference; } }
+        public string ReferenceChipText { get { return _refChip.Text; } }
+        public bool MdEnabled { get { return _dip.Enabled; } }
+
+        /// <summary>Set when the panel asked for the caret; a hidden window never really gets focus.</summary>
+        public bool MdFocusAsked { get; private set; }
+
+        public string MdText { get { return _dip.Text; } set { _dip.Text = value; } }
+
+        /// <summary>Which chooser the one strip is holding: Size, Type, Direction, Reference or None.</summary>
+        public string OpenChooser { get { return _strip.Visible ? _step.ToString() : Step.None.ToString(); } }
+
+        /// <summary>The buttons in the strip as it stands, in order.</summary>
+        public IList<string> ChooserButtons
+        {
+            get
+            {
+                var found = new List<string>();
+                Walk(_strip, found);
+                return found;
+            }
+        }
+
+        private static void Walk(Control root, List<string> into)
+        {
+            foreach (Control c in root.Controls)
+            {
+                var b = c as Button;
+                if (b != null) into.Add(b.Text);
+                Walk(c, into);
+            }
+        }
+
+        /// <summary>Presses a button in the strip by its text. False when it is not there.</summary>
+        public bool PressInChooser(string text)
+        {
+            var b = Find(_strip, text);
+            if (b == null) return false;
+            b.PerformClick();
+            return true;
+        }
+
+        /// <summary>Types into the strip's own box (a typed size, material, bearing or azimuth).</summary>
+        public bool TypeInChooser(string text)
+        {
+            var box = Boxes(_strip).FirstOrDefault();
+            if (box == null) return false;
+            box.Text = text;
+            return true;
+        }
+
+        /// <summary>Opens a chooser as clicking its chip does.</summary>
+        public void OpenChooserFor(string which)
+        {
+            switch ((which ?? string.Empty).ToUpperInvariant())
+            {
+                case "SIZE": _sizeChip.PerformClick(); break;
+                case "TYPE": _typeChip.PerformClick(); break;
+                case "DIRECTION": _dirChip.PerformClick(); break;
+                case "REFERENCE": _refChip.PerformClick(); break;
+            }
+        }
+
+        private static Button Find(Control root, string text)
+        {
+            foreach (Control c in root.Controls)
+            {
+                var b = c as Button;
+                if (b != null && b.Text == text) return b;
+                var inner = Find(c, text);
+                if (inner != null) return inner;
+            }
+            return null;
+        }
+
+        private static IEnumerable<TextBox> Boxes(Control root)
+        {
+            foreach (Control c in root.Controls)
+            {
+                var t = c as TextBox;
+                if (t != null) yield return t;
+                foreach (var inner in Boxes(c)) yield return inner;
+            }
         }
 
         // ------------------------------------------------------------ finishing
