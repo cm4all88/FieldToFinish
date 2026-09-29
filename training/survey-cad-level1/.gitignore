@@ -1,0 +1,3 @@
+output/images/
+output/*.zip
+__pycache__/
