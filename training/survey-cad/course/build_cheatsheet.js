@@ -1,6 +1,5 @@
-// Command sheets, portrait letter for a binder. Two builds from the same data:
-//   SURVEY_CAD_Command_Sheet     - the course version, with the Stage column
-//   SURVEY_CAD_Command_Reference - general reference, no stages or course wording
+// Command sheet, portrait letter for a binder. build(true) would add the course's Stage column;
+// the published sheet is build(false): no stages, no course wording.
 const fs = require("fs");
 const path = require("path");
 const {
@@ -229,7 +228,7 @@ const SYSVARS = [
   ["PICKFIRST", "1", "Pick objects first, then the command"],
   ["MIRRTEXT", "0", "Mirrored text stays readable"],
   ["PDMODE / PDSIZE", "3 / 0", "How POINT objects look"],
-  ["LTSCALE / PSLTSCALE", "20 / 0", "Linetype scale for 1\" = 20' (as this course)"],
+  ["LTSCALE / PSLTSCALE", "20 / 0", "Linetype scale for 1\" = 20' sheets"],
   ["MSLTSCALE", "1", "Model tab linetypes follow annotation scale"],
   ["CELTSCALE", "1", "Object linetype scale for new objects"],
   ["LWDISPLAY", "1", "Show lineweights on screen"],
@@ -466,8 +465,8 @@ const more = (k) => threeTable(...MORE[k]);
 
 function build(course) {
   STAGES = course;
-  const name = course ? "SURVEY_CAD_Command_Sheet" : "SURVEY_CAD_Command_Reference";
-  const docTitle = course ? "Survey CAD Command Sheet" : "Survey CAD Command Reference";
+  const name = "SURVEY_CAD_Command_Sheet";
+  const docTitle = "Survey CAD Command Sheet";
   const footers = { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
     new TextRun({ text: docTitle + "    ", size: 16, color: "808080", font: FONT }),
     new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "808080", font: FONT })] })] }) };
@@ -505,4 +504,4 @@ function build(course) {
   });
 }
 
-build(true).then(() => build(false));
+build(false);
