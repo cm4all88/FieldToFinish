@@ -1,5 +1,5 @@
-// Survey CAD Drafter Reference: a progressive training path (Levels 1-9) that stays useful as a desk reference.
-// Content lives in reference_content.js; this file only lays it out (portrait letter, binder margin).
+// Survey CAD Command Reference: AutoCAD and Civil 3D commands for survey drafters, ordered from everyday
+// basics to power-drafter tools. Content lives in reference_content.js; this file lays it out (portrait, binder margin).
 const fs = require("fs");
 const path = require("path");
 const {
@@ -70,16 +70,18 @@ function whatCell(what, warn, w, ribbon) {
   if (warn) lines.push([t("⚠ " + warn, { size: SIZE - 2, bold: true, color: RED })]);
   return cell(lines, w);
 }
-const SURVEY = {   // "Use on survey data?" column
-  ok: ["Yes", GREEN], draft: ["Drafted items only", "B45F06"], never: ["Never", RED], care: ["With care", "B45F06"], view: ["Yes (view only)", GREEN],
+const AMBER = "B45F06";
+const SURVEY = {   // "Survey use" column: what the command may do to coordinate-controlled survey geometry
+  safe: ["Safe", GREEN], care: ["With care", AMBER], derived: ["Derived geometry only", "2E75B6"],
+  draft: ["Drafted items only", AMBER], never: ["Never", RED],
 };
 
 // ---- block renderers --------------------------------------------------------------------------------
 // cmds: rows [command, type, what, {ribbon, warn, survey}]
 function cmdsBlock(b) {
   const withSurvey = b.rows.some((r) => r[3] && r[3].survey);
-  const w = withSurvey ? [2250, 2000, FULL - 2250 - 2000 - 1250, 1250] : [2250, 2000, FULL - 4250];
-  const heads = withSurvey ? ["Command", "Type", "What it does", "On survey data?"] : ["Command", "Type", "What it does"];
+  const w = withSurvey ? [2050, 1950, FULL - 2050 - 1950 - 1250, 1250] : [2050, 1950, FULL - 4000];
+  const heads = withSurvey ? ["Command", "Type", "What it does", "Survey use"] : ["Command", "Type", "What it does"];
   return table(w, [titleRow(b.title, w.length, FULL, b.fill, b.note), headRow(b.heads || heads, w),
     ...b.rows.map(([c, k, what, o = {}]) => new TableRow({ cantSplit: true, children: [
       cmdCell(c, o.ribbon, w[0]), cell(typeRuns(k), w[1]), whatCell(what, o.warn, w[2], o.ribbon),
@@ -108,7 +110,7 @@ function sysvarBlock(b) {
 // diagnose: rows [problem, [checks...]]
 function diagBlock(b) {
   const w = [2900, FULL - 2900];
-  return table(w, [titleRow(b.title, 2, FULL, b.fill, b.note), headRow(["Problem", "Check, in this order"], w),
+  return table(w, [titleRow(b.title, 2, FULL, b.fill, b.note), headRow(["Problem", "Check"], w),
     ...b.rows.map(([p, checks]) => new TableRow({ cantSplit: true, children: [
       cell(rich(`__${p}__`), w[0]),
       cell(checks.flatMap((c, i) => [...(i ? [t("   ")] : []), t(`${i + 1} `, { bold: true, color: BLUE }), ...rich(c)]), w[1])] }))]);
@@ -134,7 +136,7 @@ function exercise(e, W = HALF) {
   if (e.check) extra.push(new TableRow({ cantSplit: true, children: [cell([t("✓ Check  ", { bold: true, color: GREEN }), ...rich(e.check)], W, { span: 2, fill: "F2F7F2" })] }));
   if (e.tip) extra.push(new TableRow({ cantSplit: true, children: [cell([t("Tip  ", { bold: true, color: BLUE }), ...rich(e.tip, { italics: true })], W, { span: 2, fill: "F2F2F2" })] }));
   KEEP = false;
-  return table(w, [titleRow("EXERCISE  " + e.title, 2, W, "385D8A"), ...rows, ...extra], W);
+  return table(w, [titleRow("HOW TO  " + e.title, 2, W, "385D8A"), ...rows, ...extra], W);
 }
 const twoCol = (left, right) => table([HALF, GAP, HALF], [new TableRow({ cantSplit: true, children: [
   cell(left, HALF, { borders: noBorder, margins: { top: 0, bottom: 0, left: 0, right: 0 } }),
@@ -161,20 +163,16 @@ function sideBySide(b) {   // two small blocks next to each other
     new TableCell({ width: { size: HALF, type: WidthType.DXA }, borders: noBorder, margins: { top: 0, bottom: 0, left: 0, right: 0 }, children: [r(b.right)] })] })] });
 }
 
-function levelBar(L) {
-  const fill = L.advanced ? NAVY : BLUE;
-  const chip = L.advanced ? "ADVANCED" : L.n === 1 ? "START HERE" : "CORE";
-  return [table([1500, FULL - 1500], [new TableRow({ cantSplit: true, children: [
-    new TableCell({ width: { size: 1500, type: WidthType.DXA }, borders: noBorder, shading: { type: ShadingType.CLEAR, fill: L.advanced ? "55556A" : "2E75B6", color: "auto" },
-      margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [
-        new Paragraph({ keepNext: true, alignment: AlignmentType.CENTER, children: [new TextRun({ text: "LEVEL", font: FONT, size: 16, bold: true, color: "FFFFFF" })] }),
-        new Paragraph({ keepNext: true, alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(L.n), font: FONT, size: 44, bold: true, color: "FFFFFF" })] })] }),
-    new TableCell({ width: { size: FULL - 1500, type: WidthType.DXA }, borders: noBorder, shading: { type: ShadingType.CLEAR, fill, color: "auto" },
-      margins: { top: 60, bottom: 60, left: 180, right: 120 }, children: [
-        new Paragraph({ keepNext: true, children: [new TextRun({ text: L.title, font: FONT, size: 30, bold: true, color: "FFFFFF" }),
-          new TextRun({ text: "   " + chip, font: FONT, size: 15, bold: true, color: L.advanced ? "F4B183" : "BDD7EE" })] }),
-        new Paragraph({ keepNext: true, children: [new TextRun({ text: "Goal: " + L.goal, font: FONT, size: 19, italics: true, color: "FFFFFF" })] })] })] })]),
-  gap(80)];
+function sectionBar(S) {
+  const fill = S.advanced ? NAVY : BLUE;
+  const kids = [new TextRun({ text: ` ${S.n}   `, font: FONT, size: 30, bold: true, color: S.advanced ? "F4B183" : "9DC3E6" }),
+    new TextRun({ text: S.title, font: FONT, size: 26, bold: true, color: "FFFFFF" })];
+  if (S.tag) kids.push(new TextRun({ text: "   " + S.tag, font: FONT, size: 15, bold: true, color: S.advanced ? "F4B183" : "BDD7EE" }));
+  if (S.sub) kids.push(new TextRun({ text: "    " + S.sub, font: FONT, size: 17, italics: true, color: "E6ECF5" }));
+  const edge = { style: BorderStyle.SINGLE, size: 1, color: fill, space: 4 };
+  return [new Paragraph({ keepNext: true, keepLines: true, spacing: { before: 60, after: 100 },
+    shading: { type: ShadingType.CLEAR, fill, color: "auto" }, border: { top: edge, bottom: edge, left: edge, right: edge },
+    children: kids })];
 }
 
 function renderBlock(b) {
@@ -186,30 +184,30 @@ function renderBlock(b) {
     case "diag": return [diagBlock(b)];
     case "box": return [box(b)];
     case "side": return [sideBySide(b)];
-    case "exercises": return exercisesBlock(b);
+    case "exercises": case "how": return exercisesBlock(b);
     default: throw new Error("unknown block " + b.type);
   }
 }
 
 function cover() {
-  SIZE = 18;
+  SIZE = 16;
   const out = [
-    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: "PARAMETRIX  |  SURVEY CAD TRAINING", bold: true, size: 20, color: BLUE, font: FONT })] }),
-    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: C.TITLE, bold: true, size: 44, font: FONT })] }),
+    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: "PARAMETRIX  |  SURVEY CAD", bold: true, size: 20, color: BLUE, font: FONT })] }),
+    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: C.TITLE, bold: true, size: 40, font: FONT })] }),
     new Paragraph({ spacing: { after: 140 }, border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: BLUE, space: 4 } },
       children: [new TextRun({ text: C.SUBTITLE, italics: true, size: 21, color: "404040", font: FONT })] }),
   ];
-  for (const b of C.COVER) { out.push(...renderBlock(b)); out.push(gap()); }
+  for (const b of C.COVER) { out.push(...renderBlock(b)); out.push(gap(70)); }
   return out;
 }
 
 function build() {
   const body = cover();
   for (const L of C.LEVELS) {
-    SIZE = L.advanced ? 15 : 16;
+    SIZE = L.size || 15;
     if (L.newPage) body.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
-    body.push(...levelBar(L));
-    for (const b of L.blocks) { body.push(...renderBlock(b)); body.push(gap()); }
+    body.push(...sectionBar(L));
+    for (const b of L.blocks) { body.push(...renderBlock(b)); body.push(gap(70)); }
   }
   const footers = { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
     new TextRun({ text: C.FOOTER + "    ", size: 15, color: "808080", font: FONT }),

@@ -1,4 +1,4 @@
-# Drafter Reference: verification notes
+# Command Reference: verification notes
 
 Commands and behavior in `reference_content.js` were checked against Autodesk help (help.autodesk.com,
 AutoCAD and Civil 3D 2024-2026) in September 2026. The check used Autodesk's indexed help pages through
