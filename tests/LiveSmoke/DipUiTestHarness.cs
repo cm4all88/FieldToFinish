@@ -218,6 +218,51 @@ namespace FtfUiTest
 
         /// <summary>The last lines of the AutoCAD text window, from its own log file: what a
         /// stuck command is actually prompting for.</summary>
+        // ------------------------------------------ the office update check, inside Civil 3D
+        // Driven through scratch folders: a pretend bundle and a pretend office copy. Nothing
+        // real is installed, and the launch decision is read rather than acted on -- a test that
+        // actually ran an installer would replace the build it is testing.
+
+        private static Type OfficeUpdateType { get { return Plugin.GetType("FieldCodes.Cad.OfficeUpdate"); } }
+
+        private static object OfficeUpdateProp(string name)
+        {
+            return OfficeUpdateType.GetProperty(name).GetValue(null, null);
+        }
+
+        private static void OfficeUpdateSet(string name, object value)
+        {
+            OfficeUpdateType.GetProperty(name).SetValue(null, value, null);
+        }
+
+        /// <summary>Points FTF at a scratch bundle and re-runs the check; returns the state's name.</summary>
+        private static string CheckUpdate(string bundle)
+        {
+            OfficeUpdateSet("BundleOverride", bundle);
+            return Convert.ToString(OfficeUpdateType.GetMethod("Check").Invoke(null, null));
+        }
+
+        /// <summary>A folder that looks like what the installer leaves behind.</summary>
+        private static string FakeBundle(string root, string version, string officeFolder)
+        {
+            var bundle = Path.Combine(root, "bundle");
+            Directory.CreateDirectory(bundle);
+            if (version != null) File.WriteAllText(Path.Combine(bundle, "version.txt"), version);
+            if (officeFolder != null) File.WriteAllText(Path.Combine(bundle, "source.txt"), officeFolder);
+            return bundle;
+        }
+
+        /// <summary>A folder that looks like the setup folder on the office drive.</summary>
+        private static string FakeOffice(string root, string version)
+        {
+            var office = Path.Combine(root, "office");
+            Directory.CreateDirectory(Path.Combine(office, "Bundle"));
+            File.WriteAllText(Path.Combine(office, "install.ps1"), "# pretend installer");
+            File.WriteAllText(Path.Combine(office, "Bundle\\PackageContents.xml"), "<ApplicationPackage />");
+            if (version != null) File.WriteAllText(Path.Combine(office, "version.txt"), version);
+            return office;
+        }
+
         /// <summary>The command each button on a ribbon tab posts, panel by panel.</summary>
         private static List<string> RibbonCommands(Autodesk.Windows.RibbonTab tab)
         {
@@ -719,6 +764,70 @@ namespace FtfUiTest
                 var unknown = mine.Concat(record).Where(c => !known.Contains(c)).ToList();
                 Check(unknown.Count == 0, "every button runs a command FTF really has (" + string.Join(", ", unknown.ToArray()) + ")");
             }, 500);
+
+            // ------------------------------- the update check, in both suites
+            // Surveyors install from the office copy and never think about it again: FTF compares
+            // itself against that copy at startup and installs a newer one when Civil 3D closes.
+            add("FTF compares itself against the office copy", () =>
+            {
+                Check((bool)OfficeUpdateProp("Armed"), "the check is armed when FTF loads");
+
+                var root = Path.Combine(Path.GetTempPath(), "ftf-update-ui-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                var mine = "FTF 2026-09-01 08:00  office aaaaaaa  (Release, Civil 3D 2024)";
+                try
+                {
+                    // A newer office copy: the one case that does anything.
+                    var office = FakeOffice(root, "FTF 2026-09-30 17:00  office bbbbbbb  (Release, Civil 3D 2024)");
+                    var state = CheckUpdate(FakeBundle(root, mine, office));
+                    Log("   state: " + state + " | " + OfficeUpdateProp("Sentence"));
+                    Check(state == "UpdateWaiting", "a newer office copy is an update waiting (" + state + ")");
+                    var sentence = Convert.ToString(OfficeUpdateProp("Sentence"));
+                    Check(sentence.Contains("installs itself when you close Civil 3D"),
+                          "and the window says so, with nothing to answer");
+                    Check(sentence.Contains("2026-09-30 17:00"), "naming the build that is waiting");
+
+                    var launch = Convert.ToString(OfficeUpdateType.GetMethod("UpdaterArguments").Invoke(null, null));
+                    Log("   would run: powershell " + launch);
+                    Check(launch.Contains("install.ps1") && launch.Contains("-WaitForCivil3D"),
+                          "at quit it runs the office copy's own installer, which waits for Civil 3D to close");
+                    Check(launch.Contains(office), "from the folder it was installed from");
+
+                    // Everything else leaves the machine alone.
+                    Directory.Delete(root, true);
+                    office = FakeOffice(root, mine);
+                    state = CheckUpdate(FakeBundle(root, mine, office));
+                    Check(state == "Current", "the same build is current (" + state + ")");
+                    Check(OfficeUpdateType.GetMethod("UpdaterArguments").Invoke(null, null) == null,
+                          "and nothing is run at quit");
+
+                    Directory.Delete(root, true);
+                    office = FakeOffice(root, "FTF 2026-08-01 08:00  office ccccccc  (Release, Civil 3D 2024)");
+                    state = CheckUpdate(FakeBundle(root, mine, office));
+                    Check(state == "AheadOfOffice", "an older office copy never drags a machine back (" + state + ")");
+                    Check(OfficeUpdateType.GetMethod("UpdaterArguments").Invoke(null, null) == null,
+                          "and nothing is run at quit for it either");
+
+                    Directory.Delete(root, true);
+                    state = CheckUpdate(FakeBundle(root, mine, null));
+                    Check(state == "Unknown", "a copy installed by hand has no office copy to check (" + state + ")");
+                    Check(Convert.ToString(OfficeUpdateProp("Trouble")).Contains("installed by hand"),
+                          "and says as much: " + OfficeUpdateProp("Trouble"));
+
+                    Directory.Delete(root, true);
+                    state = CheckUpdate(FakeBundle(root, mine, Path.Combine(root, "not-there")));
+                    Check(state == "Unknown", "an unreachable office drive changes nothing (" + state + ")");
+                    Check(Convert.ToString(OfficeUpdateProp("Trouble")).Contains("not reachable"),
+                          "and says that too: " + OfficeUpdateProp("Trouble"));
+                }
+                finally
+                {
+                    // Back to this machine's real state: whatever it is, it is not the test's.
+                    OfficeUpdateSet("BundleOverride", null);
+                    OfficeUpdateType.GetMethod("Check").Invoke(null, null);
+                    try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch (System.Exception) { }
+                }
+                Log("   this machine: " + OfficeUpdateProp("State") + " | " + OfficeUpdateProp("Sentence"));
+            }, 800);
 
             if (dips)
             {

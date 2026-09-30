@@ -17,12 +17,35 @@ every button is also a command: FTF opens the window, FTFDIP the Dip
 Builder, FTFRECORD a recorded survey.
 
 
+UPDATES -- NOTHING TO DO
+------------------------
+
+You install once. After that FTF keeps itself the same as the office copy:
+
+  * When Civil 3D starts, FTF looks at the office copy this was installed from.
+  * If there is a newer one, the FTF window says so. Keep working -- nothing
+    changes underneath you, and nothing asks you anything.
+  * When you close Civil 3D, the newer FTF installs itself. The next time you
+    open Civil 3D you are current.
+
+So a new FTF reaches you the next time you open Civil 3D after closing it once.
+Civil 3D holds FTF open while it runs, which is why the swap waits for the close.
+
+To see which FTF you have, type FTFUPDATE, or click FTF Version on the FTF tab.
+The FTF window shows it too.
+
+
 IF SOMETHING GOES WRONG
 -----------------------
 
 "Civil 3D is open"
     Close every Civil 3D window and run Install FTF.bat again. Civil 3D holds
     the plugin open while it is running, so it cannot be replaced underneath it.
+
+"It says a newer FTF is waiting" and it stays that way
+    The update installs when Civil 3D closes. If you have closed and reopened it
+    and the message is still there, type FTFUPDATE -- it says what it found and
+    where it looked -- and send that to the drafting lead.
 
 The tabs are not there after installing
     Close Civil 3D and start it again -- the tabs are built when Civil 3D

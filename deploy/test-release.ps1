@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Tests the setup folder the surveyors run: what is in it, what installing does, and
     what it must never touch.
@@ -100,6 +100,60 @@ try
         $told = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot (Join-Path $scratch 'nowhere') 2>&1
         Check ($LASTEXITCODE -eq 1) 'an incomplete setup folder stops with an error'
         Check (($told -join ' ') -match 'incomplete') "and says what is wrong ($(($told | Where-Object { $_ -match 'incomplete' } | Select-Object -First 1)))"
+
+        # --- where updates come from --------------------------------------------
+        # Installing records the setup folder it came from, so FTF can compare itself
+        # against it later. That recorded path is the whole update mechanism.
+        Write-Host '-- the office copy it came from'
+        $recorded = Join-Path $installed 'source.txt'
+        Check (Test-Path $recorded) 'installing records where it was installed from'
+        if (Test-Path $recorded)
+        {
+            Check ((Get-Content $recorded -First 1).TrimEnd('\') -eq $setup.TrimEnd('\')) `
+                  ("the recorded folder is the setup folder (" + (Get-Content $recorded -First 1) + ")")
+        }
+
+        # A staging folder under TEMP is where the batch file copied itself, not somewhere
+        # to come back to for updates.
+        $staged = Join-Path $env:TEMP 'FTF-Setup'
+        if (Test-Path $staged) { Remove-Item $staged -Recurse -Force }
+        Copy-Item $setup -Destination $staged -Recurse -Force
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins | Out-Null
+        Check (-not (Test-Path $recorded)) 'a copy run from TEMP records no office copy, so nothing points at a staging folder'
+        Remove-Item $staged -Recurse -Force -ErrorAction SilentlyContinue
+
+        # --- an update applying itself -------------------------------------------
+        # What FTF launches as Civil 3D closes: the same script, with -WaitForCivil3D.
+        Write-Host '-- an update applying itself'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -Source $setup | Out-Null
+        $before = Get-Content (Join-Path $installed 'version.txt') -First 1
+
+        $newer = 'FTF 2099-01-01 09:00  office deadbee  (Release, Civil 3D 2024)'
+        Set-Content -Path (Join-Path $setup 'Bundle\version.txt') -Value $newer -Encoding utf8
+        # -ProcessName is the test seam: nothing named this is running, so the wait ends at
+        # once and the real Civil 3D -- which someone may well have open -- is left out of it.
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') `
+            -TargetRoot $plugins -Source $setup -WaitForCivil3D -ProcessName 'ftf-nothing-runs-by-this-name' | Out-Null
+        $after = Get-Content (Join-Path $installed 'version.txt') -First 1
+        Check ($LASTEXITCODE -eq 0) 'the update installer finishes cleanly'
+        Check ($before -ne $after -and $after -eq $newer) "the newer office build replaced the installed one ($after)"
+        Check ((Get-Content $recorded -First 1).TrimEnd('\') -eq $setup.TrimEnd('\')) 'and the office copy is still recorded afterwards'
+        Check ((Get-Content $officeRules -Raw) -match 'do not touch') 'an update leaves office settings alone too'
+        # And the other half of that behaviour: while Civil 3D is open, nothing is replaced.
+        # 'powershell' is certainly running -- this test is it -- so the wait gives up.
+        Set-Content -Path (Join-Path $setup 'Bundle\version.txt') -Value 'FTF 2099-06-06 06:06  office cafe123  (Release, Civil 3D 2024)' -Encoding utf8
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') `
+            -TargetRoot $plugins -Source $setup -WaitForCivil3D -WaitMinutes 0 -ProcessName 'powershell' | Out-Null
+        Check ($LASTEXITCODE -eq 0) 'an update that cannot apply yet is not an error'
+        Check ((Get-Content (Join-Path $installed 'version.txt') -First 1) -eq $newer) `
+              'a session still open is never replaced underneath -- the update waits for the next close'
+
+        $log = Join-Path $env:TEMP 'FTF-update.log'
+        Check (Test-Path $log) 'the unattended update writes a log, since nobody is watching'
+        if (Test-Path $log)
+        {
+            Check ((Get-Content $log -Raw) -match 'installed for') 'and the log says what it did'
+        }
 
         # --- uninstall -----------------------------------------------------------
         Write-Host '-- uninstalling'

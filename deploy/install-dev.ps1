@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installs Field to Finish into the per-user ApplicationPlugins folder so Civil 3D
     loads it on startup and nobody has to run NETLOAD.
@@ -76,6 +76,11 @@ if ($found.Count -eq 0) {
 
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 Copy-Item (Join-Path $source 'PackageContents.xml') -Destination $target -Force
+
+# A build installed from here is nobody's office copy: drop anything the office installer
+# left behind, so FTF does not replace this build with the office one at the next close.
+Remove-Item (Join-Path $target 'source.txt') -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $target 'version.txt') -Force -ErrorAction SilentlyContinue
 
 foreach ($build in $found) {
     $contents = Join-Path $target ("Contents\" + $build.Series)

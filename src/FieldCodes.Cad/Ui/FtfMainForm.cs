@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -45,6 +45,7 @@ namespace FieldCodes.Cad.Ui
         private Label _overviewDrawing;
         private Label _overviewSummary;
         private LinkLabel _overviewAttention;
+        private Label _buildNote;
         private Label _rulesProblem;
 
         // process
@@ -429,6 +430,18 @@ namespace FieldCodes.Cad.Ui
                 Margin = new Padding(0, 2, 0, 8)
             };
             stack.Controls.Add(_rulesProblem);
+
+            // Which FTF this is, and -- the one thing worth interrupting for -- that a newer one
+            // from the office will install itself at close. Nothing to answer either way.
+            _buildNote = new Label
+            {
+                Text = string.Empty,
+                AutoSize = true,
+                MaximumSize = new Size(560, 0),
+                ForeColor = CaptionGray,
+                Margin = new Padding(0, 0, 0, 6)
+            };
+            stack.Controls.Add(_buildNote);
 
             SectionGap(stack);
 
@@ -1455,6 +1468,7 @@ namespace FieldCodes.Cad.Ui
                 _overviewSummary.Text = "Open a drawing to see where it stands.";
                 _overviewAttention.Visible = false;
                 _unknownSummary.Text = "No drawing open.";
+                ShowBuild();
                 return;
             }
 
@@ -1485,11 +1499,26 @@ namespace FieldCodes.Cad.Ui
 
             _rulesProblem.Text = _status.RulesError ?? string.Empty;
 
+            ShowBuild();
+
             _unknownSummary.Text = string.Format(
                 "{0} point(s) carry data no rule handles yet{1}. The report lists each code " +
                 "with real sample descriptions.",
                 _status.Unconfigured,
                 _status.Errors > 0 ? ", and " + _status.Errors + " failed to parse" : string.Empty);
+        }
+
+        /// <summary>
+        /// Which FTF this is. An update waiting on the office copy is worth saying in the amber
+        /// used for "there is something to know", but it still needs nothing from the drafter.
+        /// </summary>
+        private void ShowBuild()
+        {
+            if (_buildNote == null) return;
+            _buildNote.Text = OfficeUpdate.Sentence;
+            _buildNote.ForeColor = OfficeUpdate.State == FieldCodes.Deploy.UpdateState.UpdateWaiting
+                ? Color.FromArgb(178, 108, 0)
+                : CaptionGray;
         }
 
         // ============================================================== processing

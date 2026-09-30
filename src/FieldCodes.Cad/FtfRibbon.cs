@@ -29,6 +29,10 @@ namespace FieldCodes.Cad
 
         public void Initialize()
         {
+            // Quiet, on its own thread, and never a reason for loading to fail: is this machine's
+            // FTF the same as the office copy? An update installs itself when Civil 3D closes.
+            OfficeUpdate.Start();
+
             if (ComponentManager.Ribbon != null)
             {
                 Build();
@@ -104,7 +108,8 @@ namespace FieldCodes.Cad
                 Small("Lines", "FTFLINES", FtfIcons.Lines),
                 Small("Where", "FTFWHERE", FtfIcons.Where),
                 Small("Settings", "FTFSETUP", FtfIcons.Settings),
-                Small("Profile", "FTFPROFILE", FtfIcons.Settings)));
+                Small("Profile", "FTFPROFILE", FtfIcons.Settings),
+                Small("FTF Version", "FTFUPDATE", FtfIcons.Check)));
 
             tab.Panels.Add(Panel("Sheets",
                 Large("Plan\nSheets", "FTFSHEETPLAN",

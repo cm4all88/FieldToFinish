@@ -200,6 +200,29 @@ Installing writes one folder -- `%APPDATA%\Autodesk\ApplicationPlugins\FieldToFi
 configuration lives in `%APPDATA%\FieldToFinish` and is never touched; see
 "Configuration ownership".
 
+### Updating a whole office
+
+Installing records the setup folder it came from, in `source.txt` inside the bundle. At
+startup FTF reads that folder's `version.txt` on a background thread -- a slow or absent
+network never delays Civil 3D -- and compares the stamp against its own:
+
+```
+newer there   the FTF window says an update is waiting; at quit FTF launches that
+              folder's install.ps1 with -WaitForCivil3D, which waits for the process
+              to end and then replaces the bundle. The next start is current.
+same          nothing happens.
+older there   nothing happens: an office copy that was rolled back does not drag
+              machines back with it. Rolling back is a deliberate re-install.
+unreadable    nothing happens, quietly -- including when the drive is unreachable.
+```
+
+So publishing a build reaches a surveyor the next time they open Civil 3D after closing
+it once. A loaded assembly cannot be replaced underneath a running session, which is the
+whole reason the swap waits for the close. `install-dev.ps1` deliberately removes
+`source.txt` and `version.txt`: a build installed from the repository is nobody's office
+copy and must not be replaced by one. `FTFUPDATE` reports what a machine found; the
+decision itself is `FieldCodes.Deploy.OfficeBuild`, with unit tests.
+
 Civil 3D builds FTF's two ribbon tabs at startup: **FTF** for the drawing being
 finished (Label, Finish, Dips, Review, Sheets, Clean up) and **FTF Boundary** for the
 record work written from it (Record, Easements, Exhibits).

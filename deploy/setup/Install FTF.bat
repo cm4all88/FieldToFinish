@@ -6,7 +6,8 @@ rem  Double-click this. Civil 3D must be closed. No admin rights are needed: the
 rem  plugin goes in your own profile, and your office settings are left alone.
 rem
 rem  Everything is copied to a local folder first, so it also works when this
-rem  setup folder is on the network and nothing breaks if the network hiccups.
+rem  setup folder is on the network and nothing breaks if the network hiccups. The
+rem  original folder is passed along, so FTF knows where later updates come from.
 rem ============================================================================
 
 setlocal
@@ -22,7 +23,7 @@ if exist "%STAGE%" rmdir /s /q "%STAGE%"
 robocopy "%~dp0." "%STAGE%" /E /R:2 /W:2 /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 goto copyfailed
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%STAGE%\install.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%STAGE%\install.ps1" -Source "%~dp0."
 set RESULT=%ERRORLEVEL%
 
 rmdir /s /q "%STAGE%" 2>nul
