@@ -11,8 +11,11 @@ const FILE = "SURVEY_CAD_Command_Reference";
 
 const COVER = [
   { type: "box", title: "HOW TO READ IT", lines: [
-    "Start at the front: section 1 is what you use every day. Each section gets more advanced; the back is for when you're ready.  **BOLD MONO** = type it.  **↵** = Enter (Space works too).  Italics in the Type column = click through menus.  Grey = where the button is (▾ = drop-down or expanded panel).  !!Red = warning or destructive.!!",
-    "__Survey use__ = what a command may do to coordinate-controlled survey geometry (points, control, monuments, boundary, field-to-finish linework):  __Safe__ doesn't move or reshape it.  __With care__ changes it: check the result.  __Derived geometry only__ builds new geometry from it, never replaces it.  __Drafted items only__ = text, symbols, title block, notes.  __Never__ on survey data.",
+    "- Start at the front: section 1 is what you use every day. Each section gets more advanced.",
+    "- **BOLD MONO** = type it.  **↵** = Enter (Space works too).  Italics in the Type column = click through menus.",
+    "- Grey text = where the button is (▾ = drop-down or expanded panel).  !!Red = warning or destructive.!!",
+    "- __Survey use__ = what a command may do to survey geometry (points, control, monuments, boundary, field-to-finish linework):",
+    "- __Safe__: doesn't move or reshape it.  __With care__: changes it, check the result.  __Derived geometry only__: builds new geometry from it.  __Drafted items only__: text, symbols, notes.  __Never__: not on survey data.",
   ] },
   { type: "box", kind: "warn", title: "⚠ GOLDEN RULES", lines: [
     "- Survey points and linework sit on real coordinates: never MOVE, SCALE, ROTATE, STRETCH, FLATTEN or EXPLODE them. Never scale survey geometry to fit a sheet.",
@@ -60,7 +63,10 @@ const S1 = { n: 1, title: "START HERE: EVERYDAY COMMANDS", tag: "DAY ONE", size:
     ["LAYMCUR", "LAYMCUR ↵", "Make the picked object's layer current", { ribbon: "Home › Layers" }],
   ] },
   { type: "box", title: "PARAMETRIX SURVEY LAYERS", lines: [
-    "Survey layers start with **V-**: V-NODE-E points, V-PROP-BNDY-E boundary, V-UTIL-STRM-SYMB-E storm symbols, V-TREE-TEXT tree labels (last field often the status: -E existing). Layers control visibility, plotting and organization. Keep color and linetype __ByLayer__; don't draw on 0 or Defpoints (Defpoints never plots). __Off__ hides; __Freeze__ hides and skips regens. Neither deletes.",
+    "- Survey layers start with **V-**: V-NODE-E points, V-PROP-BNDY-E boundary, V-UTIL-STRM-SYMB-E storm symbols, V-TREE-TEXT tree labels.",
+    "- The last part is often the status: -E = existing.",
+    "- Keep color and linetype __ByLayer__. Don't draw on layer 0 or Defpoints (Defpoints never plots).",
+    "- __Off__ hides a layer. __Freeze__ hides it and speeds up regens. Neither deletes anything.",
   ] },
   { type: "cmds", title: "Draw and edit", rows: [
     ["LINE", "L ↵", "Lines; snap Node to Node or type **@dist<bearing**", { ribbon: "Home › Draw", survey: "safe" }],
@@ -143,7 +149,10 @@ const S2 = { n: 2, title: "SURVEY DRAFTING COMMANDS", sub: "Finishing and labeli
     ["Road name", "MTEXT", "Centered in the road, rotated with it"],
   ] },
   { type: "box", title: "LABELING STANDARDS", lines: [
-    "Text reads from the __bottom or right__ of the sheet. 0.08\" plotted = 1.6' at 1\" = 20' (training drawing height; leader/dim style SRV-20). Labels on the feature's V- text layer (V-TREE-TEXT, V-UTIL-STRM-TEXT, V-CTRL-TEXT in the office field-code rules). Leaders don't cross each other, text or linework. Move a crowded label by its landing grip, never the arrowhead.",
+    "- Text reads from the __bottom or right__ of the sheet.",
+    "- 0.08\" plotted = 1.6' at 1\" = 20' (training drawing height; leader and dimension style SRV-20).",
+    "- Labels go on the feature's V- text layer: V-TREE-TEXT, V-UTIL-STRM-TEXT, V-CTRL-TEXT.",
+    "- Leaders don't cross each other, text or linework. Move a crowded label by its landing grip, never the arrowhead.",
   ] },
   { type: "how", items: [
     { title: "A line by bearing and distance ('BD)", steps: [
@@ -194,7 +203,10 @@ const S3 = { n: 3, title: "LAYERS, SELECTION AND DISPLAY", sub: "Stronger layer 
 // ================================================================================================
 const S4 = { n: 4, title: "SHEETS, VIEWPORTS AND PLOTTING", sub: "From model space to a deliverable sheet", blocks: [
   { type: "box", title: "MODEL, PAPER, VIEWPORT", lines: [
-    "__Model Space__ = the real world at full size, in real coordinates.  __Paper Space__ (a layout tab) = the sheet: title block, notes, north arrow.  __Viewport__ = a scaled window from the sheet into model space: at 1\" = 20', 100' measures 5\" on paper.  !!Never scale survey geometry to make it fit the sheet: change the viewport scale or the sheet.!!",
+    "- __Model Space__ = the real world at full size, in real coordinates.",
+    "- __Paper Space__ (a layout tab) = the sheet: title block, notes, north arrow.",
+    "- __Viewport__ = a scaled window from the sheet into model space. At 1\" = 20', 100' measures 5\" on paper.",
+    "- !!Never scale survey geometry to fit the sheet.!! Change the viewport scale or the sheet size.",
   ] },
   { type: "cmds", title: "Viewports, layouts and plotting", rows: [
     ["MVIEW", "MV ↵", "Viewport from two corners; **P ↵** Polygonal draws a polyline-shaped viewport, **O ↵** turns a closed polyline into one", { ribbon: "Layout › Layout Viewports" }],
@@ -238,10 +250,13 @@ const S5 = { n: 5, title: "CIVIL 3D COMMANDS AND CONCEPTS", sub: "Points, styles
     ["Feature line / Survey figure", "Linear Civil 3D objects with elevations (breaklines, grading). Figures live in the survey database"],
   ] },
   { type: "box", kind: "warn", title: "⚠ IF A CIVIL 3D OBJECT LOOKS WRONG", lines: [
-    "Don't explode or redraw it. Check the __object__ (CTRL+1), its __style__, __label style__, __layer__ and __source__ (point group, description key, data reference, xref). Fix the cause, not the picture. !!Never EXPLODE Civil 3D objects!!: use EXPORTTOAUTOCAD for a plain copy.",
+    "- Don't explode or redraw it. Check, in order: the __object__ (CTRL+1), its __style__, its __label style__, its __layer__, and its __source__ (point group, description key, data reference, xref).",
+    "- Fix the cause, not the picture. !!Never EXPLODE Civil 3D objects!!: EXPORTTOAUTOCAD makes a plain copy.",
   ] },
   { type: "box", title: "UNITS IS NOT THE COORDINATE SYSTEM", lines: [
-    "AutoCAD **UNITS** only sets how lengths and angles display and are typed. The drawing's real-world location lives in Civil 3D __Drawing Settings__. Assign or change it only with the project surveyor's zone and factors: !!it changes where the drawing sits on the earth and what grid and ground coordinates mean.!!",
+    "- AutoCAD **UNITS** only sets how lengths and angles display and are typed.",
+    "- Where the drawing sits on the earth is set in Civil 3D __Drawing Settings__ (table below).",
+    "- !!Only change it with the project surveyor's zone and factors!!: it changes what every coordinate means.",
   ] },
   { type: "cmds", title: "Coordinate system, transformation and online maps", note: "EDITDRAWINGSETTINGS ↵ or Settings tab › right-click the drawing › Edit Drawing Settings", rows: [
     ["Units and Zone tab", "EDITDRAWINGSETTINGS ↵", "Drawing units (feet), angular units, drawing scale, and the coordinate system: pick the category and the project's State Plane zone (or type its code)", { warn: "Project surveyor's call, not a drafting fix" }],
@@ -281,14 +296,19 @@ const S5 = { n: 5, title: "CIVIL 3D COMMANDS AND CONCEPTS", sub: "Points, styles
     ["3D polyline linetypes", "LINETYPE3DPLINEON ↵", "Show dashed linetypes on 3D polylines; **LINETYPE3DPLINEOFF ↵** back. Civil 3D only (Autodesk KB); pattern follows the 3D length, PLINEGEN ignored"],
   ] },
   { type: "box", title: "FIELD TO FINISH AWARENESS", lines: [
-    "The crew's codes drive the linework. PMX-Universal linework codes: **B** begin, **E** end, **C** close, **P**/**T** curve, **U** continue, **G** rectangle, **CIR** circle, **X** extend. The figure prefix database (Civil3D parametrix) sets each figure's layer and style: EC → V-SURF-CONC-E, RWC → V-SURF-WALL-CONC-E; EC1 and EC2 are separate strings. Watch for jumpers from out-of-sequence shots, code typos (**RWB1 B RW2 B**), zig-zags from two strings on one code, missing closes. Reprocessing linework rebuilds figures from the survey database, so drawing-only edits can be lost: fix the linework and tell the data processor.",
+    "- The crew's codes drive the linework. PMX-Universal codes: **B** begin, **E** end, **C** close, **P** / **T** curve, **U** continue, **G** rectangle, **CIR** circle, **X** extend.",
+    "- The figure prefix database (Civil3D parametrix) sets each figure's layer: EC → V-SURF-CONC-E, RWC → V-SURF-WALL-CONC-E. EC1 and EC2 are separate strings.",
+    "- Watch for: jumpers from out-of-sequence shots, code typos (**RWB1 B RW2 B**), zig-zags from two strings on one code, missing closes.",
+    "- Reprocessing linework rebuilds figures from the survey database, so drawing-only edits can be lost. Fix the linework and tell the data processor.",
   ] },
 ] };
 
 // ================================================================================================
 const S6 = { n: 6, title: "ADVANCED / POWER DRAFTER COMMANDS", tag: "ADVANCED", advanced: true, sub: "Not day one, but a strong drafter uses them", blocks: [
   { type: "box", kind: "warn", title: "⚠ DESTRUCTIVE: SAVE FIRST, SELECT A SMALL AREA, CHECK WITH LIST", lines: [
-    "**OVERKILL** merges, splits and rejoins polylines as well as deleting duplicates: not routine cleanup.  **FLATTEN** throws away elevations.  **EXPLODE** destroys blocks and Civil 3D objects.  **LAYDEL** deletes everything on a layer.  **LAYMRG** deletes the first layer.  **MAPCLEAN** edits geometry in place.",
+    "- **OVERKILL** merges, splits and rejoins polylines as well as deleting duplicates: not routine cleanup.",
+    "- **FLATTEN** throws away elevations.  **EXPLODE** destroys blocks and Civil 3D objects.",
+    "- **LAYDEL** deletes everything on a layer.  **LAYMRG** deletes the first layer.  **MAPCLEAN** edits geometry in place.",
   ] },
   { type: "cmds", title: "Geometry", rows: [
     ["PEDIT Multiple", "PE ↵ M ↵ ... Y ↵ J ↵", "Lines into polylines, joined within a fuzz distance", { ribbon: "Home › Modify ▾", survey: "care", warn: "Keep the fuzz small (0.01)" }],
@@ -328,7 +348,10 @@ const S6 = { n: 6, title: "ADVANCED / POWER DRAFTER COMMANDS", tag: "ADVANCED", 
 // ================================================================================================
 const S7 = { n: 7, title: "PROJECT REFERENCES AND FILE TOOLS", tag: "ADVANCED", advanced: true, sub: "Where project data lives", blocks: [
   { type: "box", title: "XREF, DATA SHORTCUT, SOURCE DRAWING", lines: [
-    "__Xref__ = another drawing shown in this one (layers read NAME|LAYER).  __Data shortcut__ = one Civil 3D object referenced read-only from another drawing: surfaces, alignments, profiles, sample lines, corridors, pipe networks. COGO points and point groups can't be shortcut.  __Source drawing__ = where the object actually lives; only there can its geometry change. Here you can change its style, layer and labels.  !!If an object is referenced, find the source before trying to fix it locally.!!",
+    "- __Xref__ = another drawing shown in this one. Its layers read NAME|LAYER.",
+    "- __Data shortcut__ = one Civil 3D object referenced read-only from another drawing (surfaces, alignments, profiles, pipe networks). COGO points and point groups can't be shortcut.",
+    "- __Source drawing__ = where the object actually lives. Only there can its geometry change; here you can change its style, layer and labels.",
+    "- !!If an object is referenced, find the source before trying to fix it locally.!!",
   ] },
   { type: "cmds", title: "Xrefs and data shortcuts", note: "data shortcut items are mostly right-click in Prospector › Data Shortcuts", rows: [
     ["XREF", "XR ↵", "Xref palette: status (Loaded, Not Found, Needs Reloading); Reload, Unload, Detach"],
@@ -359,7 +382,9 @@ const S7 = { n: 7, title: "PROJECT REFERENCES AND FILE TOOLS", tag: "ADVANCED", 
 // ================================================================================================
 const S8 = { n: 8, title: "TROUBLESHOOTING: WHEN SOMETHING GOES WRONG", tag: "REFERENCE", advanced: true, blocks: [
   { type: "box", kind: "aid", title: "FIRST AID", lines: [
-    "1  **ESC ESC**   2  Read the command line   3  **CTRL+Z** or **U ↵**   4  **Z ↵ E ↵** and **RE ↵**   5  Save, close, reopen; then restart AutoCAD",
+    "- **ESC ESC**, then read the command line.",
+    "- **CTRL+Z** or **U ↵** step by step.  **Z ↵ E ↵** and **RE ↵** if you're lost.",
+    "- Save, close, reopen; then restart AutoCAD.",
   ] },
   { type: "diag", title: "By problem", rows: [
     ["I can't see it", ["Layer off or frozen (**LA ↵**)", "VP Freeze in this viewport", "Isolated or hidden (**UNISOLATEOBJECTS ↵**)", "Xref unloaded / Not Found (**XR ↵**)", "Civil 3D style set to <none>", "Point group order or out of date", "Broken or out-of-date data reference", "Plain POINTs: **PDMODE ↵ 3 ↵**", "Surface contours missing: **LEVELOFDETAILOFF ↵**", "Online map missing: coordinate system assigned? signed in? **GEOMAP ↵**"]],

@@ -10,14 +10,15 @@ const C = require("./reference_content");
 
 const OUT = path.join(__dirname, "output");
 const FONT = "Calibri", MONO = "Consolas";
-const BLUE = "1F4E79", NAVY = "2B2B3C", RED = "C00000", GREEN = "2E7D32", GREY = "7F7F7F", HEAD = "D9E2F3";
+const BLUE = "1F4E79", NAVY = "2B2B3C", RED = "C00000", GREEN = "2E7D32", GREY = "6E6E6E", HEAD = "D9E2F3";
 const PAGE_W = 12240, PAGE_H = 15840, LEFT = 1260, RIGHT = 620;   // wide left edge for binder holes
 const FULL = PAGE_W - LEFT - RIGHT, GAP = 200, HALF = (FULL - GAP) / 2;
 const thin = { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" };
 const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 const border = { top: thin, bottom: thin, left: thin, right: thin };
 const noBorder = { top: none, bottom: none, left: none, right: none };
-const PAD = { top: 6, bottom: 6, left: 60, right: 60 };
+const PAD = { top: 22, bottom: 22, left: 80, right: 80 };
+let ROWFILL;             // zebra shading for the row being built
 
 let SIZE = 17;          // body size in half-points; beginner levels read larger than advanced ones
 let KEEP = false;       // keepNext on every paragraph while building a block that must not split
@@ -35,7 +36,7 @@ function rich(s, o = {}) {
 const para = (children, o = {}) => new Paragraph({ keepNext: KEEP, spacing: { after: 0 }, children, ...o });
 const cell = (children, w, o = {}) => new TableCell({
   width: { size: w, type: WidthType.DXA }, borders: o.borders || border, margins: o.margins || PAD,
-  shading: o.fill ? { type: ShadingType.CLEAR, fill: o.fill, color: "auto" } : undefined,
+  shading: (o.fill || (o.borders ? undefined : ROWFILL)) ? { type: ShadingType.CLEAR, fill: o.fill || ROWFILL, color: "auto" } : undefined,
   columnSpan: o.span, children: Array.isArray(children[0]) ? children.map((c) => para(c)) : [para(children)],
 });
 const table = (w, rows, width = FULL) => new Table({ width: { size: width, type: WidthType.DXA }, columnWidths: w, rows });
@@ -66,7 +67,7 @@ function cmdCell(name, ribbon, w) {
 const TYPED = /↵|^CTRL|^Shift|^F\d|^'|^%%|^[A-Z0-9 /._#@<'"+-]+$/;
 const typeRuns = (k) => (!k ? [t("")] : TYPED.test(k) && !k.includes("›") ? [mono(k)] : [t(k, { italics: true, color: "404040" })]);
 function whatCell(what, warn, w, ribbon) {
-  const lines = [[...rich(what), ...(ribbon ? [t("   " + ribbon, { size: SIZE - 4, color: GREY })] : [])]];
+  const lines = [[...rich(what), ...(ribbon ? [t("   " + ribbon, { size: SIZE - 3, color: GREY })] : [])]];
   if (warn) lines.push([t("⚠ " + warn, { size: SIZE - 2, bold: true, color: RED })]);
   return cell(lines, w);
 }
@@ -78,12 +79,13 @@ const SURVEY = {   // "Survey use" column: what the command may do to coordinate
 
 // ---- block renderers --------------------------------------------------------------------------------
 // cmds: rows [command, type, what, {ribbon, warn, survey}]
+const zebra = (i) => { ROWFILL = i % 2 ? "F3F6FA" : undefined; };
 function cmdsBlock(b) {
   const withSurvey = b.rows.some((r) => r[3] && r[3].survey);
   const w = withSurvey ? [2050, 1950, FULL - 2050 - 1950 - 1250, 1250] : [2050, 1950, FULL - 4000];
   const heads = withSurvey ? ["Command", "Type", "What it does", "Survey use"] : ["Command", "Type", "What it does"];
   return table(w, [titleRow(b.title, w.length, FULL, b.fill, b.note), headRow(b.heads || heads, w),
-    ...b.rows.map(([c, k, what, o = {}]) => new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([c, k, what, o = {}], i) => zebra(i) || new TableRow({ cantSplit: true, children: [
       cmdCell(c, o.ribbon, w[0]), cell(typeRuns(k), w[1]), whatCell(what, o.warn, w[2], o.ribbon),
       ...(withSurvey ? [cell([t(...(o.survey ? [SURVEY[o.survey][0], { bold: true, color: SURVEY[o.survey][1], size: SIZE - 2 }] : [""]))], w[3])] : [])] }))]);
 }
@@ -92,28 +94,28 @@ function pairsBlock(b, W = FULL) {
   const a = Math.round(W * (b.split || 0.34));
   const w = [a, W - a];
   return table(w, [titleRow(b.title, 2, W, b.fill, b.note), ...(b.heads ? [headRow(b.heads, w)] : []),
-    ...b.rows.map(([x, y]) => new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([x, y], i) => zebra(i) || new TableRow({ cantSplit: true, children: [
       cell(b.code ? [mono(x)] : rich(`__${x}__`), w[0]), cell(rich(y), w[1])] }))], W);
 }
 // three-column generic with rich text: rows [a, b, c]
 function tripleBlock(b) {
   const w = b.widths || [2300, 2300, FULL - 4600];
   return table(w, [titleRow(b.title, 3, FULL, b.fill, b.note), headRow(b.heads, w),
-    ...b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((x, i) => cell(rich(i === 0 ? `__${x}__` : x), w[i])) }))]);
+    ...b.rows.map((r, j) => zebra(j) || new TableRow({ cantSplit: true, children: r.map((x, i) => cell(rich(i === 0 ? `__${x}__` : x), w[i])) }))]);
 }
 function sysvarBlock(b) {
   const w = [1900, 1150, FULL - 1900 - 1150 - 2600, 2600];
   return table(w, [titleRow(b.title, 4, FULL, b.fill, b.note), headRow(["Variable", "Autodesk default", "What it controls", "Parametrix / training note"], w),
-    ...b.rows.map(([v, d, what, note, warn]) => new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([v, d, what, note, warn], i) => zebra(i) || new TableRow({ cantSplit: true, children: [
       cell([mono(v)], w[0]), cell(rich(d), w[1]), whatCell(what, warn, w[2]), cell(rich(note || ""), w[3])] }))]);
 }
 // diagnose: rows [problem, [checks...]]
 function diagBlock(b) {
   const w = [2900, FULL - 2900];
   return table(w, [titleRow(b.title, 2, FULL, b.fill, b.note), headRow(["Problem", "Check"], w),
-    ...b.rows.map(([p, checks]) => new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([p, checks], j) => zebra(j) || new TableRow({ cantSplit: true, children: [
       cell(rich(`__${p}__`), w[0]),
-      cell(checks.flatMap((c, i) => [...(i ? [t("   ")] : []), t(`${i + 1} `, { bold: true, color: BLUE }), ...rich(c)]), w[1])] }))]);
+      cell(checks.map((c) => [t("•  ", { bold: true, color: BLUE }), ...rich(c)]), w[1])] }))]);
 }
 function box(b) {   // concept (blue), warn (red), aid (green)
   const [fill, bar, head] = { concept: ["EAF1F8", BLUE, BLUE], warn: ["FCE4E4", RED, RED], aid: ["E8F3E8", GREEN, GREEN] }[b.kind || "concept"];
@@ -176,6 +178,7 @@ function sectionBar(S) {
 }
 
 function renderBlock(b) {
+  ROWFILL = undefined;
   switch (b.type) {
     case "cmds": return [cmdsBlock(b)];
     case "pairs": return [pairsBlock(b)];
@@ -204,7 +207,7 @@ function cover() {
 function build() {
   const body = cover();
   for (const L of C.LEVELS) {
-    SIZE = L.size || 15;
+    SIZE = 18;
     if (L.newPage) body.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
     body.push(...sectionBar(L));
     for (const b of L.blocks) { body.push(...renderBlock(b)); body.push(gap(70)); }
