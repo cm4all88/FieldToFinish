@@ -163,7 +163,7 @@ function buildGuide({ outFile, level, title, body, exercises }) {
     sections: [{
       properties: { page: { size: { width: PAGE_W, height: 15840 }, margin: { top: 1000, bottom: 1000, left: MARGIN, right: MARGIN } } },
       footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
-        new TextRun({ text: String(level).includes("-") ? "Survey CAD Training - Field to Finish    " : `Survey CAD Training - Level ${level}    `, size: 16, color: "808080", font: FONT }),
+        new TextRun({ text: String(level).includes("-") ? "Survey CAD Training - Finish the Drawing    " : `Survey CAD Training - Level ${level}    `, size: 16, color: "808080", font: FONT }),
         new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "808080", font: FONT })] })] }) },
       children: body,
     }],

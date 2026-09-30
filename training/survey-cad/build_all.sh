@@ -21,6 +21,6 @@ if bad:
     sys.exit(f"DXF values AutoCAD may reject: {bad[:10]}")
 PY
 rm -f _state*.dxf SURVEY_CAD_Package.zip
-zip -q SURVEY_CAD_Package.zip SURVEY_CAD_START.dxf SURVEY_CAD_POINTS.txt SURVEY_CAD_RECORD.dxf \
+zip -q SURVEY_CAD_Package.zip SURVEY_CAD_START.dxf SURVEY_CAD_POINTS.txt \
     SURVEY_CAD_COMPLETED.dxf SURVEY_CAD_Guide.docx SURVEY_CAD_Guide.pdf CHECKPOINT_*.pdf
 echo "built course/output/SURVEY_CAD_Package.zip"

@@ -1,21 +1,26 @@
-# Survey CAD Training - Field to Finish
+# Survey CAD Training - Finish the Drawing
 
-One drawing, six stages. Trainees start from a bare drawing and the crew's raw point
-file and finish a real topographic survey base in Civil 3D. After each stage a
-checkpoint PDF shows what their drawing should look like and the values to check.
+A drafting course for new survey drafters. Trainees get a drawing right after field to
+finish (points in, linework drawn from the field codes, symbols placed, nothing labeled)
+and finish it into the real survey base. A checkpoint PDF after each stage shows what
+their drawing should look like and the values to check.
 
 | Stage | Trainee does |
 |---|---|
-| 1 | Units, coordinate system, office styles; draw the parcel from deed calls; closure, area |
-| 2 | Clean the point file; survey database import; point groups; fix two bad field codes |
-| 3 | Break jumpers, remove the ASPH figure, draft pads and curb ties |
-| 4 | GROUND point group, breaklines, boundary, contours |
-| 5 | Street and surface labels, structure/monument leaders, FFEs, setbacks, boundary labels |
-| 6 | QA, sheet at 1" = 20', plot, EXPORTTOAUTOCAD, ETRANSMIT |
+| 0 | Open, units, snaps, reading point descriptions |
+| 1 | Boundary: FILLET a corner, draw the missing line by bearing, EXTEND, TRIM, JOIN, area |
+| 2 | Linework: erase jumpers and the ASPH zig-zag, draft wall footings and curb ties, LAYMCH, MATCHPROP |
+| 3 | Storm and sewer: rotate catch basins to the curb, draw pipes from measuredowns, structure leaders |
+| 4 | Labels: rotate road names, control, monuments, trees, surface callouts, FFEs, boundary labels, setbacks |
+| 5 | QA, viewport at 1" = 20', plot |
 
-Package (`course/output/SURVEY_CAD_Package.zip`): `SURVEY_CAD_START.dxf` (bare),
-`SURVEY_CAD_POINTS.txt` (as delivered), `SURVEY_CAD_RECORD.dxf` (ROW, centerline, surface
-border), `CHECKPOINT_1-6.pdf`, `SURVEY_CAD_Guide.docx/.pdf`, `SURVEY_CAD_COMPLETED.dxf`.
+Package (`course/output/SURVEY_CAD_Package.zip`): `SURVEY_CAD_START.dxf`, `CHECKPOINT_1-5.pdf`,
+`SURVEY_CAD_Guide.docx/.pdf`, `SURVEY_CAD_COMPLETED.dxf`, and the raw `SURVEY_CAD_POINTS.txt` for reference.
+
+START is the finished base with the finishing work taken back out and the real
+field-to-finish problems put in (jumpers from out-of-sequence office points, the ASPH
+zig-zag, missing footings and ties). COMPLETED is the finished base with every label and
+no contours, since the surface is a later course.
 
 ## Source data (not in the repo)
 

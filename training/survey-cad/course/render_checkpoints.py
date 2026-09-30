@@ -27,52 +27,44 @@ def f2(v):
 
 
 def checks():
-    m = A["monuments"]
     j = A["jumpers"]
+    L = A["labels"]
     return {
-        1: ("SETUP AND RECORD BOUNDARY", [
-            "Units: surveyor's bearings, 0.00 ft",
-            f"POB (SW corner): E {f2(A['pob'][0])}, N {f2(A['pob'][1])}",
-            *[f"{c['from']}-{c['to']}: {c['bearing']}  {f2(c['dist'])}'" for c in A["deed"]],
-            "Closure: last course ends on the POB",
+        1: ("BOUNDARY", [
+            "SW corner closed with FILLET R0",
+            f"North line drawn: {A['deed'][1]['bearing']}  {f2(A['deed'][1]['dist'])}'",
+            "East line extended to the north line",
+            "South line trimmed at the east line",
+            "Boundary joined into one closed polyline",
             f"Area {f2(A['area_sf'])} sq ft ({A['area_sf'] / 43560:.4f} ac)",
-            f"Perimeter {f2(A['perimeter'])}'",
-            "Record xref: right of way, centerline, surface border"]),
-        2: ("FIELD TO FINISH", [
-            f"Point file: delete bad line {A['junk_lines'][0]} (Z = -99999)",
-            f"{A['points']} points imported",
-            *[f"Group {k}: {v}" for k, v in A["groups"].items()],
-            *[f"Fix {k}: {v[0]} -> {v[1]}" for k, v in A["fixes"].items()],
-            f"Figures after fixes: {A['figures_fixed']}",
-            *[f"FIP {k} is {v['off']}' from the {v['corner']} corner" for k, v in m.items()],
-            "Jumpers still showing (fixed in Stage 3)"]),
-        3: ("LINEWORK CLEANUP", [
-            *[f"Jumper {x['figure']} {x['from']}-{x['to']} ({x['length']}') removed" for x in j],
-            "ASPH figure deleted (spot shots, not a line)",
-            "3 CONC pads drafted", f"{len(A['ties'])} curb-end ties drafted",
-            f"Figures: {A['figures']}",
-            f"Single-point strings left: {', '.join(A['single'])} (OK)"]),
-        4: ("SURFACE", [
-            f"GROUND point group: {A['ground']} points",
-            f"Inside the border: {A['inside']}",
-            f"Elevations {A['z_min']} to {A['z_max']}",
-            "Contours: 1' minor, 5' major, 45 to 91",
-            "Point 10421 (stump shot on top) kept out",
-            "Off-site control 1001/1002 kept out"]),
-        5: ("ANNOTATION AND UTILITIES", [
-            "Street names read right side up",
-            "Structure leaders: RIM, inverts, bottom",
+            f"Perimeter {f2(A['perimeter'])}'"]),
+        2: ("LINEWORK CLEANUP", [
+            *[f"Jumper {x['figure']} {x['from']}-{x['to']} ({x['length']}') erased" for x in j],
+            "ASPH zig-zag erased",
+            "3 wall pads drafted (V-SURF-WALL-E)",
+            f"{len(A['ties'])} curb-end ties drafted",
+            "Chain link fence moved off layer 0",
+            "Red curb line back to ByLayer"]),
+        3: ("STORM AND SEWER", [
+            "Catch basins rotated square to the curb",
+            "Storm pipes drawn structure to structure",
+            f"{len(A['structures'])} CB leaders: RIM, inverts, bottom",
+            "SSMH and cleanout leaders with RIM"]),
+        4: ("LABELS AND DIMENSIONS", [
+            "Road names rotated with the street",
+            f"{len(L['control'])} control labels (PMX #, type)",
+            f"{len(L['monuments'])} monument labels",
+            f"{len(A['trees'])} tree labels (size, type, drip)",
+            "Surface callouts: ASPH, CONC, CW, CG, GRASS...",
             f"FFE {', '.join(str(v) for v in A['ffe'].values())}",
-            f"Setbacks: garage {A['l1']['dim_garage']}', house {A['l1']['dim_house']}'",
-            f"North line label: {A['l1']['north_bearing']} {A['l1']['north_dist']}'",
-            "Trees, monuments and control labeled"]),
-        6: ("SHEET AND DELIVERY", [
+            "Boundary bearings and distances",
+            f"Setbacks {A['dim_garage']}' and {A['dim_house']}'"]),
+        5: ("SHEET AND PLOT", [
             "Viewport 1\" = 20', locked",
-            f"North line measures {A['l1']['north_dist'] / 20:.2f}\" on paper",
-            "No objects on layer 0; one text style",
-            "PURGE and AUDIT clean",
-            "Plotted with monochrome.ctb",
-            "Exported ACAD copy opens in plain AutoCAD"]),
+            f"North line measures {A['deed'][1]['dist'] / 20:.2f}\" on paper",
+            "Point layer frozen",
+            "Nothing on layer 0",
+            "Plotted with monochrome.ctb"]),
     }
 
 
@@ -114,13 +106,14 @@ def page(n, doc, layout, window):
 
 def main():
     IMG.mkdir(parents=True, exist_ok=True)
-    for n in (1, 2, 3, 4, 5):
+    for n in (1, 2, 3, 4):
         d = ezdxf.readfile(OUT / f"_state{n}.dxf")
-        if "TRAIN-NOTES" in d.layers:
-            d.layers.get("TRAIN-NOTES").freeze()
+        for lay in ("TRAIN-NOTES", "V-NODE-E"):
+            if lay in d.layers:
+                d.layers.get(lay).off()
         page(n, d, d.modelspace(), WINDOW)
     d = ezdxf.readfile(OUT / "SURVEY_CAD_COMPLETED.dxf")
-    page(6, d, d.layouts.get("TOPO SHEET"), None)
+    page(5, d, d.layouts.get("TOPO SHEET"), None)
 
 
 if __name__ == "__main__":
