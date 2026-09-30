@@ -1,0 +1,1352 @@
+[
+ {
+  "section": "Course commands: Getting around",
+  "name": "OPEN / SAVEAS",
+  "detail": "OPEN / SAVEAS"
+ },
+ {
+  "section": "Course commands: Getting around",
+  "name": "ZOOM Extents",
+  "detail": "Z ↵ E ↵"
+ },
+ {
+  "section": "Course commands: Getting around",
+  "name": "UNITS",
+  "detail": "UN ↵"
+ },
+ {
+  "section": "Course commands: Getting around",
+  "name": "OSNAP",
+  "detail": "OS ↵ / F3"
+ },
+ {
+  "section": "Course commands: Getting around",
+  "name": "ID",
+  "detail": "ID ↵"
+ },
+ {
+  "section": "Course commands: Getting around",
+  "name": "LIST",
+  "detail": "LI ↵"
+ },
+ {
+  "section": "Course commands: Getting around",
+  "name": "DIST",
+  "detail": "DI ↵"
+ },
+ {
+  "section": "Course commands: Layers",
+  "name": "LAYER",
+  "detail": "LA ↵"
+ },
+ {
+  "section": "Course commands: Layers",
+  "name": "LAYFRZ",
+  "detail": "LAYFRZ ↵"
+ },
+ {
+  "section": "Course commands: Layers",
+  "name": "LAYMCUR",
+  "detail": "LAYMCUR ↵"
+ },
+ {
+  "section": "Course commands: Layers",
+  "name": "LAYMCH",
+  "detail": "LAYMCH ↵"
+ },
+ {
+  "section": "Course commands: Layers",
+  "name": "MATCHPROP",
+  "detail": "MA ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "LINE",
+  "detail": "L ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "PLINE",
+  "detail": "PL ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "FILLET",
+  "detail": "F ↵ R ↵ 0 ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "EXTEND",
+  "detail": "EX ↵ B ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "TRIM",
+  "detail": "TR ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "JOIN",
+  "detail": "J ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "ERASE",
+  "detail": "E ↵"
+ },
+ {
+  "section": "Course commands: Drawing and editing",
+  "name": "ROTATE",
+  "detail": "RO ↵ R ↵ ... P ↵"
+ },
+ {
+  "section": "Course commands: Annotation",
+  "name": "MLEADER",
+  "detail": "MLD ↵"
+ },
+ {
+  "section": "Course commands: Annotation",
+  "name": "MTEXT",
+  "detail": "MT ↵"
+ },
+ {
+  "section": "Course commands: Annotation",
+  "name": "TEXT",
+  "detail": "DT ↵ J ↵ BC ↵"
+ },
+ {
+  "section": "Course commands: Annotation",
+  "name": "TORIENT",
+  "detail": "TORIENT ↵ ↵"
+ },
+ {
+  "section": "Course commands: Annotation",
+  "name": "DIMALIGNED",
+  "detail": "DAL ↵"
+ },
+ {
+  "section": "Course commands: Finish and plot",
+  "name": "QSELECT",
+  "detail": "QSELECT ↵"
+ },
+ {
+  "section": "Course commands: Finish and plot",
+  "name": "PURGE / AUDIT",
+  "detail": "PU ↵  AUDIT ↵ Y ↵"
+ },
+ {
+  "section": "Course commands: Finish and plot",
+  "name": "MVIEW",
+  "detail": "MV ↵"
+ },
+ {
+  "section": "Course commands: Finish and plot",
+  "name": "Viewport scale",
+  "detail": "Z ↵ 1/20XP ↵"
+ },
+ {
+  "section": "Course commands: Finish and plot",
+  "name": "PLOT",
+  "detail": "CTRL+P"
+ },
+ {
+  "section": "Typing input",
+  "name": "@249.14<S88d24'53\"E",
+  "detail": "Distance and bearing from the last point"
+ },
+ {
+  "section": "Typing input",
+  "name": "#1125170.86,733969.17",
+  "detail": "Absolute coordinate: Easting,Northing"
+ },
+ {
+  "section": "Typing input",
+  "name": "%%d",
+  "detail": "Degree sign in text"
+ },
+ {
+  "section": "Snaps",
+  "name": "Node",
+  "detail": "A survey point"
+ },
+ {
+  "section": "Snaps",
+  "name": "Endpoint",
+  "detail": "End of a line"
+ },
+ {
+  "section": "Snaps",
+  "name": "Insertion",
+  "detail": "A symbol's base point"
+ },
+ {
+  "section": "Snaps",
+  "name": "Midpoint",
+  "detail": "Middle of a line"
+ },
+ {
+  "section": "Snaps",
+  "name": "Perpendicular",
+  "detail": "Square off a line (setbacks)"
+ },
+ {
+  "section": "Snaps",
+  "name": "Nearest",
+  "detail": "Anywhere on a line"
+ },
+ {
+  "section": "Keys",
+  "name": "↵ / Space",
+  "detail": "Enter, or repeat last command"
+ },
+ {
+  "section": "Keys",
+  "name": "ESC",
+  "detail": "Cancel"
+ },
+ {
+  "section": "Keys",
+  "name": "F3",
+  "detail": "Snaps on/off"
+ },
+ {
+  "section": "Keys",
+  "name": "CTRL+1",
+  "detail": "Properties"
+ },
+ {
+  "section": "Keys",
+  "name": "Shift + right-click",
+  "detail": "One-time snap menu"
+ },
+ {
+  "section": "Keys",
+  "name": "CTRL+Z",
+  "detail": "Undo"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "CHSPACE",
+  "detail": "CHSPACE ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "SPACETRANS",
+  "detail": "SPACETRANS ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "MSPACE / PSPACE",
+  "detail": "MS ↵ / PS ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "VPMAX / VPMIN",
+  "detail": "VPMAX ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "VPLAYER",
+  "detail": "VPLAYER ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "VPCLIP",
+  "detail": "VPCLIP ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "Turn the view",
+  "detail": "UCS ↵ OB ↵  PLAN ↵ ↵"
+ },
+ {
+  "section": "More: Layouts and viewports",
+  "name": "LAYOUT",
+  "detail": "LAYOUT ↵ C ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYISO / LAYUNISO",
+  "detail": "LAYISO ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYOFF / LAYON",
+  "detail": "LAYOFF ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYTHW",
+  "detail": "LAYTHW ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYLCK / LAYULK",
+  "detail": "LAYLCK ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYCUR",
+  "detail": "LAYCUR ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYMRG",
+  "detail": "LAYMRG ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYDEL",
+  "detail": "LAYDEL ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYWALK",
+  "detail": "LAYWALK ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "LAYERP",
+  "detail": "LAYERP ↵"
+ },
+ {
+  "section": "More: Layer tools",
+  "name": "SETBYLAYER",
+  "detail": "SETBYLAYER ↵"
+ },
+ {
+  "section": "More: Selecting",
+  "name": "SELECTSIMILAR",
+  "detail": "SELECTSIMILAR ↵"
+ },
+ {
+  "section": "More: Selecting",
+  "name": "Previous",
+  "detail": "P ↵ at Select objects"
+ },
+ {
+  "section": "More: Selecting",
+  "name": "FILTER",
+  "detail": "FI ↵"
+ },
+ {
+  "section": "More: Selecting",
+  "name": "ADDSELECTED",
+  "detail": "ADDSELECTED ↵"
+ },
+ {
+  "section": "More: Selecting",
+  "name": "Remove from set",
+  "detail": "Shift + pick"
+ },
+ {
+  "section": "More: Selecting",
+  "name": "Cycle overlaps",
+  "detail": "Shift + Space"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "OVERKILL",
+  "detail": "OVERKILL ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "PEDIT Multiple",
+  "detail": "PE ↵ M ↵ ... J ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "REVERSE",
+  "detail": "REVERSE ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "PLINEGEN",
+  "detail": "PLINEGEN ↵ 1 ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "BREAKATPOINT",
+  "detail": "BREAKATPOINT ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "LENGTHEN",
+  "detail": "LEN ↵ DE ↵ / T ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "ALIGN",
+  "detail": "AL ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "STRETCH",
+  "detail": "S ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "OFFSET Layer",
+  "detail": "O ↵ L ↵ C ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "DIVIDE / MEASURE",
+  "detail": "DIV ↵ / ME ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "BOUNDARY",
+  "detail": "BO ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "FLATTEN",
+  "detail": "FLATTEN ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "OOPS",
+  "detail": "OOPS ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "MOVE / SCALE",
+  "detail": "M ↵ / SC ↵"
+ },
+ {
+  "section": "More: Editing linework",
+  "name": "EXPLODE",
+  "detail": "X ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "TXT2MTXT",
+  "detail": "TXT2MTXT ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "TJUST",
+  "detail": "TJUST ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "TCASE",
+  "detail": "TCASE ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "FIND",
+  "detail": "FIND ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "SCALETEXT",
+  "detail": "SCALETEXT ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "MLEADERALIGN",
+  "detail": "MLA ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "MLEADEREDIT",
+  "detail": "MLE ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "TEXTTOFRONT",
+  "detail": "TEXTTOFRONT ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "DRAWORDER",
+  "detail": "DR ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "TFRAMES",
+  "detail": "TFRAMES ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "BURST",
+  "detail": "BURST ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "ATTSYNC",
+  "detail": "ATTSYNC ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "BEDIT",
+  "detail": "BE ↵"
+ },
+ {
+  "section": "More: Text, leaders and blocks",
+  "name": "NCOPY",
+  "detail": "NCOPY ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Bearing/distance",
+  "detail": "'BD ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Azimuth/distance",
+  "detail": "'ZD ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Northing/Easting",
+  "detail": "'NE ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Point number",
+  "detail": "'PN ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Point object",
+  "detail": "'PO ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Side shot",
+  "detail": "'SS ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Zoom to point",
+  "detail": "'ZTP ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Match radius / length",
+  "detail": "'MR ↵ / 'ML ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "CREATEPOINTS",
+  "detail": "CREATEPOINTS ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Segment labels",
+  "detail": "ADDSEGMENTLABELS ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "Parcels",
+  "detail": "CREATEPARCELFROMOBJECTS ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "MAPCLEAN",
+  "detail": "MAPCLEAN ↵"
+ },
+ {
+  "section": "More: Civil 3D",
+  "name": "EXPORTTOAUTOCAD",
+  "detail": "EXPORTTOAUTOCAD ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "-PURGE Regapps",
+  "detail": "-PU ↵ R ↵ * ↵ N ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "RECOVER",
+  "detail": "RECOVER ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "WBLOCK",
+  "detail": "W ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "COPYBASE",
+  "detail": "CTRL+SHIFT+C"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "PASTEORIG",
+  "detail": "PASTEORIG ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "XATTACH / XCLIP",
+  "detail": "XA ↵ / XCLIP ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "COMPARE",
+  "detail": "COMPARE ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "ETRANSMIT",
+  "detail": "ETRANSMIT ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "MEASUREGEOM",
+  "detail": "MEA ↵"
+ },
+ {
+  "section": "More: Files and cleanup",
+  "name": "QUICKCALC",
+  "detail": "CTRL+8"
+ },
+ {
+  "section": "System variables",
+  "name": "FILEDIA",
+  "detail": "Open/Save dialogs gone? Set back to 1"
+ },
+ {
+  "section": "System variables",
+  "name": "PICKADD",
+  "detail": "Each pick adds to the selection"
+ },
+ {
+  "section": "System variables",
+  "name": "PICKFIRST",
+  "detail": "Pick objects first, then the command"
+ },
+ {
+  "section": "System variables",
+  "name": "MIRRTEXT",
+  "detail": "Mirrored text stays readable"
+ },
+ {
+  "section": "System variables",
+  "name": "PDMODE / PDSIZE",
+  "detail": "How POINT objects look"
+ },
+ {
+  "section": "System variables",
+  "name": "LTSCALE / PSLTSCALE",
+  "detail": "Linetype scale for 1\" = 20' sheets"
+ },
+ {
+  "section": "System variables",
+  "name": "MSLTSCALE",
+  "detail": "Model tab linetypes follow annotation scale"
+ },
+ {
+  "section": "System variables",
+  "name": "CELTSCALE",
+  "detail": "Object linetype scale for new objects"
+ },
+ {
+  "section": "System variables",
+  "name": "LWDISPLAY",
+  "detail": "Show lineweights on screen"
+ },
+ {
+  "section": "System variables",
+  "name": "OSNAPZ",
+  "detail": "Snaps use the current elevation, not the point's Z"
+ },
+ {
+  "section": "System variables",
+  "name": "LAYLOCKFADECTL",
+  "detail": "How faded locked layers look"
+ },
+ {
+  "section": "System variables",
+  "name": "XDWGFADECTL",
+  "detail": "How faded xrefs look"
+ },
+ {
+  "section": "Snap tricks",
+  "name": "M2P",
+  "detail": "Midpoint between two picked points"
+ },
+ {
+  "section": "Snap tricks",
+  "name": "FROM",
+  "detail": "Offset from a base point: FROM, pick, @dx,dy"
+ },
+ {
+  "section": "Snap tricks",
+  "name": "APP / EXT / PAR",
+  "detail": "Apparent intersection / extension / parallel"
+ },
+ {
+  "section": "Snap tricks",
+  "name": ".XY",
+  "detail": "Point filter: snap X,Y, then type the Z"
+ },
+ {
+  "section": "Snap tricks",
+  "name": "'Z",
+  "detail": "Zoom in the middle of a command"
+ },
+ {
+  "section": "Snap tricks",
+  "name": "@",
+  "detail": "Alone = the last point picked"
+ },
+ {
+  "section": "More keys",
+  "name": "F8 / F10",
+  "detail": "Ortho / polar tracking"
+ },
+ {
+  "section": "More keys",
+  "name": "F11 / F12",
+  "detail": "Object snap tracking / dynamic input"
+ },
+ {
+  "section": "More keys",
+  "name": "F2",
+  "detail": "Command history"
+ },
+ {
+  "section": "More keys",
+  "name": "CTRL+9",
+  "detail": "Command line on/off (if it vanishes)"
+ },
+ {
+  "section": "More keys",
+  "name": "CTRL+0",
+  "detail": "Clean screen"
+ },
+ {
+  "section": "More keys",
+  "name": "CTRL+TAB",
+  "detail": "Switch drawings"
+ },
+ {
+  "section": "Warnings",
+  "name": "ERASE",
+  "detail": "OOPS undoes the last erase"
+ },
+ {
+  "section": "Warnings",
+  "name": "ROTATE",
+  "detail": "Never on survey linework"
+ },
+ {
+  "section": "Warnings",
+  "name": "MATCHPROP",
+  "detail": "Copies the layer too"
+ },
+ {
+  "section": "Warnings",
+  "name": "PURGE / AUDIT",
+  "detail": "Save first"
+ },
+ {
+  "section": "Warnings",
+  "name": "Viewport scale",
+  "detail": "Lock it, or a zoom ruins it"
+ },
+ {
+  "section": "Warnings",
+  "name": "CHSPACE",
+  "detail": "Objects are rescaled by the viewport scale"
+ },
+ {
+  "section": "Warnings",
+  "name": "Turn the view",
+  "detail": "PLAN zooms extents; reset the viewport scale after"
+ },
+ {
+  "section": "Warnings",
+  "name": "VPMAX / VPMIN",
+  "detail": "Zooming inside an unlocked viewport changes its scale"
+ },
+ {
+  "section": "Warnings",
+  "name": "LAYISO / LAYUNISO",
+  "detail": "Run LAYUNISO before you save or the rest stay off"
+ },
+ {
+  "section": "Warnings",
+  "name": "LAYMRG",
+  "detail": "The first layer is deleted; check what you picked"
+ },
+ {
+  "section": "Warnings",
+  "name": "LAYDEL",
+  "detail": "Deletes every object on the layer, blocks included"
+ },
+ {
+  "section": "Warnings",
+  "name": "SETBYLAYER",
+  "detail": "Answer N to 'blocks too' unless you mean it"
+ },
+ {
+  "section": "Warnings",
+  "name": "OVERKILL",
+  "detail": "Can split and rejoin polylines; select an area, not ALL"
+ },
+ {
+  "section": "Warnings",
+  "name": "PEDIT Multiple",
+  "detail": "Keep the fuzz small (0.01); big fuzz joins the wrong lines"
+ },
+ {
+  "section": "Warnings",
+  "name": "ALIGN",
+  "detail": "Answer N to scale objects"
+ },
+ {
+  "section": "Warnings",
+  "name": "STRETCH",
+  "detail": "Crossing window right-to-left; objects fully inside move"
+ },
+ {
+  "section": "Warnings",
+  "name": "FLATTEN",
+  "detail": "Destroys elevations. Never on points, breaklines or 3D polylines"
+ },
+ {
+  "section": "Warnings",
+  "name": "MOVE / SCALE",
+  "detail": "Never on survey linework or points: coordinates are real"
+ },
+ {
+  "section": "Warnings",
+  "name": "EXPLODE",
+  "detail": "Never on Civil 3D points, labels, surfaces or parcels"
+ },
+ {
+  "section": "Warnings",
+  "name": "BURST",
+  "detail": "The block is gone; later block edits won't update it"
+ },
+ {
+  "section": "Warnings",
+  "name": "BEDIT",
+  "detail": "Changes every copy of that block in the drawing"
+ },
+ {
+  "section": "Warnings",
+  "name": "Parcels",
+  "detail": "Uncheck 'Erase existing entities' to keep the polyline"
+ },
+ {
+  "section": "Warnings",
+  "name": "MAPCLEAN",
+  "detail": "Save first; it edits geometry in place"
+ },
+ {
+  "section": "Warnings",
+  "name": "EXPORTTOAUTOCAD",
+  "detail": "Makes a separate ACAD- copy; keep working in the original"
+ },
+ {
+  "section": "Warnings",
+  "name": "WBLOCK",
+  "detail": "Pick Retain, not Delete from drawing"
+ },
+ {
+  "section": "Warnings",
+  "name": "LTSCALE / PSLTSCALE",
+  "detail": "Changes every linetype in the drawing"
+ },
+ {
+  "section": "Warnings",
+  "name": "FILEDIA",
+  "detail": "At 0 you get command-line prompts instead of dialogs"
+ },
+ {
+  "section": "Step by step",
+  "name": "FILLET R0 - close a corner",
+  "detail": "**F ↵** then **R ↵ 0 ↵** (the radius sticks until you change it) | Pick the first line on the part you want to keep | Pick the second line on the part you want to keep"
+ },
+ {
+  "section": "Step by step",
+  "name": "EXTEND to a boundary",
+  "detail": "**EX ↵ B ↵** (Boundary edges) | Pick the line to extend TO, then **↵** | Pick the line to extend, near the end that should grow"
+ },
+ {
+  "section": "Step by step",
+  "name": "ROTATE by Reference - square a symbol to the curb",
+  "detail": "**RO ↵**, pick the symbol **↵** | Base point: Insertion snap on the symbol | **R ↵** (Reference), type **0 ↵** (the symbol sits at 0 now) | **P ↵** (Points), pick two points along the curb (Nearest)"
+ },
+ {
+  "section": "Step by step",
+  "name": "MLEADER - label a structure",
+  "detail": "Check the leader style is SRV-20 (Annotate › Leaders) | **MLD ↵**, pick the arrow point (Insertion or Node) | Pick the landing, away from other linework | Type the label, then click outside the box"
+ },
+ {
+  "section": "Step by step",
+  "name": "TEXT on a boundary line",
+  "detail": "**DT ↵ J ↵ BC ↵**, pick the line's Midpoint | Height **1.6 ↵** if asked (0.08\" at 1\" = 20') | Rotation: pick two points along the line | Type the bearing and distance, **↵ ↵** to finish | Upside down? **TORIENT ↵**, select, **↵**"
+ },
+ {
+  "section": "Step by step",
+  "name": "DIMALIGNED - a setback",
+  "detail": "Make V-ANNO-DIMS-E current, style SRV-20 | **DAL ↵**, pick the house corner (Endpoint) | Second point: Shift + right-click › Perpendicular, pick the lot line | Click to place the dimension off the building"
+ },
+ {
+  "section": "Step by step",
+  "name": "Viewport at 1\" = 20'",
+  "detail": "On the layout: **MV ↵**, pick two corners | Double-click inside the viewport | **Z ↵ 1/20XP ↵**, then pan with the wheel held down (don't zoom) | Double-click outside, select the viewport, CTRL+1, Display locked: Yes"
+ },
+ {
+  "section": "Step by step",
+  "name": "PLOT to PDF",
+  "detail": "On the layout tab: **CTRL+P** | Printer: DWG To PDF.pc3, paper: the sheet size | Plot area Layout, scale 1:1 | Plot style table: monochrome.ctb | Preview, then OK and name the file"
+ },
+ {
+  "section": "Step by step",
+  "name": "CHSPACE - move objects between model and paper",
+  "detail": "Model to paper: double-click into the viewport, **CHSPACE ↵**, select **↵** | Paper to model: on the paper, **CHSPACE ↵**, select **↵** | With several viewports, click in the one you want and **↵**"
+ },
+ {
+  "section": "Step by step",
+  "name": "Turn the view to line up with a road",
+  "detail": "In the viewport: **UCS ↵ OB ↵**, pick the road centerline | **PLAN ↵ ↵** (Current UCS) | **Z ↵ 1/20XP ↵** and pan back to the site; lock the viewport | Reset: **UCS ↵ ↵** (World) then **PLAN ↵ ↵**"
+ },
+ {
+  "section": "Step by step",
+  "name": "PEDIT Multiple - lines into one polyline",
+  "detail": "**PE ↵ M ↵**, select the lines **↵** | Convert to polylines? **Y ↵** | **J ↵** fuzz **0.01 ↵**, then **↵** to finish"
+ },
+ {
+  "section": "Step by step",
+  "name": "LAYMRG - merge one layer into another",
+  "detail": "**LAYMRG ↵**, pick an object on the layer to get rid of **↵** | Pick an object on the layer to keep | Read the names, then **Y ↵**"
+ },
+ {
+  "section": "Step by step",
+  "name": "'BD - line by bearing and distance (Civil 3D)",
+  "detail": "**L ↵**, pick the start point | **'BD ↵**, confirm the start point | Quadrant: 1 NE, 2 SE, 3 SW, 4 NW | Bearing as DD.MMSS (**88.2453** = 88d24'53\"), then the distance | **ESC** ends 'BD, **↵** ends LINE"
+ },
+ {
+  "section": "Step by step",
+  "name": "-PURGE Regapps - shrink a slow drawing",
+  "detail": "**-PU ↵ R ↵** | Names: **↵** (all) | Verify each name? **N ↵**"
+ },
+ {
+  "section": "Golden rules",
+  "name": "Survey linework and points sit on real coordinates",
+  "detail": "Survey linework and points sit on real coordinates: never MOVE, SCALE, ROTATE, FLATTEN or EXPLODE them."
+ },
+ {
+  "section": "Golden rules",
+  "name": "Save (or SAVEAS a copy) before PURGE, AUDIT, OVERK",
+  "detail": "Save (or SAVEAS a copy) before PURGE, AUDIT, OVERKILL, MAPCLEAN or LAYDEL."
+ },
+ {
+  "section": "Golden rules",
+  "name": "Lock every viewport once its scale is set.",
+  "detail": "Lock every viewport once its scale is set."
+ },
+ {
+  "section": "Golden rules",
+  "name": "CTRL+Z undoes almost anything; OOPS brings back on",
+  "detail": "CTRL+Z undoes almost anything; OOPS brings back only the last erase."
+ },
+ {
+  "section": "First aid",
+  "name": "**ESC ESC** to get out of whatever comma",
+  "detail": "**ESC ESC** to get out of whatever command you're in"
+ },
+ {
+  "section": "First aid",
+  "name": "Read the command line: it usually says w",
+  "detail": "Read the command line: it usually says what it wants"
+ },
+ {
+  "section": "First aid",
+  "name": "**CTRL+Z** (undo) or **U ↵** step by ste",
+  "detail": "**CTRL+Z** (undo) or **U ↵** step by step"
+ },
+ {
+  "section": "First aid",
+  "name": "**Z ↵ E ↵** and **RE ↵** if you're lost",
+  "detail": "**Z ↵ E ↵** and **RE ↵** if you're lost"
+ },
+ {
+  "section": "First aid",
+  "name": "Save, close and reopen. Then restart Aut",
+  "detail": "Save, close and reopen. Then restart AutoCAD"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Command line is gone",
+  "detail": "**CTRL+9** (or type **COMMANDLINE ↵**). Drag it back to the bottom if it floats."
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Ribbon is gone",
+  "detail": "**RIBBON ↵**. Only tab names showing? Double-click any tab name."
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Menu bar (File, Edit...) wanted",
+  "detail": "**MENUBAR ↵ 1 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Screen is bare, everything hidden",
+  "detail": "**CTRL+0** (Clean Screen) toggles it back"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Properties / Tool palettes gone",
+  "detail": "**CTRL+1** Properties, **CTRL+3** Tool Palettes"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Model and layout tabs missing",
+  "detail": "Options › Display › check 'Display Layout and Model tabs'"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Drawing tabs at the top are gone",
+  "detail": "**FILETAB ↵**"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Status bar button missing (OSNAP, LWT, coordinates)",
+  "detail": "Click ≡ (Customization) at the far right of the status bar and check it"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Workspace is a mess",
+  "detail": "Gear at the bottom right › pick the workspace again. Last resort: Options › Profiles › Reset"
+ },
+ {
+  "section": "Troubleshooting: Screen and interface",
+  "name": "Dialog boxes don't open, prompts at the command line",
+  "detail": "**FILEDIA ↵ 1 ↵**. For block attributes: **ATTDIA ↵ 1 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Crosshairs are missing (arrow instead)",
+  "detail": "**CURSORTYPE ↵ 0 ↵**. Still gone: **GRAPHICSCONFIG ↵**, toggle Hardware Acceleration off and on, restart"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Crosshairs are tilted",
+  "detail": "**SNAPANG ↵ 0 ↵** and **UCS ↵ ↵** (World)"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Cursor jumps in steps, won't land between",
+  "detail": "Snap mode is on: **F9** off"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Cursor only goes straight across or up",
+  "detail": "Ortho is on: **F8** off"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Snaps not working",
+  "detail": "**F3** on; **OS ↵** to check which snaps are ticked"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Picking a second object drops the first",
+  "detail": "**PICKADD ↵ 2 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Can't pick objects before the command",
+  "detail": "**PICKFIRST ↵ 1 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "No grips (blue boxes) on selected objects",
+  "detail": "**GRIPS ↵ 1 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Selection window only works if you hold the button",
+  "detail": "**PICKDRAG ↵ 0 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Can see it but can't select it",
+  "detail": "Locked layer (faded: **LAYULK ↵**), it's inside a block or xref, or you're on paper, not in the viewport"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Wheel click shows a menu instead of panning",
+  "detail": "**MBUTTONPAN ↵ 1 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Wheel zooms the wrong way",
+  "detail": "**ZOOMWHEEL ↵ 0 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Double-click doesn't edit text",
+  "detail": "**DBLCLKEDIT ↵ ON ↵**"
+ },
+ {
+  "section": "Troubleshooting: Cursor, mouse and selecting",
+  "name": "Right-click acts like Enter (or the reverse)",
+  "detail": "Options › User Preferences › Right-click Customization"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "TRIM / EXTEND don't ask for cutting edges",
+  "detail": "Quick mode since 2021. Type **B ↵** for boundaries, or **TRIMEXTENDMODE ↵ 0 ↵** for the old way"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "Typed point went to the wrong place",
+  "detail": "Dynamic input treats typed numbers as relative. Use **#E,N** for real coordinates"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "Bearing input rejected",
+  "detail": "**UN ↵**: angle type Surveyor's Units. No spaces: **@100<N45d30'00\"E**"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "New objects on the wrong layer",
+  "detail": "Check the current layer; **LAYMCUR ↵** and pick the right one"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "Mirrored text is backwards",
+  "detail": "**MIRRTEXT ↵ 0 ↵**, mirror again"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "Hatch says 'boundary not closed'",
+  "detail": "Find the gap, or **HPGAPTOL ↵** 0.1 to allow small gaps"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "Pasted or inserted block is 12 times too big or small",
+  "detail": "Units mismatch: check **INSUNITS** in both drawings (2 = feet, 1 = inches)"
+ },
+ {
+  "section": "Troubleshooting: Drawing and editing",
+  "name": "Can't erase or move it: 'on a locked layer'",
+  "detail": "**LAYULK ↵**, pick it"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Arcs and circles look like polygons",
+  "detail": "**RE ↵** (Regen)"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Things vanished after a zoom, or leftovers on screen",
+  "detail": "**REGENALL ↵**"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "ZOOM Extents shows a tiny drawing in a corner",
+  "detail": "Stray objects far away. Window-select the empty area, erase, **Z ↵ E ↵**"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Linetypes look solid",
+  "detail": "Check **LTSCALE**; on polylines set **PLINEGEN** (Properties › Linetype generation); **RE ↵**"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Fence or wall text upside down",
+  "detail": "**REVERSE ↵** the polyline"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Lines all look thick",
+  "detail": "Lineweight display on: LWT button or **LWDISPLAY ↵ 0 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Hatches and wide polylines show as outlines",
+  "detail": "**FILLMODE ↵ 1 ↵**, **RE ↵**"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Point nodes invisible",
+  "detail": "**PDMODE ↵ 3 ↵**, **RE ↵**; is the point layer frozen?"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Everything looks faded",
+  "detail": "Locked layers fade: **LAYLOCKFADECTL ↵ 0 ↵**. Xrefs: **XDWGFADECTL ↵ 0 ↵**"
+ },
+ {
+  "section": "Troubleshooting: Display looks wrong",
+  "name": "Fonts show as ??? or a different font",
+  "detail": "Missing SHX font. Get the font, or set the text style to Arial (**ST ↵**)"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Viewport is blank",
+  "detail": "Viewport is Off (Properties › On: Yes), zoomed away, or layers VP-frozen in it"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Scale changed when you scrolled",
+  "detail": "Viewport wasn't locked: **Z ↵ 1/20XP ↵**, then lock it"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Can't zoom inside a viewport",
+  "detail": "It's locked (that's good). Unlock only to change it"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "It's on screen but won't plot",
+  "detail": "Layer has plot turned off (printer icon), it's on Defpoints, or it's outside the plot area"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Viewport border plots",
+  "detail": "Put the viewport on a no-plot layer"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Plot comes out in color or grey",
+  "detail": "Plot style table: **monochrome.ctb**"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Plot is tiny or cut off",
+  "detail": "Plot area Layout, scale 1:1, paper size matches the sheet"
+ },
+ {
+  "section": "Troubleshooting: Layouts, viewports and plotting",
+  "name": "Text or dims wrong size in the viewport",
+  "detail": "Check the annotation scale on the status bar matches the viewport"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "AutoCAD crashed",
+  "detail": "Reopen: the Drawing Recovery palette opens (**DRAWINGRECOVERY ↵**)"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Need the autosave file",
+  "detail": "**SAVEFILEPATH ↵** shows where; rename the .sv$ to .dwg. **SAVETIME ↵** 10 = every 10 min"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Drawing won't open or has errors",
+  "detail": "**RECOVER ↵**. Or rename the .bak next to it to .dwg"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Opens read-only",
+  "detail": "Someone has it open. Delete the .dwl/.dwl2 only if you're sure nobody does"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Drawing is slow or huge",
+  "detail": "**-PU ↵ R ↵ ↵ N ↵**, then PURGE (include Orphaned data), **AUDIT ↵ Y ↵**"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Scale list is hundreds long",
+  "detail": "**-SCALELISTEDIT ↵ R ↵ Y ↵ E ↵**"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Xrefs missing",
+  "detail": "**XR ↵**, select the missing one, browse to its new path"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "Coworker can't open your file",
+  "detail": "**SAVEAS** an older DWG version; for plain AutoCAD use **EXPORTTOAUTOCAD**"
+ },
+ {
+  "section": "Troubleshooting: Files and crashes",
+  "name": "'Proxy objects' warning",
+  "detail": "Made in Civil 3D or another vertical: open it there, or ask for an EXPORTTOAUTOCAD copy"
+ },
+ {
+  "section": "Troubleshooting: Civil 3D",
+  "name": "Prospector / Toolspace is gone",
+  "detail": "**TOOLSPACE ↵** (or **SHOWTS ↵**)"
+ },
+ {
+  "section": "Troubleshooting: Civil 3D",
+  "name": "Points don't show",
+  "detail": "Point layer frozen, point group out of date (right-click › Update), or style set to none"
+ },
+ {
+  "section": "Troubleshooting: Civil 3D",
+  "name": "Labels show ???",
+  "detail": "The label can't find its data (no elevation, deleted object)"
+ },
+ {
+  "section": "Troubleshooting: Civil 3D",
+  "name": "Surface or labels didn't update",
+  "detail": "Prospector › right-click the surface › Rebuild"
+ },
+ {
+  "section": "Troubleshooting: Civil 3D",
+  "name": "'BD won't start",
+  "detail": "It only works when a command is asking for a point"
+ },
+ {
+  "section": "Troubleshooting: Civil 3D",
+  "name": "Labels the wrong size",
+  "detail": "Annotation scale (status bar) must match the plot scale"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Drawing suddenly tilted in 3D",
+  "detail": "Shift + wheel-drag orbits the view. **PLAN ↵ ↵**, or click Top on the ViewCube"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "New lines have an elevation",
+  "detail": "**ELEV ↵ 0 ↵**. Snaps pulling Z from points: **OSNAPZ ↵ 1 ↵**"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "A command does something different than it should",
+  "detail": "Someone redefined it: **REDEFINE ↵** and the command name"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Typing a command picks the wrong one",
+  "detail": "Autocomplete: **INPUTSEARCHOPTIONS ↵**, or type the full name"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Dimension shows the wrong number",
+  "detail": "Text overridden (Properties › Text override: clear it) or **DIMLFAC** not 1"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Area in LIST is wrong or missing",
+  "detail": "Polyline isn't closed: Properties › Closed: Yes (check the gap first)"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Wipeout frames plot as boxes",
+  "detail": "**WIPEOUT ↵ F ↵ OFF ↵** (or **TFRAMES ↵**)"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Layer won't delete or purge",
+  "detail": "It's current, it's 0 or Defpoints, or a block or xref uses it: **LAYDEL ↵**"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "Pasted objects land far off the site",
+  "detail": "Paste used a base point: **PASTEORIG ↵** instead"
+ },
+ {
+  "section": "Troubleshooting: The odd ones",
+  "name": "UCS icon somewhere odd, coordinates don't match",
+  "detail": "**UCS ↵ ↵** back to World"
+ }
+]
