@@ -25,7 +25,7 @@ const COVER = [
 ];
 
 // ================================================================================================
-const S1 = { n: 1, title: "START HERE: EVERYDAY COMMANDS", tag: "DAY ONE", size: 16, sub: "What a new drafter uses constantly", blocks: [
+const S1 = { n: 1, newPage: false, title: "START HERE: EVERYDAY COMMANDS", tag: "DAY ONE", sub: "What a new drafter uses constantly", blocks: [
   { type: "cmds", title: "Open, move around, save", rows: [
     ["OPEN / SAVEAS", "OPEN ↵ / SAVEAS ↵", "Open a drawing / save a copy under a new name", { ribbon: "Quick Access toolbar", warn: "Practicing? SAVEAS your own copy first" }],
     ["QSAVE", "CTRL+S", "Save"],
@@ -380,20 +380,26 @@ const S7 = { n: 7, title: "PROJECT REFERENCES AND FILE TOOLS", tag: "ADVANCED", 
 ] };
 
 // ================================================================================================
-const S8 = { n: 8, title: "TROUBLESHOOTING: WHEN SOMETHING GOES WRONG", tag: "REFERENCE", advanced: true, blocks: [
+const S8 = { n: 8, title: "TROUBLESHOOTING: WHEN SOMETHING GOES WRONG", tag: "REFERENCE", advanced: true, sub: "What to check when it looks or acts wrong", blocks: [
   { type: "box", kind: "aid", title: "FIRST AID", lines: [
     "- **ESC ESC**, then read the command line.",
     "- **CTRL+Z** or **U ↵** step by step.  **Z ↵ E ↵** and **RE ↵** if you're lost.",
     "- Save, close, reopen; then restart AutoCAD.",
   ] },
-  { type: "diag", title: "By problem", rows: [
+  { type: "diag", title: "I can't see it / it won't plot", rows: [
     ["I can't see it", ["Layer off or frozen (**LA ↵**)", "VP Freeze in this viewport", "Isolated or hidden (**UNISOLATEOBJECTS ↵**)", "Xref unloaded / Not Found (**XR ↵**)", "Civil 3D style set to <none>", "Point group order or out of date", "Broken or out-of-date data reference", "Plain POINTs: **PDMODE ↵ 3 ↵**", "Surface contours missing: **LEVELOFDETAILOFF ↵**", "Online map missing: coordinate system assigned? signed in? **GEOMAP ↵**"]],
     ["It won't plot", ["Layer no-plot or Defpoints", "Outside the plot area", "Viewport On (CTRL+1)", "Online map: capture it with **GEOMAPIMAGE ↵** (put it on its own layer, not 0)"]],
+  ] },
+  { type: "diag", title: "It looks wrong", rows: [
     ["It looks wrong", ["Linetype scale: object, **LTSCALE**, **PSLTSCALE**, **MSLTSCALE**", "**RE ↵** / **REGENALL ↵**", "Viewport scale", "Annotation scale (status bar)", "Label style; dragged label: right-click › Reset Label", "??? in a label = missing data", "Linetype text upside down: **REVERSE ↵**", "Faded: **LAYLOCKFADECTL** / **XDWGFADECTL**", "Tilted in 3D: **PLAN ↵ ↵**", "Wrong dimension value: text override or **DIMLFAC**", "??? fonts: missing SHX; change the style font (**ST ↵**) or **FONTALT**"]],
+  ] },
+  { type: "diag", title: "It acts wrong", rows: [
     ["It acts wrong: selecting", ["Picks replace each other: **PICKADD ↵ 2 ↵**", "Selected first but MOVE asks again: **PICKFIRST ↵ 1 ↵**; still? **QAFLAGS ↵ 0 ↵** (undocumented; often left set by a LISP routine)", "No grips: **GRIPS ↵ 2 ↵**", "Window needs a drag: **PICKDRAG ↵ 2 ↵**", "Can see it, can't pick it: locked layer (**LAYULK ↵**), inside a block or xref, or you're on paper"]],
     ["It acts wrong: screen", ["Command line: **CTRL+9**", "Toolspace: **SHOWTS ↵**", "Ribbon: **RIBBON ↵**", "Tabs: **LAYOUTTAB ↵ 1 ↵**, **FILETAB ↵**", "**MENUBAR ↵ 1 ↵**", "Crosshairs: **CURSORTYPE ↵ 0 ↵**, **GRAPHICSCONFIG ↵**; tilted or not matching a turned view: **SNAPANG**", "Workspace: gear › pick it again; Options › Profiles › Reset"]],
     ["It acts wrong: keys and mouse", ["F8 ortho, F9 snap mode, F10 polar, F11 tracking, F12 dynamic input", "Wheel: **MBUTTONPAN ↵ 1 ↵**, **ZOOMWHEEL ↵ 0 ↵**; zoom step: **ZOOMFACTOR**", "Double-click: **DBLCLKEDIT ↵ ON ↵**"]],
     ["It acts wrong: drawing and typing", ["No dialogs: **FILEDIA ↵ 1 ↵**, **ATTDIA ↵ 1 ↵**", "Lines pick up elevations: **OSNAPZ**, **ELEV ↵ 0 ↵**", "Typed point lands wrong: use **#E,N**", "TRIM/EXTEND: **TRIMEXTENDMODE ↵ 0 ↵** for Standard", "Hatch gap: **HPGAPTOL**", "Block 12× off: **INSUNITS**", "Paste lands off site: **PASTEORIG ↵**", "Odd command: **REDEFINE ↵**, **INPUTSEARCHOPTIONS ↵**", "Mirrored text: **MIRRTEXT ↵ 0 ↵**", "Thick lines: **LWDISPLAY ↵ 0 ↵**; outline fills: **FILLMODE ↵ 1 ↵**"]],
+  ] },
+  { type: "diag", title: "Civil 3D, slow drawings and crashes", rows: [
     ["Civil 3D didn't update", ["Surface: right-click › Rebuild", "Point group: Update", "Reference: Synchronize", "'BD needs a running command; 'NE order: Ambient Settings"]],
     ["Slow or damaged drawing", ["**AUDIT ↵ Y ↵**", "**RECOVER ↵** (or rename the .bak)", "**PU ↵** PURGE incl. orphaned data", "**PURGESTYLES ↵**", "Regapps: **-PU ↵ R ↵ ↵ N ↵**", "**-SCALELISTEDIT ↵ R ↵ Y ↵ E ↵**", "Unload unused xrefs; surface triangles off; fewer point labels", "Still bad: **WBLOCK** the good objects to a new file"]],
     ["Crash, locks, sharing", ["**DRAWINGRECOVERY ↵**; autosave in **SAVEFILEPATH**, rename .sv$ to .dwg; **SAVETIME ↵ 10 ↵**", "Read-only: someone has it open (.dwl)", "Can't be opened elsewhere: SAVEAS older version, **EXPORTTOAUTOCAD**; proxy objects = made in Civil 3D"]],

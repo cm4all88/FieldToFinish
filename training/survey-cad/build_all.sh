@@ -10,6 +10,23 @@ node course/check_inventory.js
 node course/build_reference.js
 cd course/output
 soffice --headless --convert-to pdf SURVEY_CAD_Guide.docx SURVEY_CAD_Command_Reference.docx > /dev/null 2>&1 || true
+# Second pass: put each section's start page on the reference's cover sheet.
+node -e 'const C=require("../reference_content");console.log(JSON.stringify(C.LEVELS.map(L=>[L.n,L.title])))' > section_titles.json
+python3 - <<'PY'
+import json, pymupdf as fitz
+titles = json.load(open("section_titles.json"))
+doc = fitz.open("SURVEY_CAD_Command_Reference.pdf")
+pages = {}
+for n, title in titles:
+    for i in range(1, len(doc)):          # skip the cover, which lists every title
+        if title in doc[i].get_text():
+            pages[n] = i + 1
+            break
+json.dump(pages, open("section_pages.json", "w"))
+PY
+rm -f section_titles.json
+(cd .. && node build_reference.js > /dev/null)
+soffice --headless --convert-to pdf SURVEY_CAD_Command_Reference.docx > /dev/null 2>&1 || true
 python3 - <<'PY'
 # AutoCAD rejects a DXF containing a bare ^ (DXF escape character) or non-ASCII text.
 import glob, sys

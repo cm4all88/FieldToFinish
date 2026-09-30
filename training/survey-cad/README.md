@@ -15,7 +15,7 @@ their drawing should look like and the values to check.
 | 5 | QA, viewport at 1" = 20', plot |
 
 Package (`course/output/SURVEY_CAD_Package.zip`): `SURVEY_CAD_START.dxf`, `CHECKPOINT_1-5.pdf`,
-`SURVEY_CAD_Guide.docx/.pdf`, `SURVEY_CAD_Command_Reference.pdf` (12-page progressive command reference for survey drafters, everyday commands first and power-drafter tools last, portrait for a binder; content in `course/reference_content.js`, verification notes in `course/REFERENCE_SOURCES.md`, old-sheet inventory in `course/REFERENCE_INVENTORY.md`; drop button screenshots in `course/icons/NAME.png` to show them), `SURVEY_CAD_COMPLETED.dxf`, and the raw `SURVEY_CAD_POINTS.txt` for reference.
+`SURVEY_CAD_Guide.docx/.pdf`, `SURVEY_CAD_Command_Reference.pdf` (progressive command reference with a cover sheet and contents for survey drafters, everyday commands first and power-drafter tools last, portrait for a binder; content in `course/reference_content.js`, verification notes in `course/REFERENCE_SOURCES.md`, old-sheet inventory in `course/REFERENCE_INVENTORY.md`; drop button screenshots in `course/icons/NAME.png` to show them), `SURVEY_CAD_COMPLETED.dxf`, and the raw `SURVEY_CAD_POINTS.txt` for reference.
 
 START is the finished base with the finishing work taken back out and the real
 field-to-finish problems put in (jumpers from out-of-sequence office points, the ASPH

@@ -79,13 +79,13 @@ const SURVEY = {   // "Survey use" column: what the command may do to coordinate
 
 // ---- block renderers --------------------------------------------------------------------------------
 // cmds: rows [command, type, what, {ribbon, warn, survey}]
-const zebra = (i) => { ROWFILL = i % 2 ? "F3F6FA" : undefined; };
+const zebra = (i, n) => { ROWFILL = i % 2 ? "F3F6FA" : undefined; KEEP = i < n - 1; };
 function cmdsBlock(b) {
   const withSurvey = b.rows.some((r) => r[3] && r[3].survey);
   const w = withSurvey ? [2050, 1950, FULL - 2050 - 1950 - 1250, 1250] : [2050, 1950, FULL - 4000];
   const heads = withSurvey ? ["Command", "Type", "What it does", "Survey use"] : ["Command", "Type", "What it does"];
   return table(w, [titleRow(b.title, w.length, FULL, b.fill, b.note), headRow(b.heads || heads, w),
-    ...b.rows.map(([c, k, what, o = {}], i) => zebra(i) || new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([c, k, what, o = {}], i) => zebra(i, b.rows.length) || new TableRow({ cantSplit: true, children: [
       cmdCell(c, o.ribbon, w[0]), cell(typeRuns(k), w[1]), whatCell(what, o.warn, w[2], o.ribbon),
       ...(withSurvey ? [cell([t(...(o.survey ? [SURVEY[o.survey][0], { bold: true, color: SURVEY[o.survey][1], size: SIZE - 2 }] : [""]))], w[3])] : [])] }))]);
 }
@@ -94,26 +94,26 @@ function pairsBlock(b, W = FULL) {
   const a = Math.round(W * (b.split || 0.34));
   const w = [a, W - a];
   return table(w, [titleRow(b.title, 2, W, b.fill, b.note), ...(b.heads ? [headRow(b.heads, w)] : []),
-    ...b.rows.map(([x, y], i) => zebra(i) || new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([x, y], i) => zebra(i, b.rows.length) || new TableRow({ cantSplit: true, children: [
       cell(b.code ? [mono(x)] : rich(`__${x}__`), w[0]), cell(rich(y), w[1])] }))], W);
 }
 // three-column generic with rich text: rows [a, b, c]
 function tripleBlock(b) {
   const w = b.widths || [2300, 2300, FULL - 4600];
   return table(w, [titleRow(b.title, 3, FULL, b.fill, b.note), headRow(b.heads, w),
-    ...b.rows.map((r, j) => zebra(j) || new TableRow({ cantSplit: true, children: r.map((x, i) => cell(rich(i === 0 ? `__${x}__` : x), w[i])) }))]);
+    ...b.rows.map((r, j) => zebra(j, b.rows.length) || new TableRow({ cantSplit: true, children: r.map((x, i) => cell(rich(i === 0 ? `__${x}__` : x), w[i])) }))]);
 }
 function sysvarBlock(b) {
   const w = [1900, 1150, FULL - 1900 - 1150 - 2600, 2600];
   return table(w, [titleRow(b.title, 4, FULL, b.fill, b.note), headRow(["Variable", "Autodesk default", "What it controls", "Parametrix / training note"], w),
-    ...b.rows.map(([v, d, what, note, warn], i) => zebra(i) || new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([v, d, what, note, warn], i) => zebra(i, b.rows.length) || new TableRow({ cantSplit: true, children: [
       cell([mono(v)], w[0]), cell(rich(d), w[1]), whatCell(what, warn, w[2]), cell(rich(note || ""), w[3])] }))]);
 }
 // diagnose: rows [problem, [checks...]]
 function diagBlock(b) {
   const w = [2900, FULL - 2900];
   return table(w, [titleRow(b.title, 2, FULL, b.fill, b.note), headRow(["Problem", "Check"], w),
-    ...b.rows.map(([p, checks], j) => zebra(j) || new TableRow({ cantSplit: true, children: [
+    ...b.rows.map(([p, checks], j) => zebra(j, b.rows.length) || new TableRow({ cantSplit: true, children: [
       cell(rich(`__${p}__`), w[0]),
       cell(checks.map((c) => [t("•  ", { bold: true, color: BLUE }), ...rich(c)]), w[1])] }))]);
 }
@@ -179,6 +179,7 @@ function sectionBar(S) {
 
 function renderBlock(b) {
   ROWFILL = undefined;
+  KEEP = false;
   switch (b.type) {
     case "cmds": return [cmdsBlock(b)];
     case "pairs": return [pairsBlock(b)];
@@ -192,15 +193,37 @@ function renderBlock(b) {
   }
 }
 
+// Section start pages come from the previous build (build_all.sh builds twice): output/section_pages.json
+function sectionPages() {
+  try { return JSON.parse(fs.readFileSync(path.join(OUT, "section_pages.json"), "utf8")); } catch (e) { return {}; }
+}
 function cover() {
-  SIZE = 16;
+  SIZE = 18;
+  const pages = sectionPages();
   const out = [
-    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: "PARAMETRIX  |  SURVEY CAD", bold: true, size: 20, color: BLUE, font: FONT })] }),
-    new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: C.TITLE, bold: true, size: 40, font: FONT })] }),
-    new Paragraph({ spacing: { after: 140 }, border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: BLUE, space: 4 } },
-      children: [new TextRun({ text: C.SUBTITLE, italics: true, size: 21, color: "404040", font: FONT })] }),
+    new Paragraph({ spacing: { before: 1400, after: 120 }, children: [new TextRun({ text: "PARAMETRIX  |  SURVEY", bold: true, size: 26, color: BLUE, font: FONT })] }),
+    table([FULL], [new TableRow({ children: [new TableCell({ width: { size: FULL, type: WidthType.DXA }, borders: noBorder,
+      shading: { type: ShadingType.CLEAR, fill: BLUE, color: "auto" }, margins: { top: 300, bottom: 300, left: 360, right: 360 }, children: [
+        new Paragraph({ children: [new TextRun({ text: C.TITLE, font: FONT, size: 60, bold: true, color: "FFFFFF" })] }),
+        new Paragraph({ spacing: { before: 80 }, children: [new TextRun({ text: C.SUBTITLE, font: FONT, size: 24, italics: true, color: "E6ECF5" })] })] })] })]),
+    new Paragraph({ spacing: { before: 200, after: 500 }, children: [new TextRun({ text: "AutoCAD and Civil 3D  ·  Start at the front, keep it on your desk", size: 22, color: "595959", font: FONT })] }),
   ];
-  for (const b of C.COVER) { out.push(...renderBlock(b)); out.push(gap(70)); }
+  const w = [700, 4400, FULL - 700 - 4400 - 800, 800];
+  out.push(table(w, [titleRow("CONTENTS", 4, FULL), headRow(["", "Section", "What's in it", "Page"], w),
+    ...C.LEVELS.map((L, i) => zebra(i, C.LEVELS.length) || new TableRow({ cantSplit: true, children: [
+      cell([t(String(L.n), { bold: true, size: 26, color: L.advanced ? NAVY : BLUE })], w[0]),
+      cell([t(L.title, { bold: true, size: 20 }), ...(L.tag ? [t("   " + L.tag, { bold: true, size: 14, color: L.advanced ? "C55A11" : "2E75B6" })] : [])], w[1]),
+      cell([t(L.sub || "", { italics: true, color: "404040" })], w[2]),
+      new TableCell({ width: { size: w[3], type: WidthType.DXA }, borders: border, margins: PAD,
+        shading: ROWFILL ? { type: ShadingType.CLEAR, fill: ROWFILL, color: "auto" } : undefined,
+        children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [t(pages[L.n] ? String(pages[L.n]) : "", { bold: true, size: 22, color: BLUE })] })] })] }))]));
+  ROWFILL = undefined; KEEP = false;
+  out.push(gap(300));
+  for (const b of C.COVER.filter((b) => b.kind === "warn")) out.push(...renderBlock(b));
+  out.push(new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: "Parametrix Survey  ·  Survey CAD training  ·  Commands checked against Autodesk help (AutoCAD and Civil 3D 2024-2026)", size: 16, color: "808080", font: FONT })] }));
+  // page 2: how to read it
+  out.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
+  for (const b of C.COVER.filter((b) => b.kind !== "warn")) { out.push(...renderBlock(b)); out.push(gap(70)); }
   return out;
 }
 
@@ -208,7 +231,7 @@ function build() {
   const body = cover();
   for (const L of C.LEVELS) {
     SIZE = 18;
-    if (L.newPage) body.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
+    if (L.newPage !== false) body.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 }, children: [] }));
     body.push(...sectionBar(L));
     for (const b of L.blocks) { body.push(...renderBlock(b)); body.push(gap(70)); }
   }
