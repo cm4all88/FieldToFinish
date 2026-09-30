@@ -131,7 +131,7 @@ function cover({ level, title, intro, info, notation = true }) {
     new Paragraph({ spacing: { before: 600, after: 60 }, children: [new TextRun({ text: "PARAMETRIX  |  SURVEY", bold: true, size: 22, color: ACCENT, font: FONT })] }),
     new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: "Survey CAD Training", bold: true, size: 56, font: FONT })] }),
     new Paragraph({ spacing: { after: 300 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ACCENT, space: 6 } },
-      children: [new TextRun({ text: `Level ${level} - ${title}`, size: 32, font: FONT, color: "404040" })] }),
+      children: [new TextRun({ text: /^\d/.test(String(level)) && !String(level).includes("-") ? `Level ${level} - ${title}` : title, size: 32, font: FONT, color: "404040" })] }),
     P(intro),
     table(["Item", ""], info, [2000, CONTENT - 2000]),
   ];
@@ -163,7 +163,7 @@ function buildGuide({ outFile, level, title, body, exercises }) {
     sections: [{
       properties: { page: { size: { width: PAGE_W, height: 15840 }, margin: { top: 1000, bottom: 1000, left: MARGIN, right: MARGIN } } },
       footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
-        new TextRun({ text: `Survey CAD Training - Level ${level}    `, size: 16, color: "808080", font: FONT }),
+        new TextRun({ text: String(level).includes("-") ? "Survey CAD Training - Field to Finish    " : `Survey CAD Training - Level ${level}    `, size: 16, color: "808080", font: FONT }),
         new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "808080", font: FONT })] })] }) },
       children: body,
     }],

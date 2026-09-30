@@ -40,6 +40,7 @@ VIEW_CENTER = Vec2(1125135.0, 733952.0)
 SHEET = (34.0, 22.0)
 VP_BOX = (0.75, 0.75, 30.25, 21.25)
 
+SHEET_SUBTITLE = "LEVEL 1 - AUTOCAD BASICS"
 CONTOUR_LAYERS = ["V-TOPO-CONT-MAJR-E", "V-TOPO-CONT-MINR-E", "V-TOPO-CONT-TEXT-E", "V-TOPO-CONT-TEXT"]
 
 
@@ -199,7 +200,7 @@ def build(done):
     rot = (NE - NW).angle_deg
     ans["label_offset_bearing"] = bearing((0, 0), up)
     if done:
-        msp.add_text(f"{bearing(NW, NE)} {dist(NW, NE):.2f}'", height=TXT, rotation=rot,
+        msp.add_text(f"{bearing(NW, NE)} {dist(NW, NE):.2f}'".replace("\u00b0", "%%d"), height=TXT, rotation=rot,
                      dxfattribs={"layer": "V-PROP-BNDY-TEXT-E", "style": "Survey"}
                      ).set_placement(mid + up * 1.0, align=TextEntityAlignment.BOTTOM_CENTER)
     ans["north_rot_bearing"] = bearing((0, 0), NE - NW)
@@ -320,7 +321,7 @@ def build_sheet(doc, done):
     lay.add_line((xs, H - 1.7), (W - 0.5, H - 1.7), dxfattribs={"layer": "G-ANNO-TTLB"})
     t("TOPOGRAPHIC SURVEY", x0, H - 2.15, 0.15)
     t("TRAINING SITE", x0, H - 2.45, 0.12)
-    t("LEVEL 1 - AUTOCAD BASICS", x0, H - 2.7, 0.10)
+    t(SHEET_SUBTITLE, x0, H - 2.7, 0.10)
     t("FOR TRAINING ONLY - NOT FOR", x0, H - 3.0, 0.08)
     t("DESIGN OR CONSTRUCTION", x0, H - 3.18, 0.08)
     lay.add_line((xs, H - 3.4), (W - 0.5, H - 3.4), dxfattribs={"layer": "G-ANNO-TTLB"})
