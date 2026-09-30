@@ -34,7 +34,7 @@ TEXT_LT = {
     "STORM": ("SD", 1.30),
     "EOPA": ("/", 1.00),
     "FENCELINK": ("o", 0.20),
-    "ROCK_WALL": ("^", 0.15),
+    "ROCK_WALL": ("V", 0.15),        # never "^": it is the DXF escape character
 }
 
 
