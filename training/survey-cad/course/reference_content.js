@@ -92,7 +92,7 @@ const S1 = { n: 1, title: "START HERE: EVERYDAY COMMANDS", tag: "DAY ONE", size:
 ] };
 
 // ================================================================================================
-const S2 = { n: 2, title: "SURVEY DRAFTING COMMANDS", size: 16, sub: "Finishing and labeling a topo", blocks: [
+const S2 = { n: 2, title: "SURVEY DRAFTING COMMANDS", sub: "Finishing and labeling a topo", blocks: [
   { type: "cmds", title: "Text, leaders and dimensions", rows: [
     ["TEXT", "DT ↵ J ↵ BC ↵", "Single-line text; Bottom Center for text on a line", { ribbon: "Home › Annotation (Text ▾)" }],
     ["Degree sign", "%%d", "In text: **N88%%d24'53\"W**"],
@@ -240,7 +240,15 @@ const S5 = { n: 5, title: "CIVIL 3D COMMANDS AND CONCEPTS", sub: "Points, styles
     "Don't explode or redraw it. Check the __object__ (CTRL+1), its __style__, __label style__, __layer__ and __source__ (point group, description key, data reference, xref). Fix the cause, not the picture. !!Never EXPLODE Civil 3D objects!!: use EXPORTTOAUTOCAD for a plain copy.",
   ] },
   { type: "box", title: "UNITS IS NOT THE COORDINATE SYSTEM", lines: [
-    "AutoCAD **UNITS** only sets how lengths and angles display and are typed. Civil 3D keeps its real settings in **EDITDRAWINGSETTINGS ↵** (Settings tab › right-click the drawing › Edit Drawing Settings): __Units and Zone__ = drawing units, angular units, drawing scale, coordinate system.  __Transformation__ = grid/ground factors (needs a zone).  __Ambient Settings__ = precision and angle input format.  !!Don't change the zone or transformation on a job drawing: ask the project surveyor.!!",
+    "AutoCAD **UNITS** only sets how lengths and angles display and are typed. The drawing's real-world location lives in Civil 3D __Drawing Settings__. Assign or change it only with the project surveyor's zone and factors: !!it changes where the drawing sits on the earth and what grid and ground coordinates mean.!!",
+  ] },
+  { type: "cmds", title: "Coordinate system, transformation and online maps", note: "EDITDRAWINGSETTINGS ↵ or Settings tab › right-click the drawing › Edit Drawing Settings", rows: [
+    ["Units and Zone tab", "EDITDRAWINGSETTINGS ↵", "Drawing units (feet), angular units, drawing scale, and the coordinate system: pick the category and the project's State Plane zone (or type its code)", { warn: "Project surveyor's call, not a drafting fix" }],
+    ["Transformation tab", "EDITDRAWINGSETTINGS ↵", "Relates local (ground) northing/easting to grid: sea level scale factor, grid scale factor (Unity, User Defined, Reference Point, Prismoidal), rotation to grid north, reference point. Only available once a zone is set", { warn: "Use only the factors and reference point the surveyor gives you" }],
+    ["Ambient Settings tab", "EDITDRAWINGSETTINGS ↵", "Precision and how angles, directions and coordinates are typed and shown ('BD format, 'NE order)"],
+        ["Geographic location", "GEOGRAPHICLOCATION ↵", "AutoCAD's geolocation (map or KML/KMZ). In Civil 3D set the zone in Drawing Settings instead"],
+    ["GEOMAP", "GEOMAP ↵", "Online map behind the drawing: Aerial, Road, Hybrid or Off. Needs a coordinate system (Geolocation tab appears) and an Autodesk sign-in", { ribbon: "Geolocation › Online Map", warn: "The online map doesn't plot" }],
+    ["GEOMAPIMAGE", "GEOMAPIMAGE ↵", "Capture part of the online map as an image that plots and works offline (plan view of World UCS). **GEOMAPIMAGEUPDATE ↵** refreshes it", { ribbon: "Geolocation › Online Map" }],
   ] },
   { type: "cmds", title: "Toolspace, points and labels", rows: [
     ["SHOWTS", "SHOWTS ↵", "Open Toolspace (Home › Palettes buttons toggle each tab)", { ribbon: "Civil 3D: Home › Palettes" }],
@@ -353,8 +361,8 @@ const S8 = { n: 8, title: "TROUBLESHOOTING: WHEN SOMETHING GOES WRONG", tag: "RE
     "1  **ESC ESC**   2  Read the command line   3  **CTRL+Z** or **U ↵**   4  **Z ↵ E ↵** and **RE ↵**   5  Save, close, reopen; then restart AutoCAD",
   ] },
   { type: "diag", title: "By problem", rows: [
-    ["I can't see it", ["Layer off or frozen (**LA ↵**)", "VP Freeze in this viewport", "Isolated or hidden (**UNISOLATEOBJECTS ↵**)", "Xref unloaded / Not Found (**XR ↵**)", "Civil 3D style set to <none>", "Point group order or out of date", "Broken or out-of-date data reference", "Plain POINTs: **PDMODE ↵ 3 ↵**", "Surface contours missing: **LEVELOFDETAILOFF ↵**"]],
-    ["It won't plot", ["Layer no-plot or Defpoints", "Outside the plot area", "Viewport On (CTRL+1)"]],
+    ["I can't see it", ["Layer off or frozen (**LA ↵**)", "VP Freeze in this viewport", "Isolated or hidden (**UNISOLATEOBJECTS ↵**)", "Xref unloaded / Not Found (**XR ↵**)", "Civil 3D style set to <none>", "Point group order or out of date", "Broken or out-of-date data reference", "Plain POINTs: **PDMODE ↵ 3 ↵**", "Surface contours missing: **LEVELOFDETAILOFF ↵**", "Online map missing: coordinate system assigned? signed in? **GEOMAP ↵**"]],
+    ["It won't plot", ["Layer no-plot or Defpoints", "Outside the plot area", "Viewport On (CTRL+1)", "Online map: capture it with **GEOMAPIMAGE ↵** (put it on its own layer, not 0)"]],
     ["It looks wrong", ["Linetype scale: object, **LTSCALE**, **PSLTSCALE**, **MSLTSCALE**", "**RE ↵** / **REGENALL ↵**", "Viewport scale", "Annotation scale (status bar)", "Label style; dragged label: right-click › Reset Label", "??? in a label = missing data", "Linetype text upside down: **REVERSE ↵**", "Faded: **LAYLOCKFADECTL** / **XDWGFADECTL**", "Tilted in 3D: **PLAN ↵ ↵**", "Wrong dimension value: text override or **DIMLFAC**", "??? fonts: missing SHX; change the style font (**ST ↵**) or **FONTALT**"]],
     ["It acts wrong: selecting", ["Picks replace each other: **PICKADD ↵ 2 ↵**", "Selected first but MOVE asks again: **PICKFIRST ↵ 1 ↵**; still? **QAFLAGS ↵ 0 ↵** (undocumented; often left set by a LISP routine)", "No grips: **GRIPS ↵ 2 ↵**", "Window needs a drag: **PICKDRAG ↵ 2 ↵**", "Can see it, can't pick it: locked layer (**LAYULK ↵**), inside a block or xref, or you're on paper"]],
     ["It acts wrong: screen", ["Command line: **CTRL+9**", "Toolspace: **SHOWTS ↵**", "Ribbon: **RIBBON ↵**", "Tabs: **LAYOUTTAB ↵ 1 ↵**, **FILETAB ↵**", "**MENUBAR ↵ 1 ↵**", "Crosshairs: **CURSORTYPE ↵ 0 ↵**, **GRAPHICSCONFIG ↵**; tilted or not matching a turned view: **SNAPANG**", "Workspace: gear › pick it again; Options › Profiles › Reset"]],

@@ -91,3 +91,13 @@ pattern `help.autodesk.com/view/ACD/2025/ENU/?guid=<GUID>`; Civil 3D links use `
 | LINETYPE3DPLINEON / OFF | Civil 3D only, from an Autodesk KB (not in the help). Pattern follows the 3D length; PLINEGEN not honored | KB "Linetype for 3D polyline" |
 | OFFSETFEATURE | Confirmed. Creates a feature line (not a 3D polyline) offset from a feature line, figure, 2D or 3D polyline | CIV3D GUID-5D15FCE9-148D-484D-9E70-91DA6DBD0C78 |
 | LISTA / LISTU | Corrected to LISTAVAILABLEPOINTNUMBERS / LISTUSEDPOINTNUMBERS. "Available" means unused numbers. LISTA/LISTU are probably office aliases | CIV3D GUID-6029E9E4-55AC-4C10-BF80-04B5F3F8E2AA |
+
+## Coordinate system, transformation and online maps (checked September 2026)
+
+| Item | Result | Source |
+|---|---|---|
+| Units and Zone tab: linear and angular units, drawing scale, coordinate system | Confirmed | CIV3D GUID-C81280B7-3169-43EC-B3DD-B4677743B797, GUID-A2C0D8F7-0BCF-46F6-8A0E-217834AF136B |
+| Transformation tab: local to grid; sea level and grid scale factor (Unity, User Defined, Reference Point, Prismoidal); needs a zone first | Confirmed | CIV3D GUID-A68DFB6F-6BE3-4719-8A1E-2D4FF1E53219, GUID-493452B6-14D3-46DB-AF12-AF1DBB2D168D |
+| Geolocation tab appears after a coordinate system is assigned; online maps need an Autodesk sign-in | Confirmed | CIV3D GUID-7B90BBB6-DA3A-4022-BCA9-6A1F03CCEE05 |
+| GEOMAP: Aerial / Road / Hybrid / Off | Confirmed | ACD GUID-DEF7EA7B-6A4B-4520-9A6F-08A944F78218 |
+| Online map doesn't plot; GEOMAPIMAGE captures a plottable map image (plan view of WCS); GEOMAPIMAGEUPDATE | Confirmed | ACD GUID-092F0E5E-BBA9-4A4E-ACF0-4779808C4384, GUID-79DFA423-8546-4DD4-9A23-1C0F0B9DF607, FAQ GUID-32DAF2C8-DBC9-4459-BC6D-08BDC5A9ED21 |
