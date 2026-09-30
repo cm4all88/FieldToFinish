@@ -1,3 +1,4 @@
 source/
 **/output/
 __pycache__/
+course/icons/*.png
