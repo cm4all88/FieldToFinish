@@ -1,17 +1,19 @@
-// One-page command sheet for the Finish the Drawing course.
+// Command sheets, portrait letter for a binder. Two builds from the same data:
+//   SURVEY_CAD_Command_Sheet     - the course version, with the Stage column
+//   SURVEY_CAD_Command_Reference - general reference, no stages or course wording
 const fs = require("fs");
 const path = require("path");
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle,
-  ShadingType, PageOrientation, AlignmentType, ImageRun, SectionType,
+  ShadingType, AlignmentType, ImageRun, SectionType, Footer, PageNumber,
 } = require("docx");
 
 const OUT = path.join(__dirname, "output");
 const FONT = "Calibri", MONO = "Consolas", ACCENT = "1F4E79";
-const PAGE_W = 15840, PAGE_H = 12240, MARGIN = 540;
-const CONTENT = PAGE_W - 2 * MARGIN;
+const PAGE_W = 12240, PAGE_H = 15840, LEFT = 1260, RIGHT = 620;   // wide left edge for binder holes
+const CONTENT = PAGE_W - LEFT - RIGHT;
 const GAP = 240;
-const COL = (CONTENT - GAP) / 2;
+const FULL = CONTENT, HALF = (CONTENT - GAP) / 2;
 const thin = { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" };
 const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 
@@ -124,7 +126,7 @@ const cmdCell = (name, w) => {
   const paras = [new Paragraph({ children: [...(icon ? [icon, t(" ")] : []), t(name, { bold: true })] })];
   if (RIBBON[name]) paras.push(new Paragraph({ children: [t(RIBBON[name], { size: 12, color: "7F7F7F" })] }));
   return new TableCell({ width: { size: w, type: WidthType.DXA }, borders: { top: thin, bottom: thin, left: thin, right: thin },
-    margins: { top: 20, bottom: 20, left: 70, right: 70 }, children: paras });
+    margins: { top: 10, bottom: 10, left: 70, right: 70 }, children: paras });
 };
 
 // ---- Beyond the course: pages 2-3 ----------------------------------------------
@@ -380,16 +382,16 @@ let KEEP = false;   // set while building a table that must not split
 const cell = (children, w, fill) => new TableCell({
   width: { size: w, type: WidthType.DXA }, borders: border,
   shading: fill ? { type: ShadingType.CLEAR, fill, color: "auto" } : undefined,
-  margins: { top: 20, bottom: 20, left: 70, right: 70 },
+  margins: { top: 10, bottom: 10, left: 70, right: 70 },
   children: [new Paragraph({ keepNext: KEEP, children })],
 });
 const useCell = (name, text, w) => new TableCell({ width: { size: w, type: WidthType.DXA }, borders: border,
-  margins: { top: 20, bottom: 20, left: 70, right: 70 },
+  margins: { top: 10, bottom: 10, left: 70, right: 70 },
   children: [new Paragraph({ keepNext: KEEP, children: [t(text)] }),
     ...(WARN[name] ? [new Paragraph({ keepNext: KEEP, children: [t("⚠ " + WARN[name], { size: 14, color: RED, bold: true })] })] : [])] });
-const titleRow = (title, n) => new TableRow({ tableHeader: true, cantSplit: true, children: [new TableCell({ columnSpan: n,
-  width: { size: COL, type: WidthType.DXA }, borders: border, shading: { type: ShadingType.CLEAR, fill: ACCENT, color: "auto" },
-  margins: { top: 20, bottom: 20, left: 70, right: 70 },
+const titleRow = (title, n, W = FULL) => new TableRow({ tableHeader: true, cantSplit: true, children: [new TableCell({ columnSpan: n,
+  width: { size: W, type: WidthType.DXA }, borders: border, shading: { type: ShadingType.CLEAR, fill: ACCENT, color: "auto" },
+  margins: { top: 10, bottom: 10, left: 70, right: 70 },
   children: [new Paragraph({ keepNext: true, children: [t(title, { bold: true, color: "FFFFFF", size: 17 })] })] })] });
 const headRow = (heads, w) => {
   KEEP = true;
@@ -398,22 +400,24 @@ const headRow = (heads, w) => {
   return new TableRow({ tableHeader: true, cantSplit: true, children: cells });
 };
 
+let STAGES = true;   // course build shows the Stage column
 function groupTable(title, rows) {
-  const w = [1900, 1650, COL - 1900 - 1650 - 780, 780];
-  return new Table({ width: { size: COL, type: WidthType.DXA }, columnWidths: w, rows: [
+  if (!STAGES) return threeTable(title, rows);
+  const w = [2300, 2200, FULL - 2300 - 2200 - 700, 700];
+  return new Table({ width: { size: FULL, type: WidthType.DXA }, columnWidths: w, rows: [
     titleRow(title, 4), headRow(["Command", "Type", "Use it to", "Stage"], w),
-    ...rows.map(([c, k, u, s]) => new TableRow({ cantSplit: true, children: [
-      cmdCell(c, w[0]), cell([cmd(k)], w[1]), useCell(c, u, w[2]), cell([t(s)], w[3])] }))] });
+    ...rows.map(([c, k, u, st]) => new TableRow({ cantSplit: true, children: [
+      cmdCell(c, w[0]), cell([cmd(k)], w[1]), useCell(c, u, w[2]), cell([t(st)], w[3])] }))] });
 }
-function threeTable(title, rows, heads = ["Command", "Type", "Use it to"], w = [2100, 1900, COL - 2100 - 1900]) {
-  return new Table({ width: { size: COL, type: WidthType.DXA }, columnWidths: w, rows: [
+function threeTable(title, rows, heads = ["Command", "Type", "Use it to"], w = [2300, 2200, FULL - 2300 - 2200]) {
+  return new Table({ width: { size: FULL, type: WidthType.DXA }, columnWidths: w, rows: [
     titleRow(title, 3), headRow(heads, w),
     ...rows.map(([c, k, u]) => new TableRow({ cantSplit: true, children: [
       cmdCell(c, w[0]), cell([cmd(k)], w[1]), useCell(c, u, w[2])] }))] });
 }
-function pairTable(title, rows, codeFirst) {
-  const w = [Math.round(COL * 0.42), COL - Math.round(COL * 0.42)];
-  return new Table({ width: { size: COL, type: WidthType.DXA }, columnWidths: w, rows: [titleRow(title, 2),
+function pairTable(title, rows, codeFirst, W = HALF) {
+  const w = [Math.round(W * 0.42), W - Math.round(W * 0.42)];
+  return new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: w, rows: [titleRow(title, 2, W),
     ...rows.map(([a, b]) => new TableRow({ cantSplit: true, children: [
       cell([codeFirst ? cmd(a) : t(a, { bold: true })], w[0]), cell([t(b)], w[1])] }))] });
 }
@@ -421,15 +425,15 @@ function pairTable(title, rows, codeFirst) {
 const stepRuns = (s) => s.split(/(\*\*[^*]+\*\*)/).filter(Boolean)
   .map((p) => (p.startsWith("**") ? cmd(p.slice(2, -2)) : t(p)));
 function stepTable([title, steps, tip]) {
-  const w = [300, COL - 300];
+  const W = HALF, w = [300, HALF - 300];
   KEEP = true;
   const rows = steps.map((s, i) => new TableRow({ cantSplit: true, children: [
     cell([t(String(i + 1), { bold: true, color: ACCENT })], w[0]), cell(stepRuns(s), w[1])] }));
   KEEP = false;
-  return new Table({ width: { size: COL, type: WidthType.DXA }, columnWidths: w, rows: [titleRow(title, 2),
+  return new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: w, rows: [titleRow(title, 2, W),
     ...rows,
-    new TableRow({ cantSplit: true, children: [new TableCell({ columnSpan: 2, width: { size: COL, type: WidthType.DXA },
-      borders: border, shading: { type: ShadingType.CLEAR, fill: "F2F2F2", color: "auto" }, margins: { top: 20, bottom: 20, left: 70, right: 70 },
+    new TableRow({ cantSplit: true, children: [new TableCell({ columnSpan: 2, width: { size: W, type: WidthType.DXA },
+      borders: border, shading: { type: ShadingType.CLEAR, fill: "F2F2F2", color: "auto" }, margins: { top: 10, bottom: 10, left: 70, right: 70 },
       children: [new Paragraph({ children: [t("Tip  ", { bold: true, color: "2E7D32" }), t(tip, { italics: true })] })] })] })] });
 }
 function rulesBox() {
@@ -445,51 +449,60 @@ const gap = () => new Paragraph({ spacing: { after: 80 }, children: [] });
 const cellNone = (w, children) => new TableCell({ width: { size: w, type: WidthType.DXA },
   borders: { top: none, bottom: none, left: none, right: none }, children });
 const twoCol = (left, right) => new Table({
-  width: { size: CONTENT, type: WidthType.DXA }, columnWidths: [COL, GAP, COL],
-  rows: [new TableRow({ children: [cellNone(COL, left), cellNone(GAP, [new Paragraph("")]), cellNone(COL, right)] })],
+  width: { size: CONTENT, type: WidthType.DXA }, columnWidths: [HALF, GAP, HALF],
+  rows: [new TableRow({ cantSplit: true, children: [cellNone(HALF, left), cellNone(GAP, [new Paragraph("")]), cellNone(HALF, right)] })],
 });
 const join = (...blocks) => blocks.flatMap((b, i) => (i ? [gap(), b] : [b]));
 const header = (sub, note) => [
-  new Paragraph({ spacing: { after: 40 }, children: [
-    new TextRun({ text: "PARAMETRIX  |  SURVEY CAD TRAINING", bold: true, size: 18, color: ACCENT, font: FONT }),
-    new TextRun({ text: "     " + sub, bold: true, size: 30, font: FONT })] }),
-  new Paragraph({ spacing: { after: 100 }, border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: ACCENT, space: 4 } },
+  new Paragraph({ spacing: { after: 0 }, children: [
+    new TextRun({ text: "PARAMETRIX  |  SURVEY CAD TRAINING", bold: true, size: 18, color: ACCENT, font: FONT })] }),
+  new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: sub, bold: true, size: 34, font: FONT })] }),
+  new Paragraph({ spacing: { after: 120 }, border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: ACCENT, space: 4 } },
     children: [t(note, { italics: true, color: "595959" })] }),
 ];
 
-const page = { size: { width: PAGE_H, height: PAGE_W, orientation: PageOrientation.LANDSCAPE },
-  margin: { top: 500, bottom: 400, left: MARGIN, right: MARGIN } };
-const titled = (sub, note, flowing) => [
-  { properties: { page, type: SectionType.NEXT_PAGE }, children: header(sub, note) },
-  { properties: { page, type: SectionType.CONTINUOUS, column: { count: 2, space: GAP, equalWidth: true } }, children: flowing },
-];
-
-const page1 = twoCol(
-  join(groupTable(...GROUPS[0]), groupTable(...GROUPS[1]), groupTable(...GROUPS[2])),
-  join(groupTable(...GROUPS[3]), groupTable(...GROUPS[4]), pairTable("Typing input", INPUT, true),
-    pairTable("Snaps (Shift + right-click)", SNAPS, false), pairTable("Keys", KEYS, false)));
+const page = { size: { width: PAGE_W, height: PAGE_H }, margin: { top: 620, bottom: 620, left: LEFT, right: RIGHT } };
 const more = (k) => threeTable(...MORE[k]);
 
-const doc = new Document({
-  creator: "Parametrix Survey", title: "Survey CAD Command Sheet",
-  styles: { default: { document: { run: { font: FONT, size: 16 } } } },
-  sections: [
-    { properties: { page }, children: [...header("Finish the Drawing - Command Sheet",
-      "Every command in the course. Grey = where the button is (2D Drafting & Annotation workspace; ▾ = drop-down or expanded panel). Red ⚠ = be careful. ↵ = Enter."), page1] },
-    ...titled("Beyond the Course - More Commands",
-      "Not needed for the course, but you will use them on real jobs. Express Tools come with AutoCAD and Civil 3D. An apostrophe (') runs a command inside another one.",
-      join(...["viewports", "layers", "select", "edit", "text", "c3d", "files"].map(more),
-        threeTable("System variables (type the name, then the value)", SYSVARS, ["Variable", "Set to", "Why"], [2100, 1000, COL - 3100]),
-        pairTable("Snap tricks (type at a point prompt)", TRICKS, true), pairTable("More keys", MOREKEYS, false))),
-    { properties: { page, type: SectionType.NEXT_PAGE }, children: [...header("Step by Step",
-      "The commands with more than one prompt, one step at a time. Bold = what you type."), rulesBox(), gap()] },
-    { properties: { page, type: SectionType.CONTINUOUS, column: { count: 2, space: GAP, equalWidth: true } },
-      children: join(...STEPS.map(stepTable)) },
-  ],
-});
+function build(course) {
+  STAGES = course;
+  const name = course ? "SURVEY_CAD_Command_Sheet" : "SURVEY_CAD_Command_Reference";
+  const docTitle = course ? "Survey CAD Command Sheet" : "Survey CAD Command Reference";
+  const footers = { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
+    new TextRun({ text: docTitle + "    ", size: 16, color: "808080", font: FONT }),
+    new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "808080", font: FONT })] })] }) };
+  const sec = (children, extra = {}) => ({ properties: { page, ...extra }, footers, children });
+  const legend = "Grey under a command = where its button is (2D Drafting & Annotation workspace; ▾ = drop-down or expanded panel). Red ⚠ = be careful. ↵ = Enter.";
+  const basics = [
+    ...join(...GROUPS.map((g) => groupTable(...g))), gap(),
+    twoCol(join(pairTable("Typing input", INPUT, true), pairTable("Keys", KEYS, false)),
+      [pairTable("Snaps (Shift + right-click)", SNAPS, false)]),
+  ];
+  const moreCmds = [
+    ...join(...["viewports", "layers", "select", "edit", "text", "c3d", "files"].map(more),
+      threeTable("System variables (type the name, then the value)", SYSVARS, ["Variable", "Set to", "Why"], [2300, 1200, FULL - 3500])),
+    gap(), twoCol([pairTable("Snap tricks (type at a point prompt)", TRICKS, true)], [pairTable("More keys", MOREKEYS, false)]),
+  ];
+  const doc = new Document({
+    creator: "Parametrix Survey", title: docTitle,
+    styles: { default: { document: { run: { font: FONT, size: 16 } } } },
+    sections: [
+      sec([...header(course ? "Finish the Drawing - Command Sheet" : "Command Reference - The Basics",
+        (course ? "Every command in the course. Stage = where the guide uses it. " : "The everyday drafting commands. ") + legend), ...basics]),
+      sec([...header(course ? "Beyond the Course - More Commands" : "More Commands",
+        (course ? "Not needed for the course, but you will use them on real jobs. " : "Less common, but you will use them on real jobs. ") +
+        "Express Tools come with AutoCAD and Civil 3D. An apostrophe (') runs a command inside another one."), ...moreCmds],
+        { type: SectionType.NEXT_PAGE }),
+      sec([...header("Step by Step", "The commands with more than one prompt, one step at a time. Bold = what you type."), rulesBox(), gap()],
+        { type: SectionType.NEXT_PAGE }),
+      sec(join(...STEPS.map(stepTable)), { type: SectionType.CONTINUOUS, column: { count: 2, space: GAP, equalWidth: true } }),
+    ],
+  });
+  return Packer.toBuffer(doc).then((buf) => {
+    const f = path.join(OUT, name + ".docx");
+    fs.writeFileSync(f, buf);
+    console.log("wrote", f);
+  });
+}
 
-Packer.toBuffer(doc).then((buf) => {
-  const f = path.join(OUT, "SURVEY_CAD_Command_Sheet.docx");
-  fs.writeFileSync(f, buf);
-  console.log("wrote", f);
-});
+build(true).then(() => build(false));
