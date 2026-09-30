@@ -6,8 +6,9 @@ cd "$(dirname "$0")"
 python3 course/build_drawings.py > /dev/null
 python3 course/render_checkpoints.py 2>&1 | grep -v "Ignoring fixed" || true
 node course/build_guide.js
+node course/build_cheatsheet.js
 cd course/output
-soffice --headless --convert-to pdf SURVEY_CAD_Guide.docx > /dev/null 2>&1 || true
+soffice --headless --convert-to pdf SURVEY_CAD_Guide.docx SURVEY_CAD_Command_Sheet.docx > /dev/null 2>&1 || true
 python3 - <<'PY'
 # AutoCAD rejects a DXF containing a bare ^ (DXF escape character) or non-ASCII text.
 import glob, sys
@@ -22,5 +23,6 @@ if bad:
 PY
 rm -f _state*.dxf SURVEY_CAD_Package.zip
 zip -q SURVEY_CAD_Package.zip SURVEY_CAD_START.dxf SURVEY_CAD_POINTS.txt \
-    SURVEY_CAD_COMPLETED.dxf SURVEY_CAD_Guide.docx SURVEY_CAD_Guide.pdf CHECKPOINT_*.pdf
+    SURVEY_CAD_COMPLETED.dxf SURVEY_CAD_Guide.docx SURVEY_CAD_Guide.pdf \
+    SURVEY_CAD_Command_Sheet.pdf CHECKPOINT_*.pdf
 echo "built course/output/SURVEY_CAD_Package.zip"
