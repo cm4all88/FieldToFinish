@@ -101,3 +101,10 @@ pattern `help.autodesk.com/view/ACD/2025/ENU/?guid=<GUID>`; Civil 3D links use `
 | Geolocation tab appears after a coordinate system is assigned; online maps need an Autodesk sign-in | Confirmed | CIV3D GUID-7B90BBB6-DA3A-4022-BCA9-6A1F03CCEE05 |
 | GEOMAP: Aerial / Road / Hybrid / Off | Confirmed | ACD GUID-DEF7EA7B-6A4B-4520-9A6F-08A944F78218 |
 | Online map doesn't plot; GEOMAPIMAGE captures a plottable map image (plan view of WCS); GEOMAPIMAGEUPDATE | Confirmed | ACD GUID-092F0E5E-BBA9-4A4E-ACF0-4779808C4384, GUID-79DFA423-8546-4DD4-9A23-1C0F0B9DF607, FAQ GUID-32DAF2C8-DBC9-4459-BC6D-08BDC5A9ED21 |
+
+## Later additions
+
+| Item | Result | Source |
+|---|---|---|
+| COUNT, COUNTLIST, COUNTTABLE (AutoCAD 2022+) | Confirmed: counts and highlights instances of a selected block; Count palette; count table | ACD GUID-D5D02903-27D4-4AF0-AAE6-82CF97C7E411, GUID-86778E28-1E40-4C06-80E8-FDEF2F0E3D38, What's New GUID-B5191238-926D-4B66-964F-BB183E9BE1BF |
+| Point file format PNEZDN | Parametrix office standard, per the survey department | Parametrix |
