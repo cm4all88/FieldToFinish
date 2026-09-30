@@ -373,6 +373,109 @@ const RULES = [
   "CTRL+Z undoes almost anything; OOPS brings back only the last erase.",
 ];
 
+
+// Troubleshooting: [problem, fix]. **x** = what you type.
+const TROUBLE = [
+  ["Screen and interface", [
+    ["Command line is gone", "**CTRL+9** (or type **COMMANDLINE ↵**). Drag it back to the bottom if it floats."],
+    ["Ribbon is gone", "**RIBBON ↵**. Only tab names showing? Double-click any tab name."],
+    ["Menu bar (File, Edit...) wanted", "**MENUBAR ↵ 1 ↵**"],
+    ["Screen is bare, everything hidden", "**CTRL+0** (Clean Screen) toggles it back"],
+    ["Properties / Tool palettes gone", "**CTRL+1** Properties, **CTRL+3** Tool Palettes"],
+    ["Model and layout tabs missing", "Options › Display › check 'Display Layout and Model tabs'"],
+    ["Drawing tabs at the top are gone", "**FILETAB ↵**"],
+    ["Status bar button missing (OSNAP, LWT, coordinates)", "Click ≡ (Customization) at the far right of the status bar and check it"],
+    ["Workspace is a mess", "Gear at the bottom right › pick the workspace again. Last resort: Options › Profiles › Reset"],
+    ["Dialog boxes don't open, prompts at the command line", "**FILEDIA ↵ 1 ↵**. For block attributes: **ATTDIA ↵ 1 ↵**"],
+  ]],
+  ["Cursor, mouse and selecting", [
+    ["Crosshairs are missing (arrow instead)", "**CURSORTYPE ↵ 0 ↵**. Still gone: **GRAPHICSCONFIG ↵**, toggle Hardware Acceleration off and on, restart"],
+    ["Crosshairs are tilted", "**SNAPANG ↵ 0 ↵** and **UCS ↵ ↵** (World)"],
+    ["Cursor jumps in steps, won't land between", "Snap mode is on: **F9** off"],
+    ["Cursor only goes straight across or up", "Ortho is on: **F8** off"],
+    ["Snaps not working", "**F3** on; **OS ↵** to check which snaps are ticked"],
+    ["Picking a second object drops the first", "**PICKADD ↵ 2 ↵**"],
+    ["Can't pick objects before the command", "**PICKFIRST ↵ 1 ↵**"],
+    ["No grips (blue boxes) on selected objects", "**GRIPS ↵ 1 ↵**"],
+    ["Selection window only works if you hold the button", "**PICKDRAG ↵ 0 ↵**"],
+    ["Can see it but can't select it", "Locked layer (faded: **LAYULK ↵**), it's inside a block or xref, or you're on paper, not in the viewport"],
+    ["Wheel click shows a menu instead of panning", "**MBUTTONPAN ↵ 1 ↵**"],
+    ["Wheel zooms the wrong way", "**ZOOMWHEEL ↵ 0 ↵**"],
+    ["Double-click doesn't edit text", "**DBLCLKEDIT ↵ ON ↵**"],
+    ["Right-click acts like Enter (or the reverse)", "Options › User Preferences › Right-click Customization"],
+  ]],
+  ["Drawing and editing", [
+    ["TRIM / EXTEND don't ask for cutting edges", "Quick mode since 2021. Type **B ↵** for boundaries, or **TRIMEXTENDMODE ↵ 0 ↵** for the old way"],
+    ["Typed point went to the wrong place", "Dynamic input treats typed numbers as relative. Use **#E,N** for real coordinates"],
+    ["Bearing input rejected", "**UN ↵**: angle type Surveyor's Units. No spaces: **@100<N45d30'00\"E**"],
+    ["New objects on the wrong layer", "Check the current layer; **LAYMCUR ↵** and pick the right one"],
+    ["Mirrored text is backwards", "**MIRRTEXT ↵ 0 ↵**, mirror again"],
+    ["Hatch says 'boundary not closed'", "Find the gap, or **HPGAPTOL ↵** 0.1 to allow small gaps"],
+    ["Pasted or inserted block is 12 times too big or small", "Units mismatch: check **INSUNITS** in both drawings (2 = feet, 1 = inches)"],
+    ["Can't erase or move it: 'on a locked layer'", "**LAYULK ↵**, pick it"],
+  ]],
+  ["Display looks wrong", [
+    ["Arcs and circles look like polygons", "**RE ↵** (Regen)"],
+    ["Things vanished after a zoom, or leftovers on screen", "**REGENALL ↵**"],
+    ["ZOOM Extents shows a tiny drawing in a corner", "Stray objects far away. Window-select the empty area, erase, **Z ↵ E ↵**"],
+    ["Linetypes look solid", "Check **LTSCALE**; on polylines set **PLINEGEN** (Properties › Linetype generation); **RE ↵**"],
+    ["Fence or wall text upside down", "**REVERSE ↵** the polyline"],
+    ["Lines all look thick", "Lineweight display on: LWT button or **LWDISPLAY ↵ 0 ↵**"],
+    ["Hatches and wide polylines show as outlines", "**FILLMODE ↵ 1 ↵**, **RE ↵**"],
+    ["Point nodes invisible", "**PDMODE ↵ 3 ↵**, **RE ↵**; is the point layer frozen?"],
+    ["Everything looks faded", "Locked layers fade: **LAYLOCKFADECTL ↵ 0 ↵**. Xrefs: **XDWGFADECTL ↵ 0 ↵**"],
+    ["Fonts show as ??? or a different font", "Missing SHX font. Get the font, or set the text style to Arial (**ST ↵**)"],
+  ]],
+  ["Layouts, viewports and plotting", [
+    ["Viewport is blank", "Viewport is Off (Properties › On: Yes), zoomed away, or layers VP-frozen in it"],
+    ["Scale changed when you scrolled", "Viewport wasn't locked: **Z ↵ 1/20XP ↵**, then lock it"],
+    ["Can't zoom inside a viewport", "It's locked (that's good). Unlock only to change it"],
+    ["It's on screen but won't plot", "Layer has plot turned off (printer icon), it's on Defpoints, or it's outside the plot area"],
+    ["Viewport border plots", "Put the viewport on a no-plot layer"],
+    ["Plot comes out in color or grey", "Plot style table: **monochrome.ctb**"],
+    ["Plot is tiny or cut off", "Plot area Layout, scale 1:1, paper size matches the sheet"],
+    ["Text or dims wrong size in the viewport", "Check the annotation scale on the status bar matches the viewport"],
+  ]],
+  ["Files and crashes", [
+    ["AutoCAD crashed", "Reopen: the Drawing Recovery palette opens (**DRAWINGRECOVERY ↵**)"],
+    ["Need the autosave file", "**SAVEFILEPATH ↵** shows where; rename the .sv$ to .dwg. **SAVETIME ↵** 10 = every 10 min"],
+    ["Drawing won't open or has errors", "**RECOVER ↵**. Or rename the .bak next to it to .dwg"],
+    ["Opens read-only", "Someone has it open. Delete the .dwl/.dwl2 only if you're sure nobody does"],
+    ["Drawing is slow or huge", "**-PU ↵ R ↵ ↵ N ↵**, then PURGE (include Orphaned data), **AUDIT ↵ Y ↵**"],
+    ["Scale list is hundreds long", "**-SCALELISTEDIT ↵ R ↵ Y ↵ E ↵**"],
+    ["Xrefs missing", "**XR ↵**, select the missing one, browse to its new path"],
+    ["Coworker can't open your file", "**SAVEAS** an older DWG version; for plain AutoCAD use **EXPORTTOAUTOCAD**"],
+    ["'Proxy objects' warning", "Made in Civil 3D or another vertical: open it there, or ask for an EXPORTTOAUTOCAD copy"],
+  ]],
+  ["Civil 3D", [
+    ["Prospector / Toolspace is gone", "**TOOLSPACE ↵** (or **SHOWTS ↵**)"],
+    ["Points don't show", "Point layer frozen, point group out of date (right-click › Update), or style set to none"],
+    ["Labels show ???", "The label can't find its data (no elevation, deleted object)"],
+    ["Surface or labels didn't update", "Prospector › right-click the surface › Rebuild"],
+    ["'BD won't start", "It only works when a command is asking for a point"],
+    ["Labels the wrong size", "Annotation scale (status bar) must match the plot scale"],
+  ]],
+  ["The odd ones", [
+    ["Drawing suddenly tilted in 3D", "Shift + wheel-drag orbits the view. **PLAN ↵ ↵**, or click Top on the ViewCube"],
+    ["New lines have an elevation", "**ELEV ↵ 0 ↵**. Snaps pulling Z from points: **OSNAPZ ↵ 1 ↵**"],
+    ["A command does something different than it should", "Someone redefined it: **REDEFINE ↵** and the command name"],
+    ["Typing a command picks the wrong one", "Autocomplete: **INPUTSEARCHOPTIONS ↵**, or type the full name"],
+    ["Dimension shows the wrong number", "Text overridden (Properties › Text override: clear it) or **DIMLFAC** not 1"],
+    ["Area in LIST is wrong or missing", "Polyline isn't closed: Properties › Closed: Yes (check the gap first)"],
+    ["Wipeout frames plot as boxes", "**WIPEOUT ↵ F ↵ OFF ↵** (or **TFRAMES ↵**)"],
+    ["Layer won't delete or purge", "It's current, it's 0 or Defpoints, or a block or xref uses it: **LAYDEL ↵**"],
+    ["Pasted objects land far off the site", "Paste used a base point: **PASTEORIG ↵** instead"],
+    ["UCS icon somewhere odd, coordinates don't match", "**UCS ↵ ↵** back to World"],
+  ]],
+];
+const FIRST_AID = [
+  "**ESC ESC** to get out of whatever command you're in",
+  "Read the command line: it usually says what it wants",
+  "**CTRL+Z** (undo) or **U ↵** step by step",
+  "**Z ↵ E ↵** and **RE ↵** if you're lost",
+  "Save, close and reopen. Then restart AutoCAD",
+];
+
 const RED = "C00000";
 const t = (text, o = {}) => new TextRun({ text, font: FONT, size: 16, ...o });
 const cmd = (text) => new TextRun({ text, font: MONO, size: 15, bold: true });
@@ -435,6 +538,22 @@ function stepTable([title, steps, tip]) {
       borders: border, shading: { type: ShadingType.CLEAR, fill: "F2F2F2", color: "auto" }, margins: { top: 10, bottom: 10, left: 70, right: 70 },
       children: [new Paragraph({ children: [t("Tip  ", { bold: true, color: "2E7D32" }), t(tip, { italics: true })] })] })] })] });
 }
+
+function troubleTable(title, rows) {
+  const w = [3600, FULL - 3600];
+  return new Table({ width: { size: FULL, type: WidthType.DXA }, columnWidths: w, rows: [
+    titleRow(title, 2), headRow(["Problem", "Fix"], w),
+    ...rows.map(([a, b]) => new TableRow({ cantSplit: true, children: [
+      cell([t(a, { bold: true })], w[0]), cell(stepRuns(b), w[1])] }))] });
+}
+function firstAidBox() {
+  return new Table({ width: { size: CONTENT, type: WidthType.DXA }, columnWidths: [CONTENT], rows: [new TableRow({ children: [
+    new TableCell({ width: { size: CONTENT, type: WidthType.DXA }, shading: { type: ShadingType.CLEAR, fill: "E8F3E8", color: "auto" },
+      borders: { top: none, bottom: none, right: none, left: { style: BorderStyle.SINGLE, size: 18, color: "2E7D32" } },
+      margins: { top: 60, bottom: 60, left: 140, right: 140 },
+      children: [new Paragraph({ children: [t("FIRST AID - try these first", { bold: true, color: "2E7D32", size: 18 })] }),
+        ...FIRST_AID.map((r, i) => new Paragraph({ children: [t(`${i + 1}.  `, { bold: true }), ...stepRuns(r)] }))] })] })] });
+}
 function rulesBox() {
   return new Table({ width: { size: CONTENT, type: WidthType.DXA }, columnWidths: [CONTENT], rows: [new TableRow({ children: [
     new TableCell({ width: { size: CONTENT, type: WidthType.DXA }, shading: { type: ShadingType.CLEAR, fill: "FCE4E4", color: "auto" },
@@ -495,6 +614,8 @@ function build(course) {
       sec([...header("Step by Step", "The commands with more than one prompt, one step at a time. Bold = what you type."), rulesBox(), gap()],
         { type: SectionType.NEXT_PAGE }),
       sec(join(...STEPS.map(stepTable)), { type: SectionType.CONTINUOUS, column: { count: 2, space: GAP, equalWidth: true } }),
+      sec([...header("Troubleshooting", "Something looks or acts wrong? Find the symptom. Bold = what you type. Most of these are settings someone (or a crash) changed."),
+        firstAidBox(), gap(), ...join(...TROUBLE.map((g) => troubleTable(...g)))], { type: SectionType.NEXT_PAGE }),
     ],
   });
   return Packer.toBuffer(doc).then((buf) => {
