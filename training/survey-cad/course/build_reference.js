@@ -209,6 +209,9 @@ function build() {
     body.push(...sectionBar(L));
     for (const b of L.blocks) { body.push(...renderBlock(b)); body.push(gap(70)); }
   }
+  body.pop();   // no spacer after the last table: it would spill onto an empty page
+  {
+  }
   const footers = { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
     new TextRun({ text: C.FOOTER + "    ", size: 15, color: "808080", font: FONT }),
     new TextRun({ children: [PageNumber.CURRENT], size: 15, color: "808080", font: FONT })] })] }) };
