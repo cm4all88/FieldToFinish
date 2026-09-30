@@ -63,6 +63,8 @@ try
     Check ($batch -match 'ExecutionPolicy Bypass') 'the batch file runs even where PowerShell scripts are restricted'
     Check ($batch -match 'install\.ps1') 'and it calls the installer'
     Check ($batch -match 'pause') 'the window stays open long enough to read'
+    $batchRaw = [IO.File]::ReadAllText((Join-Path $setup 'Install FTF.bat'))
+    Check ($batchRaw -match "`r`n") 'the batch file keeps Windows line endings -- with LF a goto can miss its label'
 
     # --- install ------------------------------------------------------------------
     # A scratch APPDATA with office settings already in it: installing must not touch them.
