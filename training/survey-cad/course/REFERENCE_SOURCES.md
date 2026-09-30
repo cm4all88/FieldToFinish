@@ -74,3 +74,20 @@ pattern `help.autodesk.com/view/ACD/2025/ENU/?guid=<GUID>`; Civil 3D links use `
   V- layer names: the Parametrix survey base drawing used for the training course.
 - Text height 1.6' (0.08" at 1" = 20'), SRV-20 styles, V-ANNO-DIMS-E, monochrome.ctb, LTSCALE 20 / PSLTSCALE 0:
   the Survey CAD training drawings. The reference marks these as training settings to confirm against the Parametrix template.
+
+## Added from a Parametrix drafter's list (checked September 2026)
+
+| Item | Result | Source |
+|---|---|---|
+| SNAPANG | Confirmed. It sets the snap/crosshair angle for the current viewport; it doesn't follow a turned view automatically | ACD GUID-7C4EAEAE-3738-4E51-AC9B-B16B5A2CDB3B |
+| ZOOMFACTOR | Confirmed: 3 to 100, default 60 | ACD GUID-6A77AD55-6035-42FF-8FB1-FB0D8EFE1278 |
+| WBLOCK for a crew DXF | Corrected. WBLOCK writes a DWG (unless the default save format is DXF). Use SAVEAS › Tools › Options › DXF Options › Select objects | ACD GUID-F8F9ADB8-8011-42B0-86D9-80BFAA9B23CE, GUID-0FC24222-2C6A-4068-8ECF-DB7DDCEE6656 |
+| MVIEW Polygonal / Object | Confirmed | ACD GUID-731B2752-B9E2-443E-816A-9B4851296455 |
+| QAFLAGS 0 | Undocumented internal variable; community reports only. Listed after PICKFIRST as a last resort | forums.autodesk.com |
+| LEVELOFDETAIL / LEVELOFDETAILOFF | Corrected name (LEVELOFDETAIL turns it on). It reduces surface detail when zoomed out; turn it off if contours are missing | CIV3D GUID-F715FE3C-66CB-458B-848F-8743B2760F07 |
+| MAPIMPORT | Confirmed (SHP, MIF, TAB) | MAP GUID-D65473F6-0B63-4F4E-A3B7-9B8EE8217B77; CIV3D GUID-A8EAA81C-778A-4B39-8BFC-1C699FFB362D |
+| EXPORTKML | Confirmed in Civil 3D; writes KML or KMZ; needs a coordinate system. Map 3D uses MAPEXPORT | CIV3D GUID-D31F08CA-EFFF-4A04-B426-7ABACCBCB3A8 |
+| SELECTIONANNODISPLAY | Confirmed; default 1 = other scale versions shown dimmed | ACD GUID-022C086E-E1E2-4FB2-A7B3-4272EC810FA9 |
+| LINETYPE3DPLINEON / OFF | Civil 3D only, from an Autodesk KB (not in the help). Pattern follows the 3D length; PLINEGEN not honored | KB "Linetype for 3D polyline" |
+| OFFSETFEATURE | Confirmed. Creates a feature line (not a 3D polyline) offset from a feature line, figure, 2D or 3D polyline | CIV3D GUID-5D15FCE9-148D-484D-9E70-91DA6DBD0C78 |
+| LISTA / LISTU | Corrected to LISTAVAILABLEPOINTNUMBERS / LISTUSEDPOINTNUMBERS. "Available" means unused numbers. LISTA/LISTU are probably office aliases | CIV3D GUID-6029E9E4-55AC-4C10-BF80-04B5F3F8E2AA |
