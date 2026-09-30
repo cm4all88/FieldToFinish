@@ -142,6 +142,10 @@ namespace FtfUiTest
         [CommandMethod("ALLUITEST", CommandFlags.Session)]
         public void StartAll() { Begin(true, true); }
 
+        /// <summary>The drafter's own pick sizes, put back when the run ends.</summary>
+        private static short _pickbox;
+        private static short _aperture;
+
         private static void Begin(bool dips, bool easements)
         {
             Directory.CreateDirectory(OutDir);
@@ -154,6 +158,22 @@ namespace FtfUiTest
                 AcApp.SetSystemVariable("LOGFILEMODE", 1);
             }
             catch (System.Exception ex) { Log("command-line log not started: " + ex.Message); }
+
+            // PICKBOX and APERTURE live in the Civil 3D profile, not in the drawing, so they are
+            // whatever the person at this machine likes. A wide pickbox picks the hand-drawn pipe
+            // instead of the survey point two feet away, and the test would be measuring the
+            // drafter's preferences. Set to the shipped defaults for the run; put theirs back at
+            // the end.
+            try
+            {
+                _pickbox = Convert.ToInt16(AcApp.GetSystemVariable("PICKBOX"));
+                _aperture = Convert.ToInt16(AcApp.GetSystemVariable("APERTURE"));
+                AcApp.SetSystemVariable("PICKBOX", (short)3);
+                AcApp.SetSystemVariable("APERTURE", (short)10);
+                Log("PICKBOX " + _pickbox + " and APERTURE " + _aperture + " set to 3 and 10 for the run");
+            }
+            catch (System.Exception ex) { Log("pick size not set: " + ex.Message); }
+
             _drawingPath = AcApp.DocumentManager.MdiActiveDocument.Name;
             Log("UI test started " + DateTime.Now.ToString("s") + " on " + _drawingPath);
             Log("Screen working area " + Screen.PrimaryScreen.WorkingArea + ", DPI " + DpiOf());
@@ -261,6 +281,76 @@ namespace FtfUiTest
             File.WriteAllText(Path.Combine(office, "Bundle\\PackageContents.xml"), "<ApplicationPackage />");
             if (version != null) File.WriteAllText(Path.Combine(office, "version.txt"), version);
             return office;
+        }
+
+        /// <summary>
+        /// What a pick at this spot could possibly hit, and how big the drawing's view is -- the
+        /// two halves of "that is not a COGO point".
+        /// </summary>
+        private static void WhatIsAt(double x, double y, double reach)
+        {
+            try
+            {
+                var doc = AcApp.DocumentManager.MdiActiveDocument;
+                var ed = doc.Editor;
+                using (var view = ed.GetCurrentView())
+                    Log("   view: centre " + view.CenterPoint.ToString() + " height " +
+                        view.Height.ToString("0.00", CultureInfo.InvariantCulture) +
+                        ", screen " + Screen.PrimaryScreen.WorkingArea);
+
+                foreach (var size in new[] { 0.2, reach })
+                {
+                    var picked = ed.SelectCrossingWindow(new Point3d(x - size, y - size, 0),
+                                                         new Point3d(x + size, y + size, 0));
+                    var kinds = new List<string>();
+                    if (picked.Status == Autodesk.AutoCAD.EditorInput.PromptStatus.OK)
+                    {
+                        using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+                            foreach (AcDb.ObjectId id in picked.Value.GetObjectIds())
+                            {
+                                var e = tr.GetObject(id, AcDb.OpenMode.ForRead);
+                                kinds.Add(e.GetType().Name + "/" + e.Handle);
+                            }
+                    }
+                    Log("   within " + size.ToString("0.0", CultureInfo.InvariantCulture) + " of " +
+                        x.ToString("0", CultureInfo.InvariantCulture) + "," + y.ToString("0", CultureInfo.InvariantCulture) +
+                        ": " + (kinds.Count == 0 ? "(nothing)" : string.Join(", ", kinds.ToArray())));
+                }
+            }
+            catch (System.Exception ex) { Log("   what-is-at failed: " + ex.Message); }
+        }
+
+        /// <summary>Frozen, off or locked: each of them stops a pick in its own way.</summary>
+        private static string LayerState(string name)
+        {
+            try
+            {
+                var doc = AcApp.DocumentManager.MdiActiveDocument;
+                using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var lt = (AcDb.LayerTable)tr.GetObject(doc.Database.LayerTableId, AcDb.OpenMode.ForRead);
+                    if (!lt.Has(name)) return "(no such layer)";
+                    var layer = (AcDb.LayerTableRecord)tr.GetObject(lt[name], AcDb.OpenMode.ForRead);
+                    return "frozen=" + layer.IsFrozen + " off=" + layer.IsOff + " locked=" + layer.IsLocked;
+                }
+            }
+            catch (System.Exception ex) { return ex.Message; }
+        }
+
+        /// <summary>Whether a layer is frozen -- a frozen point cannot be picked.</summary>
+        private static bool LayerFrozen(string name)
+        {
+            try
+            {
+                var doc = AcApp.DocumentManager.MdiActiveDocument;
+                using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var lt = (AcDb.LayerTable)tr.GetObject(doc.Database.LayerTableId, AcDb.OpenMode.ForRead);
+                    if (!lt.Has(name)) return false;
+                    return ((AcDb.LayerTableRecord)tr.GetObject(lt[name], AcDb.OpenMode.ForRead)).IsFrozen;
+                }
+            }
+            catch (System.Exception) { return false; }
         }
 
         /// <summary>The command each button on a ribbon tab posts, panel by panel.</summary>
@@ -619,6 +709,44 @@ namespace FtfUiTest
         }
 
         /// <summary>
+        /// Answers FTF's "select the structure point" prompt with the survey point itself.
+        ///
+        /// A typed coordinate only selects what the pickbox happens to touch there, which depends
+        /// on the marker the point style draws, the view height and the drafter's own PICKBOX --
+        /// none of which this suite is testing. Naming the entity tests what it means to test:
+        /// FTF's prompt, its COGO-point filter, and what it does with the point it is given.
+        /// </summary>
+        private static void PickStructure(string button, uint pointNumber)
+        {
+            var handle = HandleOfPoint(pointNumber);
+            Click(button);
+            if (handle == null)
+            {
+                Fail("no survey point " + pointNumber + " in the drawing to select");
+                Send("\x03");
+                return;
+            }
+            Send("(handent \"" + handle + "\") ");
+        }
+
+        /// <summary>The drawing handle of a seeded survey point, or null when it is not there.</summary>
+        private static string HandleOfPoint(uint pointNumber)
+        {
+            var doc = AcApp.DocumentManager.MdiActiveDocument;
+            using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var ms = (AcDb.BlockTableRecord)tr.GetObject(
+                    AcDb.SymbolUtilityServices.GetBlockModelSpaceId(doc.Database), AcDb.OpenMode.ForRead);
+                foreach (AcDb.ObjectId id in ms)
+                {
+                    var point = tr.GetObject(id, AcDb.OpenMode.ForRead) as CivDb.CogoPoint;
+                    if (point != null && point.PointNumber == pointNumber) return point.Handle.ToString();
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Answers a point prompt, but only once FTFDIPACT is really asking. Reopening the drawing
         /// can leave a queued FTFDIPACT of its own to run first, and a point typed at the bare
         /// "Command:" prompt is lost -- after which the real prompt waits for ever and every click
@@ -765,6 +893,66 @@ namespace FtfUiTest
                 Check(unknown.Count == 0, "every button runs a command FTF really has (" + string.Join(", ", unknown.ToArray()) + ")");
             }, 500);
 
+            // What UISEED actually left in the drawing, and what the view is looking at. A pick
+            // that reports "not a COGO point" is either aimed wrong or aimed at nothing, and the
+            // log has to say which.
+            add("the seeded survey points", () =>
+            {
+                var doc = AcApp.DocumentManager.MdiActiveDocument;
+                var found = 0;
+                using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var ms = (AcDb.BlockTableRecord)tr.GetObject(
+                        AcDb.SymbolUtilityServices.GetBlockModelSpaceId(doc.Database), AcDb.OpenMode.ForRead);
+                    foreach (AcDb.ObjectId id in ms)
+                    {
+                        var e = tr.GetObject(id, AcDb.OpenMode.ForRead) as AcDb.Entity;
+                        var point = e as CivDb.CogoPoint;
+                        if (point == null)
+                        {
+                            Log("   entity: " + (e == null ? "?" : e.GetType().Name) +
+                                " on " + (e == null ? "?" : e.Layer));
+                            continue;
+                        }
+                        found++;
+                        Log("   point " + point.PointNumber + " at " +
+                            point.Location.X.ToString("0.00", CultureInfo.InvariantCulture) + "," +
+                            point.Location.Y.ToString("0.00", CultureInfo.InvariantCulture) +
+                            " \"" + point.RawDescription + "\" visible=" + point.Visible +
+                            " style=" + (point.StyleId.IsNull ? "(none)" : "set") +
+                            " layer=" + point.Layer + " frozen=" + LayerFrozen(point.Layer));
+                    }
+                }
+                Check(found == 4, "UISEED left four survey points in the drawing (" + found + ")");
+
+                // Can AutoCAD select the point at all, and is the drawing looking where the test
+                // thinks it is? A pick answers with a coordinate, which is read in the current UCS.
+                var ed = doc.Editor;
+                var ucs = ed.CurrentUserCoordinateSystem.CoordinateSystem3d;
+                Log("   UCS origin " + ucs.Origin.ToString() + " x-axis " + ucs.Xaxis.ToString());
+                using (var view = ed.GetCurrentView())
+                    Log("   view centre " + view.CenterPoint.ToString() + " height " +
+                        view.Height.ToString("0.0", CultureInfo.InvariantCulture) + " twist " +
+                        view.ViewTwist.ToString("0.000", CultureInfo.InvariantCulture));
+                Log("   V-NODE: " + LayerState("V-NODE"));
+
+                var window = ed.SelectCrossingWindow(new Point3d(4990, 4990, 0), new Point3d(5010, 5010, 0));
+                if (window.Status != Autodesk.AutoCAD.EditorInput.PromptStatus.OK)
+                {
+                    Check(false, "nothing at all can be selected around 1045 (" + window.Status + ")");
+                }
+                else
+                {
+                    var kinds = new List<string>();
+                    using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
+                        foreach (AcDb.ObjectId id in window.Value.GetObjectIds())
+                            kinds.Add(tr.GetObject(id, AcDb.OpenMode.ForRead).GetType().Name);
+                    Log("   selectable around 1045: " + string.Join(", ", kinds.ToArray()));
+                    Check(kinds.Contains("CogoPoint"), "the survey point at 1045 can be selected (" +
+                          string.Join(", ", kinds.ToArray()) + ")");
+                }
+            }, 500);
+
             // ------------------------------- the update check, in both suites
             // Surveyors install from the office copy and never think about it again: FTF compares
             // itself against that copy at startup and installs a newer one when Civil 3D closes.
@@ -860,7 +1048,11 @@ namespace FtfUiTest
 
             // Select structure --------------------------------------------------
             add("view select structure 1045 from the drawing", () => ZoomTo(5000, 5000), 500);
-            add("select structure 1045 from the drawing", () => PickPoint("Select structure point...", 5000, 5000), 1500);
+            add("select structure 1045 from the drawing", () =>
+            {
+                WhatIsAt(5000, 5000, 3);
+                PickStructure("Select structure point...", 1045);
+            }, 1500);
             add("point details populated", () =>
             {
                 var info = Field<Label>("_structureTitle").Text + " " + Field<Label>("_pointInfo").Text;
@@ -1046,7 +1238,7 @@ namespace FtfUiTest
                       "both back-to-back edits were applied, neither dropped");
             }, 5000);
             add("view select 1047", () => ZoomTo(4850, 4850), 500);
-            add("select 1047", () => PickPoint("Select structure point...", 4850, 4850), 500);
+            add("select 1047", () => PickStructure("Select structure point...", 1047), 500);
             add("1047 read as invert by default", () =>
                 Check(S("1047").Field.Pipes[0].Reference == FU.MeasurementReference.Invert && S("1047").Field.Pipes[0].ReferenceBasis == FU.ReferenceBasis.FieldNoteConvention,
                       "1047's unmarked dip is the invert by the office default"), 3500);
@@ -1438,7 +1630,7 @@ namespace FtfUiTest
 
             // Drawing with existing pipe choices ---------------------------------
             add("view back to 1045", () => ZoomTo(5000, 5000), 500);
-            add("back to 1045", () => PickPoint("Select structure point...", 5000, 5000), 500);
+            add("back to 1045", () => PickStructure("Select structure point...", 1045), 500);
             add("draw 1 (existing hand pipe: Keep)", () =>
             {
                 Click("Draw this structure's pipes");
@@ -1595,7 +1787,7 @@ namespace FtfUiTest
             add("pick 1045 in the reopened drawing", () =>
             {
                 Check(Pending() == 0, "the window's queued actions have all run (" + Pending() + " left)");
-                PickPoint("Select structure point...", 5000, 5000);
+                PickStructure("Select structure point...", 1045);
             }, 3000);
             add("thaw pipe layers", () => SetFrozen(false), 1000);
             add("persisted", () =>
@@ -1680,7 +1872,8 @@ namespace FtfUiTest
                 Send("_.ZOOM _E ");
             }, 1500);
             add("easement ending on two lot lines", () =>
-                Send("STRIPEASEMENT  6150,5325 6146,5311 6140,5200 6150,5050 6120,4836.25  Centered 20  6100,5350 6050,4862.5   "), 2500);
+                Send("STRIPEASEMENT  6150,5325 6146,5311 6140,5200 6150,5050 6120,4836.25  Centered 20  " +
+                     LotLine(0) + LotLine(1) + "  "), 2500);
             s.Add(new Step { Name = "preview: ends on lot lines", WhileBusy = true, Delay = 2500, Run = () =>
             {
                 var form = Preview;
@@ -1723,7 +1916,8 @@ namespace FtfUiTest
             }, 4000);
 
             add("easement overshooting the lot lines", () =>
-                Send("STRIPEASEMENT 6000,5400 6300,5300 6280,4776.25  Centered 10 20 6100,5350 6290,5011  6250,4787 "), 2500);
+                Send("STRIPEASEMENT 6000,5400 6300,5300 6280,4776.25  Centered 10 20 " +
+                     LotLine(0) + LotLine(2) + " 6250,4787 "), 2500);
             s.Add(new Step { Name = "preview: pick the piece inside the lot", WhileBusy = true, Delay = 2500, Run = () =>
             {
                 var form = Preview;
@@ -1930,6 +2124,14 @@ namespace FtfUiTest
 
             add("done", () =>
             {
+                try
+                {
+                    if (_pickbox > 0) AcApp.SetSystemVariable("PICKBOX", _pickbox);
+                    if (_aperture > 0) AcApp.SetSystemVariable("APERTURE", _aperture);
+                    Log("PICKBOX and APERTURE put back to " + _pickbox + " and " + _aperture);
+                }
+                catch (System.Exception ex) { Log("pick size not put back: " + ex.Message); }
+
                 Log("");
                 Log("UI TEST DONE: " + _pass + " passed, " + _fail + " failed");
                 _log.Flush();
@@ -2044,6 +2246,20 @@ namespace FtfUiTest
             return list;
         }
 
+        /// <summary>
+        /// The seeded lot lines, by drawing handle. A command that says "select the lot line" is
+        /// answered with the line itself rather than a coordinate on it: what is under a typed
+        /// coordinate depends on the view and on the drafter's own pickbox, and neither is the
+        /// subject of this test.
+        /// </summary>
+        private static readonly List<string> _lotLines = new List<string>();
+
+        /// <summary>A lot line as an answer to a selection prompt: top 0, bottom 1, side 2.</summary>
+        private static string LotLine(int which)
+        {
+            return which < _lotLines.Count ? "(handent \"" + _lotLines[which] + "\") " : "";
+        }
+
         private static void SeedLotLines()
         {
             var doc = AcApp.DocumentManager.MdiActiveDocument;
@@ -2061,8 +2277,10 @@ namespace FtfUiTest
                     var line = new AcDb.Line(new Point3d(pair[0], pair[1], 0), new Point3d(pair[2], pair[3], 0));
                     ms.AppendEntity(line);
                     tr.AddNewlyCreatedDBObject(line, true);
+                    _lotLines.Add(line.Handle.ToString());
                 }
                 tr.Commit();
+                Log("   lot lines seeded: " + string.Join(", ", _lotLines.ToArray()));
             }
         }
 
