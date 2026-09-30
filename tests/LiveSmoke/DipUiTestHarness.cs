@@ -218,6 +218,44 @@ namespace FtfUiTest
 
         /// <summary>The last lines of the AutoCAD text window, from its own log file: what a
         /// stuck command is actually prompting for.</summary>
+        /// <summary>The command each button on a ribbon tab posts, panel by panel.</summary>
+        private static List<string> RibbonCommands(Autodesk.Windows.RibbonTab tab)
+        {
+            var found = new List<string>();
+            if (tab == null) return found;
+            foreach (var panel in tab.Panels)
+                if (panel.Source != null) WalkRibbon(panel.Source.Items, found);
+            return found;
+        }
+
+        private static void WalkRibbon(IEnumerable<Autodesk.Windows.RibbonItem> items, List<string> into)
+        {
+            foreach (var item in items)
+            {
+                var button = item as Autodesk.Windows.RibbonButton;
+                if (button != null && button.CommandParameter != null)
+                    into.Add(Convert.ToString(button.CommandParameter).Trim());
+                var row = item as Autodesk.Windows.RibbonRowPanel;
+                if (row != null) WalkRibbon(row.Items, into);
+            }
+        }
+
+        /// <summary>Every command name the plugin registers -- what a ribbon button may post.</summary>
+        private static HashSet<string> PluginCommands()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            Type[] types;
+            try { types = Plugin.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+            foreach (var type in types)
+                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
+                                                       BindingFlags.Instance | BindingFlags.Static))
+                    foreach (Autodesk.AutoCAD.Runtime.CommandMethodAttribute attribute in
+                             method.GetCustomAttributes(typeof(Autodesk.AutoCAD.Runtime.CommandMethodAttribute), false))
+                        names.Add(attribute.GlobalName);
+            return names;
+        }
+
         /// <summary>How many Dip Builder actions are still queued for the drawing.</summary>
         private static int Pending()
         {
@@ -640,6 +678,47 @@ namespace FtfUiTest
         {
             var s = new List<Step>();
             Action<string, Action, int> add = (name, run, delay) => s.Add(new Step { Name = name, Run = run, Delay = delay });
+
+            // ------------------------------------------------ the ribbon, in both suites
+            // Two tabs: the drawing being finished, and the record work written from it. A
+            // button whose command was renamed away would look fine and do nothing, so every
+            // one of them is checked against the commands FTF really registers.
+            add("the ribbon has an FTF tab and an FTF Boundary tab", () =>
+            {
+                var ribbon = Autodesk.Windows.ComponentManager.Ribbon;
+                Check(ribbon != null, "Civil 3D has a ribbon for FTF to add to");
+                if (ribbon == null) return;
+
+                var drawing = ribbon.FindTab("FTF_RIBBON_TAB");
+                var boundary = ribbon.FindTab("FTF_BOUNDARY_RIBBON_TAB");
+                Check(drawing != null && drawing.Title == "FTF", "the drawing's own work is on the FTF tab");
+                Check(boundary != null && boundary.Title == "FTF Boundary", "the record work has a tab of its own");
+                if (drawing == null || boundary == null) return;
+
+                Log("   FTF panels: " + string.Join(", ", drawing.Panels.Select(p => p.Source.Title).ToArray()));
+                Log("   FTF Boundary panels: " + string.Join(", ", boundary.Panels.Select(p => p.Source.Title).ToArray()));
+
+                var mine = RibbonCommands(drawing);
+                var record = RibbonCommands(boundary);
+                Log("   FTF: " + string.Join(" ", mine.ToArray()));
+                Log("   FTF Boundary: " + string.Join(" ", record.ToArray()));
+
+                Check(mine.Count > 0 && record.Count > 0, "both tabs have buttons (" + mine.Count + ", " + record.Count + ")");
+                Check(!mine.Intersect(record).Any(), "no button sits on both tabs");
+                Check(mine.Contains("FTFDIP") && mine.Contains("FTFLABELLINE") && mine.Contains("FTFRUN") && mine.Contains("FTFCLEAN"),
+                      "the FTF tab keeps labelling, finishing, dips and clean up");
+                var strayed = mine.Where(c => c.Contains("EASEMENT") || c.Contains("RECORD") || c.Contains("EXHIBIT")).ToList();
+                Check(strayed.Count == 0, "and none of the record work (" + string.Join(", ", strayed.ToArray()) + ")");
+                Check(record.Contains("FTFRECORD") && record.Contains("STRIPEASEMENT") &&
+                      record.Contains("FTFEXHIBIT") && record.Contains("FTFEASEMENTLEGAL"),
+                      "the FTF Boundary tab holds the recorded survey, the easements and the exhibits");
+                Check(!record.Contains("FTFDIP") && !record.Contains("FTFLABELLINE"), "and none of the drawing's own finishing");
+
+                var known = PluginCommands();
+                Log("   commands FTF registers: " + known.Count);
+                var unknown = mine.Concat(record).Where(c => !known.Contains(c)).ToList();
+                Check(unknown.Count == 0, "every button runs a command FTF really has (" + string.Join(", ", unknown.ToArray()) + ")");
+            }, 500);
 
             if (dips)
             {

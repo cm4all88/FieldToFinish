@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -12,10 +12,12 @@ using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace FieldCodes.Cad
 {
     /// <summary>
-    /// The FTF ribbon tab: every command a click away, grouped the way the work
-    /// happens -- Label, Finish, Review, Clean up. Icons are drawn in code (simple
-    /// geometry in the FTF blue), so no image files ship with the plugin and the
-    /// icons cannot go missing.
+    /// FTF's two ribbon tabs: every command a click away, grouped the way the work
+    /// happens. FTF is the drawing being finished -- Label, Finish, Dips, Review,
+    /// Sheets, Clean up. FTF Boundary is the record work written from it -- the
+    /// recorded survey, the easements, and the exhibits and legals that go out.
+    /// Icons are drawn in code (simple geometry in the FTF blue), so no image files
+    /// ship with the plugin and the icons cannot go missing.
     ///
     /// The ribbon may not exist yet when the plugin loads at startup, so building
     /// is deferred until the ribbon reports ready. UNTESTED in AutoCAD.
@@ -23,6 +25,7 @@ namespace FieldCodes.Cad
     public sealed class FtfRibbon : IExtensionApplication
     {
         private const string TabId = "FTF_RIBBON_TAB";
+        private const string BoundaryTabId = "FTF_BOUNDARY_RIBBON_TAB";
 
         public void Initialize()
         {
@@ -48,91 +51,113 @@ namespace FieldCodes.Cad
             try
             {
                 var ribbon = ComponentManager.Ribbon;
-                if (ribbon == null || ribbon.FindTab(TabId) != null) return;
-
-                var tab = new RibbonTab { Title = "FTF", Id = TabId };
-
-                tab.Panels.Add(Panel("Label",
-                    Large("Label\nLine", "FTFLABELLINE",
-                        "Click a line, slide the preview, click to place. FTFL for short.",
-                        FtfIcons.LabelLine),
-                    Large("Between", "FTFLABELBETWEEN",
-                        "Label the surface between two edges. FTFB for short.",
-                        FtfIcons.Between),
-                    Large("Stairs", "FTFLABELSTAIRS",
-                        "Select the stair lines; the step count places itself. FTFS for short.",
-                        FtfIcons.Stairs),
-                    Small("Spot Shots", "FTFSPOT", FtfIcons.Spot)));
-
-                tab.Panels.Add(Panel("Finish",
-                    Large("Process\nDrawing", "FTFRUN",
-                        "Every finishing stage, in order.", FtfIcons.Run),
-                    Small("Points", "FTFPOINTS", FtfIcons.Points),
-                    Small("Driplines", "FTFDRIP", FtfIcons.Drip),
-                    Small("Labels", "FTFLABELS", FtfIcons.Labels),
-                    Small("Tags", "FTFTAGS", FtfIcons.Tags),
-                    Small("Schedule", "FTFTABLE", FtfIcons.Schedule),
-                    Small("Draw Order", "FTFORDER", FtfIcons.Order),
-                    Small("Control", "FTFCONTROL", FtfIcons.Control),
-                    Small("Legend", "FTFLEGEND", FtfIcons.Legend)));
-
-                tab.Panels.Add(Panel("Production",
-                    Large("Dip\nBuilder", "FTFDIP",
-                        "Storm and sewer structures from field dips: pipes, connections, labels, QC.",
-                        FtfIcons.Dips),
-                    Large("Strip\nEasement", "STRIPEASEMENT",
-                        "Strip easement from its angle points and width, trimmed to the lot lines you click.",
-                        FtfIcons.Easement),
-                    Small("Check Dips", "FTFDIPCHECK", FtfIcons.Check),
-                    Small("Check Easements", "FTFEASEMENTCHECK", FtfIcons.Check),
-                    Small("Portion Easement", "PORTIONEASEMENT", FtfIcons.Easement),
-                    Small("Construction Area", "CONSTRUCTIONAREA", FtfIcons.Easement),
-                    Small("Legal Draft", "FTFEASEMENTLEGAL", FtfIcons.Easement),
-                    Small("Exclude Area", "FTFEASEMENTEXCLUDE", FtfIcons.Easement),
-                    Small("Add Component", "FTFEASEMENTCOMPONENT", FtfIcons.Easement),
-                    Small("Exhibit Group", "FTFEASEMENTGROUP", FtfIcons.Easement),
-                    Small("Inspect", "FTFEASEMENTINSPECT", FtfIcons.Check),
-                    Small("Exhibit", "FTFEXHIBIT", FtfIcons.Easement),
-                    Small("Rebuild Exhibit", "FTFEXHIBITREBUILD", FtfIcons.Check),
-                    Small("Profile", "FTFPROFILE", FtfIcons.Settings)));
-
-                tab.Panels.Add(Panel("Record",
-                    Large("Recorded\nSurvey", "FTFRECORD",
-                        "Upload a recorded plat or Record of Survey, review the extracted calls, build the geometry.",
-                        FtfIcons.Record),
-                    Small("Check Record", "FTFRECORDCHECK", FtfIcons.Check),
-                    Small("Record Labels", "FTFRECORDLABEL", FtfIcons.Labels),
-                    Small("Record Source", "FTFRECORDSOURCE", FtfIcons.Where),
-                    Small("Rebuild Record", "FTFRECORDREBUILD", FtfIcons.Check)));
-
-                tab.Panels.Add(Panel("Review",
-                    Large("FTF\nWindow", "FTF",
-                        "Status, review, settings and standards in one window.",
-                        FtfIcons.Window),
-                    Small("Lines", "FTFLINES", FtfIcons.Lines),
-                    Small("Where", "FTFWHERE", FtfIcons.Where),
-                    Small("Settings", "FTFSETUP", FtfIcons.Settings)));
-
-                tab.Panels.Add(Panel("Sheets",
-                    Large("Plan\nSheets", "FTFSHEETPLAN",
-                        "Best-fit sheet grid over the site, with match lines.",
-                        FtfIcons.PlanSheets),
-                    Small("Make Layouts", "FTFSHEETMAKE", FtfIcons.MakeLayouts),
-                    Small("From Layouts", "FTFSHEETS", FtfIcons.SheetAreas),
-                    Small("Key Map", "FTFKEYMAP", FtfIcons.KeyMap)));
-
-                tab.Panels.Add(Panel("Clean up",
-                    Large("Clean", "FTFCLEAN",
-                        "Removes everything FTF created. Survey geometry untouched.",
-                        FtfIcons.Clean)));
-
-                ribbon.Tabs.Add(tab);
+                if (ribbon == null) return;
+                if (ribbon.FindTab(TabId) == null) ribbon.Tabs.Add(DrawingTab());
+                if (ribbon.FindTab(BoundaryTabId) == null) ribbon.Tabs.Add(BoundaryTab());
             }
             catch (System.Exception)
             {
                 // A ribbon that cannot build must never take the commands down with
                 // it -- everything stays reachable from the command line.
             }
+        }
+
+        /// <summary>Finishing the survey drawing: labels, the finishing stages, dips, sheets.</summary>
+        private static RibbonTab DrawingTab()
+        {
+            var tab = new RibbonTab { Title = "FTF", Id = TabId };
+
+            tab.Panels.Add(Panel("Label",
+                Large("Label\nLine", "FTFLABELLINE",
+                    "Click a line, slide the preview, click to place. FTFL for short.",
+                    FtfIcons.LabelLine),
+                Large("Between", "FTFLABELBETWEEN",
+                    "Label the surface between two edges. FTFB for short.",
+                    FtfIcons.Between),
+                Large("Stairs", "FTFLABELSTAIRS",
+                    "Select the stair lines; the step count places itself. FTFS for short.",
+                    FtfIcons.Stairs),
+                Small("Spot Shots", "FTFSPOT", FtfIcons.Spot)));
+
+            tab.Panels.Add(Panel("Finish",
+                Large("Process\nDrawing", "FTFRUN",
+                    "Every finishing stage, in order.", FtfIcons.Run),
+                Small("Points", "FTFPOINTS", FtfIcons.Points),
+                Small("Driplines", "FTFDRIP", FtfIcons.Drip),
+                Small("Labels", "FTFLABELS", FtfIcons.Labels),
+                Small("Tags", "FTFTAGS", FtfIcons.Tags),
+                Small("Schedule", "FTFTABLE", FtfIcons.Schedule),
+                Small("Draw Order", "FTFORDER", FtfIcons.Order),
+                Small("Control", "FTFCONTROL", FtfIcons.Control),
+                Small("Legend", "FTFLEGEND", FtfIcons.Legend)));
+
+            tab.Panels.Add(Panel("Dips",
+                Large("Dip\nBuilder", "FTFDIP",
+                    "Storm and sewer structures from field dips: pipes, connections, labels, QC.",
+                    FtfIcons.Dips),
+                Small("Check Dips", "FTFDIPCHECK", FtfIcons.Check)));
+
+            tab.Panels.Add(Panel("Review",
+                Large("FTF\nWindow", "FTF",
+                    "Status, review, settings and standards in one window.",
+                    FtfIcons.Window),
+                Small("Lines", "FTFLINES", FtfIcons.Lines),
+                Small("Where", "FTFWHERE", FtfIcons.Where),
+                Small("Settings", "FTFSETUP", FtfIcons.Settings),
+                Small("Profile", "FTFPROFILE", FtfIcons.Settings)));
+
+            tab.Panels.Add(Panel("Sheets",
+                Large("Plan\nSheets", "FTFSHEETPLAN",
+                    "Best-fit sheet grid over the site, with match lines.",
+                    FtfIcons.PlanSheets),
+                Small("Make Layouts", "FTFSHEETMAKE", FtfIcons.MakeLayouts),
+                Small("From Layouts", "FTFSHEETS", FtfIcons.SheetAreas),
+                Small("Key Map", "FTFKEYMAP", FtfIcons.KeyMap)));
+
+            tab.Panels.Add(Panel("Clean up",
+                Large("Clean", "FTFCLEAN",
+                    "Removes everything FTF created. Survey geometry untouched.",
+                    FtfIcons.Clean)));
+
+            return tab;
+        }
+
+        /// <summary>The record work: the recorded survey, the easements, the exhibits that go out.</summary>
+        private static RibbonTab BoundaryTab()
+        {
+            var tab = new RibbonTab { Title = "FTF Boundary", Id = BoundaryTabId };
+
+            tab.Panels.Add(Panel("Record",
+                Large("Recorded\nSurvey", "FTFRECORD",
+                    "Upload a recorded plat or Record of Survey, review the extracted calls, build the geometry.",
+                    FtfIcons.Record),
+                Small("Check Record", "FTFRECORDCHECK", FtfIcons.Check),
+                Small("Record Labels", "FTFRECORDLABEL", FtfIcons.Labels),
+                Small("Record Source", "FTFRECORDSOURCE", FtfIcons.Where),
+                Small("Rebuild Record", "FTFRECORDREBUILD", FtfIcons.Check)));
+
+            tab.Panels.Add(Panel("Easements",
+                Large("Strip\nEasement", "STRIPEASEMENT",
+                    "Strip easement from its angle points and width, trimmed to the lot lines you click.",
+                    FtfIcons.Easement),
+                Small("Portion Easement", "PORTIONEASEMENT", FtfIcons.Easement),
+                Small("Construction Area", "CONSTRUCTIONAREA", FtfIcons.Easement),
+                Small("Exclude Area", "FTFEASEMENTEXCLUDE", FtfIcons.Easement),
+                Small("Add Component", "FTFEASEMENTCOMPONENT", FtfIcons.Easement),
+                Small("Check Easements", "FTFEASEMENTCHECK", FtfIcons.Check),
+                Small("Inspect", "FTFEASEMENTINSPECT", FtfIcons.Check)));
+
+            tab.Panels.Add(Panel("Exhibits",
+                Large("Exhibit", "FTFEXHIBIT",
+                    "The easement on a sheet: the exhibit layout, its viewport and its tables.",
+                    FtfIcons.Easement),
+                Large("Legal\nDraft", "FTFEASEMENTLEGAL",
+                    "A legal description drafted from the easement geometry, for the surveyor to review.",
+                    FtfIcons.Easement),
+                Small("Exhibit Group", "FTFEASEMENTGROUP", FtfIcons.Easement),
+                Small("Rebuild Exhibit", "FTFEXHIBITREBUILD", FtfIcons.Check)));
+
+            return tab;
         }
 
         // ------------------------------------------------------------- assembly

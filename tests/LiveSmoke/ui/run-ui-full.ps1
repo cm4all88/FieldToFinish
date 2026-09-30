@@ -7,6 +7,8 @@ $smoke = Split-Path -Parent $here
 $acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
 $bin = Join-Path $smoke '..\..\src\FieldCodes.Cad\bin\Debug\net48'
 $bundle = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle\Contents\2024'
+# The ribbon API is WPF, so reading the tabs needs the WPF assemblies too.
+$wpf = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF'
 
 if (Get-Process acad -ErrorAction SilentlyContinue) { Write-Host 'Civil 3D is running -- close it first.'; exit 1 }
 
@@ -14,6 +16,7 @@ if (Get-Process acad -ErrorAction SilentlyContinue) { Write-Host 'Civil 3D is ru
     /out:"$smoke\DipUiTestHarness.dll" "$smoke\DipUiTestHarness.cs" `
     /r:"$acad\accoremgd.dll" /r:"$acad\acdbmgd.dll" /r:"$acad\acmgd.dll" /r:"$acad\C3D\AeccDbMgd.dll" `
     /r:"$bin\FieldCodes.dll" /r:System.Core.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll `
+    /r:"$acad\AdWindows.dll" /r:"$wpf\PresentationCore.dll" /r:"$wpf\WindowsBase.dll" /r:"$wpf\PresentationFramework.dll" /r:System.Xaml.dll `
     /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\netstandard.dll"
 if ($LASTEXITCODE -ne 0) { Write-Host 'harness compile failed'; exit 1 }
 
