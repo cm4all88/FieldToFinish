@@ -73,3 +73,6 @@ tests/LiveSmoke/ui/*.png
 
 # The record suite's output beside the seed drawing
 tests/LiveSmoke/seedrecord.*
+
+# Packaged setup folders (built by deploy/make-release.ps1)
+deploy/release/

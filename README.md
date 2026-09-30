@@ -169,6 +169,41 @@ retains the individual values in `Fields["trunk.stems"]`.
 > The active config uses `Arithmetic`, where both agreed, so nothing drawn so far
 > is affected.
 
+## Installing
+
+Two ways in, both per-user and neither needing admin rights. Civil 3D must be closed
+either way: it holds a loaded .NET assembly for the life of the process.
+
+```
+deploy\install-dev.ps1                 this machine, from the Debug build
+deploy\make-release.ps1 [-Zip]         the folder the office runs, from a Release build
+deploy\test-release.ps1                tests that folder without touching a real install
+```
+
+`make-release.ps1` writes `deploy\release\FieldToFinish-Setup\`:
+
+```
+Install FTF.bat      what a surveyor double-clicks
+Uninstall FTF.bat
+install.ps1          the work; the batch file stages it locally and calls it
+README.txt           three steps, and what to do when something is wrong
+version.txt          build date, branch and commit -- printed while installing
+Bundle\              PackageContents.xml + Contents\2024\ (the plugin itself)
+```
+
+Copy that folder anywhere the office can reach (the U: drive) and point people at
+`Install FTF.bat`. It stages the files to `%TEMP%` first, so a network folder and a
+network hiccup are both fine, and it refuses to install while Civil 3D is open.
+
+Installing writes one folder -- `%APPDATA%\Autodesk\ApplicationPlugins\FieldToFinish.bundle`
+-- and replaces it whole, so a file from an older FTF cannot linger and load. Office
+configuration lives in `%APPDATA%\FieldToFinish` and is never touched; see
+"Configuration ownership".
+
+Civil 3D builds FTF's two ribbon tabs at startup: **FTF** for the drawing being
+finished (Label, Finish, Dips, Review, Sheets, Clean up) and **FTF Boundary** for the
+record work written from it (Record, Easements, Exhibits).
+
 ## Build status
 
 Everything compiles. `FieldCodes` and `FieldCodes.Cad` (net48, against the local
