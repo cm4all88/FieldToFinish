@@ -39,7 +39,8 @@ try
     Check (Test-Path $setup) 'make-release.ps1 writes a setup folder'
     if (-not (Test-Path $setup)) { throw 'nothing to test' }
 
-    foreach ($name in @('Install FTF.bat', 'Uninstall FTF.bat', 'install.ps1', 'README.txt', 'version.txt'))
+    foreach ($name in @('Install FTF.bat', 'Uninstall FTF.bat', 'Check FTF.bat', 'install.ps1',
+                        'check.ps1', 'README.txt', 'version.txt'))
     {
         Check (Test-Path (Join-Path $setup $name)) "the surveyor gets $name"
     }
@@ -100,6 +101,18 @@ try
         $told = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot (Join-Path $scratch 'nowhere') 2>&1
         Check ($LASTEXITCODE -eq 1) 'an incomplete setup folder stops with an error'
         Check (($told -join ' ') -match 'incomplete') "and says what is wrong ($(($told | Where-Object { $_ -match 'incomplete' } | Select-Object -First 1)))"
+
+        # --- arriving from somewhere else ---------------------------------------
+        # A setup folder that came by email or download is marked by Windows, and Civil 3D
+        # will not load a marked plugin. Mark one the same way and check it installs clean.
+        Write-Host '-- a setup folder that came from another computer'
+        $marked = Join-Path $setup 'Bundle\Contents\2024\FieldCodes.Cad.dll'
+        Set-Content -Path ($marked + ':Zone.Identifier') -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction SilentlyContinue
+        $wasMarked = [bool](Get-Item $marked -Stream Zone.Identifier -ErrorAction SilentlyContinue)
+        Check $wasMarked 'the test could mark the file the way a download does'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -Source $setup | Out-Null
+        $stillMarked = [bool](Get-Item (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll') -Stream Zone.Identifier -ErrorAction SilentlyContinue)
+        Check (-not $stillMarked) 'installing clears the mark, so Civil 3D will load it'
 
         # --- where updates come from --------------------------------------------
         # Installing records the setup folder it came from, so FTF can compare itself

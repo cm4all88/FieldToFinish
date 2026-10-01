@@ -157,6 +157,11 @@ Copy-Item (Join-Path $from '*') -Destination $target -Recurse -Force
 $installed = (Get-ChildItem $target -Recurse -File).Count
 if ($installed -lt 2) { Fail "The copy did not finish. Try again, or send this message to the drafting lead." }
 
+# Anything that arrived by email, download or a copy from another machine carries Windows'
+# "this came from another computer" mark, and Civil 3D will not load a marked plugin. The
+# files just copied are the ones being installed, so the mark goes.
+Get-ChildItem $target -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
+
 if ($office) { Set-Content -Path (Join-Path $target 'source.txt') -Value $office -Encoding utf8 }
 
 Say ''
