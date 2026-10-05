@@ -17,7 +17,11 @@
     .\check.ps1
 #>
 [CmdletBinding()]
-param([string]$OutFile)
+param(
+    [switch]$Repair,
+    [string]$OutFile,
+    [string]$RegistryRoot = 'HKCU:\SOFTWARE\Autodesk\AutoCAD'
+)
 
 $ErrorActionPreference = 'Continue'
 $lines = New-Object System.Collections.Generic.List[string]
@@ -127,6 +131,78 @@ if ($profiles.Count -eq 0) {
     }
 }
 
+# --- what Civil 3D has recorded about FTF ------------------------------------------
+# Civil 3D keeps its own note of each plugin it has seen. A note left pointing at files
+# that went away, or one it disabled after a failed load, makes it ignore a perfectly good
+# bundle however many times it is reinstalled. Deleting the note is safe: Civil 3D writes
+# a fresh one from the bundle at the next start.
+Section "Civil 3D's own record of FTF"
+$records = @()
+foreach ($release in Get-ChildItem $RegistryRoot -ErrorAction SilentlyContinue) {
+    foreach ($product in Get-ChildItem $release.PSPath -ErrorAction SilentlyContinue) {
+        $apps = Join-Path $product.PSPath 'Applications'
+        foreach ($app in Get-ChildItem $apps -ErrorAction SilentlyContinue) {
+            if ($app.PSChildName -notmatch 'FieldToFinish') { continue }
+            $values = Get-ItemProperty $app.PSPath -ErrorAction SilentlyContinue
+            $records += [pscustomobject]@{
+                Where = $release.PSChildName + '\' + $product.PSChildName
+                Path = $app.PSPath
+                LoadCtrls = $values.LOADCTRLS
+                Loader = $values.LOADER
+            }
+        }
+    }
+}
+
+if ($records.Count -eq 0) {
+    Say '  Civil 3D has no record of FTF.'
+    Say '  -> It has never managed to load the bundle. Start Civil 3D once after installing;'
+    Say '     if this still says nothing afterwards, the bundle is being ignored outright.'
+} else {
+    foreach ($r in $records) {
+        Say ("  " + $r.Where + ": LOADCTRLS=" + $r.LoadCtrls)
+        Say ("    loader: " + $r.Loader)
+        if (-not $r.Loader) {
+            Say '    PROBLEM: the record has no program file at all.'
+        } elseif (-not (Test-Path $r.Loader)) {
+            Say '    PROBLEM: that file does not exist -- the record is stale, left from an older install.'
+        } elseif ($r.LoadCtrls -eq 0) {
+            Say '    PROBLEM: Civil 3D has this plugin switched off (LOADCTRLS=0).'
+        } else {
+            Say '    looks right (a working machine reads LOADCTRLS=2).'
+        }
+    }
+    $bad = @($records | Where-Object { (-not $_.Loader) -or (-not (Test-Path $_.Loader)) -or ($_.LoadCtrls -eq 0) })
+    if ($bad.Count -gt 0 -and -not $Repair) {
+        Say ''
+        Say '  -> Run "Repair FTF.bat" in this folder. It deletes the bad record so Civil 3D'
+        Say '     writes a fresh one next time it starts. Nothing else is touched.'
+    }
+    if ($Repair) {
+        Say ''
+        foreach ($r in $records) {
+            try {
+                Remove-Item -LiteralPath $r.Path -Recurse -Force -ErrorAction Stop
+                Say ("  removed Civil 3D's record at " + $r.Where)
+            }
+            catch { Say ("  could not remove " + $r.Where + ": " + $_.Exception.Message) }
+        }
+        Say '  -> Start Civil 3D. It will read the bundle again and write a new record.'
+    }
+}
+
+# --- does this profile keep its settings on a server --------------------------------
+Section 'Windows profile'
+$roaming = $null
+try {
+    $sid = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+    $profile = Get-CimInstance Win32_UserProfile -Filter ("SID='" + $sid + "'") -ErrorAction SilentlyContinue
+    if ($profile) { $roaming = $profile.RoamingConfigured }
+}
+catch { }
+Say ("  APPDATA: " + $env:APPDATA)
+Say ("  roaming profile: " + $(if ($null -eq $roaming) { 'unknown' } elseif ($roaming) { 'YES -- a profile reset can take FTF with it' } else { 'no' }))
+
 # --- has an automatic update run here ----------------------------------------------
 Section 'Automatic updates'
 $updateLog = Join-Path $env:TEMP 'FTF-update.log'
@@ -151,11 +227,10 @@ Say '  If the FTF window opens, the plugin is fine and only the automatic loadin
 Say '  happening. If an error appears instead, send that exact wording on -- it names the cause.'
 
 # --- save ---------------------------------------------------------------------------
+# On the desktop, where the person running it can find it -- and not inside the setup
+# folder, which is usually a shared drive everyone else installs from.
 if (-not $OutFile) {
-    $here = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
-    $OutFile = Join-Path $here 'ftf-check.txt'
-    try { Set-Content -Path $OutFile -Value 'test' -ErrorAction Stop; Remove-Item $OutFile -ErrorAction SilentlyContinue }
-    catch { $OutFile = Join-Path ([Environment]::GetFolderPath('Desktop')) 'ftf-check.txt' }
+    $OutFile = Join-Path ([Environment]::GetFolderPath('Desktop')) 'ftf-check.txt'
 }
 try {
     Set-Content -Path $OutFile -Value $lines -Encoding utf8

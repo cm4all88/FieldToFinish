@@ -143,14 +143,27 @@ $version = if (Test-Path $versionFile) { (Get-Content $versionFile -First 1) } e
 # worth recording is where "Install FTF.bat" stages itself: it deletes it on the way out.
 
 $office = $null
-$candidate = if ([string]::IsNullOrWhiteSpace($Source)) { $here } else { $Source }
-try { $candidate = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).Path } catch { }
-$candidate = $candidate.TrimEnd('\')
-$staging = (Join-Path $env:TEMP 'FTF-Setup').TrimEnd('\')
-if ((Test-Path (Join-Path $candidate 'install.ps1')) -and
-    (Test-Path (Join-Path $candidate 'Bundle\PackageContents.xml')) -and
-    ($candidate -ne $staging)) {
-    $office = $candidate
+
+# A setup folder can name its own home in updates-from.txt. That is how a copy taken to a
+# laptop, a zip sent by email, or an install run from a local folder still takes its
+# updates from the office drive. It is believed even when that drive is not reachable
+# right now: FTF checks reachability later, every time Civil 3D starts.
+$declared = Join-Path $here 'updates-from.txt'
+if (Test-Path $declared) {
+    $declaredHome = (Get-Content $declared -First 1)
+    if (-not [string]::IsNullOrWhiteSpace($declaredHome)) { $office = $declaredHome.Trim().TrimEnd('\') }
+}
+
+if (-not $office) {
+    $candidate = if ([string]::IsNullOrWhiteSpace($Source)) { $here } else { $Source }
+    try { $candidate = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).Path } catch { }
+    $candidate = $candidate.TrimEnd('\')
+    $staging = (Join-Path $env:TEMP 'FTF-Setup').TrimEnd('\')
+    if ((Test-Path (Join-Path $candidate 'install.ps1')) -and
+        (Test-Path (Join-Path $candidate 'Bundle\PackageContents.xml')) -and
+        ($candidate -ne $staging)) {
+        $office = $candidate
+    }
 }
 
 # --- copy -------------------------------------------------------------------------

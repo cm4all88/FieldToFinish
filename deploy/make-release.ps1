@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds the setup folder the surveyors run: the plugin, the batch files and a README.
 
@@ -27,6 +27,11 @@
 .PARAMETER Zip
     Also writes FieldToFinish-Setup.zip beside the folder, for emailing.
 
+.PARAMETER OfficeFolder
+    Where the office keeps this package -- the U: drive folder people install from. It is
+    written into the setup folder as updates-from.txt, so every copy of the package, local
+    or zipped or emailed, still takes its updates from there.
+
 .PARAMETER NoBuild
     Packages whatever is already built instead of building first.
 
@@ -38,6 +43,7 @@
 param(
     [ValidateSet('Release', 'Debug')][string]$Configuration = 'Release',
     [string]$OutputRoot,
+    [string]$OfficeFolder,
     [switch]$Zip,
     [switch]$NoBuild
 )
@@ -93,6 +99,10 @@ $line += "  ($Configuration, Civil 3D $series)"
 Set-Content -Path (Join-Path $bundle 'version.txt') -Value $line -Encoding utf8
 Copy-Item (Join-Path $bundle 'version.txt') -Destination $setup -Force
 
+if ($OfficeFolder) {
+    Set-Content -Path (Join-Path $setup 'updates-from.txt') -Value $OfficeFolder.TrimEnd('\') -Encoding utf8
+}
+
 # --- report -----------------------------------------------------------------------
 
 $files = (Get-ChildItem $setup -Recurse -File).Count
@@ -100,6 +110,8 @@ Write-Host ''
 Write-Host "Setup folder ready: $setup"
 Write-Host "  $line"
 Write-Host "  $files file(s); program files in Bundle\Contents\$series"
+if ($OfficeFolder) { Write-Host "  updates come from: $OfficeFolder" }
+else { Write-Host '  updates come from wherever it is installed from (pass -OfficeFolder to pin that)' }
 Write-Host ''
 Write-Host 'Copy that folder where the office can reach it and tell people to close'
 Write-Host 'Civil 3D and double-click "Install FTF.bat".'

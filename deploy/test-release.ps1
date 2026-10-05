@@ -39,8 +39,8 @@ try
     Check (Test-Path $setup) 'make-release.ps1 writes a setup folder'
     if (-not (Test-Path $setup)) { throw 'nothing to test' }
 
-    foreach ($name in @('Install FTF.bat', 'Uninstall FTF.bat', 'Check FTF.bat', 'install.ps1',
-                        'check.ps1', 'README.txt', 'version.txt'))
+    foreach ($name in @('Install FTF.bat', 'Uninstall FTF.bat', 'Check FTF.bat', 'Repair FTF.bat',
+                        'install.ps1', 'check.ps1', 'README.txt', 'version.txt'))
     {
         Check (Test-Path (Join-Path $setup $name)) "the surveyor gets $name"
     }
@@ -134,6 +134,23 @@ try
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins | Out-Null
         Check (-not (Test-Path $recorded)) 'a copy run from TEMP records no office copy, so nothing points at a staging folder'
         Remove-Item $staged -Recurse -Force -ErrorAction SilentlyContinue
+
+        # --- a copy that still updates from the office drive ---------------------
+        # Installing from a local copy, or a zip somebody was emailed, must not cut the
+        # machine off from updates. The package carries its home address.
+        Write-Host '-- a local copy that updates from the office drive'
+        $localCopy = Join-Path $scratch 'local-copy'
+        Remove-Item $localCopy -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item $setup -Destination $localCopy -Recurse -Force
+        $officeHome = 'U:\Somewhere\That\Is\Not\Mounted\FieldToFinish-Setup'
+        Set-Content -Path (Join-Path $localCopy 'updates-from.txt') -Value $officeHome -Encoding utf8
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -Source $localCopy | Out-Null
+        Check ($LASTEXITCODE -eq 0) 'installing from a local copy works'
+        Check ((Get-Content $recorded -First 1) -eq $officeHome) `
+              ("and it takes its updates from the office drive, not the local folder (" + (Get-Content $recorded -First 1) + ")")
+
+        # Back to the real setup folder for the update tests below.
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -Source $setup | Out-Null
 
         # --- an update applying itself -------------------------------------------
         # What FTF launches as Civil 3D closes: the same script, with -WaitForCivil3D.
