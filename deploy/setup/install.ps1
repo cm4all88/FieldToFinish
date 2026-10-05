@@ -71,11 +71,18 @@ function Say([string]$message)
     }
 }
 
+# Set the moment the installed bundle is actually touched, so a failure can say truthfully
+# whether the FTF already on this machine is still there.
+$script:changed = $false
+
 function Fail([string]$message)
 {
     Say ''
     Say '  ---------------------------------------------------------------'
     Say "  $message"
+    if ((-not $script:changed) -and (Test-Path $target)) {
+        Say '  The FTF you already had is still installed and was not changed.'
+    }
     Say '  ---------------------------------------------------------------'
     Say ''
     exit 1
@@ -147,22 +154,54 @@ if ((Test-Path (Join-Path $candidate 'install.ps1')) -and
 }
 
 # --- copy -------------------------------------------------------------------------
-# The old bundle goes first: a leftover file from an older FTF would otherwise stay
-# behind and load alongside the new one.
+# Copied beside the installed one first, and only swapped in once it is whole. The source
+# is usually a network folder: a share that drops halfway through must never be able to
+# leave somebody with no FTF at all. The old bundle is then removed rather than merged,
+# so a file from an older FTF cannot linger and load beside the new one.
 
-if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $target | Out-Null
-Copy-Item (Join-Path $from '*') -Destination $target -Recurse -Force
+$staging = $target + '.new'
+$previous = $target + '.old'
+Remove-Item $staging, $previous -Recurse -Force -ErrorAction SilentlyContinue
 
-$installed = (Get-ChildItem $target -Recurse -File).Count
-if ($installed -lt 2) { Fail "The copy did not finish. Try again, or send this message to the drafting lead." }
+try {
+    New-Item -ItemType Directory -Force -Path $staging | Out-Null
+    Copy-Item (Join-Path $from '*') -Destination $staging -Recurse -Force -ErrorAction Stop
+}
+catch {
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    Fail ("The copy did not finish (" + $_.Exception.Message + "). Try again when the drive is reachable.")
+}
+
+$staged = @(Get-ChildItem $staging -Recurse -File)
+$whole = (Test-Path (Join-Path $staging 'PackageContents.xml')) -and
+         ($staged | Where-Object { $_.Name -eq 'FieldCodes.Cad.dll' })
+if (-not $whole) {
+    Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+    Fail 'The copy did not finish. Try again, or send this message to the drafting lead.'
+}
 
 # Anything that arrived by email, download or a copy from another machine carries Windows'
 # "this came from another computer" mark, and Civil 3D will not load a marked plugin. The
 # files just copied are the ones being installed, so the mark goes.
-Get-ChildItem $target -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
+Get-ChildItem $staging -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
 
-if ($office) { Set-Content -Path (Join-Path $target 'source.txt') -Value $office -Encoding utf8 }
+if ($office) { Set-Content -Path (Join-Path $staging 'source.txt') -Value $office -Encoding utf8 }
+
+# The swap itself: two local renames, with the old one kept until the new one is in place.
+$script:changed = $true
+try {
+    if (Test-Path $target) { Rename-Item -LiteralPath $target -NewName (Split-Path $previous -Leaf) -ErrorAction Stop }
+    Rename-Item -LiteralPath $staging -NewName (Split-Path $target -Leaf) -ErrorAction Stop
+}
+catch {
+    if ((-not (Test-Path $target)) -and (Test-Path $previous)) {
+        Rename-Item -LiteralPath $previous -NewName (Split-Path $target -Leaf) -ErrorAction SilentlyContinue
+    }
+    Fail ("The new FTF could not be put in place (" + $_.Exception.Message + "). Close Civil 3D and try again.")
+}
+Remove-Item $previous -Recurse -Force -ErrorAction SilentlyContinue
+
+$installed = (Get-ChildItem $target -Recurse -File).Count
 
 Say ''
 Say "Field to Finish is installed for $env:USERNAME."

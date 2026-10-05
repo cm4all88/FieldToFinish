@@ -142,6 +142,44 @@ namespace FtfUiTest
         [CommandMethod("ALLUITEST", CommandFlags.Session)]
         public void StartAll() { Begin(true, true); }
 
+        /// <summary>
+        /// Can AutoCAD hand us a picture of the drawing itself? PNGOUT is AutoCAD exporting its
+        /// own view to a raster file -- nothing here captures the screen. Used to prove the
+        /// mechanism before a demo is built on it.
+        /// </summary>
+        [CommandMethod("UIRASTER", CommandFlags.Session)]
+        public void Raster()
+        {
+            Directory.CreateDirectory(OutDir);
+            _log = new StreamWriter(Path.Combine(OutDir, "ui-test.log"), false, Encoding.UTF8) { AutoFlush = true };
+            var doc = AcApp.DocumentManager.MdiActiveDocument;
+            var shot = Path.Combine(OutDir, "raster-test.png");
+            try { if (File.Exists(shot)) File.Delete(shot); } catch (System.Exception) { }
+
+            Log("raster test: writing " + shot);
+            doc.SendStringToExecute("_.ZOOM _E ", true, false, true);
+            doc.SendStringToExecute("FILEDIA\n0\n", true, false, true);
+            doc.SendStringToExecute("_.PNGOUT\n\"" + shot + "\"\n\n", true, false, true);
+            doc.SendStringToExecute("FILEDIA\n1\n", true, false, true);
+
+            // The sends run when the drawing is idle; report from a timer once they have.
+            var timer = new Timer { Interval = 2000 };
+            var waited = 0;
+            timer.Tick += (s, e) =>
+            {
+                waited += 2;
+                if (!File.Exists(shot) && waited < 60) return;
+                timer.Stop();
+                Log(File.Exists(shot)
+                    ? "raster test: " + new FileInfo(shot).Length + " bytes after " + waited + "s"
+                    : "raster test: nothing written after " + waited + "s");
+                Log("");
+                Log("UI TEST DONE: raster probe finished");
+                _log.Flush();
+            };
+            timer.Start();
+        }
+
         /// <summary>The drafter's own pick sizes, put back when the run ends.</summary>
         private static short _pickbox;
         private static short _aperture;

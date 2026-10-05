@@ -127,6 +127,22 @@ if ($profiles.Count -eq 0) {
     }
 }
 
+# --- has an automatic update run here ----------------------------------------------
+Section 'Automatic updates'
+$updateLog = Join-Path $env:TEMP 'FTF-update.log'
+if (Test-Path $updateLog) {
+    Say ("  log: " + $updateLog)
+    foreach ($line in (Get-Content $updateLog -Tail 12)) { Say ("    " + $line) }
+} else {
+    Say '  no update has ever run on this computer.'
+}
+foreach ($leftover in @(($bundle + '.new'), ($bundle + '.old'))) {
+    if (Test-Path $leftover) {
+        Say ("  PROBLEM: a half-finished update left " + $leftover)
+        Say '  -> an update was interrupted. Run Install FTF.bat again; it clears these.'
+    }
+}
+
 # --- what to do next ---------------------------------------------------------------
 Section 'If the tabs are still missing'
 Say '  In Civil 3D, type NETLOAD, choose this file, and then type FTF:'

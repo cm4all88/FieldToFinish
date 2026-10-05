@@ -168,6 +168,25 @@ try
             Check ((Get-Content $log -Raw) -match 'installed for') 'and the log says what it did'
         }
 
+        # --- a source that goes wrong halfway ------------------------------------
+        # The setup folder is normally on a network drive. If it becomes unreadable while
+        # installing, the FTF already on the machine has to survive: losing it overnight
+        # and finding the server copy intact is exactly the failure to design out.
+        Write-Host '-- an install from a source that breaks'
+        $good = Get-Content (Join-Path $installed 'version.txt') -First 1
+        $broken = Join-Path $scratch 'broken-source'
+        Remove-Item $broken -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item $setup -Destination $broken -Recurse -Force
+        Remove-Item (Join-Path $broken 'Bundle\Contents\2024\FieldCodes.Cad.dll') -Force
+        $said = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot $plugins -Source $broken 2>&1
+        Check ($LASTEXITCODE -eq 1) 'an install from a broken source fails rather than half-installing'
+        Check (Test-Path (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll')) `
+              'and the FTF already on the machine is still there'
+        Check ((Get-Content (Join-Path $installed 'version.txt') -First 1) -eq $good) 'still the same build'
+        Check ((($said -join ' ') -match 'still installed')) 'and it says so, instead of leaving someone guessing'
+        Check (-not (Test-Path ($installed + '.new'))) 'no half-copied folder is left behind'
+        Check (-not (Test-Path ($installed + '.old'))) 'and no old folder either'
+
         # --- uninstall -----------------------------------------------------------
         Write-Host '-- uninstalling'
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -Uninstall -TargetRoot $plugins | Out-Null
