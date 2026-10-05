@@ -25,10 +25,22 @@ function Check([bool]$ok, [string]$what)
 }
 
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('ftf-release-test-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+$regRoot = 'HKCU:\Software\FTF-Test\Installed'       # stands in for Civil 3D's own keys
+$regProducts = 'HKCU:\Software\FTF-Test\Products'    # stands in for the machine's product list
 $out = Join-Path $scratch 'out'
 $plugins = Join-Path $scratch 'ApplicationPlugins'
 $appdata = Join-Path $scratch 'AppData'
 New-Item -ItemType Directory -Force -Path $out, $plugins, $appdata | Out-Null
+
+# One Civil 3D and one plain AutoCAD: the registration must go to the first and not the second.
+Remove-Item 'HKCU:\Software\FTF-Test' -Recurse -Force -ErrorAction SilentlyContinue
+foreach ($pair in @(@('R24.3\ACAD-7100:409', 'Autodesk Civil 3D 2024 - English'), @('R24.3\ACAD-7101:409', ''))) {
+    New-Item -Path (Join-Path $regRoot $pair[0]) -Force | Out-Null
+    New-Item -Path (Join-Path $regProducts $pair[0]) -Force | Out-Null
+    if ($pair[1]) { New-ItemProperty -Path (Join-Path $regProducts $pair[0]) -Name ProductName -Value $pair[1] -PropertyType String -Force | Out-Null }
+}
+$civilKey = Join-Path $regRoot 'R24.3\ACAD-7100:409\Applications\FieldToFinish'
+$otherKey = Join-Path $regRoot 'R24.3\ACAD-7101:409\Applications\FieldToFinish'
 
 try
 {
@@ -78,7 +90,7 @@ try
 
     try
     {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
         $code = $LASTEXITCODE
         $installed = Join-Path $plugins 'FieldToFinish.bundle'
         Check ($code -eq 0) "installing reports success ($code)"
@@ -90,7 +102,7 @@ try
         # A file left from an older FTF must not survive the next install.
         $stale = Join-Path $installed 'Contents\2024\OldThing.dll'
         Set-Content -Path $stale -Value 'x' -Encoding utf8
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
         Check ($LASTEXITCODE -eq 0) 'installing over an existing install works'
         Check (-not (Test-Path $stale)) 'and clears out files from the older build'
 
@@ -110,7 +122,7 @@ try
         Set-Content -Path ($marked + ':Zone.Identifier') -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction SilentlyContinue
         $wasMarked = [bool](Get-Item $marked -Stream Zone.Identifier -ErrorAction SilentlyContinue)
         Check $wasMarked 'the test could mark the file the way a download does'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
         $stillMarked = [bool](Get-Item (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll') -Stream Zone.Identifier -ErrorAction SilentlyContinue)
         Check (-not $stillMarked) 'installing clears the mark, so Civil 3D will load it'
 
@@ -131,9 +143,23 @@ try
         $staged = Join-Path $env:TEMP 'FTF-Setup'
         if (Test-Path $staged) { Remove-Item $staged -Recurse -Force }
         Copy-Item $setup -Destination $staged -Recurse -Force
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
         Check (-not (Test-Path $recorded)) 'a copy run from TEMP records no office copy, so nothing points at a staging folder'
         Remove-Item $staged -Recurse -Force -ErrorAction SilentlyContinue
+
+        # --- telling Civil 3D to load it ------------------------------------------
+        # Civil 3D writes this record itself after reading a bundle, but only on a machine
+        # that scans the plugin folder. Some do not, and then FTF is installed and never
+        # loads. Installing writes the same record directly.
+        Write-Host '-- telling Civil 3D to load it at startup'
+        Check (Test-Path $civilKey) 'installing tells Civil 3D to load FTF at startup'
+        if (Test-Path $civilKey) {
+            $reg = Get-ItemProperty $civilKey
+            Check ($reg.LOADCTRLS -eq 2 -and $reg.MANAGED -eq 1) ("the record says load it, and that it is .NET (LOADCTRLS=" + $reg.LOADCTRLS + ", MANAGED=" + $reg.MANAGED + ")")
+            Check ($reg.LOADER -eq (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll')) ("and points at the installed program (" + $reg.LOADER + ")")
+            Check (Test-Path $reg.LOADER) 'which is really there'
+        }
+        Check (-not (Test-Path $otherKey)) 'plain AutoCAD is left alone -- it cannot load a Civil 3D plugin'
 
         # --- a copy that still updates from the office drive ---------------------
         # Installing from a local copy, or a zip somebody was emailed, must not cut the
@@ -144,18 +170,18 @@ try
         Copy-Item $setup -Destination $localCopy -Recurse -Force
         $officeHome = 'U:\Somewhere\That\Is\Not\Mounted\FieldToFinish-Setup'
         Set-Content -Path (Join-Path $localCopy 'updates-from.txt') -Value $officeHome -Encoding utf8
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -Source $localCopy | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $localCopy | Out-Null
         Check ($LASTEXITCODE -eq 0) 'installing from a local copy works'
         Check ((Get-Content $recorded -First 1) -eq $officeHome) `
               ("and it takes its updates from the office drive, not the local folder (" + (Get-Content $recorded -First 1) + ")")
 
         # Back to the real setup folder for the update tests below.
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
 
         # --- an update applying itself -------------------------------------------
         # What FTF launches as Civil 3D closes: the same script, with -WaitForCivil3D.
         Write-Host '-- an update applying itself'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
         $before = Get-Content (Join-Path $installed 'version.txt') -First 1
 
         $newer = 'FTF 2099-01-01 09:00  office deadbee  (Release, Civil 3D 2024)'
@@ -163,7 +189,7 @@ try
         # -ProcessName is the test seam: nothing named this is running, so the wait ends at
         # once and the real Civil 3D -- which someone may well have open -- is left out of it.
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') `
-            -TargetRoot $plugins -Source $setup -WaitForCivil3D -ProcessName 'ftf-nothing-runs-by-this-name' | Out-Null
+            -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup -WaitForCivil3D -ProcessName 'ftf-nothing-runs-by-this-name' | Out-Null
         $after = Get-Content (Join-Path $installed 'version.txt') -First 1
         Check ($LASTEXITCODE -eq 0) 'the update installer finishes cleanly'
         Check ($before -ne $after -and $after -eq $newer) "the newer office build replaced the installed one ($after)"
@@ -173,7 +199,7 @@ try
         # 'powershell' is certainly running -- this test is it -- so the wait gives up.
         Set-Content -Path (Join-Path $setup 'Bundle\version.txt') -Value 'FTF 2099-06-06 06:06  office cafe123  (Release, Civil 3D 2024)' -Encoding utf8
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') `
-            -TargetRoot $plugins -Source $setup -WaitForCivil3D -WaitMinutes 0 -ProcessName 'powershell' | Out-Null
+            -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup -WaitForCivil3D -WaitMinutes 0 -ProcessName 'powershell' | Out-Null
         Check ($LASTEXITCODE -eq 0) 'an update that cannot apply yet is not an error'
         Check ((Get-Content (Join-Path $installed 'version.txt') -First 1) -eq $newer) `
               'a session still open is never replaced underneath -- the update waits for the next close'
@@ -195,7 +221,7 @@ try
         Remove-Item $broken -Recurse -Force -ErrorAction SilentlyContinue
         Copy-Item $setup -Destination $broken -Recurse -Force
         Remove-Item (Join-Path $broken 'Bundle\Contents\2024\FieldCodes.Cad.dll') -Force
-        $said = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot $plugins -Source $broken 2>&1
+        $said = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $broken 2>&1
         Check ($LASTEXITCODE -eq 1) 'an install from a broken source fails rather than half-installing'
         Check (Test-Path (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll')) `
               'and the FTF already on the machine is still there'
@@ -206,10 +232,12 @@ try
 
         # --- uninstall -----------------------------------------------------------
         Write-Host '-- uninstalling'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -Uninstall -TargetRoot $plugins | Out-Null
+        Check (Test-Path $civilKey) 'the startup record is there before uninstalling'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -Uninstall -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
         Check ($LASTEXITCODE -eq 0) 'uninstalling reports success'
         Check (-not (Test-Path (Join-Path $plugins 'FieldToFinish.bundle'))) 'the bundle is gone'
         Check ((Get-Content $officeRules -Raw) -match 'do not touch') 'office settings survive uninstalling'
+        Check (-not (Test-Path $civilKey)) 'and Civil 3D is told to stop loading it, so nothing is left pointing at files that are gone'
     }
     finally { $env:APPDATA = $realAppData }
 }
@@ -221,6 +249,7 @@ catch
 finally
 {
     Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item 'HKCU:\Software\FTF-Test' -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ''

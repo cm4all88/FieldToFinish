@@ -50,7 +50,9 @@ param(
     [switch]$WaitForCivil3D,
     [string]$TargetRoot,
     [int]$WaitMinutes = 60,
-    [string]$ProcessName = 'acad'
+    [string]$ProcessName = 'acad',
+    [string]$RegistryRoot = 'HKCU:\SOFTWARE\Autodesk\AutoCAD',
+    [string]$ProductRoot = 'HKLM:\SOFTWARE\Autodesk\AutoCAD'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +76,72 @@ function Say([string]$message)
 # Set the moment the installed bundle is actually touched, so a failure can say truthfully
 # whether the FTF already on this machine is still there.
 $script:changed = $false
+
+# Civil 3D keeps a record of each plugin it loads at startup. It writes that record itself
+# after reading a bundle -- but only on a machine that scans the plugin folder, and some do
+# not. Writing the same record directly makes FTF load either way. Per user, no admin, and
+# removed again by the uninstaller.
+#
+# Only where Civil 3D actually is: the other AutoCAD product keys would try to load a
+# Civil-only assembly and fail noisily at startup.
+function Civil3DProducts()
+{
+    $found = @()
+    foreach ($release in Get-ChildItem $RegistryRoot -ErrorAction SilentlyContinue) {
+        foreach ($product in Get-ChildItem $release.PSPath -ErrorAction SilentlyContinue) {
+            $where = Join-Path $ProductRoot ($release.PSChildName + '\' + $product.PSChildName)
+            $name = (Get-ItemProperty -Path $where -ErrorAction SilentlyContinue).ProductName
+            if ($name -notmatch 'Civil') { continue }
+            $found += [pscustomobject]@{
+                Key = $product.PSPath
+                Name = $name
+                Where = $release.PSChildName + '\' + $product.PSChildName
+            }
+        }
+    }
+    return $found
+}
+
+function Register([string]$loader)
+{
+    $done = @()
+    foreach ($product in (Civil3DProducts)) {
+        $key = Join-Path $product.Key 'Applications\FieldToFinish'
+        try {
+            if (-not (Test-Path $key)) { New-Item -Path $key -Force -ErrorAction Stop | Out-Null }
+            New-ItemProperty -Path $key -Name DESCRIPTION -Value 'Field to Finish' -PropertyType String -Force -ErrorAction Stop | Out-Null
+            New-ItemProperty -Path $key -Name LOADCTRLS -Value 2 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+            New-ItemProperty -Path $key -Name MANAGED -Value 1 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+            New-ItemProperty -Path $key -Name LOADER -Value $loader -PropertyType String -Force -ErrorAction Stop | Out-Null
+            $done += $product.Name
+        }
+        catch { Say ("  (could not tell " + $product.Name + " to load it: " + $_.Exception.Message + ")") }
+    }
+    return $done
+}
+
+function Unregister()
+{
+    $done = @()
+    foreach ($release in Get-ChildItem $RegistryRoot -ErrorAction SilentlyContinue) {
+        foreach ($product in Get-ChildItem $release.PSPath -ErrorAction SilentlyContinue) {
+            $key = Join-Path $product.PSPath 'Applications\FieldToFinish'
+            if (-not (Test-Path $key)) { continue }
+            try { Remove-Item -Path $key -Recurse -Force -ErrorAction Stop; $done += $product.PSChildName }
+            catch { }
+        }
+    }
+    return $done
+}
+
+function TryRename([string]$from, [string]$toLeaf)
+{
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+        try { Rename-Item -LiteralPath $from -NewName $toLeaf -ErrorAction Stop; return $true }
+        catch { Start-Sleep -Milliseconds 500 }
+    }
+    return $false
+}
 
 function Fail([string]$message)
 {
@@ -113,13 +181,15 @@ elseif (-not $testInstall) {
 # --- uninstall --------------------------------------------------------------------
 
 if ($Uninstall) {
+    $forgot = Unregister
     if (Test-Path $target) {
         Remove-Item $target -Recurse -Force
         Say "Field to Finish removed."
-        Say "Your office settings are still here: $env:APPDATA\FieldToFinish"
     } else {
         Say "Field to Finish is not installed for $env:USERNAME."
     }
+    if ($forgot.Count -gt 0) { Say "Civil 3D will no longer load it at startup." }
+    Say "Your office settings are still here: $env:APPDATA\FieldToFinish"
     exit 0
 }
 
@@ -202,19 +272,27 @@ if ($office) { Set-Content -Path (Join-Path $staging 'source.txt') -Value $offic
 
 # The swap itself: two local renames, with the old one kept until the new one is in place.
 $script:changed = $true
-try {
-    if (Test-Path $target) { Rename-Item -LiteralPath $target -NewName (Split-Path $previous -Leaf) -ErrorAction Stop }
-    Rename-Item -LiteralPath $staging -NewName (Split-Path $target -Leaf) -ErrorAction Stop
-}
-catch {
-    if ((-not (Test-Path $target)) -and (Test-Path $previous)) {
-        Rename-Item -LiteralPath $previous -NewName (Split-Path $target -Leaf) -ErrorAction SilentlyContinue
+if (Test-Path $target) {
+    if (-not (TryRename $target (Split-Path $previous -Leaf))) {
+        $script:changed = $false
+        Fail 'The FTF already installed could not be moved aside. Close Civil 3D and try again.'
     }
-    Fail ("The new FTF could not be put in place (" + $_.Exception.Message + "). Close Civil 3D and try again.")
+}
+if (-not (TryRename $staging (Split-Path $target -Leaf))) {
+    if ((-not (Test-Path $target)) -and (Test-Path $previous)) {
+        [void](TryRename $previous (Split-Path $target -Leaf))
+    }
+    Fail 'The new FTF could not be put in place. Close Civil 3D and try again.'
 }
 Remove-Item $previous -Recurse -Force -ErrorAction SilentlyContinue
 
 $installed = (Get-ChildItem $target -Recurse -File).Count
+
+# Tell Civil 3D to load it at startup, rather than relying on it noticing the folder.
+$loader = (Get-ChildItem (Join-Path $target 'Contents') -Recurse -Filter 'FieldCodes.Cad.dll' -ErrorAction SilentlyContinue |
+           Select-Object -First 1)
+$told = @()
+if ($loader) { $told = Register $loader.FullName }
 
 Say ''
 Say "Field to Finish is installed for $env:USERNAME."
@@ -225,6 +303,11 @@ if ($office) {
     Say "  updates: from $office, applied when you close Civil 3D"
 } else {
     Say "  updates: none -- this copy was installed by hand, so it stays as it is"
+}
+if ($told.Count -gt 0) {
+    foreach ($name in $told) { Say ("  startup: " + $name + " will load it when it starts") }
+} else {
+    Say '  startup: no Civil 3D found to tell -- FTF is installed, but nothing will load it'
 }
 
 $officeRules = Join-Path $env:APPDATA 'FieldToFinish\rules.json'
