@@ -5,7 +5,7 @@
   "newProjectParent": "",
   "projectNumberPattern": "^[0-9][0-9A-Z.\\-]{2,}$",
   "projectFolderName": "{projectNumber} {projectName}",
-  "downloadsFolder": "Survey\\Field\\Downloads",
+  "downloadsFolder": "99Svcs\\Survey\\02Field\\01FLD_DR_FN_DCfile",
   "downloadName": "{date}-{crew}-{projectNumber}-{workType}",
   "fileName": "{download}-{code}",
   "dateFormat": "yyyyMMdd",
@@ -41,13 +41,7 @@
     }
   ],
   "projectFolders": [
-    "Admin",
-    "Survey\\CAD",
-    "Survey\\Calcs",
-    "Survey\\Control",
-    "Survey\\Deliverables",
-    "Survey\\Field",
-    "Survey\\Research"
+    "99Svcs\\Survey\\02Field"
   ],
   "categories": [
     {
@@ -75,7 +69,7 @@
         ".mp4",
         ".mov"
       ],
-      "fileName": "{original}",
+      "fileName": "{projectNumber}-{number}",
       "fallback": false,
       "color": "#FCC214"
     },
@@ -162,7 +156,7 @@
       "template": "templates\\As-Built Notes.docx"
     }
   ],
-  "logFile": "Survey\\Field\\upload-log.csv",
+  "logFile": "99Svcs\\Survey\\02Field\\01FLD_DR_FN_DCfile\\upload-log.csv",
   "branding": {
     "companyName": "Parametrix",
     "appTitle": "Crew Upload",

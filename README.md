@@ -31,7 +31,7 @@ that folder's name:
     20260128-JAM-1521-799-TOPO.jxl
     20260128-JAM-1521-799-TOPO-FN.pdf   field notes
     20260128-JAM-1521-799-TOPO-ASB.pdf  as-built notes
-    Photos\IMG_0412.jpg                 photos keep the camera's names
+    Photos\1521-799-0412.jpg            photos: project number + the camera's number (IMG_0412)
 ```
 
 1. **Project.** The crew types the project number and presses Enter; the app finds the job folder
@@ -44,10 +44,10 @@ that folder's name:
    fills in the project, crew, date and work type from its name. Clicking a box opens a picker.
 4. **Check.** Each file shows its type and new name before anything is copied; dropping it on another
    box, or changing its Type, renames it.
-5. **Upload.** The download lands in `[job]\Survey\Field\Downloads\20260128-JAM-1521-799-TOPO\`.
+5. **Upload.** The download lands in `[job]\99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\20260128-JAM-1521-799-TOPO\`.
    Files are copied (never moved) and checked; nothing is overwritten (a second field notes file
    becomes `-FN-2`); files already in the job are skipped, so dropping the folder again after adding
-   photos only copies the new photos. Every upload is logged in `Survey\Field\upload-log.csv`.
+   photos only copies the new photos. Every upload is logged in `upload-log.csv` beside the downloads.
 
 **New field notes** and **New as-built notes** start a document from `config\templates\`, already named
 for the visit and in its download folder; **Type field notes** saves typed notes the same way.
@@ -61,8 +61,7 @@ secondary palette, repeated as a stripe in the Type column. Logo files and colou
 
 Everything — the jobs root, folder layout, categories, codes, keywords and name pattern — is in
 `config\job-folders.json`, copied beside the exe. **The shipped values are placeholders**:
-`jobsRoot` (`U:\PSO\Jobs`) and `downloadsFolder` (`Survey\Field\Downloads`) must be set to the office's real ones before
-crews use it. The app refuses to start with a config that does not validate and says what is wrong.
+`jobsRoot` (`U:\PSO\Jobs`) must be set to the office's real jobs drive before crews use it. The app refuses to start with a config that does not validate and says what is wrong.
 
 ```
 dotnet build src\CrewUpload.App -c Release      # -> src\CrewUpload.App\bin\Release\net48\

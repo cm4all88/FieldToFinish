@@ -126,8 +126,7 @@ public sealed class CrewUploadTests : IDisposable
         var p = NewProject();
         Assert.Equal(Path.Combine(_jobs, "1521-799 Main St"), p.Path);
         Assert.True(File.Exists(Path.Combine(p.Path, ProjectInfo.FileName)));
-        Assert.True(Directory.Exists(Path.Combine(p.Path, "Survey", "CAD")));
-        Assert.True(Directory.Exists(Path.Combine(p.Path, "Survey", "Field", "Downloads")));
+        Assert.True(Directory.Exists(Path.Combine(p.Path, "99Svcs", "Survey", "02Field", "01FLD_DR_FN_DCfile")));
     }
 
     [Fact]
@@ -240,12 +239,13 @@ public sealed class CrewUploadTests : IDisposable
         planner.Assign(p, items, Visit);
 
         var to = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => Rel(p, i.Destination!));
-        var dl = @"Survey\Field\Downloads\" + Download + @"\";
+        var dl = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\" + Download + @"\";
         Assert.Equal(dl + Download + "-ASB.pdf", to[Download + "-ASB.pdf"]);
         Assert.Equal(dl + Download + "-FN.pdf", to[Download + "-FN.pdf"]);
         Assert.Equal(dl + Download + ".job", to[Download + ".job"]);
         Assert.Equal(dl + Download + ".jxl", to[Download + ".jxl"]);
-        Assert.Equal(dl + @"Photos\IMG_0412.jpg", to["IMG_0412.JPG"]);
+        Assert.Equal(dl + @"Photos\1521-799-0412.jpg", to["IMG_0412.JPG"]);
+        Assert.Equal(dl + @"Photos\1521-799-0413.jpg", to["IMG_0413.JPG"]);
     }
 
     [Fact]
@@ -295,6 +295,14 @@ public sealed class CrewUploadTests : IDisposable
     }
 
     [Theory]
+    [InlineData("IMG_0412", "0412")]
+    [InlineData("DSC01234", "01234")]
+    [InlineData("PXL_20260128_193045123", "193045123")]
+    [InlineData("sketch", "sketch")]
+    public void PhotosTakeTheCamerasNumber(string original, string number) =>
+        Assert.Equal(number, UploadPlanner.CameraNumber(original));
+
+    [Theory]
     [InlineData("SV-<a>:b", "SV-a-b")]
     [InlineData("SV--FN-", "SV-FN")]
     [InlineData("name. ", "name")]
@@ -314,11 +322,11 @@ public sealed class CrewUploadTests : IDisposable
 
         Assert.Equal(6, new UploadRunner(_config).Run(p, items, "JAM"));
         Assert.All(items, i => Assert.True(i.Done));
-        Assert.Equal("fn", File.ReadAllText(Path.Combine(p.Path, "Survey", "Field", "Downloads", Download, Download + "-FN.pdf")));
+        Assert.Equal("fn", File.ReadAllText(Path.Combine(p.Path, "99Svcs", "Survey", "02Field", "01FLD_DR_FN_DCfile", Download, Download + "-FN.pdf")));
         Assert.True(Directory.Exists(src));
         Assert.Empty(Directory.GetFiles(p.Path, "*.partial", SearchOption.AllDirectories));
 
-        var log = File.ReadAllLines(Path.Combine(p.Path, "Survey", "Field", "upload-log.csv"));
+        var log = File.ReadAllLines(Path.Combine(p.Path, "99Svcs", "Survey", "02Field", "01FLD_DR_FN_DCfile", "upload-log.csv"));
         Assert.Equal(UploadRunner.LogHeader, log[0]);
         Assert.Equal(7, log.Length);
         Assert.EndsWith("uploaded", log[1]);
@@ -340,7 +348,7 @@ public sealed class CrewUploadTests : IDisposable
         planner.Assign(p, again, Visit);
         Assert.Equal(6, again.Count(i => i.Skip));
         Assert.Equal(1, new UploadRunner(_config).Run(p, again, "JAM"));
-        Assert.Equal(3, Directory.GetFiles(Path.Combine(p.Path, "Survey", "Field", "Downloads", Download, "Photos")).Length);
+        Assert.Equal(3, Directory.GetFiles(Path.Combine(p.Path, "99Svcs", "Survey", "02Field", "01FLD_DR_FN_DCfile", Download, "Photos")).Length);
     }
 
     [Fact]
@@ -372,7 +380,7 @@ public sealed class CrewUploadTests : IDisposable
         var doc = _config.Documents.First(d => d.Category == "asbuilt");
 
         var path = new DocumentMaker(_config).Create(p, doc, Visit);
-        Assert.Equal(@"Survey\Field\Downloads\" + Download + @"\" + Download + "-ASB.docx", Rel(p, path));
+        Assert.Equal(@"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\" + Download + @"\" + Download + "-ASB.docx", Rel(p, path));
         Assert.Equal("template", File.ReadAllText(path));
     }
 

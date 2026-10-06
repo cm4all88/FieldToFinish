@@ -146,7 +146,7 @@ namespace CrewUpload
         [JsonProperty("projectFolderName")] public string ProjectFolderName { get; set; } = "{projectNumber} {projectName}";
 
         /// <summary>Where download folders go, under the project folder.</summary>
-        [JsonProperty("downloadsFolder")] public string DownloadsFolder { get; set; } = @"Survey\Field\Downloads";
+        [JsonProperty("downloadsFolder")] public string DownloadsFolder { get; set; } = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile";
 
         /// <summary>
         /// Name of one crew download: {date}, {crew}, {projectNumber}, {workType}. The same pattern
@@ -156,7 +156,8 @@ namespace CrewUpload
 
         /// <summary>
         /// Name of a file in the download, without extension: {download} (the folder's name),
-        /// {code}, {original}, and the download's own tokens. A category's fileName overrides it.
+        /// {code}, {original}, {number} (the last run of digits in the original name: the camera's
+        /// photo number), and the download's own tokens. A category's fileName overrides it.
         /// </summary>
         [JsonProperty("fileName")] public string FileName { get; set; } = "{download}-{code}";
 
@@ -178,7 +179,7 @@ namespace CrewUpload
         [JsonProperty("documents")] public List<DocumentTemplate> Documents { get; set; } = new List<DocumentTemplate>();
 
         /// <summary>CSV under the project folder recording every upload: who, when, from where, to where.</summary>
-        [JsonProperty("logFile")] public string LogFile { get; set; } = @"Survey\Field\upload-log.csv";
+        [JsonProperty("logFile")] public string LogFile { get; set; } = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\upload-log.csv";
 
         [JsonProperty("branding")] public Branding Branding { get; set; } = new Branding();
 
@@ -283,15 +284,10 @@ namespace CrewUpload
             return new JobFolderConfig
             {
                 JobsRoot = @"U:\PSO\Jobs",
+                // Only what is known of the office layout; downloadsFolder is always made too.
                 ProjectFolders = new List<string>
                 {
-                    @"Admin",
-                    @"Survey\CAD",
-                    @"Survey\Calcs",
-                    @"Survey\Control",
-                    @"Survey\Deliverables",
-                    @"Survey\Field",
-                    @"Survey\Research",
+                    @"99Svcs\Survey\02Field",
                 },
                 WorkTypes = new List<WorkType>
                 {
@@ -307,8 +303,8 @@ namespace CrewUpload
                 {
                     new UploadCategory
                     {
-                        // Photos keep the camera's names inside the download's Photos folder.
-                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{original}",
+                        // Project number and the camera's number: IMG_0412.JPG -> 1521-799-0412.jpg.
+                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{projectNumber}-{number}",
                         Keywords = { "photo", "photos", "pics", "pictures", "picture" },
                         Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
                     },

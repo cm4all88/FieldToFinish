@@ -224,7 +224,18 @@ namespace CrewUpload
             values["code"] = category.Code;
             values["category"] = category.Name;
             values["original"] = original ?? string.Empty;
+            values["number"] = CameraNumber(original);
             return values;
+        }
+
+        /// <summary>
+        /// The camera's number in a photo name -- the last run of digits: IMG_0412 -> 0412,
+        /// DSC01234 -> 01234. A name with no digits is kept whole.
+        /// </summary>
+        internal static string CameraNumber(string original)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(original ?? string.Empty, @"(\d+)(?!.*\d)");
+            return m.Success ? m.Groups[1].Value : (original ?? string.Empty);
         }
 
         /// <summary>
