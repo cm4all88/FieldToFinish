@@ -22,7 +22,9 @@ namespace CrewUpload.App
         private static Color Good => Theme.Charcoal;
 
         private readonly JobFolderConfig _config;
-        private readonly ProjectStore _projects;
+        private ProjectStore _projects;
+        private readonly bool _setup;
+        private readonly TextBox _phase;
         private readonly UploadPlanner _planner;
         private readonly Remembered _remembered = Remembered.Load();
         private readonly List<UploadItem> _items = new List<UploadItem>();
@@ -48,6 +50,7 @@ namespace CrewUpload.App
         public MainForm(JobFolderConfig config, string projectNumber, IList<string> dropped, bool setup = false)
         {
             _config = config;
+            _setup = setup;
             _projects = new ProjectStore(config, ProjectRegistry.For(config));
             _planner = new UploadPlanner(config);
 
@@ -69,7 +72,15 @@ namespace CrewUpload.App
             Shown += (s, e) => FillProjectList();
             _number.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; FindProject(); } };
             _number.SelectionChangeCommitted += (s, e) => BeginInvoke((Action)FindProject);
-            top.Controls.Add(_number, 1, 0);
+            // Project number with an optional phase beside it: 1800-119, phase 141 -> ...-1800-119-141-...
+            var numberRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+            numberRow.Controls.Add(_number);
+            numberRow.Controls.Add(new Label { Text = "Phase", AutoSize = true, ForeColor = Theme.MediumGray, Font = Theme.Body(10f), Margin = new Padding(10, 8, 4, 3) });
+            _phase = new TextBox { Width = 60, MaxLength = 4, Font = Theme.Body(12f) };
+            _phase.KeyPress += (s, e) => { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true; };
+            _phase.TextChanged += (s, e) => Replan();
+            numberRow.Controls.Add(_phase);
+            top.Controls.Add(numberRow, 1, 0);
             var find = Theme.Button("Find", false);
             find.Click += (s, e) => FindProject();
             top.Controls.Add(find, 2, 0);
@@ -221,7 +232,13 @@ namespace CrewUpload.App
             typed.Click += (s, e) => TypeNotes();
             _documents.Controls.Add(typed);
             _documents.Enabled = false;
-            bottom.Controls.Add(_documents, 0, 0);
+            var left = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true, Margin = new Padding(0) };
+            left.Controls.Add(_documents);
+            var settings = Theme.Button("Settings...", false);
+            settings.Margin = new Padding(3, 6, 8, 3); // line up with the document buttons inside their panel
+            settings.Click += (s, e) => OpenSettings();
+            left.Controls.Add(settings);
+            bottom.Controls.Add(left, 0, 0);
 
             var right = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
             var clear = Theme.Button("Clear list", false);
@@ -270,7 +287,7 @@ namespace CrewUpload.App
             {
                 var work = _work.SelectedItem as WorkType;
                 if (string.IsNullOrWhiteSpace(_crew.Text) || work == null) return null;
-                return new FieldVisit { Crew = _crew.Text.Trim(), Date = _date.Value.Date, WorkType = work.Code };
+                return new FieldVisit { Crew = _crew.Text.Trim(), Date = _date.Value.Date, WorkType = work.Code, Phase = JobFolderConfig.NormalizePhase(_phase.Text) };
             }
         }
 
@@ -301,7 +318,13 @@ namespace CrewUpload.App
         /// </summary>
         private void FindProject()
         {
-            var number = JobFolderConfig.NormalizeProjectNumber(_number.Text);
+            // 1800-119-141 typed in one box: the phase goes to its own box.
+            string number, phase;
+            if (JobFolderConfig.ParseProjectNumber(_number.Text, out number, out phase))
+            {
+                if (phase != null) _phase.Text = phase;
+            }
+            else number = JobFolderConfig.NormalizeProjectNumber(_number.Text);
             _number.Text = number;
             if (number.Length == 0) return;
             if (!_config.IsValidProjectNumber(number))
@@ -337,6 +360,23 @@ namespace CrewUpload.App
                 return;
             }
             SetProject(found, null);
+        }
+
+        private void OpenSettings()
+        {
+            // Changing where the app looks is for PMs: --setup, and the optional PM list. Anyone can look.
+            var canEdit = _setup && _config.IsProjectManager(Environment.UserName, Environment.UserDomainName + "\\" + Environment.UserName);
+            using (var form = new SettingsForm(_config, canEdit))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+                _projects = new ProjectStore(_config, ProjectRegistry.For(_config));
+                SetProject(null, "Settings saved. Type the project number and press Enter.");
+                FillProjectList();
+                if (!RegistryReachable())
+                    Say("The project list " + _config.RegistryPath + " cannot be reached. Connect to the office network or VPN.", Bad);
+                else
+                    Say("Settings saved.", Good);
+            }
         }
 
         private void ProjectSetup()
@@ -393,6 +433,7 @@ namespace CrewUpload.App
             if (parsed == null) return;
             var v = parsed.Visit;
             if (!string.IsNullOrEmpty(v.Crew)) _crew.Text = v.Crew;
+            _phase.Text = v.Phase ?? string.Empty;
             if (v.Date != default(DateTime)) _date.Value = v.Date;
             if (!string.IsNullOrEmpty(v.WorkType))
             {

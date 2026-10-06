@@ -80,6 +80,10 @@ deleted; *Reactivate* opens one again). Project keys are always `####-###`: `180
   live file is damaged (hand-edited, say), the newest good backup is read instead and PM saves are
   blocked until someone restores it.
 
+**Settings** (bottom of the window) shows where the app looks for the project list. A PM started with
+`--setup` can point it at another folder there (a mapped-drive pick is stored as its UNC path); it is
+saved to the job-folders.json the app was started with.
+
 **Crew uploads.** The crew types client-task, or drops a named download, and that is all they choose.
 An unregistered project stops with "The PM needs to set the project location"; there is no browsing for
 a destination. Uploads land in the one place the app writes:
@@ -87,7 +91,7 @@ a destination. Uploads land in the one place the app writes:
 ```
 [Survey]\02Field\01FLD_DR_FN_DCfile\Unprocessed\       unprocessedFolder, made inside the registered Survey folder
     20261005-JBB-1800-119-TOPO\                       the crew's folder, kept as they named it
-        20261005-JBB-1800-119-TOPO.job                data files: the download's name
+        20261005-JBB-1800-119-TOPO.job                job files: the download's name
         20261005-JBB-1800-119-TOPO-FN.pdf             field notes
         20261005-JBB-1800-119-TOPO-ASB.pdf            as-built notes
         Photos\1800-119-20261005-0412.jpg             client-task-date-camera number (IMG_0412)
@@ -97,9 +101,13 @@ a destination. Uploads land in the one place the app writes:
 Moving a download from Unprocessed to its processed location stays an office job. The app refuses to
 write anywhere outside Unprocessed, and does nothing if the registered Survey folder has gone.
 
+1. **Phase.** A project with a phase (141) has it in the Phase box beside the project number, or typed
+   as `1800-119-141`. It follows client-task in every name (`20261005-JBB-1800-119-141-TOPO`,
+   `1800-119-141-20261005-0412.jpg`) and goes to the same registered project. A download folder named
+   with a phase fills the box in.
 1. **Visit.** Crew initials, field date and work type (TOPO, LINEOUT, STAKE, BNDY, CTRL, ASBLT, ESMT)
    make the download folder's name. Dropping a folder already named that way fills them in.
-2. **Drop.** Four boxes -- Photos, Field notes, Data files, As-built notes. Whatever lands on a box is
+2. **Drop.** Four boxes -- Job files, Field notes, As-built notes, Photos. Whatever lands on a box is
    that type, files or whole folders. Crew initials inside a download name never decide a type.
 3. **Check.** Each file shows its type, final name and status before anything is copied. A dropped
    download keeps its own folder and subfolders; downloads are never flattened together.

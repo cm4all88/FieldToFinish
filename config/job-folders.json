@@ -43,56 +43,8 @@
   ],
   "categories": [
     {
-      "key": "photos",
-      "name": "Photos",
-      "code": "PHOTO",
-      "folder": "Photos",
-      "keywords": [
-        "photo",
-        "photos",
-        "pics",
-        "pictures",
-        "picture"
-      ],
-      "extensions": [
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".heic",
-        ".heif",
-        ".gif",
-        ".bmp",
-        ".tif",
-        ".tiff",
-        ".mp4",
-        ".mov"
-      ],
-      "fileName": "{projectNumber}-{date}-{number}",
-      "fallback": false,
-      "color": "#FCC214"
-    },
-    {
-      "key": "notes",
-      "name": "Field notes",
-      "code": "FN",
-      "folder": "",
-      "keywords": [
-        "fn",
-        "field notes",
-        "field note",
-        "fieldnotes",
-        "notes",
-        "fieldbook",
-        "field book"
-      ],
-      "extensions": [],
-      "fileName": null,
-      "fallback": false,
-      "color": "#3FB549"
-    },
-    {
       "key": "data",
-      "name": "Data files",
+      "name": "Job files",
       "code": "",
       "folder": "",
       "keywords": [
@@ -125,6 +77,25 @@
       "color": "#0073BB"
     },
     {
+      "key": "notes",
+      "name": "Field notes",
+      "code": "FN",
+      "folder": "",
+      "keywords": [
+        "fn",
+        "field notes",
+        "field note",
+        "fieldnotes",
+        "notes",
+        "fieldbook",
+        "field book"
+      ],
+      "extensions": [],
+      "fileName": null,
+      "fallback": false,
+      "color": "#3FB549"
+    },
+    {
       "key": "asbuilt",
       "name": "As-built notes",
       "code": "ASB",
@@ -140,6 +111,35 @@
       "fileName": null,
       "fallback": false,
       "color": "#F36E21"
+    },
+    {
+      "key": "photos",
+      "name": "Photos",
+      "code": "PHOTO",
+      "folder": "Photos",
+      "keywords": [
+        "photo",
+        "photos",
+        "pics",
+        "pictures",
+        "picture"
+      ],
+      "extensions": [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".heic",
+        ".heif",
+        ".gif",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".mp4",
+        ".mov"
+      ],
+      "fileName": "{projectNumber}-{date}-{number}",
+      "fallback": false,
+      "color": "#FCC214"
     }
   ],
   "documents": [

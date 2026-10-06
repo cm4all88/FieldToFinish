@@ -283,6 +283,126 @@ namespace CrewUpload.App
         }
     }
 
+    /// <summary>
+    /// Where the app looks: the project list's folder on the share. Anyone can see it; only a PM
+    /// (started with --setup) can change it. Saved to the job-folders.json the app was started with.
+    /// </summary>
+    internal sealed class SettingsForm : Form
+    {
+        private readonly JobFolderConfig _config;
+        private readonly TextBox _folder;
+        private readonly Label _state;
+        private readonly Button _save;
+
+        public SettingsForm(JobFolderConfig config, bool canEdit)
+        {
+            _config = config;
+            Text = "Settings";
+            Font = Theme.Body(10f);
+            ForeColor = Theme.Charcoal;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            StartPosition = FormStartPosition.CenterParent;
+            MinimizeBox = MaximizeBox = false;
+            ShowInTaskbar = false;
+            BackColor = Color.White;
+
+            var stack = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 3, Padding = new Padding(16, 14, 16, 10) };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 520));
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+            stack.Controls.Add(MainForm.Caption("Project list folder"), 0, 0);
+            _folder = new TextBox { Width = 510, Text = Path.GetDirectoryName(config.RegistryPath ?? string.Empty), ReadOnly = !canEdit };
+            _folder.TextChanged += (s, e) => ShowState();
+            stack.Controls.Add(_folder, 1, 0);
+            var browse = Theme.Button("Choose folder...", false);
+            browse.Enabled = canEdit;
+            browse.Click += (s, e) => Choose();
+            stack.Controls.Add(browse, 2, 0);
+
+            _state = new Label { AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(3, 4, 3, 8) };
+            stack.Controls.Add(_state, 1, 1);
+            stack.SetColumnSpan(_state, 2);
+
+            stack.Controls.Add(MainForm.Caption("Settings file"), 0, 2);
+            stack.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(700, 0), ForeColor = Theme.MediumGray, Margin = new Padding(3, 8, 3, 3), Text = config.LoadedFrom ?? "(not saved)" }, 1, 2);
+            stack.Controls.Add(MainForm.Caption("Uploads go to"), 0, 3);
+            stack.Controls.Add(new Label { AutoSize = true, ForeColor = Theme.MediumGray, Margin = new Padding(3, 8, 3, 3), Text = "[registered Survey folder]\\" + config.UnprocessedFolder + "\\<crew download folder>" }, 1, 3);
+
+            var note = new Label
+            {
+                AutoSize = true, MaximumSize = new Size(700, 0), Margin = new Padding(3, 10, 3, 3), ForeColor = Theme.MediumGray,
+                Text = canEdit
+                    ? "The folder holds project-registry.json and its backups. Use the network (\\\\parametrix.com\\...) path; a mapped drive is turned into one."
+                    : "Only a PM can change this: start Crew Upload with --setup.",
+            };
+            stack.Controls.Add(note, 1, 4);
+            stack.SetColumnSpan(note, 2);
+
+            var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
+            _save = Theme.Button("Save", true);
+            _save.Visible = canEdit;
+            _save.Click += (s, e) => Save();
+            var close = Theme.Button(canEdit ? "Cancel" : "Close", false);
+            close.DialogResult = DialogResult.Cancel;
+            buttons.Controls.Add(_save);
+            buttons.Controls.Add(close);
+            stack.Controls.Add(buttons, 0, 5);
+            stack.SetColumnSpan(buttons, 3);
+            CancelButton = close;
+
+            Controls.Add(stack);
+            ClientSize = new Size(stack.PreferredSize.Width, stack.PreferredSize.Height + 4);
+            ShowState();
+        }
+
+        private string Folder => _folder.Text.Trim().TrimEnd('\\', '/');
+
+        private void ShowState()
+        {
+            var f = Folder;
+            if (f.Length == 0) { _state.Text = "Choose the folder."; _state.ForeColor = Theme.Red; _save.Enabled = false; return; }
+            var unc = ProjectRegistry.IsUnc(f);
+            var exists = Directory.Exists(f);
+            var hasList = exists && File.Exists(Path.Combine(f, "project-registry.json"));
+            _state.ForeColor = !unc && _config.RequireUncPaths || !exists ? Theme.Red : Theme.MediumGray;
+            _state.Text = !unc && _config.RequireUncPaths ? "This is not a network (UNC) path."
+                : !exists ? "This folder cannot be reached (or does not exist yet)."
+                : hasList ? "Found project-registry.json here."
+                : "Reachable. No project list here yet; the first project a PM registers creates it.";
+            _save.Enabled = (unc || !_config.RequireUncPaths) && exists;
+        }
+
+        private void Choose()
+        {
+            using (var dialog = new FolderBrowserDialog { Description = "Choose the Crew Upload config folder (it holds project-registry.json)", ShowNewFolderButton = true })
+            {
+                if (Directory.Exists(Folder)) dialog.SelectedPath = Folder;
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                _folder.Text = Unc.FromMapped(dialog.SelectedPath).TrimEnd('\\');
+            }
+        }
+
+        private void Save()
+        {
+            if (_config.LoadedFrom == null) return;
+            var previous = _config.RegistryFile;
+            _config.RegistryFile = Path.Combine(Folder, "project-registry.json");
+            try
+            {
+                _config.Save(_config.LoadedFrom);
+                DialogResult = DialogResult.OK;
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException)
+            {
+                _config.RegistryFile = previous;
+                MessageBox.Show(this, "Could not save " + _config.LoadedFrom + ":\n" + e.Message
+                    + "\n\nIf the app runs from the share, the settings file may be read-only for you; ask the CAD manager.",
+                    Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+    }
+
     /// <summary>Field notes typed straight in, for crews without a scanner.</summary>
     internal sealed class NotesForm : Form
     {

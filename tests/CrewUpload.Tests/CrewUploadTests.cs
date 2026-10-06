@@ -147,6 +147,47 @@ public sealed class CrewUploadTests : IDisposable
         Assert.Equal(number, JobFolderConfig.NormalizeProjectNumber(typed));
 
     [Theory]
+    [InlineData("1800-119", "1800-119", null)]
+    [InlineData("1800-119-141", "1800-119", "141")]
+    [InlineData("554-1800-119", "1800-119", null)]
+    [InlineData("554-1800-119-141", "1800-119", "141")]
+    [InlineData("1800-11-2", "1800-011", "2")]
+    public void PhasesAreReadFromTheNumber(string typed, string clientTask, string? phase)
+    {
+        Assert.True(JobFolderConfig.ParseProjectNumber(typed, out var ct, out var ph));
+        Assert.Equal((clientTask, phase), (ct, ph));
+    }
+
+    [Fact]
+    public void APhaseFollowsClientTaskInEveryName()
+    {
+        var p = Project();
+        var visit = new FieldVisit { Crew = "jbb", Date = new DateTime(2026, 10, 5), WorkType = "TOPO", Phase = "141" };
+        Assert.Equal("20261005-JBB-1521-799-141-TOPO", DownloadNames.Name(_config, "1521-799", visit));
+
+        CardFile("IMG_0412.JPG");
+        CardFile("x.job");
+        var planner = new UploadPlanner(_config);
+        var items = planner.Collect(Directory.GetFiles(_card).OrderBy(f => f));
+        planner.Assign(p, items, visit);
+        Assert.Equal(new[] { "1521-799-141-20261005-0412.jpg", "20261005-JBB-1521-799-141-TOPO.job" }, items.Select(i => Path.GetFileName(i.Destination)));
+        // Same registered project: the phase does not change where it goes.
+        Assert.All(items, i => Assert.StartsWith(p.UploadRoot, i.Destination));
+    }
+
+    [Fact]
+    public void ADownloadNamedWithAPhaseIsReadBack()
+    {
+        var parsed = DownloadNames.Parse(_config, "20261005-JBB-1800-119-141-TOPO")!;
+        Assert.Equal(("1800-119", "141", "TOPO"), (parsed.ProjectNumber, parsed.Visit.Phase, parsed.Visit.WorkType));
+        Assert.Null(DownloadNames.Parse(_config, "20261005-JBB-1800-119-TOPO")!.Visit.Phase);
+    }
+
+    [Fact]
+    public void TheBoxesAreJobFilesFieldNotesAsBuiltNotesPhotos() =>
+        Assert.Equal(new[] { "Job files", "Field notes", "As-built notes", "Photos" }, _config.Categories.Select(c => c.Name));
+
+    [Theory]
     [InlineData("1800-119", true)]
     [InlineData("554-1800-119", true)]
     [InlineData("1800", false)]

@@ -15,6 +15,9 @@ namespace CrewUpload
         /// <summary>Work type code: TOPO, LINEOUT ...</summary>
         public string WorkType { get; set; }
 
+        /// <summary>The project's phase when it has one (141); it follows client-task in every name.</summary>
+        public string Phase { get; set; }
+
         public string CrewCode => (Crew ?? string.Empty).Trim().ToUpperInvariant();
         public string WorkCode => (WorkType ?? string.Empty).Trim().ToUpperInvariant();
     }
@@ -40,7 +43,10 @@ namespace CrewUpload
         {
             return new Dictionary<string, string>
             {
-                { "projectNumber", JobFolderConfig.NormalizeProjectNumber(projectNumber) },
+                // 1800-119, or 1800-119-141 when the visit is for a phase.
+                { "projectNumber", JobFolderConfig.NormalizeProjectNumber(projectNumber) + (string.IsNullOrEmpty(visit.Phase) ? string.Empty : "-" + visit.Phase) },
+                { "clientTask", JobFolderConfig.NormalizeProjectNumber(projectNumber) },
+                { "phase", visit.Phase ?? string.Empty },
                 { "date", visit.Date.ToString(config.DateFormat, CultureInfo.InvariantCulture) },
                 { "year", visit.Date.Year.ToString(CultureInfo.InvariantCulture) },
                 { "crew", visit.CrewCode },
@@ -67,8 +73,9 @@ namespace CrewUpload
             }
             visit.Crew = m.Groups["crew"].Success ? m.Groups["crew"].Value.ToUpperInvariant() : null;
             visit.WorkType = m.Groups["workType"].Success ? m.Groups["workType"].Value.ToUpperInvariant() : null;
-            var number = JobFolderConfig.NormalizeProjectNumber(m.Groups["projectNumber"].Value);
-            if (!config.IsValidProjectNumber(number)) return null;
+            string number, phase;
+            if (!JobFolderConfig.ParseProjectNumber(m.Groups["projectNumber"].Value, out number, out phase) || !config.IsValidProjectNumber(number)) return null;
+            visit.Phase = phase;
             return new ParsedDownload { FolderName = folderName.Trim(), ProjectNumber = number, Visit = visit };
         }
 

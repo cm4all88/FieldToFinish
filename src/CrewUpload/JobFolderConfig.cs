@@ -231,16 +231,47 @@ namespace CrewUpload
         /// </summary>
         public static string NormalizeProjectNumber(string number)
         {
-            var n = Regex.Replace((number ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", string.Empty);
-            var parts = n.Split('-');
-            if (parts.Length > 2) n = parts[parts.Length - 2] + "-" + parts[parts.Length - 1];
-            parts = n.Split('-');
-            // ####-###: zeros are padded on, never dropped, so 1800-011 and 1800-119 stay apart and
-            // 1800-11 is the same project as 1800-011.
-            if (parts.Length == 2 && Regex.IsMatch(parts[0], "^[0-9]{1,4}$") && Regex.IsMatch(parts[1], "^[0-9]{1,3}$"))
-                return parts[0].PadLeft(4, '0') + "-" + parts[1].PadLeft(3, '0');
-            return n;
+            string clientTask, phase;
+            return ParseProjectNumber(number, out clientTask, out phase) ? clientTask : Compact(number);
         }
+
+        /// <summary>
+        /// Reads a project number as crews and folders write it: 1800-119, 1800-119-141 (with a phase),
+        /// 554-1800-119 (with the office prefix), 554-1800-119-141. Client-task comes back as ####-###:
+        /// zeros are padded on, never dropped, so 1800-011 and 1800-119 stay apart and 1800-11 is the
+        /// same project as 1800-011. The phase is kept as written. False when there is no client-task in it.
+        /// </summary>
+        public static bool ParseProjectNumber(string number, out string clientTask, out string phase)
+        {
+            clientTask = null;
+            phase = null;
+            var parts = Compact(number).Split('-');
+            // Client is the 4-digit part followed by a task of up to 3 digits; a 3-digit part before it
+            // is the office prefix, one after it the phase.
+            for (var pass = 0; pass < 2 && clientTask == null; pass++)
+                for (var i = 0; i + 1 < parts.Length; i++)
+                {
+                    var clientOk = pass == 0 ? Regex.IsMatch(parts[i], "^[0-9]{4}$") : Regex.IsMatch(parts[i], "^[0-9]{1,4}$");
+                    if (!clientOk || !Regex.IsMatch(parts[i + 1], "^[0-9]{1,3}$")) continue;
+                    if (i + 2 < parts.Length && !Regex.IsMatch(parts[i + 2], "^[0-9]{1,4}$")) continue;
+                    if (i + 3 < parts.Length) continue;
+                    clientTask = parts[i].PadLeft(4, '0') + "-" + parts[i + 1].PadLeft(3, '0');
+                    phase = i + 2 < parts.Length ? parts[i + 2] : null;
+                    break;
+                }
+            return clientTask != null;
+        }
+
+        /// <summary>A phase as crews type it: digits only, or null for none.</summary>
+        public static string NormalizePhase(string phase)
+        {
+            var p = Compact(phase);
+            return p.Length == 0 ? null : p;
+        }
+
+        public static bool IsValidPhase(string phase) => phase == null || Regex.IsMatch(phase, "^[0-9]{1,4}$");
+
+        private static string Compact(string s) => Regex.Replace((s ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", string.Empty);
 
         /// <summary>True when the user may open project setup (after --setup). Not a security boundary.</summary>
         public bool IsProjectManager(string userName, string domainUser = null)
@@ -270,12 +301,35 @@ namespace CrewUpload
         {
             var config = JsonConvert.DeserializeObject<JobFolderConfig>(File.ReadAllText(path)) ?? new JobFolderConfig();
             config.BaseDirectory = Path.GetDirectoryName(Path.GetFullPath(path));
+            config.LoadedFrom = Path.GetFullPath(path);
             return config;
         }
 
+        /// <summary>The job-folders.json this config was read from; Settings saves back to it.</summary>
+        [JsonIgnore] public string LoadedFrom { get; set; }
+
+        /// <summary>
+        /// Writes the config to a temporary file beside <paramref name="path"/>, checks it reads back,
+        /// then swaps it in, so a failed save never leaves a half-written job-folders.json.
+        /// </summary>
         public void Save(string path)
         {
-            File.WriteAllText(path, JsonConvert.SerializeObject(this, Formatting.Indented));
+            var text = JsonConvert.SerializeObject(this, Formatting.Indented);
+            var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.WriteAllText(temp, text);
+                if (JsonConvert.DeserializeObject<JobFolderConfig>(File.ReadAllText(temp)) == null)
+                    throw new InvalidDataException("The settings did not read back. Nothing was saved.");
+                if (File.Exists(path)) File.Replace(temp, path, null, true);
+                else File.Move(temp, path);
+            }
+            finally
+            {
+                try { if (File.Exists(temp)) File.Delete(temp); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
 
         /// <summary>Everything wrong with the config, in words a CAD manager can act on.</summary>
@@ -352,10 +406,10 @@ namespace CrewUpload
                 {
                     new UploadCategory
                     {
-                        // Client-task-date-camera number: IMG_0412.JPG -> 1521-799-20260128-0412.jpg.
-                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{projectNumber}-{date}-{number}",
-                        Keywords = { "photo", "photos", "pics", "pictures", "picture" },
-                        Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
+                        // 20260128-JAM-1521-799-TOPO.job / .jxl: the data carries the download's own name.
+                        Key = "data", Name = "Job files", Code = "", Color = "#0073BB", Folder = "", FileName = "{download}", Fallback = true,
+                        Keywords = { "raw", "raw data", "rawdata", "data" },
+                        Extensions = { ".job", ".jxl", ".raw", ".rw5", ".dc", ".t01", ".t02", ".t04", ".dat", ".fbk", ".gsi", ".sdr", ".crd", ".csv", ".pnt", ".tsj", ".jbk" },
                     },
                     new UploadCategory
                     {
@@ -364,15 +418,15 @@ namespace CrewUpload
                     },
                     new UploadCategory
                     {
-                        // 20260128-JAM-1521-799-TOPO.job / .jxl: the data carries the download's own name.
-                        Key = "data", Name = "Data files", Code = "", Color = "#0073BB", Folder = "", FileName = "{download}", Fallback = true,
-                        Keywords = { "raw", "raw data", "rawdata", "data" },
-                        Extensions = { ".job", ".jxl", ".raw", ".rw5", ".dc", ".t01", ".t02", ".t04", ".dat", ".fbk", ".gsi", ".sdr", ".crd", ".csv", ".pnt", ".tsj", ".jbk" },
+                        Key = "asbuilt", Name = "As-built notes", Code = "ASB", Color = "#F36E21", Folder = "",
+                        Keywords = { "asb", "asbuilt", "as built", "asbuilts", "as builts" },
                     },
                     new UploadCategory
                     {
-                        Key = "asbuilt", Name = "As-built notes", Code = "ASB", Color = "#F36E21", Folder = "",
-                        Keywords = { "asb", "asbuilt", "as built", "asbuilts", "as builts" },
+                        // Client-task-date-camera number: IMG_0412.JPG -> 1521-799-20260128-0412.jpg.
+                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{projectNumber}-{date}-{number}",
+                        Keywords = { "photo", "photos", "pics", "pictures", "picture" },
+                        Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
                     },
                 },
                 Branding = new Branding
