@@ -48,7 +48,7 @@ namespace CrewUpload.App
         public MainForm(JobFolderConfig config, string projectNumber, IList<string> dropped, bool setup = false)
         {
             _config = config;
-            _projects = new ProjectStore(config, new ProjectRegistry(config.RegistryPath, config.RequireUncPaths));
+            _projects = new ProjectStore(config, ProjectRegistry.For(config));
             _planner = new UploadPlanner(config);
 
             Text = (Theme.CompanyName.Length > 0 ? Theme.CompanyName + " " : string.Empty) + Theme.AppTitle;
@@ -66,7 +66,7 @@ namespace CrewUpload.App
 
             top.Controls.Add(Caption("Project number"), 0, 0);
             _number = new ComboBox { Width = 190, Font = Theme.Body(12f), DropDownStyle = ComboBoxStyle.DropDown };
-            _number.Items.AddRange(_remembered.RecentProjects.Cast<object>().ToArray());
+            Shown += (s, e) => FillProjectList();
             _number.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; FindProject(); } };
             _number.SelectionChangeCommitted += (s, e) => BeginInvoke((Action)FindProject);
             top.Controls.Add(_number, 1, 0);
@@ -279,7 +279,20 @@ namespace CrewUpload.App
         private bool RegistryReachable()
         {
             var path = _config.RegistryPath;
-            return path != null && (File.Exists(path) || Directory.Exists(Path.GetDirectoryName(path)));
+            return path != null && Directory.Exists(Path.GetDirectoryName(path));
+        }
+
+        /// <summary>The crew's list: active projects only, the ones this PC used recently first.</summary>
+        private void FillProjectList()
+        {
+            IReadOnlyList<string> active;
+            try { active = _projects.ActiveProjects(); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException) { return; }
+            var typed = _number.Text;
+            _number.Items.Clear();
+            var recent = _remembered.RecentProjects.Select(JobFolderConfig.NormalizeProjectNumber).Where(active.Contains).ToList();
+            _number.Items.AddRange(recent.Concat(active.Except(recent)).Cast<object>().ToArray());
+            _number.Text = typed;
         }
 
         /// <summary>
@@ -302,18 +315,20 @@ namespace CrewUpload.App
                 return;
             }
             ProjectFolder found;
+            string problem;
             try
             {
-                found = _projects.Find(number);
+                // Retries a briefly unavailable file a few times before giving up.
+                found = _projects.Find(number, out problem);
             }
-            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is Newtonsoft.Json.JsonException)
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException)
             {
-                SetProject(null, "Cannot read the project list: " + e.Message);
+                SetProject(null, "Cannot read the project list right now. Try again in a minute. (" + e.Message + ")");
                 return;
             }
             if (found == null)
             {
-                SetProject(null, number + " has not been set up for crew uploads yet. The PM needs to set the project location.");
+                SetProject(null, problem);
                 return;
             }
             if (!Directory.Exists(found.Path))
@@ -326,11 +341,21 @@ namespace CrewUpload.App
 
         private void ProjectSetup()
         {
-            using (var form = new ProjectSetupForm(_config, _projects, _number.Text))
+            // A second check after --setup. The registry folder's NTFS permissions are what really
+            // decide who can change it; this only keeps the screen away from people who need not see it.
+            var user = Environment.UserName;
+            var domainUser = Environment.UserDomainName + "\\" + user;
+            if (!_config.IsProjectManager(user, domainUser))
+            {
+                MessageBox.Show(this, domainUser + " is not on the project manager list in job-folders.json.", "Project setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (var form = new ProjectSetupForm(_config, _projects.Registry, _number.Text))
             {
                 form.ShowDialog(this);
-                if (form.Registered != null && string.Equals(form.Registered, JobFolderConfig.NormalizeProjectNumber(_number.Text), StringComparison.OrdinalIgnoreCase))
-                    FindProject();
+                if (!form.Changed) return;
+                FillProjectList();
+                if (_number.Text.Length > 0) FindProject();
             }
         }
 

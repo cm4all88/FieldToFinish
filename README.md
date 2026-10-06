@@ -34,11 +34,35 @@ Survey folder, picked in a folder browser, for example
 ```
 
 A pick on a mapped drive is stored as its UNC path; a path that is not UNC is refused. The PM can change
-the location later, and the old one is kept in the entry's history. Registrations live in one shared
-file, `project-registry.json` (`registryFile` in the config). **It must be on the share** -- run the app
-from the share, or point `registryFile` at a UNC path -- so every PC reads the same list. PMs open setup
-by starting the app with `--setup` (their own shortcut); crews' shortcuts leave it off. Who may change
-the list is decided by the file's share permissions.
+the location later, or mark a finished project **inactive** -- it disappears from the crews' list and
+an upload to it is refused, but the registration and its full history stay (projects are never
+deleted; *Reactivate* opens one again). Project keys are always `####-###`: `1800-11` is read as
+`1800-011`, and `1800-011` and `1800-119` are different projects.
+
+**The registry** is one file in its own shared configuration folder, never beside the exe:
+
+```
+\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config\
+    project-registry.json              the live list (registryFile in job-folders.json, a permanent UNC path)
+    project-registry.backup-1.json     the version before the live one ... backup-5 the oldest (registryBackups)
+```
+
+- **Permissions are the security boundary.** PMs/admins need Modify on the folder (a save creates,
+  renames and deletes files there); crews need Read. `deploy\crewupload-config-folder.ps1` makes the
+  folder and adds both grants. PMs open setup with `--setup` (their own shortcut), and the optional
+  `projectManagers` list in job-folders.json is a second check -- a convenience that keeps the screen
+  out of the way, not protection. A PM without Modify gets "You do not have permission" on saving.
+- **Saves never write over the live file.** A save takes a writers' lock (`project-registry.lock`,
+  deleted on close even if the PC crashes), re-reads the live file, writes the complete new registry to
+  a temporary file in the same folder, flushes it to disk, reads it back and checks it, and only then
+  atomically replaces the live file, which becomes backup-1 (older backups roll up to backup-5). A write
+  that does not read back is thrown away and the live file is untouched.
+- **Two PMs at once.** Every save bumps the file's revision. If another PM saved after this PM opened
+  setup, changes to *other* projects are merged in and kept; a change to the *same* project stops the
+  save, says who changed it, and refreshes the screen so the PM can look before trying again.
+- **Crew reads** retry a briefly locked or mid-swap file a few times before reporting a problem. If the
+  live file is damaged (hand-edited, say), the newest good backup is read instead and PM saves are
+  blocked until someone restores it.
 
 **Crew uploads.** The crew types client-task, or drops a named download, and that is all they choose.
 An unregistered project stops with "The PM needs to set the project location"; there is no browsing for
@@ -84,7 +108,7 @@ stand-ins for Klinic Slab and Franklin Gothic URW). Each drop box carries its ty
 secondary palette, repeated as a stripe in the Type column. Logo files and colours are in
 `config\branding\` and the `branding` section of the config.
 
-Everything -- the registry file, Unprocessed folder, work types, upload types, codes, keywords and name
+Everything -- the registry location and backups, PM list, Unprocessed folder, work types, upload types, codes, keywords and name
 patterns -- is in `config\job-folders.json`, copied beside the exe. The app refuses to start with a
 config that does not validate and says what is wrong.
 

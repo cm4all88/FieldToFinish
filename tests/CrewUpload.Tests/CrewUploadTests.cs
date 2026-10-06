@@ -60,7 +60,9 @@ public sealed class CrewUploadTests : IDisposable
     }
 
     // Temp folders are not UNC; the UNC rule itself is tested on its own.
-    private ProjectRegistry Registry() => new(Path.Combine(_root, "project-registry.json"), requireUnc: false);
+    private string RegistryFile => Path.Combine(_root, "Config", "project-registry.json");
+
+    private ProjectRegistry Registry() => new(RegistryFile, requireUnc: false, backups: 5, retries: 5, retryDelayMs: 50);
 
     private ProjectStore Store() => new(_config, Registry());
 
@@ -124,6 +126,8 @@ public sealed class CrewUploadTests : IDisposable
     [InlineData("1800-119", "1800-119")]
     [InlineData(" 1521-799 ", "1521-799")]
     [InlineData("554-1800-119", "1800-119")]
+    [InlineData("1800-11", "1800-011")]
+    [InlineData("800-7", "0800-007")]
     public void ProjectNumbersAreClientTask(string typed, string number) =>
         Assert.Equal(number, JobFolderConfig.NormalizeProjectNumber(typed));
 
@@ -177,6 +181,7 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void AnUnregisteredProjectIsNotFoundEvenIfItsFolderExists()
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(RegistryFile)!);
         SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3");
         Assert.Null(Store().Find("1800-119"));
     }
@@ -191,8 +196,9 @@ public sealed class CrewUploadTests : IDisposable
 
         var reg = Registry().Find("1800-119")!;
         Assert.Equal(second, reg.SurveyFolder);
-        var old = Assert.Single(reg.History);
-        Assert.Equal((first, "pm1", "pm2"), (old.SurveyFolder, old.RegisteredBy, old.ReplacedBy));
+        Assert.Equal(new[] { RegistrationChange.Registered, RegistrationChange.Moved }, reg.History.Select(h => h.Change));
+        var moved = reg.History[1];
+        Assert.Equal((second, first, "pm2"), (moved.SurveyFolder, moved.PreviousFolder, moved.By));
         Assert.Single(Registry().All());
     }
 
@@ -223,13 +229,175 @@ public sealed class CrewUploadTests : IDisposable
     }
 
     [Fact]
-    public void ShippedConfigRequiresUncAndKeepsTheRegistryBesideTheApp()
+    public void ShippedConfigKeepsTheRegistryInTheSharedConfigFolder()
     {
         var c = JobFolderConfig.CreateDefault();
         Assert.True(c.RequireUncPaths);
         c.BaseDirectory = _root;
-        Assert.Equal(Path.Combine(_root, "project-registry.json"), c.RegistryPath);
+        Assert.Equal(@"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config\project-registry.json", c.RegistryPath);
+        Assert.Equal(5, c.RegistryBackups);
         Assert.Equal(@"02Field\01FLD_DR_FN_DCfile\Unprocessed", c.UnprocessedFolder);
+    }
+
+    [Fact]
+    public void ARegistryBesideTheAppIsRefused()
+    {
+        var c = JobFolderConfig.CreateDefault();
+        c.RegistryFile = "project-registry.json";
+        var problems = new List<string>();
+        c.Validate(problems);
+        Assert.Contains(problems, p => p.Contains("registryFile must be a permanent UNC path"));
+    }
+
+    [Fact]
+    public void ThePmListIsOptionalAndCaseInsensitive()
+    {
+        var c = JobFolderConfig.CreateDefault();
+        Assert.True(c.IsProjectManager("anyone"));
+        c.ProjectManagers.Add("PMSmith");
+        Assert.True(c.IsProjectManager("pmsmith"));
+        Assert.True(c.IsProjectManager("x", "PMSmith"));
+        Assert.False(c.IsProjectManager("jbb"));
+    }
+
+    // ---------------------------------------------------------- registry file
+
+    [Fact]
+    public void KeysKeepTheirLeadingZeros()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("1800-011", SurveyDir("1800-HDR", "554-1800-011 Other"), "pm");
+        Assert.Equal(new[] { "1800-011", "1800-119" }, Registry().All().Select(r => r.Key));
+        Assert.EndsWith("554-1800-011 Other" + Path.DirectorySeparatorChar + "99Svcs" + Path.DirectorySeparatorChar + "Survey", Registry().Find("1800-11")!.SurveyFolder);
+    }
+
+    [Fact]
+    public void EverySaveReplacesTheWholeFileAndKeepsFiveBackups()
+    {
+        for (var i = 0; i < 7; i++)
+            Registry().Register("1800-1" + i.ToString("00"), SurveyDir("1800-HDR", "554-1800-1" + i.ToString("00") + " P"), "pm");
+
+        var registry = Registry();
+        var live = registry.Load();
+        Assert.Equal(7, live.Revision);
+        Assert.Equal(7, live.Projects.Count);
+        for (var n = 1; n <= 5; n++) Assert.True(File.Exists(registry.BackupPath(n)), "backup-" + n);
+        Assert.False(File.Exists(registry.BackupPath(6)));
+        // backup-1 is the version just before the live one.
+        Assert.Contains("\"revision\": 6", File.ReadAllText(registry.BackupPath(1)));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(RegistryFile)!, "*.tmp-*"));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(RegistryFile)!, "*.lock"));
+    }
+
+    [Fact]
+    public void AWriteThatDoesNotReadBackNeverReplacesTheLiveFile()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        var before = File.ReadAllText(RegistryFile);
+
+        var registry = Registry();
+        registry.AfterTempWritten = temp => File.WriteAllText(temp, "{ \"projects\": [ broken");
+        Assert.Throws<InvalidDataException>(() => registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm"));
+
+        Assert.Equal(before, File.ReadAllText(RegistryFile));
+        Assert.False(File.Exists(registry.BackupPath(1)));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(RegistryFile)!, "*.tmp-*"));
+        Assert.Null(Registry().Find("1711-042"));
+    }
+
+    [Fact]
+    public void AChangeToTheSameProjectByAnotherPmIsNotOverwritten()
+    {
+        var a = SurveyDir("1800-HDR", "554-1800-119 TDLE");
+        var b = SurveyDir("1800-HDR", "554-1800-119 TDLE moved");
+        var c = SurveyDir("1800-HDR", "554-1800-119 TDLE elsewhere");
+        Registry().Register("1800-119", a, "pm1");
+
+        var myScreen = Registry().Load();               // PM 2 opens setup
+        Registry().Register("1800-119", b, "pm3");      // PM 3 moves it meanwhile
+        var e = Assert.Throws<RegistryConflictException>(() => Registry().Register("1800-119", c, "pm2", myScreen));
+        Assert.Contains("pm3", e.Message);
+        Assert.Contains("Refresh", e.Message);
+        Assert.Equal(b, Registry().Find("1800-119")!.SurveyFolder);
+    }
+
+    [Fact]
+    public void ChangesToOtherProjectsMeanwhileAreMergedNotLost()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        var myScreen = Registry().Load();
+        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm3");
+
+        var result = Registry().SetActive("1800-119", false, "pm2", myScreen);
+        Assert.True(result.MergedOtherChanges);
+        Assert.NotNull(Registry().Find("1711-042"));
+        Assert.False(Registry().Find("1800-119")!.Active);
+        Assert.Equal(3, Registry().Load().Revision);
+    }
+
+    [Fact]
+    public void TwoPmsSavingAtOnceBothLand()
+    {
+        var folders = Enumerable.Range(0, 10).Select(i => SurveyDir("1800-HDR", "554-1800-2" + i.ToString("00") + " P")).ToList();
+        Parallel.For(0, 10, i => Registry().Register("1800-2" + i.ToString("00"), folders[i], "pm" + i));
+        var live = Registry().Load();
+        Assert.Equal(10, live.Projects.Count);
+        Assert.Equal(10, live.Revision);
+    }
+
+    [Fact]
+    public void CrewReadsRideOutABrieflyLockedFile()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        var held = new FileStream(RegistryFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var release = Task.Run(async () => { await Task.Delay(120); held.Dispose(); });
+        Assert.NotNull(Registry().Find("1800-119"));
+        release.Wait();
+    }
+
+    [Fact]
+    public void ADamagedLiveFileFallsBackToTheLastGoodBackupAndBlocksSaves()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm");
+        File.WriteAllText(RegistryFile, "{ hand edited, oops");
+
+        var snapshot = Registry().Load();
+        Assert.Equal(Registry().BackupPath(1), snapshot.ReadFromBackup);
+        Assert.NotNull(snapshot.Get("1800-119"));
+        var e = Assert.Throws<InvalidDataException>(() => Registry().Register("1700-001", SurveyDir("1700-X", "1700-001 Y"), "pm"));
+        Assert.Contains("Restore", e.Message);
+        Assert.Equal("{ hand edited, oops", File.ReadAllText(RegistryFile));
+    }
+
+    [Fact]
+    public void AnInactiveProjectLeavesCrewSelectionButKeepsItsHistory()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm");
+        Registry().SetActive("1800-119", false, "pm");
+
+        string problem;
+        Assert.Null(Store().Find("1800-119", out problem));
+        Assert.Contains("inactive", problem);
+        Assert.Equal(new[] { "1711-042" }, Store().ActiveProjects());
+        var reg = Registry().Find("1800-119")!;
+        Assert.Equal(RegistrationChange.Deactivated, reg.History.Last().Change);
+
+        Registry().SetActive("1800-119", true, "pm");
+        Assert.NotNull(Store().Find("1800-119"));
+        Assert.Equal(3, Registry().Find("1800-119")!.History.Count);
+    }
+
+    [Fact]
+    public void AVersionOneRegistryIsStillRead()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(RegistryFile)!);
+        var survey = SurveyDir("1800-HDR", "554-1800-119 TDLE").Replace("\\", "\\\\");
+        File.WriteAllText(RegistryFile, "{\"version\":\"1\",\"projects\":[{\"client\":\"1800\",\"task\":\"119\",\"surveyFolder\":\"" + survey + "\"}]}");
+        var reg = Registry().Find("1800-119")!;
+        Assert.Equal("1800-119", reg.Key);
+        Assert.True(reg.Active);
     }
 
     // ------------------------------------------------------------- classifying

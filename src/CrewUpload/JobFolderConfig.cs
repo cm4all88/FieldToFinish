@@ -134,16 +134,27 @@ namespace CrewUpload
         [JsonProperty("jobsRoot")] public string JobsRoot { get; set; }
 
         /// <summary>
-        /// The shared list of registered projects (client-task -> base Survey folder). Relative paths
-        /// are relative to this config file, so a copy of the app on the share uses one list for all.
+        /// The shared list of registered projects (client-task -> base Survey folder), in its own
+        /// configuration folder on the share -- never beside the exe -- so every PC reads one list and
+        /// the folder's NTFS permissions decide who may change it (PMs/admins Modify, crews Read).
         /// </summary>
-        [JsonProperty("registryFile")] public string RegistryFile { get; set; } = "project-registry.json";
+        [JsonProperty("registryFile")] public string RegistryFile { get; set; } = @"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config\project-registry.json";
+
+        /// <summary>How many earlier versions of the registry are kept: project-registry.backup-1.json (newest) to -N.</summary>
+        [JsonProperty("registryBackups")] public int RegistryBackups { get; set; } = 5;
+
+        /// <summary>
+        /// Windows user names allowed to open project setup, as a second check after --setup. Empty
+        /// lets anyone who starts with --setup in. A convenience only: the registry folder's NTFS
+        /// permissions are what actually stop a crew member changing it.
+        /// </summary>
+        [JsonProperty("projectManagers")] public List<string> ProjectManagers { get; set; } = new List<string>();
 
         /// <summary>Only UNC paths may be registered, never a mapped drive letter.</summary>
         [JsonProperty("requireUncPaths")] public bool RequireUncPaths { get; set; } = true;
 
         /// <summary>A client-task number (1800-119) has to match this before anything is looked up.</summary>
-        [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^[0-9]+-[0-9A-Z]+$";
+        [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^[0-9]{4}-[0-9]{3}$";
 
         /// <summary>
         /// Under the registered base Survey folder, the one place the app writes: each crew download
@@ -209,7 +220,7 @@ namespace CrewUpload
         [JsonIgnore]
         public string RegistryPath =>
             string.IsNullOrWhiteSpace(RegistryFile) ? null
-            : Path.IsPathRooted(RegistryFile) ? RegistryFile
+            : Path.IsPathRooted(RegistryFile) || ProjectRegistry.IsUnc(RegistryFile) ? RegistryFile
             : Naming.Combine(BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory, RegistryFile, new Dictionary<string, string>());
 
         [JsonIgnore] public UploadCategory FallbackCategory => Categories.FirstOrDefault(c => c.Fallback) ?? Categories.LastOrDefault();
@@ -222,7 +233,21 @@ namespace CrewUpload
         {
             var n = Regex.Replace((number ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", string.Empty);
             var parts = n.Split('-');
-            return parts.Length > 2 ? parts[parts.Length - 2] + "-" + parts[parts.Length - 1] : n;
+            if (parts.Length > 2) n = parts[parts.Length - 2] + "-" + parts[parts.Length - 1];
+            parts = n.Split('-');
+            // ####-###: zeros are padded on, never dropped, so 1800-011 and 1800-119 stay apart and
+            // 1800-11 is the same project as 1800-011.
+            if (parts.Length == 2 && Regex.IsMatch(parts[0], "^[0-9]{1,4}$") && Regex.IsMatch(parts[1], "^[0-9]{1,3}$"))
+                return parts[0].PadLeft(4, '0') + "-" + parts[1].PadLeft(3, '0');
+            return n;
+        }
+
+        /// <summary>True when the user may open project setup (after --setup). Not a security boundary.</summary>
+        public bool IsProjectManager(string userName, string domainUser = null)
+        {
+            if (ProjectManagers == null || ProjectManagers.Count == 0) return true;
+            return ProjectManagers.Any(m => string.Equals(m, userName, StringComparison.OrdinalIgnoreCase)
+                || (domainUser != null && string.Equals(m, domainUser, StringComparison.OrdinalIgnoreCase)));
         }
 
         /// <summary>1800-119 -> client 1800, task 119.</summary>
@@ -257,6 +282,9 @@ namespace CrewUpload
         public void Validate(ICollection<string> problems)
         {
             if (string.IsNullOrWhiteSpace(RegistryFile)) problems.Add("registryFile is not set: the shared list of registered projects.");
+            else if (RequireUncPaths && !ProjectRegistry.IsUnc(RegistryFile))
+                problems.Add("registryFile must be a permanent UNC path in the shared config folder, e.g. \\\\parametrix.com\\pmx\\...\\CrewUpload\\Config\\project-registry.json.");
+            if (RegistryBackups < 1 || RegistryBackups > 20) problems.Add("registryBackups must be 1 to 20.");
             if (string.IsNullOrWhiteSpace(UnprocessedFolder) || Path.IsPathRooted(UnprocessedFolder) || Naming.Segments(UnprocessedFolder).Any(x => x == ".."))
                 problems.Add("unprocessedFolder must be a folder inside the project's Survey folder.");
             if (SequenceDigits < 1 || SequenceDigits > 6) problems.Add("sequenceDigits must be 1 to 6.");

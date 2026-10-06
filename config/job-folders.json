@@ -1,9 +1,11 @@
 {
   "version": "1",
   "jobsRoot": "\\\\parametrix.com\\pmx\\PSO\\Projects\\Clients",
-  "registryFile": "project-registry.json",
+  "registryFile": "\\\\parametrix.com\\pmx\\PSO\\Shared\\Divisions\\00Survey\\CrewUpload\\Config\\project-registry.json",
+  "registryBackups": 5,
+  "projectManagers": [],
   "requireUncPaths": true,
-  "projectNumberPattern": "^[0-9]+-[0-9A-Z]+$",
+  "projectNumberPattern": "^[0-9]{4}-[0-9]{3}$",
   "unprocessedFolder": "02Field\\01FLD_DR_FN_DCfile\\Unprocessed",
   "downloadName": "{date}-{crew}-{projectNumber}-{workType}",
   "fileName": "{download}-{code}",
