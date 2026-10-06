@@ -146,8 +146,59 @@ config that does not validate and says what is wrong.
 ```
 dotnet build src\CrewUpload.App -c Release      # -> src\CrewUpload.App\bin\Release\net48\
 dotnet test  tests\CrewUpload.Tests
+dotnet test  tests\CrewUpload.Schedule.Tests
 CrewUpload.exe [--config path\job-folders.json] [project number] [files or folders...]
 ```
+
+### Daily reports
+
+**Daily report...** fills in Form 03-SV-125-GW (job, date, project/task/subtask, crew, hours, data
+file, control file, equipment, vehicle and mileage, comments, safety observations and precautions,
+extras, plus work type, work order and optional weather). It opens with what the upload screen
+already shows; everything is editable. **Submit** gives the report a ReportID (`DR-20260507-JBB-3f9a1c2e`)
+and files:
+
+| Copy | Where |
+|---|---|
+| Project | beside the crew's download: `[Survey]\02Field\01FLD_DR_FN_DCfile\Unprocessed\<download>\<download>-DR.pdf` |
+| Admin | `dailyReport.adminFolder\yyyy\yyyy-MM\<download>-DR.pdf` |
+| Crew | `dailyReport.localFolder` on the PC |
+| Record | `dailyReport.adminFolder\Records\yyyy\yyyy-MM\<ReportID>.json` -- the structured record |
+
+Nothing is overwritten (a second report the same day is `-2`). If the admin folder is unreachable the
+record waits on the PC and is sent later (**My reports...** shows each report and whether it has been
+recorded). The vehicle, equipment and safety lists are in the `dailyReport` section of
+`job-folders.json`. Admins (with `--setup`) get **Scheduled vs reported...** in Project setup: reported
+crews, missing reports and reports for unscheduled work, from the records -- never from file names.
+
+### Survey Schedule integration (optional)
+
+Crew Upload and the Survey Schedule stay separate programs. The integration is
+`CrewUpload.Schedule.dll` beside the exe; Crew Upload loads it at run time only when
+`features.scheduleIntegration` is on, and has no compile-time link to it. **Delete the DLL (or switch the
+feature off) and Crew Upload is exactly the standalone tool**; the schedule never depends on Crew Upload.
+
+- **Reads** `schedule.folder` (`pso-master.json`, `pm-*.json`, `pso-requests.json`, `pso-overrides.json`)
+  read-only and assembles it the way the app's `assembleState()` does. Pending requests are left out.
+  If it cannot be read: "Schedule unavailable. Report can still be entered manually."
+- **Project link.** In Project setup the PM links a registered project to its schedule project
+  (stored as the schedule's permanent id). Projects carrying exactly the full 3-4-3 number are
+  suggested; nothing is linked automatically.
+- **Crew & work types** (Project setup): crew initials (`JBB` = `jeff_bearson`), optional Windows
+  sign-in, and which schedule activities mean which work type. Kept in `crew-settings.json` beside the
+  project list, written as safely as the registry. Empty until a PM fills it in.
+- **Prefill** (`features.schedulePrefill`): the TODAY card shows what the person is scheduled on with
+  **Daily Report / Upload Files / Open Project**; the report offers each scheduled project plus *Not
+  listed / Enter manually*. The schedule only gives a starting point; the report records what happened.
+- **Status** (`features.scheduleReportStatus`, off by default): marks the reported entries in
+  `pso-progress.json` the way the app's own end-of-day reports do. The PM files are never written.
+
+| Switch | Default | Off means |
+|---|---|---|
+| `features.scheduleIntegration` | on | no schedule at all (standalone) |
+| `features.schedulePrefill` | on | no TODAY card, no prefill |
+| `features.dailyReports` | on | no Daily report button |
+| `features.scheduleReportStatus` | off | the schedule's progress file is never written |
 
 ## Targeting 2024 and 2026
 
