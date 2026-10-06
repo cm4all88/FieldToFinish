@@ -172,5 +172,16 @@
       "Franklin Gothic Book",
       "Segoe UI"
     ]
+  },
+  "features": {
+    "scheduleIntegration": true,
+    "schedulePrefill": true,
+    "dailyReports": true,
+    "scheduleReportStatus": false
+  },
+  "schedule": {
+    "folder": "\\\\parametrix.com\\pmx\\PSO\\Shared\\Divisions\\00Survey\\OFC_RSC\\Schedule",
+    "integrationAssembly": "CrewUpload.Schedule.dll",
+    "integrationType": "CrewUpload.Schedule.ScheduleFolderSource"
   }
 }

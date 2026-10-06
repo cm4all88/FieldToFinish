@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The integration layer between Crew Upload and the Survey Schedule, and nothing else.
+         Reads the schedule's JSON files read-only and answers Crew Upload's IScheduleSource
+         questions. Crew Upload does not reference this project: it loads the DLL at run time when
+         features.scheduleIntegration is on. Delete the DLL (or this project) and both applications
+         still run on their own. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>CrewUpload.Schedule</AssemblyName>
+    <RootNamespace>CrewUpload.Schedule</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>CrewUpload.Schedule.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only for the contract types (CrewUpload.Integration); none of Crew Upload's logic is used. -->
+    <ProjectReference Include="..\CrewUpload\CrewUpload.csproj" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

@@ -20,6 +20,36 @@ namespace CrewUpload
     }
 
     /// <summary>
+    /// Switches for the optional parts, so Crew Upload can be run alone or with the Survey Schedule
+    /// connected, from the same build. Off means the feature is not there at all, not an error.
+    /// </summary>
+    public sealed class FeatureSwitches
+    {
+        /// <summary>Read the Survey Schedule (through CrewUpload.Schedule.dll) for prefill and the admin comparison.</summary>
+        [JsonProperty("scheduleIntegration")] public bool ScheduleIntegration { get; set; } = true;
+
+        /// <summary>Offer the day's scheduled work when a daily report is started.</summary>
+        [JsonProperty("schedulePrefill")] public bool SchedulePrefill { get; set; } = true;
+
+        [JsonProperty("dailyReports")] public bool DailyReports { get; set; } = true;
+
+        /// <summary>Mark scheduled days as reported in the schedule's pso-progress.json. Off until wanted.</summary>
+        [JsonProperty("scheduleReportStatus")] public bool ScheduleReportStatus { get; set; }
+    }
+
+    /// <summary>Where the Survey Schedule's files are, and which integration reads them.</summary>
+    public sealed class ScheduleSettings
+    {
+        /// <summary>The schedule's data folder, read only. UNC, like every other path here.</summary>
+        [JsonProperty("folder")] public string Folder { get; set; } = @"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\OFC_RSC\Schedule";
+
+        /// <summary>The integration assembly beside the app. Delete it and Crew Upload runs on its own.</summary>
+        [JsonProperty("integrationAssembly")] public string IntegrationAssembly { get; set; } = "CrewUpload.Schedule.dll";
+
+        [JsonProperty("integrationType")] public string IntegrationType { get; set; } = "CrewUpload.Schedule.ScheduleFolderSource";
+    }
+
+    /// <summary>
     /// One kind of file inside a crew download: photos, field notes, data files, as-built notes.
     /// Decides where in the download folder it goes and the suffix on its name.
     /// </summary>
@@ -196,6 +226,10 @@ namespace CrewUpload
         [JsonProperty("manifestFile")] public string ManifestFile { get; set; } = "upload-manifest.csv";
 
         [JsonProperty("branding")] public Branding Branding { get; set; } = new Branding();
+
+        [JsonProperty("features")] public FeatureSwitches Features { get; set; } = new FeatureSwitches();
+
+        [JsonProperty("schedule")] public ScheduleSettings Schedule { get; set; } = new ScheduleSettings();
 
         /// <summary>Folder the config was read from; relative template paths resolve against it.</summary>
         [JsonIgnore] public string BaseDirectory { get; set; }

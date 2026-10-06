@@ -16,6 +16,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CrewUpload\CrewUpload.csproj" />
+    <!-- The optional schedule integration: built and copied beside the exe, but not referenced, so
+         nothing in the app can depend on it. Delete CrewUpload.Schedule.dll and the app runs alone. -->
+    <ProjectReference Include="..\CrewUpload.Schedule\CrewUpload.Schedule.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Content" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
