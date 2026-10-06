@@ -21,7 +21,8 @@ namespace CrewUpload.App
         {
             _config = config;
             Text = "New project";
-            Font = new Font("Segoe UI", 10f);
+            Font = Theme.Body(10f);
+            ForeColor = Theme.Charcoal;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MinimizeBox = MaximizeBox = false;
@@ -43,9 +44,9 @@ namespace CrewUpload.App
             foreach (var box in new[] { _number, _name, _client }) box.TextChanged += (s, e) => Preview();
 
             var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-            var ok = MainForm.FlatButton("Create project", true);
+            var ok = Theme.Button("Create project", true);
             ok.Click += (s, e) => Accept();
-            var cancel = MainForm.FlatButton("Cancel", false);
+            var cancel = Theme.Button("Cancel", false);
             cancel.DialogResult = DialogResult.Cancel;
             buttons.Controls.Add(ok);
             buttons.Controls.Add(cancel);
@@ -117,7 +118,8 @@ namespace CrewUpload.App
         public NotesForm(string project, string crew, DateTime date)
         {
             Text = "Field notes -- " + project;
-            Font = new Font("Segoe UI", 10f);
+            Font = Theme.Body(10f);
+            ForeColor = Theme.Charcoal;
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
             MinimizeBox = false;
@@ -129,11 +131,11 @@ namespace CrewUpload.App
                 Dock = DockStyle.Top, Height = 34, Padding = new Padding(12, 8, 12, 0), ForeColor = MainForm.Muted,
                 Text = date.ToString("yyyy-MM-dd") + "   crew " + (string.IsNullOrWhiteSpace(crew) ? "(no initials)" : crew.ToUpperInvariant()) + "   -- saved in the field notes folder, named for the project",
             };
-            _text = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true, AcceptsTab = true, Font = new Font("Consolas", 11f) };
+            _text = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true, AcceptsTab = true, Font = Theme.Body(11f) };
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(8) };
-            var ok = MainForm.FlatButton("Save notes", true);
+            var ok = Theme.Button("Save notes", true);
             ok.Click += (s, e) => { if (_text.Text.Trim().Length > 0) DialogResult = DialogResult.OK; };
-            var cancel = MainForm.FlatButton("Cancel", false);
+            var cancel = Theme.Button("Cancel", false);
             cancel.DialogResult = DialogResult.Cancel;
             buttons.Controls.Add(ok);
             buttons.Controls.Add(cancel);

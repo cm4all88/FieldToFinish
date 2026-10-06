@@ -32,7 +32,8 @@
       "extensions": [],
       "fileName": null,
       "useFileDate": false,
-      "fallback": false
+      "fallback": false,
+      "color": "#F36E21"
     },
     {
       "key": "stakeout",
@@ -51,7 +52,8 @@
       "extensions": [],
       "fileName": null,
       "useFileDate": false,
-      "fallback": false
+      "fallback": false,
+      "color": "#FCC214"
     },
     {
       "key": "control",
@@ -67,7 +69,8 @@
       "extensions": [],
       "fileName": null,
       "useFileDate": false,
-      "fallback": false
+      "fallback": false,
+      "color": "#0073BB"
     },
     {
       "key": "notes",
@@ -92,7 +95,8 @@
       ],
       "fileName": null,
       "useFileDate": false,
-      "fallback": false
+      "fallback": false,
+      "color": "#3FB549"
     },
     {
       "key": "photos",
@@ -121,7 +125,8 @@
       ],
       "fileName": null,
       "useFileDate": true,
-      "fallback": false
+      "fallback": false,
+      "color": "#ED715D"
     },
     {
       "key": "rawdata",
@@ -154,7 +159,8 @@
       ],
       "fileName": "SV-{projectNumber}-{code}-{date}-{original}",
       "useFileDate": false,
-      "fallback": false
+      "fallback": false,
+      "color": "#676768"
     },
     {
       "key": "other",
@@ -165,7 +171,8 @@
       "extensions": [],
       "fileName": null,
       "useFileDate": false,
-      "fallback": true
+      "fallback": true,
+      "color": "#B3B4B5"
     }
   ],
   "documents": [
@@ -190,7 +197,18 @@
     "companyName": "Parametrix",
     "appTitle": "Crew Upload",
     "logo": "branding\\parametrix-logo.png",
-    "primaryColor": "#00395D",
-    "accentColor": "#78BE20"
+    "ixMark": "branding\\parametrix-ix.png",
+    "primaryColor": "#333333",
+    "accentColor": "#EE3D24",
+    "headlineFonts": [
+      "Klinic Slab",
+      "Rockwell",
+      "Georgia"
+    ],
+    "bodyFonts": [
+      "Franklin Gothic URW",
+      "Franklin Gothic Book",
+      "Segoe UI"
+    ]
   }
 }

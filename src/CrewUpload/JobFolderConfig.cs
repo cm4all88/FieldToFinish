@@ -47,6 +47,12 @@ namespace CrewUpload
         /// <summary>The category used when nothing else matches. Exactly one should be set.</summary>
         [JsonProperty("fallback")] public bool Fallback { get; set; }
 
+        /// <summary>
+        /// Colour of its drop box and Type stripe, "#RRGGBB". The brand guide reserves the
+        /// secondary and tertiary palette for exactly this: telling categories apart.
+        /// </summary>
+        [JsonProperty("color")] public string Color { get; set; }
+
         public override string ToString() => Name;
     }
 
@@ -71,21 +77,34 @@ namespace CrewUpload
         public override string ToString() => Name;
     }
 
-    /// <summary>How the upload window looks: the company's logo, name and colours.</summary>
+    /// <summary>
+    /// How the upload window looks, from the Parametrix brand guide (Nov 2023): charcoal, red and
+    /// white, the primary logo on white, the ix formation as a corner element, and the guide's
+    /// Microsoft Office stand-ins for the brand fonts (Rockwell for Klinic Slab headlines,
+    /// Franklin Gothic for body text).
+    /// </summary>
     public sealed class Branding
     {
         [JsonProperty("companyName")] public string CompanyName { get; set; } = "Parametrix";
 
         [JsonProperty("appTitle")] public string AppTitle { get; set; } = "Crew Upload";
 
-        /// <summary>PNG shown in the header. Relative paths are relative to the config file. Without it the company name is drawn as a wordmark.</summary>
+        /// <summary>Primary (charcoal/red) logo PNG for the white header. Relative to the config file.</summary>
         [JsonProperty("logo")] public string Logo { get; set; } = @"branding\parametrix-logo.png";
 
-        /// <summary>Header band and primary buttons, "#RRGGBB".</summary>
-        [JsonProperty("primaryColor")] public string PrimaryColor { get; set; } = "#00395D";
+        /// <summary>The ix formation, set in the bottom-left corner. Optional.</summary>
+        [JsonProperty("ixMark")] public string IxMark { get; set; } = @"branding\parametrix-ix.png";
 
-        /// <summary>Highlights: the drop box a file is being dragged over, counts, "#RRGGBB".</summary>
-        [JsonProperty("accentColor")] public string AccentColor { get; set; } = "#78BE20";
+        /// <summary>Text, outlines and secondary buttons: Charcoal.</summary>
+        [JsonProperty("primaryColor")] public string PrimaryColor { get; set; } = "#333333";
+
+        /// <summary>The one thing to press, problems, the spacer arrow: Parametrix Red. Used sparingly.</summary>
+        [JsonProperty("accentColor")] public string AccentColor { get; set; } = "#EE3D24";
+
+        /// <summary>First installed font wins.</summary>
+        [JsonProperty("headlineFonts")] public List<string> HeadlineFonts { get; set; } = new List<string>();
+
+        [JsonProperty("bodyFonts")] public List<string> BodyFonts { get; set; } = new List<string>();
 
         internal static bool IsColor(string value) =>
             value != null && Regex.IsMatch(value, "^#[0-9A-Fa-f]{6}$");
@@ -198,8 +217,8 @@ namespace CrewUpload
             catch (FormatException) { problems.Add("dateFormat '" + DateFormat + "' is not a date format."); }
 
             if (Branding == null) Branding = new Branding();
-            if (!Branding.IsColor(Branding.PrimaryColor)) problems.Add("branding.primaryColor must be a colour like #00395D.");
-            if (!Branding.IsColor(Branding.AccentColor)) problems.Add("branding.accentColor must be a colour like #78BE20.");
+            if (!Branding.IsColor(Branding.PrimaryColor)) problems.Add("branding.primaryColor must be a colour like #333333.");
+            if (!Branding.IsColor(Branding.AccentColor)) problems.Add("branding.accentColor must be a colour like #EE3D24.");
 
             if (Categories.Count == 0) problems.Add("No categories: nothing would know where a file goes.");
             foreach (var g in Categories.GroupBy(c => (c.Key ?? string.Empty).ToLowerInvariant()).Where(g => g.Count() > 1))
@@ -214,6 +233,7 @@ namespace CrewUpload
                     problems.Add(label + " folder must stay inside the project folder.");
                 if (string.IsNullOrWhiteSpace(c.Code)) problems.Add(label + " has no code.");
                 else if (c.Code.IndexOfAny(Naming.WindowsInvalid) >= 0) problems.Add(label + " code has characters a file name cannot hold.");
+                if (c.Color != null && !Branding.IsColor(c.Color)) problems.Add(label + " color must be like #3FB549.");
                 if (c.Extensions.Any(e => string.IsNullOrEmpty(e) || e[0] != '.')) problems.Add(label + " extensions must start with a dot.");
             }
             if (Categories.Count(c => c.Fallback) != 1) problems.Add("Exactly one category should be the fallback, for files nothing else matches.");
@@ -246,28 +266,28 @@ namespace CrewUpload
                 {
                     new UploadCategory
                     {
-                        Key = "lineout", Name = "Field lineout", Code = "LINEOUT", Folder = @"Survey\Field\Lineouts",
+                        Key = "lineout", Name = "Field lineout", Code = "LINEOUT", Color = "#F36E21", Folder = @"Survey\Field\Lineouts",
                         Keywords = { "lineout", "line out", "line-out", "lineouts" },
                     },
                     new UploadCategory
                     {
-                        Key = "stakeout", Name = "Stakeout / cut sheet", Code = "STAKE", Folder = @"Survey\Field\Stakeout",
+                        Key = "stakeout", Name = "Stakeout / cut sheet", Code = "STAKE", Color = "#FCC214", Folder = @"Survey\Field\Stakeout",
                         Keywords = { "stakeout", "stake out", "staking", "cut sheet", "cutsheet", "cut sheets", "cutsheets" },
                     },
                     new UploadCategory
                     {
-                        Key = "control", Name = "Control", Code = "CTRL", Folder = @"Survey\Control",
+                        Key = "control", Name = "Control", Code = "CTRL", Color = "#0073BB", Folder = @"Survey\Control",
                         Keywords = { "control", "ctrl", "opus", "static" },
                     },
                     new UploadCategory
                     {
-                        Key = "notes", Name = "Field notes", Code = "FN", Folder = @"Survey\Field\Field Notes",
+                        Key = "notes", Name = "Field notes", Code = "FN", Color = "#3FB549", Folder = @"Survey\Field\Field Notes",
                         Keywords = { "field notes", "field note", "fieldnotes", "notes", "note", "fieldbook", "field book", "fn" },
                         Extensions = { ".txt", ".rtf", ".doc", ".docx" },
                     },
                     new UploadCategory
                     {
-                        Key = "photos", Name = "Photos", Code = "PHOTO", Folder = @"Survey\Field\Photos\{date}", UseFileDate = true,
+                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#ED715D", Folder = @"Survey\Field\Photos\{date}", UseFileDate = true,
                         Keywords = { "photo", "photos", "pics", "pictures", "picture" },
                         Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
                     },
@@ -275,15 +295,20 @@ namespace CrewUpload
                     {
                         // Data collector files keep their own name in the new one: the job file
                         // name is what the crew and the office both search for.
-                        Key = "rawdata", Name = "Raw data", Code = "RAW", Folder = @"Survey\Field\Raw Data\{date}",
+                        Key = "rawdata", Name = "Raw data", Code = "RAW", Color = "#676768", Folder = @"Survey\Field\Raw Data\{date}",
                         FileName = "SV-{projectNumber}-{code}-{date}-{original}",
                         Keywords = { "raw", "raw data", "rawdata" },
                         Extensions = { ".job", ".jxl", ".raw", ".rw5", ".dc", ".t01", ".t02", ".t04", ".dat", ".fbk", ".gsi", ".sdr", ".crd", ".csv", ".pnt", ".tsj", ".jbk" },
                     },
                     new UploadCategory
                     {
-                        Key = "other", Name = "Other field document", Code = "MISC", Folder = @"Survey\Field\Other", Fallback = true,
+                        Key = "other", Name = "Other field document", Code = "MISC", Color = "#B3B4B5", Folder = @"Survey\Field\Other", Fallback = true,
                     },
+                },
+                Branding = new Branding
+                {
+                    HeadlineFonts = { "Klinic Slab", "Rockwell", "Georgia" },
+                    BodyFonts = { "Franklin Gothic URW", "Franklin Gothic Book", "Segoe UI" },
                 },
                 Documents = new List<DocumentTemplate>
                 {

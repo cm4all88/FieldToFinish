@@ -17,8 +17,9 @@ namespace CrewUpload.App
     internal sealed class MainForm : Form
     {
         internal static Color Muted => Theme.Muted;
-        private static readonly Color Bad = Color.FromArgb(176, 0, 32);
-        private static readonly Color Good = Color.FromArgb(0, 120, 60);
+        // Red for problems only; everything that went right is plain charcoal.
+        private static Color Bad => Theme.Red;
+        private static Color Good => Theme.Charcoal;
 
         private readonly JobFolderConfig _config;
         private readonly ProjectStore _projects;
@@ -49,7 +50,8 @@ namespace CrewUpload.App
             _planner = new UploadPlanner(config);
 
             Text = (Theme.CompanyName.Length > 0 ? Theme.CompanyName + " " : string.Empty) + Theme.AppTitle;
-            Font = new Font("Segoe UI", 10f);
+            Font = Theme.Body(10f);
+            ForeColor = Theme.Charcoal;
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(900, 600);
             Size = new Size(1180, 860);
@@ -61,23 +63,23 @@ namespace CrewUpload.App
             top.ColumnStyles[5] = new ColumnStyle(SizeType.Percent, 100);
 
             top.Controls.Add(Caption("Project number"), 0, 0);
-            _number = new ComboBox { Width = 190, Font = new Font("Segoe UI", 12f), DropDownStyle = ComboBoxStyle.DropDown };
+            _number = new ComboBox { Width = 190, Font = Theme.Body(12f), DropDownStyle = ComboBoxStyle.DropDown };
             _number.Items.AddRange(_remembered.RecentProjects.Cast<object>().ToArray());
             _number.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; FindProject(); } };
             _number.SelectionChangeCommitted += (s, e) => BeginInvoke((Action)FindProject);
             top.Controls.Add(_number, 1, 0);
-            var find = FlatButton("Find", false);
+            var find = Theme.Button("Find", false);
             find.Click += (s, e) => FindProject();
             top.Controls.Add(find, 2, 0);
-            var create = FlatButton("New project (PM)...", false);
+            var create = Theme.Button("New project (PM)...", false);
             create.Click += (s, e) => NewProject();
             top.Controls.Add(create, 3, 0);
-            _openFolder = FlatButton("Open job folder", false);
+            _openFolder = Theme.Button("Open job folder", false);
             _openFolder.Enabled = false;
             _openFolder.Click += (s, e) => { if (_project != null) Process.Start("explorer.exe", "\"" + _project.Path + "\""); };
             top.Controls.Add(_openFolder, 4, 0);
 
-            _projectLabel = new Label { AutoSize = true, Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = Muted, Margin = new Padding(3, 4, 3, 8), Text = "Type the project number and press Enter." };
+            _projectLabel = new Label { AutoSize = true, Font = Theme.Body(12f, FontStyle.Bold), ForeColor = Muted, Margin = new Padding(3, 4, 3, 8), Text = "Type the project number and press Enter." };
             top.Controls.Add(_projectLabel, 1, 1);
             top.SetColumnSpan(_projectLabel, 5);
 
@@ -120,11 +122,27 @@ namespace CrewUpload.App
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 BackgroundColor = Color.White, BorderStyle = BorderStyle.None, EditMode = DataGridViewEditMode.EditOnEnter,
             };
+            _grid.EnableHeadersVisualStyles = false;
+            _grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+            _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Theme.LightGray3, ForeColor = Theme.Charcoal, Font = Theme.Body(10f, FontStyle.Bold),
+                SelectionBackColor = Theme.LightGray3, SelectionForeColor = Theme.Charcoal, Padding = new Padding(4, 4, 4, 4),
+            };
+            _grid.DefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.White, ForeColor = Theme.Charcoal, Font = Theme.Body(10f),
+                SelectionBackColor = Theme.LightGray2, SelectionForeColor = Theme.Charcoal, Padding = new Padding(4, 0, 4, 0),
+            };
+            _grid.GridColor = Theme.LightGray2;
+            _grid.RowTemplate.Height = 28;
+            _grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "file", HeaderText = "Dropped file", ReadOnly = true, FillWeight = 26 });
             _typeColumn = new DataGridViewComboBoxColumn
             {
                 Name = "type", HeaderText = "Type", FillWeight = 16, FlatStyle = FlatStyle.Flat,
                 DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton,
+                DefaultCellStyle = new DataGridViewCellStyle { Padding = new Padding(10, 0, 2, 0) },
             };
             _typeColumn.Items.AddRange(_config.Categories.Select(c => (object)c.Name).ToArray());
             _grid.Columns.Add(_typeColumn);
@@ -134,45 +152,58 @@ namespace CrewUpload.App
             _grid.CurrentCellDirtyStateChanged += (s, e) => { if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
             _grid.CellValueChanged += TypeChanged;
             _grid.DataError += (s, e) => e.ThrowException = false;
+            _grid.CellPainting += PaintTypeStripe;
             _grid.KeyDown += (s, e) => { if (e.KeyCode == Keys.Delete && !_busy) RemoveSelected(); };
             var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 0, 14, 0) };
             gridWrap.Controls.Add(_grid);
 
             // ---- actions
-            var bottom = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 2, Padding = new Padding(14, 8, 14, 12) };
+            // The ix formation sits in the bottom-left corner, bleeding off the left and bottom
+            // edges as the guide's letterhead and business card show it.
+            var ixWidth = Theme.Ix == null ? 0 : 64;
+            var bottom = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 2, Padding = new Padding(14 + ixWidth, 10, 16, 14), BackColor = Color.White };
+            bottom.Paint += (s, e) =>
+            {
+                if (Theme.Ix == null) return;
+                var h = bottom.Height - 8f;
+                var w = Theme.Ix.Width * h / Theme.Ix.Height;
+                e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                e.Graphics.DrawImage(Theme.Ix, 0, bottom.Height - h, w, h);
+            };
+            bottom.Resize += (s, e) => bottom.Invalidate();
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             bottom.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             _documents = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true };
             foreach (var doc in _config.Documents)
             {
                 var d = doc;
-                var b = FlatButton(d.Name, false);
+                var b = Theme.Button(d.Name, false);
                 b.Click += (s, e) => NewDocument(d);
                 _documents.Controls.Add(b);
             }
-            var typed = FlatButton("Type field notes...", false);
+            var typed = Theme.Button("Type field notes...", false);
             typed.Click += (s, e) => TypeNotes();
             _documents.Controls.Add(typed);
             _documents.Enabled = false;
             bottom.Controls.Add(_documents, 0, 0);
 
             var right = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-            var clear = FlatButton("Clear list", false);
+            var clear = Theme.Button("Clear list", false);
             clear.Click += (s, e) => { if (!_busy) { _items.Clear(); Refill(); } };
             right.Controls.Add(clear);
-            _upload = FlatButton("Upload to job", true);
+            _upload = Theme.Button("Upload to job", true);
             _upload.Click += async (s, e) => await Upload();
             right.Controls.Add(_upload);
             bottom.Controls.Add(right, 1, 0);
 
-            _status = new Label { Dock = DockStyle.Bottom, Height = 28, Padding = new Padding(16, 4, 16, 4), ForeColor = Muted, BackColor = Color.FromArgb(245, 245, 245) };
+            _status = new Label { Dock = DockStyle.Bottom, Height = 30, Padding = new Padding(16, 6, 16, 4), ForeColor = Muted, BackColor = Theme.LightGray4 };
 
             Controls.Add(gridWrap);
             Controls.Add(dropWrap);
             Controls.Add(top);
             Controls.Add(Theme.Header());
-            Controls.Add(bottom);
             Controls.Add(_status);
+            Controls.Add(bottom);
 
             FormClosing += (s, e) =>
             {
@@ -229,7 +260,7 @@ namespace CrewUpload.App
             if (project != null)
             {
                 _projectLabel.Text = project.Display + "     " + project.Path;
-                _projectLabel.ForeColor = Theme.Primary;
+                _projectLabel.ForeColor = Good;
                 _remembered.Used(project.Info.ProjectNumber);
                 if (!_number.Items.Contains(project.Info.ProjectNumber)) _number.Items.Insert(0, project.Info.ProjectNumber);
                 Say(project.HasInfoFile ? "Project found." : "Project found (an older folder: its name was read from the folder).", Good);
@@ -495,6 +526,18 @@ namespace CrewUpload.App
             }
         }
 
+        /// <summary>A bar in the type's colour at the left of the Type cell, matching its drop box.</summary>
+        private void PaintTypeStripe(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex != _typeColumn.Index) return;
+            var item = _grid.Rows[e.RowIndex].Tag as UploadItem;
+            if (item?.Category == null) return;
+            e.Paint(e.ClipBounds, DataGridViewPaintParts.All);
+            using (var b = new SolidBrush(Theme.Parse(item.Category.Color, Theme.MediumGray)))
+                e.Graphics.FillRectangle(b, e.CellBounds.Left, e.CellBounds.Top + 3, 5, e.CellBounds.Height - 7);
+            e.Handled = true;
+        }
+
         // ------------------------------------------------------------------ helpers
 
         private void Say(string text, Color color)
@@ -504,18 +547,6 @@ namespace CrewUpload.App
         }
 
         internal static Label Caption(string text) =>
-            new Label { Text = text, AutoSize = true, ForeColor = Muted, Margin = new Padding(3, 8, 8, 3) };
-
-        internal static Button FlatButton(string text, bool primary)
-        {
-            var b = new Button
-            {
-                Text = text, AutoSize = true, FlatStyle = FlatStyle.Flat, Padding = new Padding(10, 3, 10, 3), Margin = new Padding(3, 3, 6, 3),
-                BackColor = primary ? Theme.Primary : Color.White, ForeColor = primary ? Color.White : Theme.Primary, Cursor = Cursors.Hand,
-            };
-            b.FlatAppearance.BorderColor = Theme.Primary;
-            if (primary) b.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
-            return b;
-        }
+            new Label { Text = text, AutoSize = true, ForeColor = Theme.MediumGray, Font = Theme.Body(10f), Margin = new Padding(3, 8, 8, 3) };
     }
 }

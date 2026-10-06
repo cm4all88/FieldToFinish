@@ -42,9 +42,12 @@ The buttons along the bottom start a **field lineout**, **field notes** sheet or
 templates in `config\templates\`, already named and filed for the project; **Type field notes** saves
 typed notes the same way.
 
-The window carries the Parametrix look from `branding` in the same config: company name, app title,
-header colours and a logo (`config\branding\parametrix-logo.png`; without it the name is drawn as a
-wordmark). The shipped colours are placeholders to be matched to the brand guide.
+The window follows the Parametrix Brand Guide (Nov 2023): the primary logo on a white header, charcoal
+and white with Parametrix Red kept to the Upload button and problems, the red spacer arrow under the
+title, the ix formation in the bottom-left corner, and Rockwell / Franklin Gothic (the guide's Office
+stand-ins for Klinic Slab and Franklin Gothic URW). Each drop box carries its type's colour from the
+secondary palette, repeated as a stripe in the Type column. Logo files and colours are in
+`config\branding\` and the `branding` section of the config.
 
 Everything — the jobs root, folder layout, categories, codes, keywords and name pattern — is in
 `config\job-folders.json`, copied beside the exe. **The shipped values are placeholders**:

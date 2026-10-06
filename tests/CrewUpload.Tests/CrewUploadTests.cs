@@ -186,7 +186,7 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void BrandingColoursAreChecked()
     {
-        _config.Branding.PrimaryColor = "navy";
+        _config.Branding.PrimaryColor = "charcoal";
         var problems = new List<string>();
         _config.Validate(problems);
         Assert.Contains(problems, x => x.Contains("primaryColor"));
