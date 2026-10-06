@@ -184,12 +184,19 @@ feature off) and Crew Upload is exactly the standalone tool**; the schedule neve
 - **Project link.** In Project setup the PM links a registered project to its schedule project
   (stored as the schedule's permanent id). Projects carrying exactly the full 3-4-3 number are
   suggested; nothing is linked automatically.
-- **Crew & work types** (Project setup): crew initials (`JBB` = `jeff_bearson`), optional Windows
-  sign-in, and which schedule activities mean which work type. Kept in `crew-settings.json` beside the
-  project list, written as safely as the registry. Empty until a PM fills it in.
+- **Crew & work types** (Project setup): crew initials (`JBB` = `jeff_bearson`, shown by name), optional
+  Windows sign-in, and which schedule activities mean which work type. Kept in `crew-settings.json`
+  beside the project list, written as safely as the registry. Empty until a PM fills it in. Mapping is
+  exact only: an activity that is not exactly a listed name leaves the work type blank for the crew;
+  free-text comments are never searched. The work type codes themselves are the editable list in
+  `job-folders.json` (the shipped list is a placeholder).
 - **Prefill** (`features.schedulePrefill`): the TODAY card shows what the person is scheduled on with
   **Daily Report / Upload Files / Open Project**; the report offers each scheduled project plus *Not
   listed / Enter manually*. The schedule only gives a starting point; the report records what happened.
+- **Same reading as the Schedule.** `ScheduleAssembler.cs` is a port of the Schedule's `assembleState()`;
+  `tests\schedule-compat` runs the Schedule's own code (extracted from its HTML) against it on every
+  test run where Node.js is installed. A multi-day entry covers every day of its range, as the board
+  draws it. `ScheduleCheck.exe` prints what Crew Upload sees on given dates, read-only.
 - **Status** (`features.scheduleReportStatus`, off by default): marks the reported entries in
   `pso-progress.json` the way the app's own end-of-day reports do. The PM files are never written.
 
@@ -199,6 +206,8 @@ feature off) and Crew Upload is exactly the standalone tool**; the schedule neve
 | `features.schedulePrefill` | on | no TODAY card, no prefill |
 | `features.dailyReports` | on | no Daily report button |
 | `features.scheduleReportStatus` | off | the schedule's progress file is never written |
+
+Before relying on it, run the Windows smoke test: `deploy\SMOKE-TEST.md`.
 
 ## Targeting 2024 and 2026
 
