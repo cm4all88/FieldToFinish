@@ -1,38 +1,42 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
+using System.Text.RegularExpressions;
 
 namespace CrewUpload
 {
-    /// <summary>What the PM typed when the project was made. Kept as project.json in its folder.</summary>
+    /// <summary>What is known about a project, read from its folder's name.</summary>
     public sealed class ProjectInfo
     {
-        public const string FileName = "project.json";
+        /// <summary>Client-task as crews write it: 1800-119. The number in every upload's name.</summary>
+        public string ProjectNumber { get; set; }
 
-        [JsonProperty("projectNumber")] public string ProjectNumber { get; set; }
-        [JsonProperty("projectName")] public string ProjectName { get; set; }
-        [JsonProperty("client")] public string Client { get; set; }
-        [JsonProperty("projectManager")] public string ProjectManager { get; set; }
-        [JsonProperty("createdBy")] public string CreatedBy { get; set; }
-        [JsonProperty("created")] public DateTime? Created { get; set; }
+        /// <summary>The rest of the folder name: "TDLE Phase 3".</summary>
+        public string ProjectName { get; set; }
+
+        /// <summary>The client folder it sits in: "1800-SoundTransit".</summary>
+        public string Client { get; set; }
     }
 
-    /// <summary>A project folder that exists on disk.</summary>
+    /// <summary>A project folder that exists on the share.</summary>
     public sealed class ProjectFolder
     {
         public string Path { get; set; }
         public ProjectInfo Info { get; set; }
 
-        /// <summary>False for a folder that predates the tool: the info was guessed from its name.</summary>
-        public bool HasInfoFile { get; set; }
+        /// <summary>The folder's own name: "554-1800-119 TDLE Phase 3".</summary>
+        public string FolderName => System.IO.Path.GetFileName(Path);
 
-        public string Display => Info.ProjectNumber + (string.IsNullOrWhiteSpace(Info.ProjectName) ? string.Empty : " - " + Info.ProjectName);
+        public string Display => FolderName;
     }
 
-    /// <summary>Finds project folders by number, and makes new ones to the office layout.</summary>
+    /// <summary>
+    /// Finds a project folder on the Parametrix share:
+    /// [projectsRoot]\[client folder]\[project folder], for example
+    /// \\parametrix.com\pmx\PSO\Projects\Clients\1800-SoundTransit\554-1800-119 TDLE Phase 3.
+    /// Never creates one: a project that cannot be found is the user's to point to.
+    /// </summary>
     public sealed class ProjectStore
     {
         private readonly JobFolderConfig _config;
@@ -43,116 +47,64 @@ namespace CrewUpload
         }
 
         /// <summary>
-        /// The folder for a project number: named exactly the number, or the number followed
-        /// by a space, '-' or '_' and a name ("2169171001 Silver Lake"). Null when there is none.
-        /// Two candidates is an error, never a guess -- uploading into the wrong job is worse
-        /// than not uploading.
+        /// Every project folder that is client-task <paramref name="projectNumber"/>: under a client
+        /// folder named for the client ("1800-..." or "1800"), a folder named for client-task, with or
+        /// without a leading prefix ("1800-119 ..." or "554-1800-119 ..."). The caller uses the answer
+        /// only when there is exactly one; zero or several go to the user to choose, never a guess.
         /// </summary>
-        public ProjectFolder Find(string projectNumber)
+        public List<ProjectFolder> Resolve(string projectNumber)
         {
             var number = JobFolderConfig.NormalizeProjectNumber(projectNumber);
-            if (number.Length == 0 || string.IsNullOrWhiteSpace(_config.JobsRoot) || !Directory.Exists(_config.JobsRoot)) return null;
+            var found = new List<ProjectFolder>();
+            string client, task;
+            if (!JobFolderConfig.SplitProjectNumber(number, out client, out task)) return found;
+            if (string.IsNullOrWhiteSpace(_config.JobsRoot) || !Directory.Exists(_config.JobsRoot)) return found;
 
-            var matches = Candidates(_config.JobsRoot, number, _config.SearchDepth).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (matches.Count == 0) return null;
-            if (matches.Count > 1)
-                throw new InvalidOperationException("More than one folder is project " + number + ":" + Environment.NewLine
-                    + string.Join(Environment.NewLine, matches) + Environment.NewLine + "Ask the PM which one is current.");
-            return Open(matches[0], number);
-        }
-
-        private static IEnumerable<string> Candidates(string dir, string number, int depth)
-        {
-            string[] children;
-            try { children = Directory.GetDirectories(dir); }
-            catch (UnauthorizedAccessException) { yield break; }
-            catch (IOException) { yield break; }
-
-            foreach (var child in children)
-            {
-                var name = Path.GetFileName(child);
-                if (IsProjectFolderName(name, number))
-                {
-                    yield return child;
-                    continue; // never look inside a project for another project
-                }
-                if (depth > 1)
-                    foreach (var deeper in Candidates(child, number, depth - 1))
-                        yield return deeper;
-            }
-        }
-
-        internal static bool IsProjectFolderName(string folderName, string number)
-        {
-            if (!folderName.StartsWith(number, StringComparison.OrdinalIgnoreCase)) return false;
-            if (folderName.Length == number.Length) return true;
-            var next = folderName[number.Length];
-            return next == ' ' || next == '-' || next == '_';
-        }
-
-        private static ProjectFolder Open(string path, string number)
-        {
-            var file = Path.Combine(path, ProjectInfo.FileName);
-            if (File.Exists(file))
-            {
-                try
-                {
-                    var info = JsonConvert.DeserializeObject<ProjectInfo>(File.ReadAllText(file));
-                    if (info != null)
-                    {
-                        if (string.IsNullOrWhiteSpace(info.ProjectNumber)) info.ProjectNumber = number;
-                        return new ProjectFolder { Path = path, Info = info, HasInfoFile = true };
-                    }
-                }
-                catch (JsonException)
-                {
-                    // A hand-edited project.json that no longer parses: fall back to the folder name.
-                }
-            }
-
-            var name = Path.GetFileName(path).Substring(number.Length).Trim(' ', '-', '_');
-            return new ProjectFolder { Path = path, Info = new ProjectInfo { ProjectNumber = number, ProjectName = name }, HasInfoFile = false };
+            foreach (var clientDir in Children(_config.JobsRoot).Where(d => IsClientFolderName(System.IO.Path.GetFileName(d), client)))
+                foreach (var projectDir in Children(clientDir).Where(d => IsProjectFolderName(System.IO.Path.GetFileName(d), number)))
+                    found.Add(Open(projectDir, number));
+            return found;
         }
 
         /// <summary>
-        /// Makes the project folder, the office's standard folders and the downloads folder,
-        /// then writes project.json. Refuses a number that already
-        /// has a folder.
+        /// A project folder the user pointed to, read as project <paramref name="projectNumber"/>.
+        /// It has to exist; nothing is created.
         /// </summary>
-        public ProjectFolder Create(ProjectInfo info)
+        public ProjectFolder Open(string path, string projectNumber)
         {
-            if (info == null) throw new ArgumentNullException(nameof(info));
-            var number = JobFolderConfig.NormalizeProjectNumber(info.ProjectNumber);
-            if (!_config.IsValidProjectNumber(number))
-                throw new ArgumentException("'" + info.ProjectNumber + "' is not a project number this office uses.");
-            if (string.IsNullOrWhiteSpace(_config.JobsRoot) || !Directory.Exists(_config.JobsRoot))
-                throw new DirectoryNotFoundException("The jobs folder '" + _config.JobsRoot + "' cannot be reached. Is the drive connected?");
-            if (Find(number) != null)
-                throw new InvalidOperationException("Project " + number + " already has a folder.");
-
-            info.ProjectNumber = number;
-            info.ProjectName = (info.ProjectName ?? string.Empty).Trim();
-            info.Client = (info.Client ?? string.Empty).Trim();
-            if (info.Created == null) info.Created = DateTime.Now;
-
-            var values = new Dictionary<string, string>
+            if (!Directory.Exists(path)) throw new DirectoryNotFoundException("The folder " + path + " does not exist.");
+            var number = JobFolderConfig.NormalizeProjectNumber(projectNumber);
+            var name = System.IO.Path.GetFileName(path.TrimEnd('\\', '/'));
+            var m = ProjectName(number).Match(name);
+            return new ProjectFolder
             {
-                { "projectNumber", number },
-                { "projectName", info.ProjectName },
-                { "client", info.Client },
-                { "year", info.Created.Value.Year.ToString(CultureInfo.InvariantCulture) },
+                Path = path,
+                Info = new ProjectInfo
+                {
+                    ProjectNumber = number,
+                    ProjectName = m.Success ? m.Groups["name"].Value.Trim(' ', '-', '_') : name,
+                    Client = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path.TrimEnd('\\', '/'))),
+                },
             };
-            var parent = Naming.Combine(_config.JobsRoot, _config.NewProjectParent, values);
-            var folderName = Naming.Clean(Naming.Fill(_config.ProjectFolderName, values));
-            var path = Path.Combine(parent, folderName);
+        }
 
-            Directory.CreateDirectory(path);
-            foreach (var f in _config.ProjectFolders)
-                Directory.CreateDirectory(Naming.Combine(path, f, values));
-            Directory.CreateDirectory(Naming.Combine(path, Naming.StaticPart(_config.DownloadsFolder), values));
+        /// <summary>True when the folder name looks like it is this project, for checking a folder the user picked.</summary>
+        public static bool LooksLike(string folderName, string projectNumber) =>
+            IsProjectFolderName(folderName ?? string.Empty, JobFolderConfig.NormalizeProjectNumber(projectNumber));
 
-            File.WriteAllText(Path.Combine(path, ProjectInfo.FileName), JsonConvert.SerializeObject(info, Formatting.Indented));
-            return new ProjectFolder { Path = path, Info = info, HasInfoFile = true };
+        internal static bool IsClientFolderName(string folderName, string client) =>
+            Regex.IsMatch(folderName, "^" + Regex.Escape(client) + @"($|[\s_-])", RegexOptions.IgnoreCase);
+
+        internal static bool IsProjectFolderName(string folderName, string number) => ProjectName(number).IsMatch(folderName);
+
+        private static Regex ProjectName(string number) =>
+            new Regex(@"^(?:[0-9A-Za-z]+-)?" + Regex.Escape(number) + @"(?<name>$|[\s_-].*)", RegexOptions.IgnoreCase);
+
+        private static IEnumerable<string> Children(string dir)
+        {
+            try { return Directory.GetDirectories(dir).OrderBy(d => d, StringComparer.OrdinalIgnoreCase).ToList(); }
+            catch (UnauthorizedAccessException) { return Enumerable.Empty<string>(); }
+            catch (IOException) { return Enumerable.Empty<string>(); }
         }
     }
 }

@@ -73,13 +73,10 @@ namespace CrewUpload.App
             var find = Theme.Button("Find", false);
             find.Click += (s, e) => FindProject();
             top.Controls.Add(find, 2, 0);
-            var create = Theme.Button("New project (PM)...", false);
-            create.Click += (s, e) => NewProject();
-            top.Controls.Add(create, 3, 0);
             _openFolder = Theme.Button("Open job folder", false);
             _openFolder.Enabled = false;
             _openFolder.Click += (s, e) => { if (_project != null) Process.Start("explorer.exe", "\"" + _project.Path + "\""); };
-            top.Controls.Add(_openFolder, 4, 0);
+            top.Controls.Add(_openFolder, 3, 0);
 
             _projectLabel = new Label { AutoSize = true, Font = Theme.Body(12f, FontStyle.Bold), ForeColor = Muted, Margin = new Padding(3, 4, 3, 8), Text = "Type the project number and press Enter." };
             top.Controls.Add(_projectLabel, 1, 1);
@@ -166,6 +163,21 @@ namespace CrewUpload.App
             _grid.DataError += (s, e) => e.ThrowException = false;
             _grid.CellPainting += PaintTypeStripe;
             _grid.KeyDown += (s, e) => { if (e.KeyCode == Keys.Delete && !_busy) RemoveSelected(); };
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Keep both (upload as -2)", null, (s, e) => SetChoice(ConflictChoice.KeepBoth));
+            menu.Items.Add("Skip this file", null, (s, e) => SetChoice(ConflictChoice.Skip));
+            menu.Items.Add("Undecided", null, (s, e) => SetChoice(ConflictChoice.Undecided));
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Remove from list", null, (s, e) => { if (!_busy) RemoveSelected(); });
+            _grid.ContextMenuStrip = menu;
+            _grid.CellMouseDown += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && !_grid.Rows[e.RowIndex].Selected)
+                {
+                    _grid.ClearSelection();
+                    _grid.Rows[e.RowIndex].Selected = true;
+                }
+            };
             var gridWrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 0, 14, 0) };
             gridWrap.Controls.Add(_grid);
 
@@ -252,6 +264,10 @@ namespace CrewUpload.App
 
         // ------------------------------------------------------------------ project
 
+        /// <summary>
+        /// Looks the client-task number up under the Clients share. Exactly one folder is used;
+        /// zero or several go to the crew to choose. A project folder is never created.
+        /// </summary>
         private void FindProject()
         {
             var number = JobFolderConfig.NormalizeProjectNumber(_number.Text);
@@ -259,7 +275,7 @@ namespace CrewUpload.App
             if (number.Length == 0) return;
             if (!_config.IsValidProjectNumber(number))
             {
-                SetProject(null, "'" + number + "' is not a project number.");
+                SetProject(null, "'" + number + "' is not a client-task number like 1800-119.");
                 return;
             }
             if (!Directory.Exists(_config.JobsRoot))
@@ -267,14 +283,30 @@ namespace CrewUpload.App
                 SetProject(null, "Cannot reach " + _config.JobsRoot + ". Connect to the office network or VPN.");
                 return;
             }
-            try
+
+            var found = _projects.Resolve(number);
+            if (found.Count == 1)
             {
-                var found = _projects.Find(number);
-                SetProject(found, found == null ? "No job folder for " + number + ". Check the number, or ask the PM to create the project." : null);
+                SetProject(found[0], null);
+                return;
             }
-            catch (InvalidOperationException e)
+            using (var pick = new PickProjectForm(number, found, _config.JobsRoot))
             {
-                SetProject(null, e.Message);
+                if (pick.ShowDialog(this) != DialogResult.OK)
+                {
+                    SetProject(null, found.Count == 0
+                        ? "No project folder found for " + number + ". Nothing was created."
+                        : found.Count + " folders match " + number + ". Pick one to upload.");
+                    return;
+                }
+                try
+                {
+                    SetProject(_projects.Open(pick.ChosenPath, number), null);
+                }
+                catch (DirectoryNotFoundException e)
+                {
+                    SetProject(null, e.Message);
+                }
             }
         }
 
@@ -288,7 +320,9 @@ namespace CrewUpload.App
                 _projectLabel.ForeColor = Good;
                 _remembered.Used(project.Info.ProjectNumber);
                 if (!_number.Items.Contains(project.Info.ProjectNumber)) _number.Items.Insert(0, project.Info.ProjectNumber);
-                Say(project.HasInfoFile ? "Project found." : "Project found (an older folder: its name was read from the folder).", Good);
+                Say(Directory.Exists(_planner.DownloadsRoot(project))
+                    ? "Project found."
+                    : "Project found. Its " + _config.DownloadsFolder + " folder will be made on the first upload.", Good);
             }
             else
             {
@@ -296,25 +330,6 @@ namespace CrewUpload.App
                 _projectLabel.ForeColor = Bad;
             }
             Replan();
-        }
-
-        private void NewProject()
-        {
-            using (var form = new NewProjectForm(_config, _number.Text))
-            {
-                if (form.ShowDialog(this) != DialogResult.OK) return;
-                try
-                {
-                    var created = _projects.Create(form.Info);
-                    _number.Text = created.Info.ProjectNumber;
-                    SetProject(created, null);
-                    Say("Project " + created.Info.ProjectNumber + " created at " + created.Path, Good);
-                }
-                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException || e is InvalidOperationException)
-                {
-                    MessageBox.Show(this, e.Message, "New project", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            }
         }
 
         // ------------------------------------------------------------------ dropping
@@ -418,7 +433,9 @@ namespace CrewUpload.App
             if (_busy) return;
             _items.RemoveAll(i => i.Done);
             var visit = Visit;
+            var kept = _items.Select(i => i.NamePrefix).Where(n => n != null).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             _downloadLabel.Text = _project == null ? "(pick the project)"
+                : kept.Count > 0 ? string.Join(",  ", kept) + "   (kept as the crew named it)"
                 : visit == null ? "(fill in the crew initials and work type)"
                 : DownloadNames.Name(_config, _project.Info.ProjectNumber, visit);
             _downloadLabel.ForeColor = _project != null && visit != null ? Theme.Charcoal : Muted;
@@ -441,9 +458,10 @@ namespace CrewUpload.App
             _grid.CellValueChanged -= TypeChanged;
             _grid.Rows.Clear();
             var visit = Visit;
-            var download = _project != null && visit != null ? _planner.DownloadFolder(_project, visit) : null;
+            var visitFolder = _project != null && visit != null ? _planner.DownloadFolder(_project, visit) : null;
             foreach (var item in _items)
             {
+                var download = _project == null ? null : item.NamePrefix != null ? Path.Combine(_planner.DownloadsRoot(_project), item.NamePrefix) : visitFolder;
                 var i = _grid.Rows.Add();
                 var row = _grid.Rows[i];
                 row.Tag = item;
@@ -458,36 +476,61 @@ namespace CrewUpload.App
                     row.Cells["name"].Value = _project == null ? "(pick the project)" : "(fill in crew and work type)";
                     row.Cells["name"].Style.ForeColor = Muted;
                 }
-                else if (item.Skip)
-                {
-                    row.Cells["name"].Value = Path.GetFileName(item.AlreadyUploadedAs);
-                    row.Cells["folder"].Value = InDownload(download, Path.GetDirectoryName(item.AlreadyUploadedAs));
-                    row.Cells["folder"].ToolTipText = item.AlreadyUploadedAs;
-                    row.Cells["status"].Value = "Already in job";
-                    row.DefaultCellStyle.ForeColor = Muted;
-                }
                 else
                 {
-                    row.Cells["name"].Value = Path.GetFileName(item.Destination);
-                    row.Cells["folder"].Value = InDownload(download, Path.GetDirectoryName(item.Destination));
-                    row.Cells["folder"].ToolTipText = item.Destination;
-                }
-                if (item.Error != null)
-                {
-                    row.Cells["status"].Value = "Failed";
-                    row.Cells["status"].ToolTipText = item.Error;
-                    row.Cells["status"].Style.ForeColor = Bad;
+                    var shown = item.FinalPath ?? item.ConflictWith;
+                    row.Cells["name"].Value = Path.GetFileName(shown);
+                    row.Cells["folder"].Value = InDownload(download, Path.GetDirectoryName(shown));
+                    row.Cells["folder"].ToolTipText = shown;
+                    switch (item.State)
+                    {
+                        case UploadState.AlreadyUploaded:
+                            row.Cells["status"].Value = "Already in job";
+                            row.Cells["status"].ToolTipText = "A file of this name and size is already there: " + item.AlreadyUploadedAs;
+                            row.DefaultCellStyle.ForeColor = Muted;
+                            break;
+                        case UploadState.Conflict:
+                            row.Cells["status"].Value = "Conflict";
+                            row.Cells["status"].ToolTipText = "A different file (" + UploadPlannerLength(item.ConflictWith) + " bytes) already has this name; this one is "
+                                + UploadPlannerLength(item.SourcePath) + ". Right-click to keep both or skip.";
+                            row.Cells["status"].Style.ForeColor = Bad;
+                            break;
+                        case UploadState.Skipped:
+                            row.Cells["status"].Value = "Skipped";
+                            row.DefaultCellStyle.ForeColor = Muted;
+                            break;
+                        case UploadState.Failed:
+                            row.Cells["status"].Value = "Failed";
+                            row.Cells["status"].ToolTipText = item.Error;
+                            row.Cells["status"].Style.ForeColor = Bad;
+                            break;
+                        default:
+                            if (item.LastError != null)
+                            {
+                                row.Cells["status"].Value = "Failed -- retry";
+                                row.Cells["status"].ToolTipText = item.LastError;
+                                row.Cells["status"].Style.ForeColor = Bad;
+                            }
+                            else if (item.ConflictWith != null) row.Cells["status"].Value = "Keep both";
+                            break;
+                    }
                 }
             }
             _grid.CellValueChanged += TypeChanged;
 
-            var toCopy = _items.Count(i => !i.Skip && !i.Done);
-            _upload.Enabled = !_busy && _project != null && Visit != null && toCopy > 0;
-            _upload.Text = toCopy > 0 ? "Upload " + toCopy + " file" + (toCopy == 1 ? "" : "s") + " to job" : "Upload to job";
-            foreach (var box in _boxes) box.SetCount(_items.Count(i => i.Category == box.Category && !i.Skip));
+            var toCopy = _items.Count(i => i.State == UploadState.Ready || i.State == UploadState.Conflict || i.State == UploadState.Failed);
+            _upload.Enabled = !_busy && _project != null && Visit != null && _items.Count(i => !i.Done) > 0;
+            _upload.Text = toCopy > 0 ? "Upload " + toCopy + " file" + (toCopy == 1 ? "" : "s") + " to job" : "Check and record";
+            foreach (var box in _boxes) box.SetCount(_items.Count(i => i.Category == box.Category));
             _dropHelp.Text = _items.Count == 0
                 ? HelpText
                 : "Check the names below. Drop a file on another box, or change its Type, to move it. Delete removes it from the list.";
+        }
+
+        private static long UploadPlannerLength(string path)
+        {
+            try { return path == null ? -1 : new FileInfo(path).Length; }
+            catch (IOException) { return -1; }
         }
 
         /// <summary>Where in the download folder: "(download folder)" or "Photos".</summary>
@@ -519,6 +562,7 @@ namespace CrewUpload.App
             }
 
             Replan();
+            if (!ResolveConflicts()) return;
             var project = _project;
             var crew = _crew.Text.Trim();
             var batch = _items.ToList();
@@ -527,11 +571,11 @@ namespace CrewUpload.App
             _busy = true;
             _upload.Enabled = false;
             UseWaitCursor = true;
-            int copied;
+            UploadResult result;
             try
             {
                 var runner = new UploadRunner(_config);
-                copied = await Task.Run(() => runner.Run(project, batch, crew, item =>
+                result = await Task.Run(() => runner.Run(project, batch, crew, item =>
                     BeginInvoke((Action)(() => Say("Uploading " + (++count) + " of " + total + ": " + Path.GetFileName(item.SourcePath), Muted)))));
             }
             finally
@@ -540,19 +584,50 @@ namespace CrewUpload.App
                 UseWaitCursor = false;
             }
 
-            var failed = batch.Where(i => i.Error != null).ToList();
             _remembered.Crew = crew;
             _remembered.Save();
             Replan();
-            if (failed.Count == 0)
+            var summary = result.Copied + " copied, " + result.AlreadyUploaded + " already in the job" + (result.Skipped > 0 ? ", " + result.Skipped + " skipped" : string.Empty);
+            if (result.Complete)
             {
-                Say(copied + " file" + (copied == 1 ? "" : "s") + " uploaded to " + project.Display + ". The originals were left where they were.", Good);
+                Say("Upload complete and verified: " + summary + ". Every file is in " + project.Display + " at its original size; the originals were left where they were.", Good);
             }
             else
             {
-                Say(copied + " uploaded, " + failed.Count + " failed -- they are still in the list. Hover Failed for the reason.", Bad);
-                MessageBox.Show(this, string.Join("\n", failed.Take(10).Select(f => Path.GetFileName(f.SourcePath) + ": " + f.Error)), "Some files did not upload", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Say("Upload NOT complete: " + summary + ", " + (result.Problems.Count + result.Undecided) + " not verified -- they are still in the list.", Bad);
+                MessageBox.Show(this, string.Join("\n", result.Problems.Take(10).Select(f => Path.GetFileName(f.SourcePath) + ": " + f.Error))
+                    + (result.Undecided > 0 ? "\n" + result.Undecided + " name conflict(s) were not decided and were not uploaded." : string.Empty),
+                    "Upload not complete", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+
+        /// <summary>
+        /// Files whose name is taken in the job by a different file are never copied over it.
+        /// Asks once for all of them: keep both (the new one numbered -2), or skip them.
+        /// False when the crew cancels.
+        /// </summary>
+        private bool ResolveConflicts()
+        {
+            var conflicts = _items.Where(i => i.State == UploadState.Conflict).ToList();
+            if (conflicts.Count == 0) return true;
+            var list = string.Join("\n", conflicts.Take(8).Select(c => "  " + Path.GetFileName(c.ConflictWith)
+                + "  (job: " + UploadPlannerLength(c.ConflictWith) + " bytes, this one: " + UploadPlannerLength(c.SourcePath) + ")"));
+            var answer = MessageBox.Show(this,
+                conflicts.Count + " file(s) have the same name as a different file already in the job:\n\n" + list
+                + (conflicts.Count > 8 ? "\n  ..." : string.Empty)
+                + "\n\nNothing in the job will be overwritten.\n\nYes: keep both (the new file gets -2)\nNo: skip these files\nCancel: stop and look first",
+                "Name conflicts", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (answer == DialogResult.Cancel) return false;
+            foreach (var c in conflicts) c.Choice = answer == DialogResult.Yes ? ConflictChoice.KeepBoth : ConflictChoice.Skip;
+            Replan();
+            return true;
+        }
+
+        private void SetChoice(ConflictChoice choice)
+        {
+            foreach (DataGridViewRow row in _grid.SelectedRows)
+                if (row.Tag is UploadItem item && item.ConflictWith != null) item.Choice = choice;
+            Replan();
         }
 
         // ------------------------------------------------------------------ documents

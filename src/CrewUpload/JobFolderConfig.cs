@@ -127,23 +127,15 @@ namespace CrewUpload
 
         [JsonProperty("version")] public string Version { get; set; } = "1";
 
-        /// <summary>Folder that holds every project folder, e.g. a mapped network share.</summary>
+        /// <summary>
+        /// The Clients folder on the share, as a UNC path so it works whatever drive letters a PC
+        /// has mapped. Holds client folders (1711-CityOfOrting), which hold project folders
+        /// (554-1800-119 TDLE Phase 3).
+        /// </summary>
         [JsonProperty("jobsRoot")] public string JobsRoot { get; set; }
 
-        /// <summary>
-        /// How deep below jobsRoot a project folder may be. 1 = directly inside it;
-        /// 2 also finds projects filed by year or client (Jobs\2026\2169171001 ...).
-        /// </summary>
-        [JsonProperty("searchDepth")] public int SearchDepth { get; set; } = 2;
-
-        /// <summary>Where a new project is created, under jobsRoot. May use {year}. Empty = jobsRoot itself.</summary>
-        [JsonProperty("newProjectParent")] public string NewProjectParent { get; set; } = string.Empty;
-
-        /// <summary>A project number has to match this before anything is looked up or created.</summary>
-        [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^[0-9][0-9A-Z.\-]{2,}$";
-
-        /// <summary>Name of a new project folder. {projectNumber}, {projectName}, {client}.</summary>
-        [JsonProperty("projectFolderName")] public string ProjectFolderName { get; set; } = "{projectNumber} {projectName}";
+        /// <summary>A client-task number (1800-119) has to match this before anything is looked up.</summary>
+        [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^[0-9]+-[0-9A-Z]+$";
 
         /// <summary>Where download folders go, under the project folder.</summary>
         [JsonProperty("downloadsFolder")] public string DownloadsFolder { get; set; } = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile";
@@ -171,15 +163,15 @@ namespace CrewUpload
 
         [JsonProperty("workTypes")] public List<WorkType> WorkTypes { get; set; } = new List<WorkType>();
 
-        /// <summary>Folders every new project gets, under the project folder.</summary>
-        [JsonProperty("projectFolders")] public List<string> ProjectFolders { get; set; } = new List<string>();
-
         [JsonProperty("categories")] public List<UploadCategory> Categories { get; set; } = new List<UploadCategory>();
 
         [JsonProperty("documents")] public List<DocumentTemplate> Documents { get; set; } = new List<DocumentTemplate>();
 
-        /// <summary>CSV under the project folder recording every upload: who, when, from where, to where.</summary>
-        [JsonProperty("logFile")] public string LogFile { get; set; } = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\upload-log.csv";
+        /// <summary>
+        /// CSV kept in each download folder, mapping every original file name to its final name,
+        /// with who uploaded it and when. Appended to, never rewritten.
+        /// </summary>
+        [JsonProperty("manifestFile")] public string ManifestFile { get; set; } = "upload-manifest.csv";
 
         [JsonProperty("branding")] public Branding Branding { get; set; } = new Branding();
 
@@ -204,8 +196,25 @@ namespace CrewUpload
 
         [JsonIgnore] public UploadCategory FallbackCategory => Categories.FirstOrDefault(c => c.Fallback) ?? Categories.LastOrDefault();
 
-        /// <summary>Trimmed and upper-cased: crews type "2169171001 " and "554-3744-009a".</summary>
-        public static string NormalizeProjectNumber(string number) => (number ?? string.Empty).Trim().ToUpperInvariant();
+        /// <summary>
+        /// Client-task, trimmed and upper-cased. A full number with its prefix (554-1800-119) comes
+        /// back as the client-task crews use in names (1800-119).
+        /// </summary>
+        public static string NormalizeProjectNumber(string number)
+        {
+            var n = Regex.Replace((number ?? string.Empty).Trim().ToUpperInvariant(), @"\s+", string.Empty);
+            var parts = n.Split('-');
+            return parts.Length > 2 ? parts[parts.Length - 2] + "-" + parts[parts.Length - 1] : n;
+        }
+
+        /// <summary>1800-119 -> client 1800, task 119.</summary>
+        public static bool SplitProjectNumber(string number, out string client, out string task)
+        {
+            var parts = NormalizeProjectNumber(number).Split('-');
+            client = parts.Length == 2 ? parts[0] : null;
+            task = parts.Length == 2 ? parts[1] : null;
+            return parts.Length == 2 && client.Length > 0 && task.Length > 0;
+        }
 
         public bool IsValidProjectNumber(string number)
         {
@@ -229,8 +238,7 @@ namespace CrewUpload
         /// <summary>Everything wrong with the config, in words a CAD manager can act on.</summary>
         public void Validate(ICollection<string> problems)
         {
-            if (string.IsNullOrWhiteSpace(JobsRoot)) problems.Add("jobsRoot is not set: the folder that holds the project folders.");
-            if (SearchDepth < 1 || SearchDepth > 4) problems.Add("searchDepth must be 1 to 4.");
+            if (string.IsNullOrWhiteSpace(JobsRoot)) problems.Add("jobsRoot is not set: the Clients folder that holds the client folders.");
             if (SequenceDigits < 1 || SequenceDigits > 6) problems.Add("sequenceDigits must be 1 to 6.");
             if (string.IsNullOrWhiteSpace(FileName)) problems.Add("fileName is empty.");
             if (string.IsNullOrWhiteSpace(DownloadName) || DownloadName.IndexOf("{projectNumber}", StringComparison.Ordinal) < 0)
@@ -243,8 +251,8 @@ namespace CrewUpload
                     problems.Add("Work type '" + w.Name + "' needs a code of letters and digits only.");
             foreach (var g in WorkTypes.GroupBy(w => (w.Code ?? string.Empty).ToUpperInvariant()).Where(g => g.Count() > 1))
                 problems.Add("Work type code '" + g.Key + "' is used more than once.");
-            if (string.IsNullOrWhiteSpace(ProjectFolderName) || ProjectFolderName.IndexOf("{projectNumber}", StringComparison.Ordinal) < 0)
-                problems.Add("projectFolderName must contain {projectNumber}, or projects cannot be found again.");
+            if (string.IsNullOrWhiteSpace(ManifestFile) || ManifestFile.IndexOfAny(Naming.WindowsInvalid) >= 0)
+                problems.Add("manifestFile must be a plain file name.");
             try { Regex.IsMatch(string.Empty, ProjectNumberPattern ?? string.Empty); }
             catch (ArgumentException e) { problems.Add("projectNumberPattern is not a valid pattern: " + e.Message); }
             try { DateTime.Today.ToString(DateFormat); }
@@ -283,12 +291,7 @@ namespace CrewUpload
         {
             return new JobFolderConfig
             {
-                JobsRoot = @"U:\PSO\Jobs",
-                // Only what is known of the office layout; downloadsFolder is always made too.
-                ProjectFolders = new List<string>
-                {
-                    @"99Svcs\Survey\02Field",
-                },
+                JobsRoot = @"\\parametrix.com\pmx\PSO\Projects\Clients",
                 WorkTypes = new List<WorkType>
                 {
                     new WorkType { Code = "TOPO", Name = "Topographic survey" },
@@ -303,8 +306,8 @@ namespace CrewUpload
                 {
                     new UploadCategory
                     {
-                        // Project number and the camera's number: IMG_0412.JPG -> 1521-799-0412.jpg.
-                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{projectNumber}-{number}",
+                        // Client-task-date-camera number: IMG_0412.JPG -> 1521-799-20260128-0412.jpg.
+                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{projectNumber}-{date}-{number}",
                         Keywords = { "photo", "photos", "pics", "pictures", "picture" },
                         Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
                     },

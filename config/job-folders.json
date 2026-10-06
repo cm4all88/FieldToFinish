@@ -1,10 +1,7 @@
 {
   "version": "1",
-  "jobsRoot": "U:\\PSO\\Jobs",
-  "searchDepth": 2,
-  "newProjectParent": "",
-  "projectNumberPattern": "^[0-9][0-9A-Z.\\-]{2,}$",
-  "projectFolderName": "{projectNumber} {projectName}",
+  "jobsRoot": "\\\\parametrix.com\\pmx\\PSO\\Projects\\Clients",
+  "projectNumberPattern": "^[0-9]+-[0-9A-Z]+$",
   "downloadsFolder": "99Svcs\\Survey\\02Field\\01FLD_DR_FN_DCfile",
   "downloadName": "{date}-{crew}-{projectNumber}-{workType}",
   "fileName": "{download}-{code}",
@@ -40,9 +37,6 @@
       "name": "Easement"
     }
   ],
-  "projectFolders": [
-    "99Svcs\\Survey\\02Field"
-  ],
   "categories": [
     {
       "key": "photos",
@@ -69,7 +63,7 @@
         ".mp4",
         ".mov"
       ],
-      "fileName": "{projectNumber}-{number}",
+      "fileName": "{projectNumber}-{date}-{number}",
       "fallback": false,
       "color": "#FCC214"
     },
@@ -156,7 +150,7 @@
       "template": "templates\\As-Built Notes.docx"
     }
   ],
-  "logFile": "99Svcs\\Survey\\02Field\\01FLD_DR_FN_DCfile\\upload-log.csv",
+  "manifestFile": "upload-manifest.csv",
   "branding": {
     "companyName": "Parametrix",
     "appTitle": "Crew Upload",

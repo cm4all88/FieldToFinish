@@ -9,9 +9,9 @@ Civil 3D plugin; contains no Autodesk references and runs without a CAD licence.
 src/FieldCodes/        netstandard2.0 — grammar, rules, parsing. No CAD types.
 src/FieldCodes.Cad/    net48;net8.0   — CogoPoint reading, block/label/drip placement.  [not yet written]
 config/rules.json      the grammar itself
-src/CrewUpload/        netstandard2.0 — crew upload rules: job folder lookup, sorting, naming.
+src/CrewUpload/        netstandard2.0 — crew upload rules: project lookup, sorting, naming, copy checks.
 src/CrewUpload.App/    net48 WinExe   — CrewUpload.exe, the crews' drag-and-drop upload window.
-config/job-folders.json  the job folder and file naming standard CrewUpload follows
+config/job-folders.json  the project folder and file naming standard CrewUpload follows
 ```
 
 The split matters: `FieldCodes` is the single definition of what a code means.
@@ -19,35 +19,47 @@ Nothing downstream should re-implement the grammar.
 
 ## Crew Upload
 
-`CrewUpload.exe` is a separate Windows app (no Civil 3D needed) for getting what a crew brings back
-into the right job folder with the right names.
+`CrewUpload.exe` is a separate Windows app (no Civil 3D needed) for getting a crew's download into
+the right project folder with the right names.
 
-A crew download is one folder per crew, day, project and kind of work, and everything in it carries
-that folder's name:
+A crew download is one folder per crew, day, project and kind of work, named
+`{date}-{crew}-{client}-{task}-{work type}`. It lands in the project like this:
 
 ```
-20260128-JAM-1521-799-TOPO\            {date}-{crew}-{project}-{work type}
-    20260128-JAM-1521-799-TOPO.job      data files: the download's name
-    20260128-JAM-1521-799-TOPO.jxl
-    20260128-JAM-1521-799-TOPO-FN.pdf   field notes
-    20260128-JAM-1521-799-TOPO-ASB.pdf  as-built notes
-    Photos\1521-799-0412.jpg            photos: project number + the camera's number (IMG_0412)
+\\parametrix.com\pmx\PSO\Projects\Clients\                 jobsRoot (UNC, never a mapped drive)
+    1800-SoundTransit\                                       client folder
+        554-1800-119 TDLE Phase 3\                           project folder (client 1800, task 119)
+            99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\        downloadsFolder, made if missing
+                20261005-JBB-1800-119-TOPO\                  the crew's folder, kept as they named it
+                    20261005-JBB-1800-119-TOPO.job           data files: the download's name
+                    20261005-JBB-1800-119-TOPO-FN.pdf        field notes
+                    20261005-JBB-1800-119-TOPO-ASB.pdf       as-built notes
+                    Photos\1800-119-20261005-0412.jpg        client-task-date-camera number (IMG_0412)
+                    upload-manifest.csv                      original name -> final name, per upload
 ```
 
-1. **Project.** The crew types the project number and presses Enter; the app finds the job folder
-   under `jobsRoot` (directly, or one level down, e.g. filed by year). A PM uses **New project (PM)**
-   to make the folder from the office layout and a `project.json` holding number, name, client and PM.
+1. **Project.** The crew types client-task (`1800-119`) or drops a named download. The app looks under
+   every client folder for that client (`1800-...`) for a project folder named `1800-119 ...` or
+   `554-1800-119 ...`. Exactly one is used. Zero or several stop and ask the crew to pick or browse to
+   the folder (a mapped-drive pick is turned into its UNC path). **It never creates a project folder**;
+   it only makes the missing `99Svcs\Survey\02Field\01FLD_DR_FN_DCfile` inside an existing one.
 2. **Visit.** Crew initials, field date and work type (TOPO, LINEOUT, STAKE, BNDY, CTRL, ASBLT, ESMT)
-   make the download folder's name, shown on the form.
-3. **Drop.** Four boxes -- Photos, Field notes, Data files, As-built notes. Whatever lands on a box
-   is that type, files or whole folders. A folder already named like `20260128-JAM-1521-799-TOPO`
-   fills in the project, crew, date and work type from its name. Clicking a box opens a picker.
-4. **Check.** Each file shows its type and new name before anything is copied; dropping it on another
-   box, or changing its Type, renames it.
-5. **Upload.** The download lands in `[job]\99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\20260128-JAM-1521-799-TOPO\`.
-   Files are copied (never moved) and checked; nothing is overwritten (a second field notes file
-   becomes `-FN-2`); files already in the job are skipped, so dropping the folder again after adding
-   photos only copies the new photos. Every upload is logged in `upload-log.csv` beside the downloads.
+   make the download folder's name. Dropping a folder already named that way fills them in.
+3. **Drop.** Four boxes -- Photos, Field notes, Data files, As-built notes. Whatever lands on a box is
+   that type, files or whole folders. Crew initials inside a download name never decide a type.
+4. **Check.** Each file shows its type, final name and status before anything is copied. A dropped
+   download keeps its own folder and subfolders; downloads are never flattened together.
+5. **Upload.** Files are copied, never moved; nothing is deleted from FLD_Download and nothing in the
+   job is overwritten.
+   - Same name and byte size already in the job: already uploaded, not copied.
+   - Same name, different size: a **conflict**. It is not copied until the crew chooses *keep both*
+     (the new file gets `-2`) or *skip* (right-click a row, or answer when uploading). Only then are
+     files hashed, to find out whether the file is already there under another name.
+   - Two different files in one batch that would get the same name are numbered `-2`, `-3`.
+   - After copying, every file is checked again -- the original still there, the job's copy there at
+     the same byte size -- and only then does the app say the upload is complete.
+   - Every file, including conflicts and skips, gets a row in the download folder's `upload-manifest.csv`
+     mapping its original name to its final name.
 
 **New field notes** and **New as-built notes** start a document from `config\templates\`, already named
 for the visit and in its download folder; **Type field notes** saves typed notes the same way.
@@ -59,9 +71,9 @@ stand-ins for Klinic Slab and Franklin Gothic URW). Each drop box carries its ty
 secondary palette, repeated as a stripe in the Type column. Logo files and colours are in
 `config\branding\` and the `branding` section of the config.
 
-Everything — the jobs root, folder layout, categories, codes, keywords and name pattern — is in
-`config\job-folders.json`, copied beside the exe. **The shipped values are placeholders**:
-`jobsRoot` (`U:\PSO\Jobs`) must be set to the office's real jobs drive before crews use it. The app refuses to start with a config that does not validate and says what is wrong.
+Everything -- the Clients root, downloads folder, work types, upload types, codes, keywords and name
+patterns -- is in `config\job-folders.json`, copied beside the exe. The app refuses to start with a
+config that does not validate and says what is wrong.
 
 ```
 dotnet build src\CrewUpload.App -c Release      # -> src\CrewUpload.App\bin\Release\net48\
