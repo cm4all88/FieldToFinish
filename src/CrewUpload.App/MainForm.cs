@@ -236,6 +236,13 @@ namespace CrewUpload.App
             _documents.Controls.Add(typed);
             _documents.Enabled = false;
             var left = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true, Margin = new Padding(0) };
+            if (_config.Features?.DailyReports ?? true)
+            {
+                var report = Theme.Button("Daily report...", false);
+                report.Margin = new Padding(3, 6, 3, 3);
+                report.Click += (s, e) => DailyReport(null);
+                left.Controls.Add(report);
+            }
             left.Controls.Add(_documents);
             var settings = Theme.Button("Settings...", false);
             settings.Margin = new Padding(3, 6, 8, 3); // line up with the document buttons inside their panel
@@ -409,6 +416,24 @@ namespace CrewUpload.App
                 form.AcceptButton = ok;
                 form.CancelButton = cancel;
                 return form.ShowDialog(this) == DialogResult.OK && list.SelectedIndex >= 0 ? candidates[list.SelectedIndex].Key : null;
+            }
+        }
+
+        /// <summary>
+        /// Opens the daily report with what this screen knows (project, crew, date, phase, work
+        /// type) or with <paramref name="draft"/>. Works without a project: the crew types it.
+        /// </summary>
+        private void DailyReport(Reports.DailyReport draft)
+        {
+            string problem;
+            var crewList = CrewSettingsStore.For(_config).TryLoad(out problem);
+            var work = _work.SelectedItem as WorkType;
+            draft = draft ?? Reports.DailyReportDraft.FromUpload(_config, _project, _crew.Text, _date.Value, JobFolderConfig.NormalizePhase(_phase.Text), work?.Code, crewList);
+            if (draft.ProjectNumber == null && _number.Text.Trim().Length > 0) draft.ProjectNumber = _number.Text.Trim();
+            using (var form = new DailyReportForm(_config, _projects, crewList, draft))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK || form.Result == null) return;
+                Say("Daily report " + form.Result.Report.ReportId + " submitted.", Good);
             }
         }
 

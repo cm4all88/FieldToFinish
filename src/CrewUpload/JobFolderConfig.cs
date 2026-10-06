@@ -231,6 +231,9 @@ namespace CrewUpload
 
         [JsonProperty("schedule")] public ScheduleSettings Schedule { get; set; } = new ScheduleSettings();
 
+        /// <summary>The daily report form's lists and where its copies are filed.</summary>
+        [JsonProperty("dailyReport")] public Reports.DailyReportSettings DailyReport { get; set; } = new Reports.DailyReportSettings();
+
         /// <summary>Folder the config was read from; relative template paths resolve against it.</summary>
         [JsonIgnore] public string BaseDirectory { get; set; }
 

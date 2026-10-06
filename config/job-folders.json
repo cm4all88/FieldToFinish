@@ -183,5 +183,156 @@
     "folder": "\\\\parametrix.com\\pmx\\PSO\\Shared\\Divisions\\00Survey\\OFC_RSC\\Schedule",
     "integrationAssembly": "CrewUpload.Schedule.dll",
     "integrationType": "CrewUpload.Schedule.ScheduleFolderSource"
+  },
+  "dailyReport": {
+    "formNumber": "Form 03-SV-125-GW/Rev. 01/03/2025",
+    "title": "DAILY FIELD SURVEYOR’S REPORT",
+    "team": "Greater Washington Survey Team",
+    "fileSuffix": "-DR",
+    "adminFolder": "\\\\parametrix.com\\pmx\\PSO\\Shared\\Divisions\\00Survey\\FLD\\CrewUpload\\DailyReports",
+    "localFolder": "%USERPROFILE%\\Documents\\Daily Reports",
+    "personalAuto": "Personal Auto",
+    "noEquipment": "No Equipment",
+    "equipment": [
+      {
+        "name": "PSO Survey Equipment",
+        "assets": "249999 / 4129"
+      },
+      {
+        "name": "Scanner",
+        "assets": "247462 / 4127"
+      },
+      {
+        "name": "Wingtra UAV",
+        "assets": "248251 / 4131"
+      },
+      {
+        "name": "LiDAR UAV",
+        "assets": "248193 / 4134"
+      },
+      {
+        "name": "Single Beam",
+        "assets": "244070 / 4055"
+      },
+      {
+        "name": "Multi Beam",
+        "assets": "244065 / 4050"
+      }
+    ],
+    "vehicles": [
+      {
+        "id": "AUT 61",
+        "description": "Puy 2007 Toyota Tundra",
+        "assets": "243994 / 2702"
+      },
+      {
+        "id": "AUT 63",
+        "description": "Sea 2008 Toyota Tundra",
+        "assets": "244099 / 2702"
+      },
+      {
+        "id": "AUT 67",
+        "description": "Puy 2008 Toyota Highlander",
+        "assets": "244163 / 2702"
+      },
+      {
+        "id": "AUT 71",
+        "description": "Brem 2008 Toyota Tundra",
+        "assets": "244323 / 2702"
+      },
+      {
+        "id": "AUT 76",
+        "description": "Brem 2015 Toyota Tundra",
+        "assets": "245503 / 2702"
+      },
+      {
+        "id": "AUT 79",
+        "description": "Puy 2016 Toyota Tundra",
+        "assets": "245726 / 2702"
+      },
+      {
+        "id": "AUT 97",
+        "description": "Sea 2017 Toyota Tundra",
+        "assets": "245983 / 2702"
+      },
+      {
+        "id": "AUT 103",
+        "description": "Puy 2019 Toyota Tundra",
+        "assets": "246676 / 2702"
+      },
+      {
+        "id": "AUT 7076r",
+        "description": "Sea 2020 Toyota Tundra",
+        "assets": "247076 / 2702"
+      },
+      {
+        "id": "AUT 7269",
+        "description": "Muk 2015 Toyota Tundra",
+        "assets": "247269 / 2702"
+      },
+      {
+        "id": "AUT 7270",
+        "description": "Muk 2017 Toyota Tundra",
+        "assets": "247270 / 2702"
+      },
+      {
+        "id": "AUT 7272",
+        "description": "Muk 2019 Toyota Tacoma",
+        "assets": "247272 / 2702"
+      },
+      {
+        "id": "AUT 7986",
+        "description": "Puy 2022 Ford F-150",
+        "assets": "247986 / 2702"
+      },
+      {
+        "id": "AUT 8541",
+        "description": "Brem 2024 Toyota Tundra",
+        "assets": "248541 / 2702"
+      },
+      {
+        "id": "AUT 8687",
+        "description": "Muk 2024 Toyota Tacoma",
+        "assets": "248687 / 2702"
+      }
+    ],
+    "safetyObservations": [
+      "Dangerous Snakes/Wildlife",
+      "Extreme Temperatures",
+      "Insects",
+      "Traffic",
+      "Dense Vegetation",
+      "Hazardous Material",
+      "Open Trenches",
+      "Uneven Ground",
+      "Drop-Offs and Edges > 4 feet",
+      "Homeless Encampments",
+      "Over/Adjacent to Water Bodies",
+      "Equipment/Machinery",
+      "Ice/Slippery",
+      "Road Conditions"
+    ],
+    "safetyPrecautions": [
+      "Appropriate Clothing for Cold/Heat",
+      "Fall Avoidance/Handrail/PPE",
+      "Hearing Protection",
+      "Rain Gear",
+      "Use Cones/Flags/Signs",
+      "Appropriate Clothing for Insects/Wildlife",
+      "First Aid Kit",
+      "Hydration",
+      "Safety Vest",
+      "Waders",
+      "Flashers/Beacons",
+      "Keep Safe Distance",
+      "Sunscreen",
+      "Work in Pairs",
+      "Gloves",
+      "Life Vest",
+      "Tall Leather Boots",
+      "Aware of Surroundings/Be Alert",
+      "Hand and Leg Cut Protection",
+      "Mask/Respirator"
+    ]
   }
 }
