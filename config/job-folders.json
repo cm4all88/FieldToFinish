@@ -1,7 +1,7 @@
 {
   "version": "1",
   "jobsRoot": "\\\\parametrix.com\\pmx\\PSO\\Projects\\Clients",
-  "registryFile": "\\\\parametrix.com\\pmx\\PSO\\Shared\\Divisions\\00Survey\\CrewUpload\\Config\\project-registry.json",
+  "registryFile": "\\\\parametrix.com\\pmx\\PSO\\Shared\\Divisions\\00Survey\\FLD\\CrewUpload\\Config\\project-registry.json",
   "registryBackups": 5,
   "projectManagers": [],
   "requireUncPaths": true,

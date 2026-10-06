@@ -138,7 +138,7 @@ namespace CrewUpload
         /// configuration folder on the share -- never beside the exe -- so every PC reads one list and
         /// the folder's NTFS permissions decide who may change it (PMs/admins Modify, crews Read).
         /// </summary>
-        [JsonProperty("registryFile")] public string RegistryFile { get; set; } = @"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config\project-registry.json";
+        [JsonProperty("registryFile")] public string RegistryFile { get; set; } = @"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\FLD\CrewUpload\Config\project-registry.json";
 
         /// <summary>How many earlier versions of the registry are kept: project-registry.backup-1.json (newest) to -N.</summary>
         [JsonProperty("registryBackups")] public int RegistryBackups { get; set; } = 5;

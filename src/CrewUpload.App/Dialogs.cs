@@ -356,7 +356,8 @@ namespace CrewUpload.App
             ShowState();
         }
 
-        private string Folder => _folder.Text.Trim().TrimEnd('\\', '/');
+        // A typed or picked U:\... path is turned into its \\server\share path whenever Windows can say what it is.
+        private string Folder => Unc.FromMapped(_folder.Text.Trim().TrimEnd('\\', '/'));
 
         private void ShowState()
         {
@@ -366,10 +367,14 @@ namespace CrewUpload.App
             var exists = Directory.Exists(f);
             var hasList = exists && File.Exists(Path.Combine(f, "project-registry.json"));
             _state.ForeColor = !unc && _config.RequireUncPaths || !exists ? Theme.Red : Theme.MediumGray;
-            _state.Text = !unc && _config.RequireUncPaths ? "This is not a network (UNC) path."
+            _state.Text = !unc && _config.RequireUncPaths && Unc.IsDriveLetter(f)
+                    ? f.Substring(0, 2) + " is a drive letter, and Windows would not say which network path it maps to. Type the network path instead, "
+                      + "starting \\\\parametrix.com\\... (in PowerShell, 'net use " + f.Substring(0, 2) + "' shows it)."
+                : !unc && _config.RequireUncPaths ? "This is not a network (UNC) path."
                 : !exists ? "This folder cannot be reached (or does not exist yet)."
-                : hasList ? "Found project-registry.json here."
-                : "Reachable. No project list here yet; the first project a PM registers creates it.";
+                : hasList ? "Found project-registry.json here." + (f != _folder.Text.Trim().TrimEnd('\\', '/') ? "  Will be saved as " + f : string.Empty)
+                : "Reachable. No project list here yet; the first project a PM registers creates it."
+                    + (f != _folder.Text.Trim().TrimEnd('\\', '/') ? "  Will be saved as " + f : string.Empty);
             _save.Enabled = (unc || !_config.RequireUncPaths) && exists;
         }
 
@@ -380,6 +385,7 @@ namespace CrewUpload.App
                 if (Directory.Exists(Folder)) dialog.SelectedPath = Folder;
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 _folder.Text = Unc.FromMapped(dialog.SelectedPath).TrimEnd('\\');
+                ShowState();
             }
         }
 

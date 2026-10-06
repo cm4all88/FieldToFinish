@@ -22,13 +22,31 @@ namespace CrewUpload.App
                 var drive = path.Substring(0, 2);
                 var length = 512;
                 var remote = new StringBuilder(length);
-                if (WNetGetConnection(drive, remote, ref length) != 0) return path; // a local drive
-                return remote.ToString().TrimEnd('\\') + path.Substring(2);
+                if (WNetGetConnection(drive, remote, ref length) == 0 && remote.Length > 0)
+                    return remote.ToString().TrimEnd('\\') + path.Substring(2);
             }
             catch (Exception e) when (e is DllNotFoundException || e is EntryPointNotFoundException)
             {
-                return path; // not Windows
+                // not Windows
             }
+
+            // Second source: a drive mapped by logon script or Group Policy is recorded per user under
+            // HKCU\Network\<letter>\RemotePath even when the call above cannot see it (e.g. elevated).
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Network\" + path.Substring(0, 1)))
+                {
+                    var remote = key?.GetValue("RemotePath") as string;
+                    if (!string.IsNullOrEmpty(remote)) return remote.TrimEnd('\\') + path.Substring(2);
+                }
+            }
+            catch (Exception e) when (e is System.Security.SecurityException || e is UnauthorizedAccessException || e is IOException)
+            {
+            }
+            return path; // a local drive, or a mapping Windows will not describe: the caller says so
         }
+
+        /// <summary>True for a drive-letter path (U:\...), as opposed to a UNC one.</summary>
+        public static bool IsDriveLetter(string path) => !string.IsNullOrEmpty(path) && path.Length >= 2 && path[1] == ':';
     }
 }

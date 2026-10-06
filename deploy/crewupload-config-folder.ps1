@@ -21,7 +21,7 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$Folder = '\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config',
+    [string]$Folder = '\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\FLD\CrewUpload\Config',
     [Parameter(Mandatory)][string]$PmGroup,
     [Parameter(Mandatory)][string]$CrewGroup
 )

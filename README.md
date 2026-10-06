@@ -42,7 +42,7 @@ deleted; *Reactivate* opens one again). Project keys are always `####-###`: `180
 **The registry** is one file in its own shared configuration folder, never beside the exe:
 
 ```
-\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config\
+\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\FLD\CrewUpload\Config\
     project-registry.json              the live list (registryFile in job-folders.json, a permanent UNC path)
     project-registry.backup-1.json     the version before the live one ... backup-5 the oldest (registryBackups)
 ```

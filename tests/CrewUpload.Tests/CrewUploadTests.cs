@@ -290,7 +290,7 @@ public sealed class CrewUploadTests : IDisposable
         var c = JobFolderConfig.CreateDefault();
         Assert.True(c.RequireUncPaths);
         c.BaseDirectory = _root;
-        Assert.Equal(@"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\CrewUpload\Config\project-registry.json", c.RegistryPath);
+        Assert.Equal(@"\\parametrix.com\pmx\PSO\Shared\Divisions\00Survey\FLD\CrewUpload\Config\project-registry.json", c.RegistryPath);
         Assert.Equal(5, c.RegistryBackups);
         Assert.Equal(@"02Field\01FLD_DR_FN_DCfile\Unprocessed", c.UnprocessedFolder);
     }
