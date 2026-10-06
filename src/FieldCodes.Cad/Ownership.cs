@@ -105,7 +105,15 @@ namespace FieldCodes.Cad
         /// <summary>The line/curve table for tagged courses.</summary>
         RecordTable = 40,
         /// <summary>Lot, tract and area text inside a figure.</summary>
-        RecordText = 41
+        RecordText = 41,
+
+        // Break marks. Deliberate drafting the drafter places by hand, so FTFCLEAN leaves
+        // them where they were put.
+
+        /// <summary>The tilde across a line where it runs off the view.</summary>
+        BreakMark = 42,
+        /// <summary>The zigzag along the seam a viewport cuts.</summary>
+        BreakLine = 43
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

@@ -81,7 +81,8 @@ namespace FieldCodes.Cad
                 Large("Stairs", "FTFLABELSTAIRS",
                     "Select the stair lines; the step count places itself. FTFS for short.",
                     FtfIcons.Stairs),
-                Small("Spot Shots", "FTFSPOT", FtfIcons.Spot)));
+                Small("Spot Shots", "FTFSPOT", FtfIcons.Spot),
+                Small("Tilde", "FTFTILDE", FtfIcons.Lines)));
 
             tab.Panels.Add(Panel("Finish",
                 Large("Process\nDrawing", "FTFRUN",
@@ -117,7 +118,8 @@ namespace FieldCodes.Cad
                     FtfIcons.PlanSheets),
                 Small("Make Layouts", "FTFSHEETMAKE", FtfIcons.MakeLayouts),
                 Small("From Layouts", "FTFSHEETS", FtfIcons.SheetAreas),
-                Small("Key Map", "FTFKEYMAP", FtfIcons.KeyMap)));
+                Small("Key Map", "FTFKEYMAP", FtfIcons.KeyMap),
+                Small("Match Line", "FTFMATCHLINE", FtfIcons.SheetAreas)));
 
             tab.Panels.Add(Panel("Clean up",
                 Large("Clean", "FTFCLEAN",

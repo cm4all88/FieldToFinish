@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -573,6 +573,14 @@ namespace FieldCodes.Settings
         [JsonProperty("matchlineTextPlotted")]
         public double MatchlineTextPlotted { get; set; }
 
+        /// <summary>How far the zigzag's teeth stand off the seam, as plotted.</summary>
+        [JsonProperty("matchlineZigAmplitudePlotted")]
+        public double MatchlineZigAmplitudePlotted { get; set; }
+
+        /// <summary>One full tooth either side, as plotted.</summary>
+        [JsonProperty("matchlineZigPeriodPlotted")]
+        public double MatchlineZigPeriodPlotted { get; set; }
+
         /// <summary>Paper size for the sheet planner, inches. 17 x 11 is ledger.</summary>
         [JsonProperty("sheetWidthIn")]
         public double SheetWidthIn { get; set; }
@@ -605,6 +613,10 @@ namespace FieldCodes.Settings
             MatchlineLayer = "V-SHEET-MTCH";
             MatchlineLabelFormat = "MATCHLINE - SEE SHEET {sheet}";
             MatchlineTextPlotted = 0.10;
+            // A tooth a tenth of an inch off the seam, a quarter inch apart: the zigzag reads
+            // as a break at arm's length without swamping what it runs through.
+            MatchlineZigAmplitudePlotted = 0.10;
+            MatchlineZigPeriodPlotted = 0.25;
             SheetWidthIn = 17.0;
             SheetHeightIn = 11.0;
             MarginIn = 0.5;

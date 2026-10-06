@@ -282,7 +282,9 @@ namespace FieldCodes.Cad
                     text.TextHeight = textHeight;
                     text.Attachment = AttachmentPoint.MiddleCenter;
                     text.Location = b + dir * (textHeight * 0.8);
-                    text.Rotation = radians;
+                    // Across the pipe, not along it: the mark reads as the line being cut off
+                    // where the survey stopped, the way a drafter ticks a line that carries on.
+                    text.Rotation = radians + Math.PI / 2.0;
                     text.LayerId = ProductionLayers.Get(db, tr, standard.LabelLayer, settings);
                     CadUtil.AddToModelSpace(db, tr, text);
                     Ownership.Stamp(text, connection.Id, rulesVersion, FtfEntityKind.UtilityPipeLabel, null, tag);
