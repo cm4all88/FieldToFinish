@@ -31,6 +31,7 @@ namespace CrewUpload.Schedule
             s.Assignments.AddRange((requests ?? Enumerable.Empty<AssignmentRecord>()).Where(r => r != null));
 
             // cross-PM overrides: newest change per entry wins
+            // (fs0.overrides||[]).forEach(o=>{if(!ovr[o.id]||o.at>ovr[o.id].at)ovr[o.id]=o;});
             var ovr = new Dictionary<string, OverrideRecord>(StringComparer.Ordinal);
             var order = new List<string>();
             foreach (var o in overrides ?? Enumerable.Empty<OverrideRecord>())
@@ -38,36 +39,77 @@ namespace CrewUpload.Schedule
                 if (o?.Id == null) continue;
                 OverrideRecord cur;
                 if (!ovr.TryGetValue(o.Id, out cur)) { ovr[o.Id] = o; order.Add(o.Id); }
-                else if (Later(o.At, cur.At)) ovr[o.Id] = o;
+                else if (JsGreater(o.At, cur.At)) ovr[o.Id] = o;
             }
 
-            foreach (var o in order.Select(id => ovr[id]))
+            // Object.values(ovr).forEach(...) -- in JavaScript's key order
+            foreach (var o in JsKeyOrder(order).Select(id => ovr[id]))
             {
                 if (o.Kind == "proj")
                 {
-                    if (o.Data == null || o.Data.Type == Newtonsoft.Json.Linq.JTokenType.Null) continue;
+                    if (IsFalsy(o.Data)) continue;                                   // if(!o.data)return;
                     var data = o.Data.ToObject<ProjectRecord>();
                     var pi = s.Projects.FindIndex(p => p.Id == data.Id);
                     var pcur = pi >= 0 ? s.Projects[pi] : null;
-                    if (pcur != null && !Later(o.At, pcur.UpdatedAt ?? "")) continue; // owner's newer settings win
+                    if (pcur != null && JsLessOrEqual(o.At, pcur.UpdatedAt ?? "")) continue; // owner's newer settings win
                     if (pi >= 0) s.Projects[pi] = data; else s.Projects.Add(data);
+                    s.AppliedOverrides.Add(o.Id);
                     continue;
                 }
                 var idx = s.Assignments.FindIndex(a => a.Id == o.Id);
                 var curA = idx >= 0 ? s.Assignments[idx] : null;
-                var curAt = curA?.UpdatedAt ?? "";
-                if (!Later(o.At, curAt)) continue; // owner has since made a newer edit -- theirs wins
-                if (o.Op == "delete") { if (idx >= 0) s.Assignments.RemoveAt(idx); }
-                else if (o.Data != null && o.Data.Type != Newtonsoft.Json.Linq.JTokenType.Null)
+                var curAt = curA?.UpdatedAt ?? "";                                   // (cur&&cur.updatedAt)||""
+                if (JsLessOrEqual(o.At, curAt)) continue;                            // owner has since made a newer edit -- theirs wins
+                if (o.Op == "delete") { if (idx >= 0) { s.Assignments.RemoveAt(idx); s.AppliedOverrides.Add(o.Id); } }
+                else if (!IsFalsy(o.Data))
                 {
                     var data = o.Data.ToObject<AssignmentRecord>();
                     if (idx >= 0) s.Assignments[idx] = data; else s.Assignments.Add(data);
+                    s.AppliedOverrides.Add(o.Id);
                 }
             }
             return s;
         }
 
-        /// <summary>JavaScript's a &gt; b on strings: the app compares ISO timestamps as text.</summary>
-        private static bool Later(string a, string b) => string.CompareOrdinal(a ?? "", b ?? "") > 0;
+        // ---- JavaScript's semantics, which the app relies on ----
+
+        /// <summary>a &gt; b in JavaScript for the app's timestamps: strings compare by UTF-16 code units; a missing value compares false.</summary>
+        internal static bool JsGreater(string a, string b) => a != null && b != null && string.CompareOrdinal(a, b) > 0;
+
+        /// <summary>a &lt;= b in JavaScript: false when either is missing (undefined &lt;= "" is false, so the override applies).</summary>
+        internal static bool JsLessOrEqual(string a, string b) => a != null && b != null && string.CompareOrdinal(a, b) <= 0;
+
+        /// <summary>!value in JavaScript for the override's data: missing, null, false, 0 or "".</summary>
+        private static bool IsFalsy(Newtonsoft.Json.Linq.JToken t)
+        {
+            if (t == null) return true;
+            switch (t.Type)
+            {
+                case Newtonsoft.Json.Linq.JTokenType.Null:
+                case Newtonsoft.Json.Linq.JTokenType.Undefined: return true;
+                case Newtonsoft.Json.Linq.JTokenType.Boolean: return !(bool)t;
+                case Newtonsoft.Json.Linq.JTokenType.Integer:
+                case Newtonsoft.Json.Linq.JTokenType.Float: return (double)t == 0;
+                case Newtonsoft.Json.Linq.JTokenType.String: return ((string)t).Length == 0;
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// The order Object.values() visits keys: integer-like keys ("12") first, ascending, then the
+        /// rest in the order they were added.
+        /// </summary>
+        internal static IEnumerable<string> JsKeyOrder(List<string> keys)
+        {
+            Func<string, bool> isIndex = k =>
+            {
+                uint n;
+                return k.Length > 0 && (k == "0" || k[0] != '0') && k.All(char.IsDigit)
+                    && uint.TryParse(k, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out n) && n < uint.MaxValue;
+            };
+            return keys.Where(isIndex).OrderBy(k => uint.Parse(k, System.Globalization.CultureInfo.InvariantCulture))
+                .Concat(keys.Where(k => !isIndex(k)));
+        }
+
     }
 }

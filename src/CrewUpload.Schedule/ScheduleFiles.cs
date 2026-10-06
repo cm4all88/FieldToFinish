@@ -86,5 +86,8 @@ namespace CrewUpload.Schedule
         public MasterFile Master { get; set; }
         public List<ProjectRecord> Projects { get; set; } = new List<ProjectRecord>();
         public List<AssignmentRecord> Assignments { get; set; } = new List<AssignmentRecord>();
+
+        /// <summary>Overrides (by entry id) that changed something, for the diagnostics.</summary>
+        public List<string> AppliedOverrides { get; set; } = new List<string>();
     }
 }

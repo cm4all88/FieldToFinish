@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- A read-only check of a Survey Schedule folder: what Crew Upload's schedule reader sees on
+         given dates, the assembled data for the compatibility test, and proof (SHA-256 before and
+         after) that nothing in the folder changed. Never writes to the schedule folder. -->
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>ScheduleCheck</AssemblyName>
+    <RootNamespace>CrewUpload.ScheduleCheck</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CrewUpload.Schedule\CrewUpload.Schedule.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

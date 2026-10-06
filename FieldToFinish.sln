@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrewUpload.Schedule", "src\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrewUpload.Schedule.Tests", "tests\CrewUpload.Schedule.Tests\CrewUpload.Schedule.Tests.csproj", "{3E062626-0AA3-4292-B071-4EA23D6BB8F5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrewUpload.ScheduleCheck", "src\CrewUpload.ScheduleCheck\CrewUpload.ScheduleCheck.csproj", "{BBD2FC23-A253-4434-A3E0-C8A3B166F10F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -64,6 +66,10 @@ Global
 		{3E062626-0AA3-4292-B071-4EA23D6BB8F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E062626-0AA3-4292-B071-4EA23D6BB8F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3E062626-0AA3-4292-B071-4EA23D6BB8F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BBD2FC23-A253-4434-A3E0-C8A3B166F10F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BBD2FC23-A253-4434-A3E0-C8A3B166F10F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BBD2FC23-A253-4434-A3E0-C8A3B166F10F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BBD2FC23-A253-4434-A3E0-C8A3B166F10F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{330B102A-EF81-4CC0-A2AB-E17103FFC421} = {5346F8C4-62AD-45E0-B40E-92C13C48ADE8}
@@ -74,5 +80,6 @@ Global
 		{12488ADE-761F-4609-A833-B8FC97D91656} = {203D265A-6F0C-4BCF-9969-761AB3C18A2A}
 		{A4AF39C3-5567-4DB4-B9D8-02075848590D} = {5346F8C4-62AD-45E0-B40E-92C13C48ADE8}
 		{3E062626-0AA3-4292-B071-4EA23D6BB8F5} = {203D265A-6F0C-4BCF-9969-761AB3C18A2A}
+		{BBD2FC23-A253-4434-A3E0-C8A3B166F10F} = {5346F8C4-62AD-45E0-B40E-92C13C48ADE8}
 	EndGlobalSection
 EndGlobal

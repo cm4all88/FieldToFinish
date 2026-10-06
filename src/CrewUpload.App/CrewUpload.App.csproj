@@ -20,6 +20,9 @@
          nothing in the app can depend on it. Delete CrewUpload.Schedule.dll and the app runs alone. -->
     <ProjectReference Include="..\CrewUpload.Schedule\CrewUpload.Schedule.csproj"
                       ReferenceOutputAssembly="false" OutputItemType="Content" CopyToOutputDirectory="PreserveNewest" />
+    <!-- ScheduleCheck.exe: the read-only schedule check used for the Windows smoke test. Not used by the app. -->
+    <ProjectReference Include="..\CrewUpload.ScheduleCheck\CrewUpload.ScheduleCheck.csproj" SetTargetFramework="TargetFramework=net48"
+                      ReferenceOutputAssembly="false" OutputItemType="Content" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

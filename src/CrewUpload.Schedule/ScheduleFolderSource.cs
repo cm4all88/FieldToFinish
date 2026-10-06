@@ -61,7 +61,7 @@ namespace CrewUpload.Schedule
                 {
                     var sig = Run(Signature);
                     if (sig != null && sig == _signature && _schedule != null) return true;
-                    var s = Run(Read);
+                    var s = Run(ReadAssembled);
                     if (s == null) return Fail();
                     _schedule = s;
                     _projectsById = new Dictionary<string, ProjectRecord>(StringComparer.Ordinal);
@@ -281,7 +281,8 @@ namespace CrewUpload.Schedule
         }
 
         /// <summary>readFolderState() then assembleState(). Null when there is no usable master file.</summary>
-        private AssembledSchedule Read()
+        /// <summary>The folder read and assembled, as the app does; null when there is no usable master. Used by the diagnostics too.</summary>
+        internal AssembledSchedule ReadAssembled()
         {
             if (string.IsNullOrWhiteSpace(_folder) || !Directory.Exists(_folder)) return null;
             var master = ReadJson<MasterFile>(MasterFile);
