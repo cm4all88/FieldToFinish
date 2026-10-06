@@ -249,6 +249,9 @@ namespace CrewUpload.App
             Run(() => _registry.SetActive(Key, makeActive, Environment.UserName, _snapshot), Key + (makeActive ? " reactivated." : " made inactive."));
         }
 
+        private string LogNote() =>
+            "\n\nThe live project list was not changed. Details for IT are in:\n" + string.Join("\n", _registry.Log.Paths.Where(p => !string.IsNullOrEmpty(p)));
+
         private void Run(Func<RegistrySaveResult> save, string done)
         {
             try
@@ -259,7 +262,8 @@ namespace CrewUpload.App
                 _chosen.Text = string.Empty;
                 Fill();
                 ShowState();
-                Say(done + (result.MergedOtherChanges ? " Changes other PMs saved meanwhile were kept." : string.Empty), false);
+                Say(done + (result.MergedOtherChanges ? " Changes other PMs saved meanwhile were kept." : string.Empty)
+                    + (result.Warning != null ? " " + result.Warning : string.Empty), result.Warning != null);
             }
             catch (RegistryConflictException e)
             {
@@ -270,11 +274,11 @@ namespace CrewUpload.App
             catch (UnauthorizedAccessException)
             {
                 MessageBox.Show(this, "You do not have permission to change the project list in\n" + Path.GetDirectoryName(_registry.FilePath)
-                    + "\n\nPMs need Modify on that folder; ask IT.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    + "\n\nPMs need Modify on that folder; ask IT." + LogNote(), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             catch (Exception e) when (e is IOException || e is ArgumentException || e is InvalidDataException || e is InvalidOperationException)
             {
-                MessageBox.Show(this, e.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, e.Message + (e is IOException || e is InvalidDataException ? LogNote() : string.Empty), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
     }

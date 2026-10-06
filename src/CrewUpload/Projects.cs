@@ -109,6 +109,9 @@ namespace CrewUpload
 
         /// <summary>Nothing needed changing.</summary>
         public bool Unchanged { get; set; }
+
+        /// <summary>Saved, but something around it (rolling the backups) did not work; already logged.</summary>
+        public string Warning { get; set; }
     }
 
     /// <summary>
@@ -138,6 +141,21 @@ namespace CrewUpload
         /// <summary>Test hook: runs on the temporary file after it is written and before it is checked.</summary>
         internal Action<string> AfterTempWritten { get; set; }
 
+        /// <summary>How long a save waits for another PM's lock before saying who holds it.</summary>
+        internal TimeSpan LockWait { get; set; } = TimeSpan.FromSeconds(15);
+
+        /// <summary>A held lock older than this is reported as probably left by a crashed PC (still never broken).</summary>
+        internal TimeSpan StaleLockAfter { get; set; } = TimeSpan.FromMinutes(2);
+
+        /// <summary>Pauses between retries of one file operation on the share (about 8 s in all).</summary>
+        internal int[] RetryDelaysMs { get; set; } = { 100, 250, 500, 1000, 2000, 4000 };
+
+        /// <summary>Test hook: runs before every attempt of every save step, and may throw to simulate a share error.</summary>
+        internal Action<string, int> BeforeFileStep { get; set; }
+
+        /// <summary>Where save failures are logged: beside the registry, and on this PC.</summary>
+        public RegistryLog Log { get; set; }
+
         public ProjectRegistry(string path, bool requireUnc = true, int backups = 5, int retries = 5, int retryDelayMs = 300)
         {
             _path = path;
@@ -145,6 +163,7 @@ namespace CrewUpload
             _backups = Math.Max(1, backups);
             _retries = Math.Max(1, retries);
             _retryDelayMs = Math.Max(0, retryDelayMs);
+            Log = new RegistryLog(string.IsNullOrEmpty(path) ? null : Path.Combine(Folder, RegistryLog.FileName), RegistryLog.LocalPath);
         }
 
         public static ProjectRegistry For(JobFolderConfig config) =>
@@ -324,114 +343,194 @@ namespace CrewUpload
         /// </summary>
         private RegistrySaveResult Save(string key, string user, RegistrySnapshot basis, Func<ProjectRegistration, DateTime, ProjectRegistration> change)
         {
-            Directory.CreateDirectory(Folder);
-            using (TakeLock())
-            {
-                RegistrySnapshot live;
-                if (File.Exists(_path))
-                {
-                    try { live = Parse(ReadShared(_path), _path); }
-                    catch (InvalidDataException e)
-                    {
-                        throw new InvalidDataException(e.Message + " Nothing was saved. Restore " + BackupPath(1) + " (or an older backup) over it first.", e);
-                    }
-                }
-                else live = FirstGoodBackup() ?? new RegistrySnapshot();
-
-                var merged = false;
-                if (basis != null && basis.Revision != live.Revision)
-                {
-                    // Someone saved since this PM's screen was loaded. Changes to other projects are
-                    // kept; a change to this same project is theirs to look at first.
-                    if (Json(basis.Get(key)) != Json(live.Get(key)))
-                        throw new RegistryConflictException(key + " was changed by " + (live.SavedBy ?? "someone else")
-                            + (live.SavedOn.HasValue ? " at " + live.SavedOn.Value.ToString("HH:mm") : string.Empty)
-                            + " after you opened this screen. Refresh to see their change, then make yours again.");
-                    merged = true;
-                }
-
-                var current = live.Get(key);
-                var copy = current == null ? null : JsonConvert.DeserializeObject<ProjectRegistration>(Json(current));
-                var now = DateTime.Now;
-                var updated = change(copy, now);
-                if (updated == null)
-                    return new RegistrySaveResult { Entry = current, Snapshot = live, Unchanged = true, MergedOtherChanges = merged };
-
-                var next = new RegistrySnapshot
-                {
-                    Revision = live.Revision + 1,
-                    SavedBy = user,
-                    SavedOn = now,
-                    Projects = live.Projects.Where(p => !string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)).Concat(new[] { updated })
-                        .OrderBy(p => p.Key, StringComparer.Ordinal).ToList(),
-                };
-                WriteAtomically(next);
-                return new RegistrySaveResult { Entry = updated, Snapshot = Parse(ReadShared(_path), _path), MergedOtherChanges = merged };
-            }
-        }
-
-        private void WriteAtomically(RegistrySnapshot next)
-        {
-            var temp = Path.Combine(Folder, Path.GetFileNameWithoutExtension(_path) + ".tmp-" + Guid.NewGuid().ToString("N") + Path.GetExtension(_path));
+            var step = "open registry folder";
             try
             {
-                var bytes = new UTF8Encoding(false).GetBytes(JsonConvert.SerializeObject(next, Formatting.Indented));
-                using (var s = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                var retry = new Retrier(RetryDelaysMs, Log) { BeforeAttempt = BeforeFileStep };
+                retry.Run(step, Folder, () => Directory.CreateDirectory(Folder));
+                step = "acquire registry lock";
+                using (RegistryLock.Acquire(LockPath, LockWait, StaleLockAfter, Log))
                 {
-                    s.Write(bytes, 0, bytes.Length);
-                    s.Flush(true); // on disk, not just in a cache, before it can become the live file
+                    step = "read live registry";
+                    RegistrySnapshot live;
+                    if (retry.Run("check live registry exists", _path, () => File.Exists(_path)))
+                    {
+                        var text = retry.Run(step, _path, () => ReadShared(_path));
+                        try { live = Parse(text, _path); }
+                        catch (InvalidDataException e)
+                        {
+                            throw new InvalidDataException(e.Message + " Nothing was saved. Restore " + BackupPath(1) + " (or an older backup) over it first.", e);
+                        }
+                    }
+                    else live = FirstGoodBackup() ?? new RegistrySnapshot();
+
+                    step = "check for other PMs' changes";
+                    var merged = false;
+                    if (basis != null && basis.Revision != live.Revision)
+                    {
+                        // Someone saved since this PM's screen was loaded. Changes to other projects are
+                        // kept; a change to this same project is theirs to look at first.
+                        if (Json(basis.Get(key)) != Json(live.Get(key)))
+                            throw new RegistryConflictException(key + " was changed by " + (live.SavedBy ?? "someone else")
+                                + (live.SavedOn.HasValue ? " at " + live.SavedOn.Value.ToString("HH:mm") : string.Empty)
+                                + " after you opened this screen. Refresh to see their change, then make yours again.");
+                        merged = true;
+                    }
+
+                    var current = live.Get(key);
+                    var copy = current == null ? null : JsonConvert.DeserializeObject<ProjectRegistration>(Json(current));
+                    var now = DateTime.Now;
+                    var updated = change(copy, now);
+                    if (updated == null)
+                        return new RegistrySaveResult { Entry = current, Snapshot = live, Unchanged = true, MergedOtherChanges = merged };
+
+                    var next = new RegistrySnapshot
+                    {
+                        Revision = live.Revision + 1,
+                        SavedBy = user,
+                        SavedOn = now,
+                        Projects = live.Projects.Where(p => !string.Equals(p.Key, key, StringComparison.OrdinalIgnoreCase)).Concat(new[] { updated })
+                            .OrderBy(p => p.Key, StringComparer.Ordinal).ToList(),
+                    };
+                    step = "write new registry";
+                    var warning = WriteAtomically(next, retry, s => step = s);
+
+                    // The swap is done. Re-read what is now live; if the share hiccups, the version just
+                    // validated is what is there.
+                    RegistrySnapshot saved;
+                    try { saved = Parse(retry.Run("re-read saved registry", _path, () => ReadShared(_path)), _path); }
+                    catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException) { saved = next; }
+                    return new RegistrySaveResult { Entry = updated, Snapshot = saved, MergedOtherChanges = merged, Warning = warning };
                 }
-                AfterTempWritten?.Invoke(temp);
-
-                // Read back exactly what is on disk and check it before it replaces anything.
-                var check = Parse(ReadShared(temp), temp);
-                if (check.Revision != next.Revision || check.Projects.Count != next.Projects.Count)
-                    throw new InvalidDataException("The new project list did not read back as written. Nothing was saved.");
-
-                RotateBackups();
-                if (File.Exists(_path)) File.Replace(temp, _path, BackupPath(1), true);
-                else File.Move(temp, _path);
             }
-            finally
+            catch (RegistryConflictException)
             {
-                try { if (File.Exists(temp)) File.Delete(temp); }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
+                throw; // not a failure: the PM is told to refresh
             }
-        }
-
-        /// <summary>backup-(N-1) -> backup-N ... backup-1 -> backup-2; File.Replace then makes the live file backup-1.</summary>
-        private void RotateBackups()
-        {
-            var oldest = BackupPath(_backups);
-            if (File.Exists(oldest)) File.Delete(oldest);
-            for (var n = _backups - 1; n >= 1; n--)
+            catch (RegistryLockedException)
             {
-                var from = BackupPath(n);
-                if (File.Exists(from)) File.Move(from, BackupPath(n + 1));
+                throw; // logged where it was raised
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException || e is ArgumentException)
+            {
+                Log.Error("save registry: " + step, _path, e, "key " + key + "; nothing was saved unless a later entry says so");
+                throw;
             }
         }
 
         /// <summary>
-        /// The writers' lock: a file held open exclusively and deleted on close, so it cannot be left
-        /// behind by a crashed PC. Readers never take it.
+        /// Writes the complete registry to a temporary file in the same folder, flushes and checks it,
+        /// copies the live file to a fresh backup, then replaces the live file in one step. The live
+        /// file is never deleted or renamed away at any point: until the replace succeeds it is the old
+        /// version, after it the new one. Old backups are rolled only after the replace, and a failure
+        /// there is a warning, not a failed save. Returns that warning, or null.
         /// </summary>
-        private IDisposable TakeLock()
+        private string WriteAtomically(RegistrySnapshot next, Retrier retry, Action<string> stepIs)
         {
-            for (var attempt = 1; ; attempt++)
+            var stem = Path.GetFileNameWithoutExtension(_path);
+            var ext = Path.GetExtension(_path);
+            var id = Guid.NewGuid().ToString("N");
+            var temp = Path.Combine(Folder, stem + ".tmp-" + id + ext);
+            var backupNew = Path.Combine(Folder, stem + ".backup-new-" + id + ext);
+            try
             {
+                stepIs("write temporary registry");
+                var bytes = new UTF8Encoding(false).GetBytes(JsonConvert.SerializeObject(next, Formatting.Indented));
+                retry.Run("write temporary registry", temp, () =>
+                {
+                    using (var s = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        s.Write(bytes, 0, bytes.Length);
+                        s.Flush(true); // on disk, not just in a cache, before it can become the live file
+                    }
+                });
+                AfterTempWritten?.Invoke(temp);
+
+                // Read back exactly what is on disk and check it before it replaces anything.
+                stepIs("read back temporary registry");
+                var check = Parse(retry.Run("read back temporary registry", temp, () => ReadShared(temp)), temp);
+                if (check.Revision != next.Revision || check.Projects.Count != next.Projects.Count)
+                    throw new InvalidDataException("The new project list did not read back as written. Nothing was saved.");
+
+                var liveExists = retry.Run("check live registry exists", _path, () => File.Exists(_path));
+                if (liveExists)
+                {
+                    // A copy, so the live file stays exactly where it is.
+                    stepIs("copy live registry to backup");
+                    retry.Run("copy live registry to backup", backupNew, () => File.Copy(_path, backupNew, true));
+
+                    // No backup argument: with one, Windows renames the live file away first and, if the
+                    // next step fails, can leave no live file. Without one, a failed replace leaves the
+                    // live file as it was.
+                    stepIs("replace live registry");
+                    retry.Run("replace live registry", _path, () =>
+                    {
+                        // A replace the server finished but whose reply was lost leaves no temp file and
+                        // our revision live: that is success, not something to retry.
+                        if (!File.Exists(temp) && IsRevision(_path, next.Revision)) return;
+                        File.Replace(temp, _path, null, true);
+                    });
+                }
+                else
+                {
+                    stepIs("create live registry");
+                    retry.Run("create live registry", _path, () =>
+                    {
+                        if (!File.Exists(temp) && IsRevision(_path, next.Revision)) return;
+                        File.Move(temp, _path);
+                    });
+                }
+
+                if (!liveExists) return null;
+                stepIs("rotate registry backups");
                 try
                 {
-                    return new FileStream(LockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+                    RotateBackups(retry);
+                    retry.Run("rename new backup to backup-1", BackupPath(1), () => File.Move(backupNew, BackupPath(1)));
+                    return null;
                 }
-                catch (IOException) when (attempt < 20)
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
                 {
-                    Thread.Sleep(250);
+                    var warning = "Saved, but the backups could not be rolled (" + e.Message + "). The previous version is kept as "
+                        + Path.GetFileName(backupNew) + ".";
+                    Log.Warn("rotate registry backups", Folder, e, warning);
+                    backupNew = null; // keep it: it is the only copy of the previous version
+                    return warning;
                 }
-                catch (IOException e)
-                {
-                    throw new IOException("Another PM is saving the project list. Try again in a moment.", e);
-                }
+            }
+            finally
+            {
+                // Only our own temporary files are ever deleted here -- never the live registry.
+                TryDelete(temp, retry);
+                if (backupNew != null) TryDelete(backupNew, retry);
+            }
+        }
+
+        private static bool IsRevision(string path, int revision)
+        {
+            try { return File.Exists(path) && Parse(ReadShared(path), path).Revision == revision; }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException) { return false; }
+        }
+
+        private void TryDelete(string path, Retrier retry)
+        {
+            try { retry.Run("delete temporary file", path, () => { if (File.Exists(path)) File.Delete(path); }); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
+        }
+
+        /// <summary>
+        /// backup-(N-1) -> backup-N ... backup-1 -> backup-2, freeing backup-1 for the version just
+        /// replaced. Only backups are touched.
+        /// </summary>
+        private void RotateBackups(Retrier retry)
+        {
+            var oldest = BackupPath(_backups);
+            retry.Run("delete oldest backup", oldest, () => { if (File.Exists(oldest)) File.Delete(oldest); });
+            for (var n = _backups - 1; n >= 1; n--)
+            {
+                var from = BackupPath(n);
+                var to = BackupPath(n + 1);
+                retry.Run("roll backup-" + n + " to backup-" + (n + 1), from, () => { if (File.Exists(from)) File.Move(from, to); });
             }
         }
 

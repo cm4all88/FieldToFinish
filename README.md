@@ -60,6 +60,22 @@ deleted; *Reactivate* opens one again). Project keys are always `####-###`: `180
 - **Two PMs at once.** Every save bumps the file's revision. If another PM saved after this PM opened
   setup, changes to *other* projects are merged in and kept; a change to the *same* project stops the
   save, says who changed it, and refreshes the screen so the PM can look before trying again.
+- **On the share.** Every file step of a save (temp write, read-back, backup copy, the replace, each
+  backup roll) is retried for about 8 seconds through sharing violations, antivirus locks and brief SMB
+  errors. The live file is never deleted or renamed away: the backup is a *copy* taken first, and the
+  replace runs without a backup argument, so a replace that fails leaves the live file exactly as it was.
+  A backup roll that fails after the replace is a warning, not a failed save (the previous version is
+  kept as `project-registry.backup-new-*.json`).
+- **The lock** is `project-registry.lock`, held open exclusively by the saving PM (so the file server
+  stops anyone else opening, deleting or replacing it), with `project-registry.lock.owner.json` saying
+  who holds it. A leftover lock file that nobody holds is taken over and logged. A lock that is still
+  *held* is never broken -- including one held by a PC that crashed, whose handle the server keeps until
+  it drops the connection; after 15 s the PM is told who holds it and since when, and after 2 minutes how
+  IT can close it (Computer Management > Shared Folders > Open Files).
+- **Troubleshooting.** Every save failure and every retry is logged with the operation attempted, the
+  path, the user, the machine and the Windows error (`win32=32` sharing violation, `5` access denied,
+  `64` network name gone ...) to `registry-errors.log` beside the registry and to
+  `%LOCALAPPDATA%\FieldToFinish\CrewUpload\registry-errors.log` on the PC (in case the share is the problem).
 - **Crew reads** retry a briefly locked or mid-swap file a few times before reporting a problem. If the
   live file is damaged (hand-edited, say), the newest good backup is read instead and PM saves are
   blocked until someone restores it.

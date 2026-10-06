@@ -62,7 +62,22 @@ public sealed class CrewUploadTests : IDisposable
     // Temp folders are not UNC; the UNC rule itself is tested on its own.
     private string RegistryFile => Path.Combine(_root, "Config", "project-registry.json");
 
-    private ProjectRegistry Registry() => new(RegistryFile, requireUnc: false, backups: 5, retries: 5, retryDelayMs: 50);
+    private string LogFile => Path.Combine(_root, "logs", "registry-errors.log");
+
+    private ProjectRegistry Registry() => new(RegistryFile, requireUnc: false, backups: 5, retries: 5, retryDelayMs: 50)
+    {
+        Log = new RegistryLog(LogFile),
+        RetryDelaysMs = new[] { 1, 1, 1, 1 },
+        LockWait = TimeSpan.FromMilliseconds(300),
+    };
+
+    private string LockFile => Path.Combine(Path.GetDirectoryName(RegistryFile)!, "project-registry.lock");
+
+    private string Log() => File.Exists(LogFile) ? File.ReadAllText(LogFile) : string.Empty;
+
+    /// <summary>What a Windows share throws for a sharing violation (ERROR_SHARING_VIOLATION, 32).</summary>
+    private static IOException SharingViolation() =>
+        new("The process cannot access the file because it is being used by another process.", unchecked((int)0x80070020));
 
     private ProjectStore Store() => new(_config, Registry());
 
@@ -339,7 +354,12 @@ public sealed class CrewUploadTests : IDisposable
     public void TwoPmsSavingAtOnceBothLand()
     {
         var folders = Enumerable.Range(0, 10).Select(i => SurveyDir("1800-HDR", "554-1800-2" + i.ToString("00") + " P")).ToList();
-        Parallel.For(0, 10, i => Registry().Register("1800-2" + i.ToString("00"), folders[i], "pm" + i));
+        Parallel.For(0, 10, i =>
+        {
+            var registry = Registry();
+            registry.LockWait = TimeSpan.FromSeconds(30); // ten PMs queueing for one lock
+            registry.Register("1800-2" + i.ToString("00"), folders[i], "pm" + i);
+        });
         var live = Registry().Load();
         Assert.Equal(10, live.Projects.Count);
         Assert.Equal(10, live.Revision);
@@ -368,6 +388,184 @@ public sealed class CrewUploadTests : IDisposable
         var e = Assert.Throws<InvalidDataException>(() => Registry().Register("1700-001", SurveyDir("1700-X", "1700-001 Y"), "pm"));
         Assert.Contains("Restore", e.Message);
         Assert.Equal("{ hand edited, oops", File.ReadAllText(RegistryFile));
+    }
+
+    // ------------------------------------------------------- share failure cases
+
+    private void WriteOwner(string user, string machine, DateTime acquiredUtc, bool released = false)
+    {
+        File.WriteAllText(LockFile + ".owner.json", Newtonsoft.Json.JsonConvert.SerializeObject(new
+        {
+            user, machine, processId = 4242, acquiredUtc, releasedUtc = released ? acquiredUtc.AddSeconds(1) : (DateTime?)null,
+        }));
+    }
+
+    [Fact]
+    public void ALockHeldByAnotherPmIsNeverRemoved()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        var before = File.ReadAllText(RegistryFile);
+        using var held = new FileStream(LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        WriteOwner(@"PMX\pmother", "PC-0099", DateTime.UtcNow.AddSeconds(-5));
+
+        var e = Assert.Throws<RegistryLockedException>(() => Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2"));
+        Assert.Contains(@"PMX\pmother on PC-0099", e.Message);
+        Assert.Contains("try again", e.Message);
+        Assert.True(File.Exists(LockFile));
+        held.WriteByte(1); // still ours, still open
+        Assert.Equal(before, File.ReadAllText(RegistryFile));
+        Assert.Contains("op=\"acquire registry lock\"", Log());
+    }
+
+    [Fact]
+    public void ALockHeldPastTheTimeoutIsReportedButStillNotBroken()
+    {
+        using var held = new FileStream(Path.Combine(Directory.CreateDirectory(Path.GetDirectoryName(RegistryFile)!).FullName, "project-registry.lock"),
+            FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        WriteOwner(@"PMX\pmcrashed", "PC-0042", DateTime.UtcNow.AddMinutes(-12));
+        var registry = Registry();
+        registry.StaleLockAfter = TimeSpan.FromMinutes(2);
+
+        var e = Assert.Throws<RegistryLockedException>(() => registry.Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm2"));
+        Assert.Contains("PC-0042", e.Message);
+        Assert.Contains("12 min", e.Message);
+        Assert.Contains("never breaks a lock that is still held", e.Message);
+        Assert.Contains("Open Files", e.Message);
+        Assert.True(File.Exists(LockFile));
+        Assert.False(File.Exists(RegistryFile));
+    }
+
+    [Fact]
+    public void ALeftoverLockThatNobodyHoldsIsRecoveredAndLogged()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(RegistryFile)!);
+        File.WriteAllText(LockFile, "{\"user\":\"pmcrashed\"}");   // the crash left the file behind
+        WriteOwner(@"PMX\pmcrashed", "PC-0042", DateTime.UtcNow.AddHours(-3));
+
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm2");
+        Assert.NotNull(Registry().Find("1800-119"));
+        var log = Log();
+        Assert.Contains("op=\"recover stale registry lock\"", log);
+        Assert.Contains("PC-0042", log);
+        Assert.False(File.Exists(LockFile) && new FileInfo(LockFile).Length > 0);
+    }
+
+    [Fact]
+    public void ACleanReleaseIsNotReportedAsStale()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        Assert.DoesNotContain("recover stale", Log());
+    }
+
+    [Fact]
+    public void ALockThePmCannotOpenIsReportedAsPermissionNotBusy()
+    {
+        // A folder where the lock file should be: opening it is "access denied" on every attempt,
+        // like a share where this user lacks Modify.
+        Directory.CreateDirectory(LockFile);
+        var e = Record.Exception(() => Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm"));
+        Assert.IsType<UnauthorizedAccessException>(e);
+        Assert.Contains("check Modify on the folder", Log());
+        Assert.False(File.Exists(RegistryFile));
+    }
+
+    [Fact]
+    public void ASharingViolationOnTheSwapIsRetried()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        var registry = Registry();
+        registry.BeforeFileStep = (op, attempt) => { if (op == "replace live registry" && attempt <= 2) throw SharingViolation(); };
+
+        registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        Assert.NotNull(Registry().Find("1711-042"));
+        Assert.Equal(2, Registry().Load().Revision);
+        var log = Log();
+        Assert.Contains("win32=32", log);
+        Assert.Contains("succeeded after 3 attempts", log);
+    }
+
+    [Theory]
+    [InlineData("write temporary registry")]
+    [InlineData("read back temporary registry")]
+    [InlineData("copy live registry to backup")]
+    [InlineData("replace live registry")]
+    public void APersistentShareErrorLeavesTheLiveRegistryExactlyAsItWas(string failingStep)
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("1800-011", SurveyDir("1800-HDR", "554-1800-011 Early"), "pm1");
+        var folder = Path.GetDirectoryName(RegistryFile)!;
+        var before = File.ReadAllText(RegistryFile);
+        var backupsBefore = Directory.GetFiles(folder, "*.backup-*").OrderBy(f => f).Select(File.ReadAllText).ToList();
+
+        var registry = Registry();
+        registry.BeforeFileStep = (op, attempt) => { if (op == failingStep) throw SharingViolation(); };
+        Assert.ThrowsAny<IOException>(() => registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2"));
+
+        Assert.Equal(before, File.ReadAllText(RegistryFile));
+        Assert.Equal(backupsBefore, Directory.GetFiles(folder, "*.backup-*").OrderBy(f => f).Select(File.ReadAllText).ToList());
+        Assert.Empty(Directory.GetFiles(folder, "*.tmp-*"));
+        Assert.Empty(Directory.GetFiles(folder, "*.backup-new-*"));
+
+        var error = Assert.Single(Log().Split('\n'), l => l.Contains("\tERROR\t") && l.Contains("save registry"));
+        Assert.Contains(failingStep, error);
+        Assert.Contains("win32=32", error);
+        Assert.Contains("user=\"" + RegistryLog.UserName + "\"", error);
+        Assert.Contains("machine=\"" + Environment.MachineName + "\"", error);
+        Assert.Contains("path=\"" + RegistryFile + "\"", error);
+    }
+
+    [Fact]
+    public void AnAntivirusLockOnTheBackupCopyIsRetried()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        var registry = Registry();
+        registry.BeforeFileStep = (op, attempt) =>
+        {
+            if (op == "copy live registry to backup" && attempt == 1) throw new UnauthorizedAccessException("Access to the path is denied.");
+        };
+        registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        Assert.Contains("\"revision\": 1", File.ReadAllText(registry.BackupPath(1)));
+    }
+
+    [Fact]
+    public void ABackupRotationFailureStillSavesAndKeepsThePreviousVersion()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        var registry = Registry();
+        registry.BeforeFileStep = (op, attempt) => { if (op == "delete oldest backup") throw SharingViolation(); };
+
+        var result = registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        Assert.NotNull(result.Warning);
+        Assert.Equal(2, Registry().Load().Revision);
+        var kept = Assert.Single(Directory.GetFiles(Path.GetDirectoryName(RegistryFile)!, "*.backup-new-*"));
+        Assert.Contains("\"revision\": 1", File.ReadAllText(kept));
+        Assert.Contains("op=\"rotate registry backups\"", Log());
+    }
+
+    [Fact]
+    public void AReplaceThatFinishedButLostItsReplyIsNotRetriedIntoAFailure()
+    {
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        var registry = Registry();
+        var folder = Path.GetDirectoryName(RegistryFile)!;
+        registry.BeforeFileStep = (op, attempt) =>
+        {
+            if (op != "replace live registry" || attempt != 1) return;
+            File.Replace(Directory.GetFiles(folder, "*.tmp-*").Single(), RegistryFile, null); // the server did it ...
+            throw new IOException("The specified network name is no longer available.", unchecked((int)0x80070040)); // ... the reply was lost
+        };
+        registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        Assert.Equal(2, Registry().Load().Revision);
+        Assert.Contains("win32=64", Log());
+        Assert.DoesNotContain("\tERROR\t", Log());
+    }
+
+    [Fact]
+    public void TheWindowsErrorCodeIsReadFromTheException()
+    {
+        Assert.Equal("win32=32 hresult=0x80070020", RegistryLog.WindowsError(SharingViolation()));
+        Assert.Equal("win32=5 hresult=0x80070005", RegistryLog.WindowsError(new UnauthorizedAccessException()));
     }
 
     [Fact]
