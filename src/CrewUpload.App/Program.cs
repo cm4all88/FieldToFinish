@@ -50,6 +50,7 @@ namespace CrewUpload.App
                 return;
             }
 
+            Theme.Apply(config);
             Application.Run(new MainForm(config, project, dropped));
         }
     }

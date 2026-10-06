@@ -186,15 +186,11 @@
     }
   ],
   "logFile": "Survey\\Field\\upload-log.csv",
-  "FallbackCategory": {
-    "key": "other",
-    "name": "Other field document",
-    "code": "MISC",
-    "folder": "Survey\\Field\\Other",
-    "keywords": [],
-    "extensions": [],
-    "fileName": null,
-    "useFileDate": false,
-    "fallback": true
+  "branding": {
+    "companyName": "Parametrix",
+    "appTitle": "Crew Upload",
+    "logo": "branding\\parametrix-logo.png",
+    "primaryColor": "#00395D",
+    "accentColor": "#78BE20"
   }
 }

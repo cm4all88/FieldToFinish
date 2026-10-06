@@ -26,11 +26,12 @@ into the right job folder with the right names.
    under `jobsRoot` (directly, or one level down, e.g. filed by year). A PM uses **New project (PM)**
    to make the folder from the office layout (`projectFolders` plus a folder per category) and a
    `project.json` holding number, name, client and PM.
-2. **Drop.** Folders, field notes, photos, data collector files — dragged onto the window, chosen
-   with a click, or sent with Explorer's *Send to* (files on the command line are added as dropped).
-3. **Check.** Each file shows its type, new name and destination before anything is copied. The type
-   is guessed from keywords in the file name ("lineout", "field notes", "cut sheet"), then the folder
-   it came in ("Photos\", "Lineouts\"), then its extension; the crew can change it per file.
+2. **Drop.** The window has one drop box per type (Field lineout, Stakeout / cut sheet, Control,
+   Field notes, Photos, Raw data, Other). Whatever lands on a box -- files or a whole folder -- is
+   that type; nothing is guessed. Clicking a box opens a file picker for that type. Files given on
+   the command line (Explorer's *Send to*) are sorted by name and extension instead.
+3. **Check.** Each file shows its type, new name and destination before anything is copied. Dropping
+   it on another box, or changing its Type, moves it.
 4. **Upload.** Files are copied (never moved), checked, and named
    `SV-{projectNumber}-{code}-{date}-{seq}` — e.g. `SV-2169171001-PHOTO-20261002-01.jpg`. Numbering
    continues from what is already in the job, nothing is overwritten, and a file whose exact contents
@@ -40,6 +41,10 @@ into the right job folder with the right names.
 The buttons along the bottom start a **field lineout**, **field notes** sheet or **cut sheet** from the
 templates in `config\templates\`, already named and filed for the project; **Type field notes** saves
 typed notes the same way.
+
+The window carries the Parametrix look from `branding` in the same config: company name, app title,
+header colours and a logo (`config\branding\parametrix-logo.png`; without it the name is drawn as a
+wordmark). The shipped colours are placeholders to be matched to the brand guide.
 
 Everything — the jobs root, folder layout, categories, codes, keywords and name pattern — is in
 `config\job-folders.json`, copied beside the exe. **The shipped values are placeholders**:

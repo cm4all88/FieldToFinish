@@ -10,16 +10,13 @@ using System.Windows.Forms;
 namespace CrewUpload.App
 {
     /// <summary>
-    /// Pick the project, drop what the crew brought back, check the names, upload. Every file
-    /// is shown with its type, new name and destination before anything is copied, and the
-    /// type can be changed per file.
+    /// Pick the project, drop what the crew brought back onto the box for its type, check the
+    /// names, upload. Every file is shown with its type, new name and destination before anything
+    /// is copied, and the type can still be changed per file.
     /// </summary>
     internal sealed class MainForm : Form
     {
-        internal static readonly Color Accent = Color.FromArgb(0, 102, 153);
-        internal static readonly Color Muted = Color.FromArgb(96, 96, 96);
-        private static readonly Color DropIdle = Color.FromArgb(240, 245, 250);
-        private static readonly Color DropHot = Color.FromArgb(214, 234, 248);
+        internal static Color Muted => Theme.Muted;
         private static readonly Color Bad = Color.FromArgb(176, 0, 32);
         private static readonly Color Good = Color.FromArgb(0, 120, 60);
 
@@ -33,8 +30,8 @@ namespace CrewUpload.App
         private readonly Label _projectLabel;
         private readonly TextBox _crew;
         private readonly DateTimePicker _date;
-        private readonly Panel _drop;
-        private readonly Label _dropText;
+        private readonly List<DropBox> _boxes = new List<DropBox>();
+        private readonly Label _dropHelp;
         private readonly DataGridView _grid;
         private readonly DataGridViewComboBoxColumn _typeColumn;
         private readonly Button _upload;
@@ -51,13 +48,12 @@ namespace CrewUpload.App
             _projects = new ProjectStore(config);
             _planner = new UploadPlanner(config);
 
-            Text = "Crew Upload";
+            Text = (Theme.CompanyName.Length > 0 ? Theme.CompanyName + " " : string.Empty) + Theme.AppTitle;
             Font = new Font("Segoe UI", 10f);
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(900, 600);
-            Size = new Size(1150, 760);
+            Size = new Size(1180, 860);
             BackColor = Color.White;
-            AllowDrop = true;
 
             // ---- project and crew
             var top = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 6, Padding = new Padding(14, 12, 14, 4) };
@@ -97,29 +93,32 @@ namespace CrewUpload.App
             top.Controls.Add(dateNote, 4, 2);
             top.SetColumnSpan(dateNote, 2);
 
-            // ---- drop zone
-            _drop = new Panel { Dock = DockStyle.Top, Height = 110, BackColor = DropIdle, Margin = new Padding(14), Cursor = Cursors.Hand, AllowDrop = true };
-            _dropText = new Label
+            // ---- one drop box per type: the box decides the type, nothing is guessed
+            var boxes = new TableLayoutPanel { Dock = DockStyle.Top, Height = 128, ColumnCount = _config.Categories.Count, RowCount = 1, Padding = new Padding(9, 0, 9, 0) };
+            foreach (var category in _config.Categories)
             {
-                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 13f), ForeColor = Accent,
-                Text = "Drag the crew's folders, field notes and photos here\r\nor click to choose files",
-            };
-            _drop.Controls.Add(_dropText);
-            _drop.Paint += (s, e) =>
+                boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / _config.Categories.Count));
+                var box = new DropBox(category);
+                box.FilesDropped += (b, paths) => { if (!_busy) AddPaths(paths, b.Category); };
+                box.Browse += b => Browse(b.Category);
+                _boxes.Add(box);
+                boxes.Controls.Add(box);
+            }
+            _dropHelp = new Label
             {
-                using (var pen = new Pen(Accent, 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
-                    e.Graphics.DrawRectangle(pen, 1, 1, _drop.Width - 3, _drop.Height - 3);
+                Dock = DockStyle.Top, Height = 30, Padding = new Padding(16, 8, 16, 0), ForeColor = Theme.Muted,
+                Text = "Drag each kind of file onto its box -- a whole folder works too. Or click a box to choose files.",
             };
-            _dropText.Click += (s, e) => Browse();
-            var dropWrap = new Panel { Dock = DockStyle.Top, Height = 130, Padding = new Padding(14, 6, 14, 14) };
-            dropWrap.Controls.Add(_drop);
+            var dropWrap = new Panel { Dock = DockStyle.Top, Height = 168, Padding = new Padding(0, 0, 0, 10) };
+            dropWrap.Controls.Add(boxes);
+            dropWrap.Controls.Add(_dropHelp);
 
             // ---- the plan
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToResizeRows = false, RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = Color.White, BorderStyle = BorderStyle.None, AllowDrop = true, EditMode = DataGridViewEditMode.EditOnEnter,
+                BackgroundColor = Color.White, BorderStyle = BorderStyle.None, EditMode = DataGridViewEditMode.EditOnEnter,
             };
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "file", HeaderText = "Dropped file", ReadOnly = true, FillWeight = 26 });
             _typeColumn = new DataGridViewComboBoxColumn
@@ -171,16 +170,9 @@ namespace CrewUpload.App
             Controls.Add(gridWrap);
             Controls.Add(dropWrap);
             Controls.Add(top);
+            Controls.Add(Theme.Header());
             Controls.Add(bottom);
             Controls.Add(_status);
-
-            foreach (var target in new Control[] { this, _drop, _dropText, _grid })
-            {
-                target.AllowDrop = true;
-                target.DragEnter += OnDragEnter;
-                target.DragLeave += (s, e) => _drop.BackColor = DropIdle;
-                target.DragDrop += OnDragDrop;
-            }
 
             FormClosing += (s, e) =>
             {
@@ -237,7 +229,7 @@ namespace CrewUpload.App
             if (project != null)
             {
                 _projectLabel.Text = project.Display + "     " + project.Path;
-                _projectLabel.ForeColor = Good;
+                _projectLabel.ForeColor = Theme.Primary;
                 _remembered.Used(project.Info.ProjectNumber);
                 if (!_number.Items.Contains(project.Info.ProjectNumber)) _number.Items.Insert(0, project.Info.ProjectNumber);
                 Say(project.HasInfoFile ? "Project found." : "Project found (an older folder: its name was read from the folder).", Good);
@@ -271,45 +263,47 @@ namespace CrewUpload.App
 
         // ------------------------------------------------------------------ dropping
 
-        private void OnDragEnter(object sender, DragEventArgs e)
-        {
-            var ok = !_busy && e.Data.GetDataPresent(DataFormats.FileDrop);
-            e.Effect = ok ? DragDropEffects.Copy : DragDropEffects.None;
-            if (ok) _drop.BackColor = DropHot;
-        }
-
-        private void OnDragDrop(object sender, DragEventArgs e)
-        {
-            _drop.BackColor = DropIdle;
-            if (_busy) return;
-            var paths = e.Data.GetData(DataFormats.FileDrop) as string[];
-            if (paths != null) AddPaths(paths);
-        }
-
-        private void Browse()
+        private void Browse(UploadCategory category)
         {
             if (_busy) return;
-            using (var dialog = new OpenFileDialog { Multiselect = true, Title = "Choose field notes, photos and data" })
-                if (dialog.ShowDialog(this) == DialogResult.OK) AddPaths(dialog.FileNames);
+            using (var dialog = new OpenFileDialog { Multiselect = true, Title = "Choose " + category.Name.ToLowerInvariant() + " to upload" })
+                if (dialog.ShowDialog(this) == DialogResult.OK) AddPaths(dialog.FileNames, category);
         }
 
-        private void AddPaths(IEnumerable<string> paths)
+        /// <summary>
+        /// Adds files to the list. With a category (dropped on its box) they are that type; a file
+        /// already in the list that is dropped on another box changes to that type. Without one
+        /// (the command line) the type is guessed from names and extensions.
+        /// </summary>
+        private void AddPaths(IEnumerable<string> paths, UploadCategory category = null)
         {
             List<UploadItem> found;
             try
             {
-                found = _planner.Collect(paths);
+                found = _planner.Collect(paths, category);
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
                 Say("Could not read what was dropped: " + ex.Message, Bad);
                 return;
             }
-            var known = new HashSet<string>(_items.Select(i => i.SourcePath), StringComparer.OrdinalIgnoreCase);
-            var added = found.Where(i => known.Add(i.SourcePath)).ToList();
-            _items.AddRange(added);
+            var known = _items.ToDictionary(i => i.SourcePath, StringComparer.OrdinalIgnoreCase);
+            var added = 0;
+            foreach (var item in found)
+            {
+                UploadItem existing;
+                if (known.TryGetValue(item.SourcePath, out existing))
+                {
+                    if (category != null) existing.Category = category;
+                    continue;
+                }
+                known[item.SourcePath] = item;
+                _items.Add(item);
+                added++;
+            }
             Replan();
-            Say(added.Count + " file" + (added.Count == 1 ? "" : "s") + " added." + (_project == null ? " Pick the project to see their names." : " Check the types, then Upload."), Muted);
+            var what = category == null ? string.Empty : " as " + category.Name.ToLowerInvariant();
+            Say(added + " file" + (added == 1 ? "" : "s") + " added" + what + "." + (_project == null ? " Pick the project to see their names." : " Check the names, then Upload."), Muted);
         }
 
         private void RemoveSelected()
@@ -390,9 +384,10 @@ namespace CrewUpload.App
             var toCopy = _items.Count(i => !i.Skip && !i.Done);
             _upload.Enabled = !_busy && _project != null && toCopy > 0;
             _upload.Text = toCopy > 0 ? "Upload " + toCopy + " file" + (toCopy == 1 ? "" : "s") + " to job" : "Upload to job";
-            _dropText.Text = _items.Count == 0
-                ? "Drag the crew's folders, field notes and photos here\r\nor click to choose files"
-                : _items.Count + " file" + (_items.Count == 1 ? "" : "s") + " ready -- drop more here, or click to choose files\r\nChange a Type if it guessed wrong. Delete removes a file from the list.";
+            foreach (var box in _boxes) box.SetCount(_items.Count(i => i.Category == box.Category && !i.Skip));
+            _dropHelp.Text = _items.Count == 0
+                ? "Drag each kind of file onto its box -- a whole folder works too. Or click a box to choose files."
+                : "Check the names below. Drop on another box, or change the Type, to move a file. Delete removes it from the list.";
         }
 
         private string Relative(string folder)
@@ -516,9 +511,9 @@ namespace CrewUpload.App
             var b = new Button
             {
                 Text = text, AutoSize = true, FlatStyle = FlatStyle.Flat, Padding = new Padding(10, 3, 10, 3), Margin = new Padding(3, 3, 6, 3),
-                BackColor = primary ? Accent : Color.White, ForeColor = primary ? Color.White : Accent, Cursor = Cursors.Hand,
+                BackColor = primary ? Theme.Primary : Color.White, ForeColor = primary ? Color.White : Theme.Primary, Cursor = Cursors.Hand,
             };
-            b.FlatAppearance.BorderColor = Accent;
+            b.FlatAppearance.BorderColor = Theme.Primary;
             if (primary) b.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
             return b;
         }

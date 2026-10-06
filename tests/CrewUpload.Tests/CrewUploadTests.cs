@@ -168,6 +168,30 @@ public sealed class CrewUploadTests : IDisposable
         Assert.Equal(@"Day 3\Photos\IMG_1.jpg", items[2].DroppedAs);
     }
 
+    [Fact]
+    public void DroppingOnATypesBoxDecidesTheTypeForEverything()
+    {
+        CardFile(@"Day 3\IMG_1.jpg");
+        CardFile(@"Day 3\Field Notes\page1.pdf");
+        CardFile(@"Day 3\SVLK.job");
+        var items = new UploadPlanner(_config).Collect(new[] { Path.Combine(_card, "Day 3") }, _config.Category("lineout"));
+        Assert.Equal(3, items.Count);
+        Assert.All(items, i => Assert.Equal("lineout", i.Category!.Key));
+
+        var p = NewProject();
+        new UploadPlanner(_config).Assign(p, items, "cmm", FieldDay);
+        Assert.All(items, i => Assert.StartsWith(Path.Combine(p.Path, "Survey", "Field", "Lineouts"), i.Destination));
+    }
+
+    [Fact]
+    public void BrandingColoursAreChecked()
+    {
+        _config.Branding.PrimaryColor = "navy";
+        var problems = new List<string>();
+        _config.Validate(problems);
+        Assert.Contains(problems, x => x.Contains("primaryColor"));
+    }
+
     // ------------------------------------------------------------------ naming
 
     [Fact]

@@ -23,6 +23,10 @@
     <None Include="..\..\config\job-folders.json" Link="job-folders.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- The company logo for the header. -->
+    <None Include="..\..\config\branding\**\*" Exclude="..\..\config\branding\**\*.md" LinkBase="branding">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <!-- Blank lineout / field notes / cut sheet forms the document buttons copy. -->
     <None Include="..\..\config\templates\**\*" Exclude="..\..\config\templates\**\*.md" LinkBase="templates">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

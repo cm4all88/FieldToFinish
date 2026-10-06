@@ -71,6 +71,26 @@ namespace CrewUpload
         public override string ToString() => Name;
     }
 
+    /// <summary>How the upload window looks: the company's logo, name and colours.</summary>
+    public sealed class Branding
+    {
+        [JsonProperty("companyName")] public string CompanyName { get; set; } = "Parametrix";
+
+        [JsonProperty("appTitle")] public string AppTitle { get; set; } = "Crew Upload";
+
+        /// <summary>PNG shown in the header. Relative paths are relative to the config file. Without it the company name is drawn as a wordmark.</summary>
+        [JsonProperty("logo")] public string Logo { get; set; } = @"branding\parametrix-logo.png";
+
+        /// <summary>Header band and primary buttons, "#RRGGBB".</summary>
+        [JsonProperty("primaryColor")] public string PrimaryColor { get; set; } = "#00395D";
+
+        /// <summary>Highlights: the drop box a file is being dragged over, counts, "#RRGGBB".</summary>
+        [JsonProperty("accentColor")] public string AccentColor { get; set; } = "#78BE20";
+
+        internal static bool IsColor(string value) =>
+            value != null && Regex.IsMatch(value, "^#[0-9A-Fa-f]{6}$");
+    }
+
     /// <summary>
     /// The office job folder standard: where projects live, what folders a new project gets,
     /// and how uploaded files are sorted and named. Ships as job-folders.json beside the app
@@ -121,13 +141,25 @@ namespace CrewUpload
         /// <summary>CSV under the project folder recording every upload: who, when, from where, to where.</summary>
         [JsonProperty("logFile")] public string LogFile { get; set; } = @"Survey\Field\upload-log.csv";
 
+        [JsonProperty("branding")] public Branding Branding { get; set; } = new Branding();
+
         /// <summary>Folder the config was read from; relative template paths resolve against it.</summary>
         [JsonIgnore] public string BaseDirectory { get; set; }
 
         public UploadCategory Category(string key) =>
             Categories.FirstOrDefault(c => string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase));
 
-        public UploadCategory FallbackCategory => Categories.FirstOrDefault(c => c.Fallback) ?? Categories.LastOrDefault();
+        /// <summary>A file named in the config, resolved against the config's folder. Null when not set or not there.</summary>
+        public string ResolveFile(string relative)
+        {
+            if (string.IsNullOrWhiteSpace(relative)) return null;
+            var path = Path.IsPathRooted(relative)
+                ? relative
+                : Naming.Combine(BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory, relative, new Dictionary<string, string>());
+            return File.Exists(path) ? path : null;
+        }
+
+        [JsonIgnore] public UploadCategory FallbackCategory => Categories.FirstOrDefault(c => c.Fallback) ?? Categories.LastOrDefault();
 
         /// <summary>Trimmed and upper-cased: crews type "2169171001 " and "554-3744-009a".</summary>
         public static string NormalizeProjectNumber(string number) => (number ?? string.Empty).Trim().ToUpperInvariant();
@@ -164,6 +196,10 @@ namespace CrewUpload
             catch (ArgumentException e) { problems.Add("projectNumberPattern is not a valid pattern: " + e.Message); }
             try { DateTime.Today.ToString(DateFormat); }
             catch (FormatException) { problems.Add("dateFormat '" + DateFormat + "' is not a date format."); }
+
+            if (Branding == null) Branding = new Branding();
+            if (!Branding.IsColor(Branding.PrimaryColor)) problems.Add("branding.primaryColor must be a colour like #00395D.");
+            if (!Branding.IsColor(Branding.AccentColor)) problems.Add("branding.accentColor must be a colour like #78BE20.");
 
             if (Categories.Count == 0) problems.Add("No categories: nothing would know where a file goes.");
             foreach (var g in Categories.GroupBy(c => (c.Key ?? string.Empty).ToLowerInvariant()).Where(g => g.Count() > 1))

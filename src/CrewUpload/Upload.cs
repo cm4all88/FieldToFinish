@@ -61,8 +61,10 @@ namespace CrewUpload
         /// Files and folders as dropped. A folder brings in every file under it; its name and
         /// its subfolders' names become hints ("Lineouts\..." is a lineout). Hidden files, Office
         /// lock files (~$...) and Windows thumbnail caches are left behind.
+        /// With <paramref name="category"/> -- the crew dropped onto that type's box -- every file
+        /// is that type and nothing is guessed.
         /// </summary>
-        public List<UploadItem> Collect(IEnumerable<string> dropped)
+        public List<UploadItem> Collect(IEnumerable<string> dropped, UploadCategory category = null)
         {
             var items = new List<UploadItem>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -80,6 +82,8 @@ namespace CrewUpload
                     Add(items, seen, path, new List<string>(), Path.GetFileName(path));
                 }
             }
+            if (category != null)
+                foreach (var item in items) item.Category = category;
             return items;
         }
 

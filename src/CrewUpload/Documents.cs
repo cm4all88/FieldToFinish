@@ -21,17 +21,7 @@ namespace CrewUpload
         }
 
         /// <summary>The template file for a document, or null when none is set or it cannot be found.</summary>
-        public string TemplatePath(DocumentTemplate document)
-        {
-            if (document == null || string.IsNullOrWhiteSpace(document.Template)) return null;
-            var path = document.Template;
-            if (!Path.IsPathRooted(path))
-            {
-                var baseDir = _config.BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory;
-                path = Naming.Combine(baseDir, path, new Dictionary<string, string>());
-            }
-            return File.Exists(path) ? path : null;
-        }
+        public string TemplatePath(DocumentTemplate document) => document == null ? null : _config.ResolveFile(document.Template);
 
         /// <summary>
         /// Makes the document and returns its path. A copy of the template when there is one;
