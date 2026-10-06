@@ -15,6 +15,21 @@ namespace CrewUpload.Reports
         public override string ToString() => string.IsNullOrEmpty(Name) ? Initials : Name + " (" + Initials + ")";
     }
 
+    /// <summary>A calendar day as yyyy-MM-dd, the same on every PC whatever its time zone.</summary>
+    internal sealed class DayConverter : Newtonsoft.Json.Converters.IsoDateTimeConverter
+    {
+        public DayConverter() { DateTimeFormat = "yyyy-MM-dd"; }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            if (reader.TokenType == JsonToken.Date) return ((DateTime)reader.Value).Date;
+            var s = reader.Value as string;
+            DateTime d;
+            if (s != null && s.Length >= 10 && DateTime.TryParseExact(s.Substring(0, 10), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out d)) return d;
+            return base.ReadJson(reader, objectType, existingValue, serializer);
+        }
+    }
+
     public sealed class ReportMileage
     {
         [JsonProperty("Start")] public int? Start { get; set; }
@@ -30,7 +45,8 @@ namespace CrewUpload.Reports
     public sealed class DailyReport
     {
         [JsonProperty("ReportID")] public string ReportId { get; set; }
-        [JsonProperty("Date")] public DateTime Date { get; set; }
+        /// <summary>The day worked, written as 2026-05-07 (no time, no time zone).</summary>
+        [JsonProperty("Date")] [JsonConverter(typeof(DayConverter))] public DateTime Date { get; set; }
 
         /// <summary>The full 3-4-3 project number when known (554-1800-119), else what the crew typed.</summary>
         [JsonProperty("ProjectNumber")] public string ProjectNumber { get; set; }

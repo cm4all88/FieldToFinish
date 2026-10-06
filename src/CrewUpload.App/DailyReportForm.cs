@@ -393,7 +393,7 @@ namespace CrewUpload.App
                 return;
             }
             OnSubmitted(Result);
-            var lines = Result.Copies.Select(c => (c.Kind == FiledCopy.Project ? "Project: " : c.Kind == FiledCopy.Admin ? "Admin: " : "This PC: ")
+            var lines = Result.Copies.Select(c => (c.Kind == FiledCopy.Project ? "Project: " : c.Kind == FiledCopy.Admin ? "Admin: " : c.Kind == FiledCopy.Record ? "Record: " : "This PC: ")
                 + (c.Ok ? c.Path : "not saved -- " + c.Error));
             MessageBox.Show(this, "Report " + Result.Report.ReportId + " submitted.\n\n" + string.Join("\n", lines), Text, MessageBoxButtons.OK,
                 Result.Copies.All(c => c.Ok) ? MessageBoxIcon.Information : MessageBoxIcon.Warning);

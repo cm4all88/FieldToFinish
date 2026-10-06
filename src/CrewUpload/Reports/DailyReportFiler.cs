@@ -9,7 +9,7 @@ namespace CrewUpload.Reports
     /// <summary>Where one copy of a submitted report went, or why it could not.</summary>
     public sealed class FiledCopy
     {
-        public const string Project = "project", Admin = "admin", Local = "local";
+        public const string Project = "project", Admin = "admin", Local = "local", Record = "record";
 
         public string Kind { get; set; }
         public string Path { get; set; }
@@ -35,7 +35,10 @@ namespace CrewUpload.Reports
     {
         private readonly JobFolderConfig _config;
 
-        public DailyReportFiler(JobFolderConfig config) { _config = config; }
+        public DailyReportFiler(JobFolderConfig config) { _config = config; Records = ReportRecords.For(config); }
+
+        /// <summary>Where the structured record goes after the PDFs are filed; null for no record.</summary>
+        public ReportRecords Records { get; set; }
 
         private DailyReportSettings Form => _config.DailyReport ?? new DailyReportSettings();
 
@@ -101,6 +104,23 @@ namespace CrewUpload.Reports
             report.AdminPdfPath = adminCopy.Ok ? adminCopy.Path : null;
             report.PdfPath = projectCopy.Ok ? projectCopy.Path : report.AdminPdfPath;
             if (report.PdfPath == null) report.PdfPath = result.Copies.FirstOrDefault(c => c.Ok)?.Path;
+
+            // The record says where the PDFs went, so it is written last. Only a report that was filed somewhere is recorded.
+            if (Records != null && result.Filed)
+            {
+                string problem;
+                var record = new FiledCopy { Kind = FiledCopy.Record };
+                try
+                {
+                    record.Path = Records.Save(report, out problem);
+                    record.Error = record.Path == null ? problem ?? "Not recorded." : null;
+                }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException)
+                {
+                    record.Error = e.Message;
+                }
+                result.Copies.Add(record);
+            }
             return result;
         }
 

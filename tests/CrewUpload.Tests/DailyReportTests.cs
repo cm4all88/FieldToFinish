@@ -12,6 +12,8 @@ public sealed class DailyReportTests : TestShare
         Config.DailyReport.LocalFolder = Path.Combine(Root, "Local");
     }
 
+    private DailyReportFiler Filer() => new(Config) { Records = new ReportRecords(Config.DailyReport.AdminFolder, Path.Combine(Root, "PC")) };
+
     /// <summary>Jeff's report from the sample form (5-7-26).</summary>
     internal static DailyReport Sample() => new()
     {
@@ -81,7 +83,7 @@ public sealed class DailyReportTests : TestShare
     [Fact]
     public void RendersAReadablePdf()
     {
-        var bytes = new DailyReportFiler(Config).Render(Sample());
+        var bytes = Filer().Render(Sample());
         var text = Encoding.Latin1.GetString(bytes);
         Assert.Contains("/Count 1 ", text); // the usual day fits on one page, like the paper form
         Assert.StartsWith("%PDF-1.4", text);
@@ -103,7 +105,7 @@ public sealed class DailyReportTests : TestShare
     {
         var r = Sample();
         r.Notes = string.Join("\n", Enumerable.Range(1, 80).Select(i => "Line " + i + " of a very long day of notes about the work."));
-        var text = Encoding.Latin1.GetString(new DailyReportFiler(Config).Render(r));
+        var text = Encoding.Latin1.GetString(Filer().Render(r));
         Assert.DoesNotContain("/Count 1 ", text);
         Assert.Contains("(Line 80 of a very long day of notes about the work.) Tj", text);
     }
@@ -121,7 +123,7 @@ public sealed class DailyReportTests : TestShare
     public void FilesThreeCopiesAndNeverOverwrites()
     {
         var project = Project();
-        var filer = new DailyReportFiler(Config);
+        var filer = Filer();
         var result = filer.Submit(Sample(), project);
         Assert.True(result.Copies.All(c => c.Ok), string.Join("; ", result.Copies.Select(c => c.Error)));
         var r = result.Report;
@@ -146,7 +148,7 @@ public sealed class DailyReportTests : TestShare
     {
         var r = Sample();
         r.DataFileName = null;
-        var result = new DailyReportFiler(Config).Submit(r, null);
+        var result = Filer().Submit(r, null);
         Assert.False(result.Copy(FiledCopy.Project)!.Ok);
         Assert.True(result.Copy(FiledCopy.Admin)!.Ok);
         Assert.Equal(result.Report.AdminPdfPath, result.Report.PdfPath);
@@ -157,7 +159,7 @@ public sealed class DailyReportTests : TestShare
     public void AnUnreachableAdminFolderDoesNotLoseTheReport()
     {
         File.WriteAllText(Path.Combine(Root, "Admin"), "a file where the folder should be");
-        var result = new DailyReportFiler(Config).Submit(Sample(), Project());
+        var result = Filer().Submit(Sample(), Project());
         Assert.False(result.Copy(FiledCopy.Admin)!.Ok);
         Assert.True(result.Copy(FiledCopy.Project)!.Ok);
         Assert.True(result.Copy(FiledCopy.Local)!.Ok);
@@ -169,7 +171,7 @@ public sealed class DailyReportTests : TestShare
     {
         var r = Sample();
         r.Crew.Clear();
-        Assert.Throws<InvalidOperationException>(() => new DailyReportFiler(Config).Submit(r, Project()));
+        Assert.Throws<InvalidOperationException>(() => Filer().Submit(r, Project()));
         Assert.False(Directory.Exists(Path.Combine(Root, "Admin")));
     }
 }

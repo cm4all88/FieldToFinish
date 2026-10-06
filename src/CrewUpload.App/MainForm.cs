@@ -246,6 +246,12 @@ namespace CrewUpload.App
                 report.Margin = new Padding(3, 6, 3, 3);
                 report.Click += (s, e) => DailyReport(null);
                 left.Controls.Add(report);
+                var history = Theme.Button("My reports...", false);
+                history.Margin = new Padding(3, 6, 3, 3);
+                history.Click += (s, e) => { using (var f = new ReportHistoryForm(Reports.ReportRecords.For(_config))) f.ShowDialog(this); };
+                left.Controls.Add(history);
+                // records that could not reach the admin folder last time go now, quietly
+                Shown += (s, e) => Task.Run(() => { string p; try { Reports.ReportRecords.For(_config).SendPending(out p); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
             }
             left.Controls.Add(_documents);
             var settings = Theme.Button("Settings...", false);
