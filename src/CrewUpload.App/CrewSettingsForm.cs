@@ -71,7 +71,7 @@ namespace CrewUpload.App
             _crew.DataError += (s, e) => e.ThrowException = false; // a schedule person no longer in the roster
             var crewHelp = new Label
             {
-                Dock = DockStyle.Top, AutoSize = true, MaximumSize = new Size(860, 0), ForeColor = Theme.MediumGray, Padding = new Padding(0, 0, 0, 8),
+                Dock = DockStyle.Top, AutoSize = false, Height = 58, ForeColor = Theme.MediumGray, Padding = new Padding(0, 0, 0, 8),
                 Text = "Initials are what crews type and what goes in download names and daily reports (JBB). Link a person to the schedule so their"
                     + " day can be prefilled. Windows sign-in is optional; with it the app knows who is at the keyboard. People are made inactive, not deleted.",
             };
@@ -95,7 +95,7 @@ namespace CrewUpload.App
             var known = schedule != null && schedule.Available ? schedule.Activities() : (IReadOnlyList<string>)new string[0];
             var typeHelp = new Label
             {
-                Dock = DockStyle.Top, AutoSize = true, MaximumSize = new Size(860, 0), ForeColor = Theme.MediumGray, Padding = new Padding(0, 0, 0, 8),
+                Dock = DockStyle.Top, AutoSize = false, Height = 58, ForeColor = Theme.MediumGray, Padding = new Padding(0, 0, 0, 8),
                 Text = "Which Schedule activities mean each work type, for suggesting the work type on a crew's report. Nothing maps until it is listed here,"
                     + " and the crew can always change it. Work type codes come from job-folders.json."
                     + (known.Count > 0 ? "\r\nActivities in the schedule: " + string.Join(", ", known) : string.Empty),

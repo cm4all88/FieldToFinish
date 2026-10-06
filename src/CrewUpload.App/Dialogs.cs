@@ -116,12 +116,19 @@ namespace CrewUpload.App
             {
                 using (var f = new CrewSettingsForm(_config, CrewSettingsStore.For(_config), _schedule)) f.ShowDialog(this);
             };
+            var reports = Theme.Button("Scheduled vs reported...", false);
+            reports.Click += (s, e) =>
+            {
+                using (var f = new AdminReportsForm(_config, _registry, _schedule)) f.ShowDialog(this);
+            };
+            reports.Visible = config.Features?.DailyReports ?? true;
             var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 8) };
             buttons.Controls.Add(_save);
             buttons.Controls.Add(_active);
             buttons.Controls.Add(refresh);
             buttons.Controls.Add(close);
             buttons.Controls.Add(crew);
+            buttons.Controls.Add(reports);
             stack.Controls.Add(buttons, 0, 7);
             stack.SetColumnSpan(buttons, 3);
             CancelButton = close;

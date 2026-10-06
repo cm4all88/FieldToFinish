@@ -10,13 +10,14 @@ internal sealed class FakeSchedule : IScheduleSource
     public string? Message { get; set; }
     public List<ScheduledWork> Work { get; } = new();
     public List<ScheduledEmployee> People { get; } = new();
+    public List<ScheduledCrew> Crews { get; } = new();
     public bool Refresh() => Available;
     public IReadOnlyList<ScheduledEmployee> Employees() => People;
     public IReadOnlyList<ScheduledProject> Projects() => Array.Empty<ScheduledProject>();
     public IReadOnlyList<string> Activities() => new[] { "Topo", "Staking" };
     public IReadOnlyList<ScheduledWork> WorkFor(string employeeId, DateTime date) =>
         Available ? Work.Where(w => w.EmployeeId == employeeId && w.Date == date.Date).ToList() : new List<ScheduledWork>();
-    public IReadOnlyList<ScheduledCrew> CrewsOn(DateTime date) => Array.Empty<ScheduledCrew>();
+    public IReadOnlyList<ScheduledCrew> CrewsOn(DateTime date) => Available ? Crews.Where(c => c.Date == date.Date).ToList() : new List<ScheduledCrew>();
 }
 
 public sealed class SchedulePrefillTests : TestShare
