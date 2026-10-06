@@ -49,6 +49,10 @@ namespace CrewUpload.App
         private bool _busy;
         private IScheduleSource _schedule;
         private bool _scheduleTried;
+        private readonly TodayCard _today;
+        private PrefillResult _prefill;
+        private string _prefillKey;
+        private int _prefillRun;
 
         public MainForm(JobFolderConfig config, string projectNumber, IList<string> dropped, bool setup = false)
         {
@@ -263,6 +267,17 @@ namespace CrewUpload.App
 
             Controls.Add(gridWrap);
             Controls.Add(dropWrap);
+            if (PrefillOn)
+            {
+                _today = new TodayCard();
+                _today.ReportClicked += c => DailyReport(c);
+                _today.UploadClicked += UploadFor;
+                _today.OpenClicked += c => { if (c.Project != null) Process.Start("explorer.exe", "\"" + c.Project.Path + "\""); };
+                Controls.Add(_today);
+                Shown += (s, e) => RefreshToday();
+                _crew.Leave += (s, e) => RefreshToday();
+                _date.ValueChanged += (s, e) => RefreshToday();
+            }
             Controls.Add(top);
             Controls.Add(Theme.Header());
             Controls.Add(_status);
@@ -423,18 +438,96 @@ namespace CrewUpload.App
         /// Opens the daily report with what this screen knows (project, crew, date, phase, work
         /// type) or with <paramref name="draft"/>. Works without a project: the crew types it.
         /// </summary>
-        private void DailyReport(Reports.DailyReport draft)
+        private void DailyReport(PrefillChoice choice)
         {
             string problem;
             var crewList = CrewSettingsStore.For(_config).TryLoad(out problem);
             var work = _work.SelectedItem as WorkType;
-            draft = draft ?? Reports.DailyReportDraft.FromUpload(_config, _project, _crew.Text, _date.Value, JobFolderConfig.NormalizePhase(_phase.Text), work?.Code, crewList);
-            if (draft.ProjectNumber == null && _number.Text.Trim().Length > 0) draft.ProjectNumber = _number.Text.Trim();
-            using (var form = new DailyReportForm(_config, _projects, crewList, draft))
+            var manual = Reports.DailyReportDraft.FromUpload(_config, _project, _crew.Text, _date.Value, JobFolderConfig.NormalizePhase(_phase.Text), work?.Code, crewList);
+            if (manual.ProjectNumber == null && _number.Text.Trim().Length > 0) manual.ProjectNumber = _number.Text.Trim();
+
+            PrefillResult prefill = null;
+            if (PrefillOn && Schedule() != null)
             {
+                prefill = _prefillKey == PrefillKey() ? _prefill : null;
+                if (prefill == null)
+                {
+                    Cursor = Cursors.WaitCursor;
+                    try { prefill = LoadPrefill(_crew.Text, _date.Value.Date); }
+                    finally { Cursor = Cursors.Default; }
+                }
+            }
+            using (var form = new DailyReportForm(_config, _projects, crewList, choice?.Draft ?? manual))
+            {
+                if (prefill != null) form.SetChoices(prefill, manual, choice ?? (prefill.Choices.Count == 1 ? prefill.Choices[0] : null));
                 if (form.ShowDialog(this) != DialogResult.OK || form.Result == null) return;
                 Say("Daily report " + form.Result.Report.ReportId + " submitted.", Good);
             }
+        }
+
+        private bool PrefillOn => (_config.Features?.ScheduleIntegration ?? false) && (_config.Features?.SchedulePrefill ?? false);
+
+        private string PrefillKey() => _crew.Text.Trim().ToUpperInvariant() + "|" + _date.Value.Date.ToString("yyyy-MM-dd");
+
+        /// <summary>The schedule's view of this person's day. Reads files; call off the UI thread where it can wait.</summary>
+        private PrefillResult LoadPrefill(string crewText, DateTime date)
+        {
+            string problem;
+            var crewList = CrewSettingsStore.For(_config).TryLoad(out problem);
+            var person = SchedulePrefill.Identify(crewList, crewText, Environment.UserName);
+            var schedule = Schedule();
+            schedule?.Refresh();
+            return SchedulePrefill.For(schedule, _config, crewList, _projects, person, date);
+        }
+
+        /// <summary>Fills the TODAY card in the background; the window never waits on the schedule.</summary>
+        private void RefreshToday()
+        {
+            if (_today == null) return;
+            var schedule = Schedule();
+            if (schedule == null) { _today.Visible = false; return; } // integration not installed: standalone
+            var key = PrefillKey();
+            if (key == _prefillKey && _prefill != null) return;
+            var run = ++_prefillRun;
+            var crewText = _crew.Text;
+            var date = _date.Value.Date;
+            _today.ShowLoading(date);
+            Task.Run(() => LoadPrefill(crewText, date)).ContinueWith(t =>
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke((Action)(() =>
+                {
+                    if (run != _prefillRun) return; // a newer check started
+                    var result = t.Status == TaskStatus.RanToCompletion ? t.Result : new PrefillResult { Message = SchedulePrefill.Unavailable };
+                    _prefill = result;
+                    _prefillKey = key;
+                    _today.Show(result, date);
+                    if (_crew.Text.Trim().Length == 0 && result.Person != null)
+                    {
+                        _crew.Text = result.Person.Initials; // found by Windows sign-in
+                        _prefillKey = PrefillKey();
+                    }
+                }));
+            });
+        }
+
+        /// <summary>Upload Files on the TODAY card: the project, crew, date and work type the schedule gives.</summary>
+        private void UploadFor(PrefillChoice choice)
+        {
+            if (_busy) return;
+            if (choice.Draft.Date != default(DateTime)) _date.Value = choice.Draft.Date;
+            if (_crew.Text.Trim().Length == 0 && _prefill?.Person != null) _crew.Text = _prefill.Person.Initials;
+            var code = choice.Draft.WorkType;
+            var type = _config.WorkTypes.FirstOrDefault(w => string.Equals(w.Code, code, StringComparison.OrdinalIgnoreCase));
+            if (type != null) _work.SelectedItem = type;
+            if (choice.Project == null)
+            {
+                Say("\"" + choice.Work.ProjectName + "\" is not linked to a registered project yet. Type the project number; the PM can link it in Project setup.", Bad);
+                _number.Focus();
+                return;
+            }
+            _number.Text = choice.Project.Info.FullNumber;
+            FindProject();
         }
 
         /// <summary>

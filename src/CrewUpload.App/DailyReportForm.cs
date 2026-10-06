@@ -6,7 +6,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using CrewUpload.Integration;
 using CrewUpload.Reports;
+using Newtonsoft.Json;
 
 namespace CrewUpload.App
 {
@@ -35,6 +37,7 @@ namespace CrewUpload.App
         private readonly TextBox _notes, _extras, _otherObservation, _otherPrecaution;
         private readonly Button _submit;
         private DailyReport _draft;
+        private List<string> _unknownCrew = new List<string>();
 
         /// <summary>The report as submitted, or null.</summary>
         public SubmitResult Result { get; private set; }
@@ -174,6 +177,46 @@ namespace CrewUpload.App
             ApplyDraft(draft ?? new DailyReport { Date = DateTime.Today });
         }
 
+        // ------------------------------------------------------------------ the schedule's choices
+
+        /// <summary>
+        /// Shows what the schedule has the crew on that day, plus "Not listed / Enter manually". Picking
+        /// one fills the form from it; nothing is saved until Submit, and every field stays editable.
+        /// </summary>
+        public void SetChoices(PrefillResult prefill, DailyReport manual, PrefillChoice selected)
+        {
+            _top.Controls.Clear();
+            var list = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Theme.LightGray4, Padding = new Padding(10, 6, 10, 6) };
+            if (prefill.Choices.Count == 0)
+            {
+                list.Controls.Add(new Label { AutoSize = true, ForeColor = Theme.MediumGray, Text = prefill.Message ?? SchedulePrefill.Unavailable });
+                _top.Controls.Add(list);
+                return;
+            }
+            list.Controls.Add(new Label
+            {
+                AutoSize = true, Font = Theme.Body(10f, FontStyle.Bold), Margin = new Padding(0, 0, 0, 4),
+                Text = prefill.Choices.Count == 1 ? "On the schedule" : "On the schedule -- pick what you worked on",
+            });
+            foreach (var c in prefill.Choices)
+            {
+                var choice = c;
+                var rb = new RadioButton { AutoSize = true, Text = choice.Label, Checked = choice == selected, Margin = new Padding(3, 1, 3, 1) };
+                rb.CheckedChanged += (s, e) => { if (rb.Checked) { _unknownCrew = choice.UnknownCrew.ToList(); ApplyDraft(Copy(choice.Draft)); } };
+                list.Controls.Add(rb);
+            }
+            var by = new RadioButton { AutoSize = true, Text = "Not listed / Enter manually", Checked = selected == null, Margin = new Padding(3, 1, 3, 1) };
+            by.CheckedChanged += (s, e) => { if (by.Checked) { _unknownCrew = new List<string>(); ApplyDraft(Copy(manual)); } };
+            list.Controls.Add(by);
+            list.Controls.Add(new Label { AutoSize = true, ForeColor = Theme.MediumGray, Margin = new Padding(0, 4, 0, 0),
+                Text = "The schedule only fills in a starting point. Change anything that was different; the report records what actually happened." });
+            _top.Controls.Add(list);
+            _unknownCrew = selected?.UnknownCrew.ToList() ?? new List<string>();
+            ApplyDraft(Copy(selected?.Draft ?? manual));
+        }
+
+        private static DailyReport Copy(DailyReport d) => JsonConvert.DeserializeObject<DailyReport>(JsonConvert.SerializeObject(d));
+
         // ------------------------------------------------------------------ filling in
 
         /// <summary>Puts a draft into the form. Used when it opens and when the crew picks another schedule entry.</summary>
@@ -290,6 +333,8 @@ namespace CrewUpload.App
             _crewNames.Text = people.Count == 0 ? string.Empty
                 : (people.Count == 1 ? "Solo crew: " : people.Count + "-person crew: ")
                   + string.Join(", ", people.Select(p => p.Name ?? _draft?.Crew.FirstOrDefault(x => x.Initials == p.Initials)?.Name ?? p.Initials + " (not in the crew list)"));
+            if (_unknownCrew.Count > 0)
+                _crewNames.Text += (_crewNames.Text.Length > 0 ? "\r\n" : string.Empty) + "Also scheduled, not in the crew list: " + string.Join(", ", _unknownCrew) + " -- type their initials to include them.";
         }
 
         private void ShowTotal()
