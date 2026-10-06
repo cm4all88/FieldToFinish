@@ -9,10 +9,48 @@ Civil 3D plugin; contains no Autodesk references and runs without a CAD licence.
 src/FieldCodes/        netstandard2.0 — grammar, rules, parsing. No CAD types.
 src/FieldCodes.Cad/    net48;net8.0   — CogoPoint reading, block/label/drip placement.  [not yet written]
 config/rules.json      the grammar itself
+src/CrewUpload/        netstandard2.0 — crew upload rules: job folder lookup, sorting, naming.
+src/CrewUpload.App/    net48 WinExe   — CrewUpload.exe, the crews' drag-and-drop upload window.
+config/job-folders.json  the job folder and file naming standard CrewUpload follows
 ```
 
 The split matters: `FieldCodes` is the single definition of what a code means.
 Nothing downstream should re-implement the grammar.
+
+## Crew Upload
+
+`CrewUpload.exe` is a separate Windows app (no Civil 3D needed) for getting what a crew brings back
+into the right job folder with the right names.
+
+1. **Project.** The crew types the project number and presses Enter; the app finds the job folder
+   under `jobsRoot` (directly, or one level down, e.g. filed by year). A PM uses **New project (PM)**
+   to make the folder from the office layout (`projectFolders` plus a folder per category) and a
+   `project.json` holding number, name, client and PM.
+2. **Drop.** Folders, field notes, photos, data collector files — dragged onto the window, chosen
+   with a click, or sent with Explorer's *Send to* (files on the command line are added as dropped).
+3. **Check.** Each file shows its type, new name and destination before anything is copied. The type
+   is guessed from keywords in the file name ("lineout", "field notes", "cut sheet"), then the folder
+   it came in ("Photos\", "Lineouts\"), then its extension; the crew can change it per file.
+4. **Upload.** Files are copied (never moved), checked, and named
+   `SV-{projectNumber}-{code}-{date}-{seq}` — e.g. `SV-2169171001-PHOTO-20261002-01.jpg`. Numbering
+   continues from what is already in the job, nothing is overwritten, and a file whose exact contents
+   are already there is skipped. Photos are dated by when they were taken. Every upload is recorded in
+   `Survey\Field\upload-log.csv` in the job.
+
+The buttons along the bottom start a **field lineout**, **field notes** sheet or **cut sheet** from the
+templates in `config\templates\`, already named and filed for the project; **Type field notes** saves
+typed notes the same way.
+
+Everything — the jobs root, folder layout, categories, codes, keywords and name pattern — is in
+`config\job-folders.json`, copied beside the exe. **The shipped values are placeholders**:
+`jobsRoot` (`U:\PSO\Jobs`) and the `Survey\Field\...` layout must be set to the office's real ones before
+crews use it. The app refuses to start with a config that does not validate and says what is wrong.
+
+```
+dotnet build src\CrewUpload.App -c Release      # -> src\CrewUpload.App\bin\Release\net48\
+dotnet test  tests\CrewUpload.Tests
+CrewUpload.exe [--config path\job-folders.json] [project number] [files or folders...]
+```
 
 ## Targeting 2024 and 2026
 

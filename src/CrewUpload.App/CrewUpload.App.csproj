@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The crew's upload window. A plain Windows app, not a Civil 3D plugin: crews upload
+         from the truck laptop or the office kiosk, neither of which has Civil 3D.
+         net48 because every office PC already has it, so it runs from a share with no install. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>CrewUpload</AssemblyName>
+    <RootNamespace>CrewUpload.App</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyTitle>Crew Upload</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CrewUpload\CrewUpload.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The office standard ships beside the exe; edit it there, no rebuild. -->
+    <None Include="..\..\config\job-folders.json" Link="job-folders.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Blank lineout / field notes / cut sheet forms the document buttons copy. -->
+    <None Include="..\..\config\templates\**\*" Exclude="..\..\config\templates\**\*.md" LinkBase="templates">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets net48 build without Visual Studio / the .NET Framework targeting pack. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+</Project>
