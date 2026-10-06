@@ -29,7 +29,7 @@ public sealed class CrewUploadTests : IDisposable
 
     private const string Download = "20260128-JAM-1521-799-TOPO";
     private static readonly FieldVisit Visit = new() { Crew = "jam", Date = new DateTime(2026, 1, 28), WorkType = "topo" };
-    private static readonly string[] Downloads = { "99Svcs", "Survey", "02Field", "01FLD_DR_FN_DCfile" };
+    private static readonly string[] Downloads = { "02Field", "01FLD_DR_FN_DCfile", "Unprocessed" };
 
     private string CardFile(string relative, string content = "x")
     {
@@ -51,22 +51,29 @@ public sealed class CrewUploadTests : IDisposable
         return Path.Combine(_card, name);
     }
 
-    /// <summary>An existing project folder on the "share", as the office makes them.</summary>
-    private string ProjectDir(string client = "1521-CityOfOrting", string project = "554-1521-799 Main St Topo")
+    /// <summary>An existing project's base Survey folder on the "share", as the office makes them.</summary>
+    private string SurveyDir(string client = "1521-CityOfOrting", string project = "554-1521-799 Main St Topo")
     {
-        var path = Path.Combine(_clients, client, project);
+        var path = Path.Combine(_clients, client, project, "99Svcs", "Survey");
         Directory.CreateDirectory(path);
         return path;
     }
 
+    // Temp folders are not UNC; the UNC rule itself is tested on its own.
+    private ProjectRegistry Registry() => new(Path.Combine(_root, "project-registry.json"), requireUnc: false);
+
+    private ProjectStore Store() => new(_config, Registry());
+
+    /// <summary>The PM registers 1521-799 to its Survey folder; the crew then finds it by number.</summary>
     private ProjectFolder Project()
     {
-        ProjectDir();
-        return new ProjectStore(_config).Resolve("1521-799").Single();
+        Registry().Register("1521-799", SurveyDir(), "pm");
+        return Store().Find("1521-799")!;
     }
 
     private string InDownloads(ProjectFolder p, params string[] rest) => Path.Combine(new[] { p.Path }.Concat(Downloads).Concat(rest).ToArray());
 
+    /// <summary>Relative to the registered Survey folder.</summary>
     private static string Rel(ProjectFolder p, string path) => Path.GetRelativePath(p.Path, path).Replace(Path.DirectorySeparatorChar, '\\');
 
     private (UploadPlanner planner, List<UploadItem> items) Plan(ProjectFolder p, params string[] dropped)
@@ -91,16 +98,16 @@ public sealed class CrewUploadTests : IDisposable
 
     [Fact]
     public void TheShareIsReachedByItsUncPathNotADriveLetter() =>
-        Assert.Equal(@"\\parametrix.com\pmx\PSO\Projects\Clients", JobFolderConfig.CreateDefault().JobsRoot);
+        Assert.True(ProjectRegistry.IsUnc(JobFolderConfig.CreateDefault().JobsRoot));
 
     [Fact]
     public void ValidateCatchesFoldersLeavingTheProject()
     {
-        _config.DownloadsFolder = @"..\Elsewhere";
+        _config.UnprocessedFolder = @"..\Elsewhere";
         _config.Categories[0].Folder = @"..\..\Elsewhere";
         var problems = new List<string>();
         _config.Validate(problems);
-        Assert.Contains(problems, p => p.Contains("downloadsFolder"));
+        Assert.Contains(problems, p => p.Contains("unprocessedFolder"));
         Assert.Contains(problems, p => p.Contains("inside the download folder"));
     }
 
@@ -150,61 +157,79 @@ public sealed class CrewUploadTests : IDisposable
     [InlineData("20260128-JAM-TOPO")]
     public void OtherFolderNamesAreNotDownloads(string name) => Assert.Null(DownloadNames.Parse(_config, name));
 
-    // ---------------------------------------------------------------- projects
+    // ------------------------------------------------------------ registration
 
     [Fact]
-    public void FindsTheProjectUnderItsClient()
+    public void APmRegistersTheProjectsSurveyFolderOnce()
     {
-        ProjectDir("1800-SoundTransit", "554-1800-119 TDLE Phase 3");
-        var found = new ProjectStore(_config).Resolve("1800-119");
-        var p = Assert.Single(found);
-        Assert.Equal(Path.Combine(_clients, "1800-SoundTransit", "554-1800-119 TDLE Phase 3"), p.Path);
-        Assert.Equal("1800-119", p.Info.ProjectNumber);
-        Assert.Equal("TDLE Phase 3", p.Info.ProjectName);
-        Assert.Equal("1800-SoundTransit", p.Info.Client);
+        var survey = SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3");
+        Registry().Register("1800-119", survey, "pm1");
+
+        var p = Store().Find("1800-119")!;
+        Assert.Equal(survey, p.Path);
+        Assert.Equal(Path.Combine(survey, "02Field", "01FLD_DR_FN_DCfile", "Unprocessed"), p.UploadRoot);
+        Assert.Equal("554-1800-119 TDLE Phase 3", p.Info.ProjectName);
+        Assert.Equal("1800-HDR", p.Info.Client);
+        var reg = Registry().Find("1800-119")!;
+        Assert.Equal(("1800", "119", "pm1"), (reg.Client, reg.Task, reg.RegisteredBy));
     }
 
     [Fact]
-    public void AProjectFolderWithoutAPrefixIsFoundToo()
+    public void AnUnregisteredProjectIsNotFoundEvenIfItsFolderExists()
     {
-        ProjectDir("1711-CityOfOrting", "1711-042 Harman Way");
-        Assert.Single(new ProjectStore(_config).Resolve("1711-042"));
-    }
-
-    [Theory]
-    [InlineData("1800-SoundTransit", "554-1800-1190 Other task")]   // task 1190, not 119
-    [InlineData("18000-Someone", "554-1800-119 Wrong client folder")] // client 18000, not 1800
-    [InlineData("1711-CityOfOrting", "554-1711-119 Same task, other client")]
-    public void LookalikeFoldersAreNotTheProject(string client, string project)
-    {
-        ProjectDir(client, project);
-        Assert.Empty(new ProjectStore(_config).Resolve("1800-119"));
+        SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3");
+        Assert.Null(Store().Find("1800-119"));
     }
 
     [Fact]
-    public void TwoMatchingFoldersAreReturnedForTheUserToChoose()
+    public void ThePmCanMoveARegistrationAndTheOldPathIsKept()
     {
-        ProjectDir("1800-SoundTransit", "554-1800-119 TDLE Phase 3");
-        ProjectDir("1800-SoundTransit", "1800-119 TDLE Phase 3 OLD");
-        Assert.Equal(2, new ProjectStore(_config).Resolve("1800-119").Count);
+        var first = SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3");
+        var second = SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3 (moved)");
+        Registry().Register("1800-119", first, "pm1");
+        Registry().Register("1800-119", second, "pm2");
+
+        var reg = Registry().Find("1800-119")!;
+        Assert.Equal(second, reg.SurveyFolder);
+        var old = Assert.Single(reg.History);
+        Assert.Equal((first, "pm1", "pm2"), (old.SurveyFolder, old.RegisteredBy, old.ReplacedBy));
+        Assert.Single(Registry().All());
     }
 
     [Fact]
-    public void FindingNothingCreatesNothing()
+    public void RegistrationKeepsOtherProjects()
     {
-        Assert.Empty(new ProjectStore(_config).Resolve("1800-119"));
-        Assert.Empty(Directory.GetFileSystemEntries(_clients));
+        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("1711-042", SurveyDir("1711-CityOfOrting", "1711-042 Harman Way"), "pm");
+        Assert.Equal(new[] { "1711-042", "1800-119" }, Registry().All().Select(r => r.ProjectNumber));
     }
 
     [Fact]
-    public void AFolderTheUserPickedIsOpenedButNeverCreated()
+    public void OnlyAnExistingFolderCanBeRegisteredAndNothingIsCreated()
     {
-        var picked = ProjectDir("1800-SoundTransit", "Archive 554-1800-119");
-        var p = new ProjectStore(_config).Open(picked, "1800-119");
-        Assert.Equal(picked, p.Path);
-        Assert.False(ProjectStore.LooksLike(p.FolderName, "1800-119"));
-        Assert.Throws<DirectoryNotFoundException>(() => new ProjectStore(_config).Open(Path.Combine(_clients, "nope"), "1800-119"));
-        Assert.False(Directory.Exists(Path.Combine(_clients, "nope")));
+        var missing = Path.Combine(_clients, "1800-HDR", "nope", "Survey");
+        Assert.Throws<DirectoryNotFoundException>(() => Registry().Register("1800-119", missing, "pm"));
+        Assert.False(Directory.Exists(Path.Combine(_clients, "1800-HDR")));
+    }
+
+    [Fact]
+    public void ADriveLetterPathIsRefusedWhenUncIsRequired()
+    {
+        var registry = new ProjectRegistry(Path.Combine(_root, "r.json"), requireUnc: true);
+        var e = Assert.Throws<ArgumentException>(() => registry.Register("1800-119", SurveyDir(), "pm"));
+        Assert.Contains("UNC", e.Message);
+        Assert.True(ProjectRegistry.IsUnc(@"\\parametrix.com\pmx\PSO\Projects\Clients\1800-HDR\554-1800-119 TDLE Phase 3\99Svcs\Survey"));
+        Assert.False(ProjectRegistry.IsUnc(@"U:\PSO\Projects\Clients"));
+    }
+
+    [Fact]
+    public void ShippedConfigRequiresUncAndKeepsTheRegistryBesideTheApp()
+    {
+        var c = JobFolderConfig.CreateDefault();
+        Assert.True(c.RequireUncPaths);
+        c.BaseDirectory = _root;
+        Assert.Equal(Path.Combine(_root, "project-registry.json"), c.RegistryPath);
+        Assert.Equal(@"02Field\01FLD_DR_FN_DCfile\Unprocessed", c.UnprocessedFolder);
     }
 
     // ------------------------------------------------------------- classifying
@@ -274,7 +299,7 @@ public sealed class CrewUploadTests : IDisposable
         var (_, items) = Plan(p, CrewDownload());
 
         var to = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => Rel(p, i.Destination!));
-        var dl = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\" + Download + @"\";
+        var dl = @"02Field\01FLD_DR_FN_DCfile\Unprocessed\" + Download + @"\";
         Assert.Equal(dl + Download + "-ASB.pdf", to[Download + "-ASB.pdf"]);
         Assert.Equal(dl + Download + "-FN.pdf", to[Download + "-FN.pdf"]);
         Assert.Equal(dl + Download + ".job", to[Download + ".job"]);
@@ -299,7 +324,7 @@ public sealed class CrewUploadTests : IDisposable
     {
         var p = Project();
         var (_, items) = Plan(p, CrewDownload(), CrewDownload("20260129-JAM-1521-799-TOPO"));
-        var folders = items.Select(i => Rel(p, i.Destination!).Split('\\')[4]).Distinct().ToList();
+        var folders = items.Select(i => Rel(p, i.Destination!).Split('\\')[3]).Distinct().ToList();
         Assert.Equal(new[] { Download, "20260129-JAM-1521-799-TOPO" }, folders);
     }
 
@@ -460,10 +485,37 @@ public sealed class CrewUploadTests : IDisposable
     // ---------------------------------------------------------------- uploading
 
     [Fact]
+    public void NothingIsWrittenIfTheRegisteredSurveyFolderIsGone()
+    {
+        var p = Project();
+        var (_, items) = Plan(p, CrewDownload());
+        Directory.Delete(p.Path, true);
+
+        var result = new UploadRunner(_config).Run(p, items, "JAM");
+        Assert.False(result.Complete);
+        Assert.Equal(0, result.Copied);
+        Assert.False(Directory.Exists(p.Path));
+        Assert.Contains("Ask the PM", items[0].Error);
+    }
+
+    [Fact]
+    public void TheRunnerRefusesToWriteOutsideUnprocessed()
+    {
+        var p = Project();
+        var (_, items) = Plan(p, CrewDownload());
+        var outside = Path.Combine(p.Path, "02Field", "processed.job");
+        items[0].Destination = outside;
+
+        new UploadRunner(_config).Run(p, items, "JAM");
+        Assert.Contains("outside", items[0].Error);
+        Assert.False(File.Exists(outside));
+    }
+
+    [Fact]
     public void UploadCopiesVerifiesAndLeavesTheOriginals()
     {
         var p = Project();
-        Assert.False(Directory.Exists(InDownloads(p))); // made on the first upload, inside the existing project
+        Assert.False(Directory.Exists(InDownloads(p))); // Unprocessed is made on the first upload, inside the registered Survey folder
         var src = CrewDownload();
         var (_, items) = Plan(p, src);
 

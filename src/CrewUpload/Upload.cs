@@ -226,17 +226,16 @@ namespace CrewUpload
             return null;
         }
 
-        /// <summary>[project]\99Svcs\Survey\02Field\01FLD_DR_FN_DCfile: where every download folder goes.</summary>
-        public string DownloadsRoot(ProjectFolder project) =>
-            Naming.Combine(project.Path, _config.DownloadsFolder, new Dictionary<string, string>());
+        /// <summary>[Survey]\02Field\01FLD_DR_FN_DCfile\Unprocessed: where every download folder goes.</summary>
+        public string DownloadsRoot(ProjectFolder project) => project.UploadRoot;
 
         /// <summary>The download folder for a visit: [downloads root]\20260128-JAM-1521-799-TOPO.</summary>
         public string DownloadFolder(ProjectFolder project, FieldVisit visit) =>
             Path.Combine(DownloadsRoot(project), DownloadNames.Name(_config, project.Info.ProjectNumber, visit));
 
         /// <summary>
-        /// Gives every item its destination. A dropped download keeps its own folder and subfolders
-        /// under the downloads root; loose files go in the visit's download folder. Names follow the
+        /// Gives every item its destination. A dropped download keeps its own folder name and subfolders
+        /// under the project's Unprocessed folder; loose files go in the visit's download folder. Names follow the
         /// download (raw data) plus the type's suffix, photos become client-task-date-camera number.
         ///
         /// Nothing in the job is ever overwritten. A file of the same name and byte size already
@@ -422,6 +421,9 @@ namespace CrewUpload
         {
             var result = new UploadResult();
             var batch = items.Where(i => !i.Done).ToList();
+            // The registered Survey folder has to be there already: the app makes the Unprocessed
+            // folders inside it, never the project's own folders.
+            var surveyMissing = !Directory.Exists(project.Path);
             foreach (var item in batch)
             {
                 switch (item.State)
@@ -440,7 +442,9 @@ namespace CrewUpload
                 var partial = item.Destination + ".partial";
                 try
                 {
+                    if (surveyMissing) throw new DirectoryNotFoundException("The registered Survey folder " + project.Path + " cannot be found. Ask the PM to check the project location.");
                     if (string.IsNullOrEmpty(item.Destination)) throw new InvalidOperationException("No destination was planned.");
+                    if (!IsInside(item.Destination, project.UploadRoot)) throw new InvalidOperationException("Refused: " + item.Destination + " is outside the project's Unprocessed folder.");
                     if (File.Exists(item.Destination)) throw new IOException(Path.GetFileName(item.Destination) + " appeared in the job while uploading. Nothing was overwritten; check the list again.");
                     Directory.CreateDirectory(Path.GetDirectoryName(item.Destination));
                     File.Copy(item.SourcePath, partial, true);
@@ -462,8 +466,17 @@ namespace CrewUpload
 
             Verify(batch, result);
             foreach (var item in batch) item.LastError = item.Error;
-            WriteManifests(batch, crew);
+            WriteManifests(project, batch, crew);
             return result;
+        }
+
+        /// <summary>True when <paramref name="path"/> is somewhere below <paramref name="folder"/>.</summary>
+        internal static bool IsInside(string path, string folder)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(folder)) return false;
+            var p = Path.GetFullPath(path);
+            var f = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return p.StartsWith(f, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>Every file that should be in the job is there at its source's size, and the source is untouched.</summary>
@@ -488,13 +501,13 @@ namespace CrewUpload
             }
         }
 
-        private void WriteManifests(IEnumerable<UploadItem> items, string crew)
+        private void WriteManifests(ProjectFolder project, IEnumerable<UploadItem> items, string crew)
         {
-            if (string.IsNullOrWhiteSpace(_config.ManifestFile)) return;
+            if (string.IsNullOrWhiteSpace(_config.ManifestFile) || !Directory.Exists(project.Path)) return;
             // One manifest per download folder: the folder directly under the downloads root.
             foreach (var group in items.Where(i => i.FinalPath != null || i.ConflictWith != null).GroupBy(i => DownloadFolderOf(i.FinalPath ?? i.ConflictWith), StringComparer.OrdinalIgnoreCase))
             {
-                if (group.Key == null) continue;
+                if (group.Key == null || !IsInside(Path.Combine(group.Key, _config.ManifestFile), project.UploadRoot)) continue;
                 var sb = new StringBuilder();
                 foreach (var item in group) sb.AppendLine(Row(crew, item));
                 var path = Path.Combine(group.Key, _config.ManifestFile);
@@ -517,8 +530,8 @@ namespace CrewUpload
 
         private string DownloadFolderOf(string path)
         {
-            // Walk up to the folder whose parent is the downloads folder (…\01FLD_DR_FN_DCfile\<download>).
-            var downloads = Naming.Segments(_config.DownloadsFolder).LastOrDefault();
+            // Walk up to the folder whose parent is the Unprocessed folder (…\Unprocessed\<download>).
+            var downloads = Naming.Segments(_config.UnprocessedFolder).LastOrDefault();
             var dir = Path.GetDirectoryName(path);
             while (dir != null)
             {

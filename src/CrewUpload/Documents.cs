@@ -6,8 +6,8 @@ using System.Text;
 namespace CrewUpload
 {
     /// <summary>
-    /// Starts a new field document -- a daily report, a field notes sheet -- in the visit's
-    /// download folder, named exactly as an upload of that type would be (...-TOPO-DR.docx).
+    /// Starts a new field document -- field notes, as-built notes -- in the visit's download folder
+    /// under Unprocessed, named exactly as an upload of that type would be (...-TOPO-FN.docx).
     /// </summary>
     public sealed class DocumentMaker
     {
@@ -43,6 +43,8 @@ namespace CrewUpload
         {
             var values = _planner.Values(project, category, visit, title);
             var folder = Naming.Combine(_planner.DownloadFolder(project, visit), category.Folder, values);
+            if (!Directory.Exists(project.Path))
+                throw new DirectoryNotFoundException("The registered Survey folder " + project.Path + " cannot be found. Ask the PM to check the project location.");
             var ext = template != null ? Path.GetExtension(template) : ".txt";
             var path = _planner.NextFreeName(folder, _planner.PatternFor(category), values, ext, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             Directory.CreateDirectory(folder);

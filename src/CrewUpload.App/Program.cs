@@ -9,7 +9,8 @@ namespace CrewUpload.App
     internal static class Program
     {
         /// <summary>
-        /// CrewUpload.exe [--config path\job-folders.json] [project number] [files or folders...]
+        /// CrewUpload.exe [--config path\job-folders.json] [--setup] [project number] [files or folders...]
+        /// --setup shows the PM's project setup; crews' shortcuts leave it off.
         /// Without --config the job-folders.json beside the exe is used. Files and folders on the
         /// command line are added as if dropped, so a shortcut in the Explorer "Send to" menu works.
         /// </summary>
@@ -22,9 +23,11 @@ namespace CrewUpload.App
             string configPath = null;
             string project = null;
             var dropped = new List<string>();
+            var setup = false;
             for (var i = 0; i < args.Length; i++)
             {
                 if (string.Equals(args[i], "--config", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length) configPath = args[++i];
+                else if (string.Equals(args[i], "--setup", StringComparison.OrdinalIgnoreCase)) setup = true;
                 else if (File.Exists(args[i]) || Directory.Exists(args[i])) dropped.Add(args[i]);
                 else project = args[i];
             }
@@ -51,7 +54,7 @@ namespace CrewUpload.App
             }
 
             Theme.Apply(config);
-            Application.Run(new MainForm(config, project, dropped));
+            Application.Run(new MainForm(config, project, dropped, setup));
         }
     }
 

@@ -23,43 +23,56 @@ Nothing downstream should re-implement the grammar.
 the right project folder with the right names.
 
 A crew download is one folder per crew, day, project and kind of work, named
-`{date}-{crew}-{client}-{task}-{work type}`. It lands in the project like this:
+`{date}-{crew}-{client}-{task}-{work type}`.
+
+**Project setup (PM).** The app never works out a project's folders from the company folder structure.
+Once a project's folders exist, a PM registers it: client-task (`1800-119`) and the project's base
+Survey folder, picked in a folder browser, for example
 
 ```
-\\parametrix.com\pmx\PSO\Projects\Clients\                 jobsRoot (UNC, never a mapped drive)
-    1800-SoundTransit\                                       client folder
-        554-1800-119 TDLE Phase 3\                           project folder (client 1800, task 119)
-            99Svcs\Survey\02Field\01FLD_DR_FN_DCfile\        downloadsFolder, made if missing
-                20261005-JBB-1800-119-TOPO\                  the crew's folder, kept as they named it
-                    20261005-JBB-1800-119-TOPO.job           data files: the download's name
-                    20261005-JBB-1800-119-TOPO-FN.pdf        field notes
-                    20261005-JBB-1800-119-TOPO-ASB.pdf       as-built notes
-                    Photos\1800-119-20261005-0412.jpg        client-task-date-camera number (IMG_0412)
-                    upload-manifest.csv                      original name -> final name, per upload
+\\parametrix.com\pmx\PSO\Projects\Clients\1800-HDR\554-1800-119 TDLE Phase 3\99Svcs\Survey
 ```
 
-1. **Project.** The crew types client-task (`1800-119`) or drops a named download. The app looks under
-   every client folder for that client (`1800-...`) for a project folder named `1800-119 ...` or
-   `554-1800-119 ...`. Exactly one is used. Zero or several stop and ask the crew to pick or browse to
-   the folder (a mapped-drive pick is turned into its UNC path). **It never creates a project folder**;
-   it only makes the missing `99Svcs\Survey\02Field\01FLD_DR_FN_DCfile` inside an existing one.
-2. **Visit.** Crew initials, field date and work type (TOPO, LINEOUT, STAKE, BNDY, CTRL, ASBLT, ESMT)
+A pick on a mapped drive is stored as its UNC path; a path that is not UNC is refused. The PM can change
+the location later, and the old one is kept in the entry's history. Registrations live in one shared
+file, `project-registry.json` (`registryFile` in the config). **It must be on the share** -- run the app
+from the share, or point `registryFile` at a UNC path -- so every PC reads the same list. PMs open setup
+by starting the app with `--setup` (their own shortcut); crews' shortcuts leave it off. Who may change
+the list is decided by the file's share permissions.
+
+**Crew uploads.** The crew types client-task, or drops a named download, and that is all they choose.
+An unregistered project stops with "The PM needs to set the project location"; there is no browsing for
+a destination. Uploads land in the one place the app writes:
+
+```
+[Survey]\02Field\01FLD_DR_FN_DCfile\Unprocessed\       unprocessedFolder, made inside the registered Survey folder
+    20261005-JBB-1800-119-TOPO\                       the crew's folder, kept as they named it
+        20261005-JBB-1800-119-TOPO.job                data files: the download's name
+        20261005-JBB-1800-119-TOPO-FN.pdf             field notes
+        20261005-JBB-1800-119-TOPO-ASB.pdf            as-built notes
+        Photos\1800-119-20261005-0412.jpg             client-task-date-camera number (IMG_0412)
+        upload-manifest.csv                           original name -> final name, per upload
+```
+
+Moving a download from Unprocessed to its processed location stays an office job. The app refuses to
+write anywhere outside Unprocessed, and does nothing if the registered Survey folder has gone.
+
+1. **Visit.** Crew initials, field date and work type (TOPO, LINEOUT, STAKE, BNDY, CTRL, ASBLT, ESMT)
    make the download folder's name. Dropping a folder already named that way fills them in.
-3. **Drop.** Four boxes -- Photos, Field notes, Data files, As-built notes. Whatever lands on a box is
+2. **Drop.** Four boxes -- Photos, Field notes, Data files, As-built notes. Whatever lands on a box is
    that type, files or whole folders. Crew initials inside a download name never decide a type.
-4. **Check.** Each file shows its type, final name and status before anything is copied. A dropped
+3. **Check.** Each file shows its type, final name and status before anything is copied. A dropped
    download keeps its own folder and subfolders; downloads are never flattened together.
-5. **Upload.** Files are copied, never moved; nothing is deleted from FLD_Download and nothing in the
-   job is overwritten.
-   - Same name and byte size already in the job: already uploaded, not copied.
+4. **Upload.** Files are copied, never moved; nothing is deleted from FLD_Download and nothing is
+   overwritten.
+   - Same name and byte size already there: already uploaded, not copied.
    - Same name, different size: a **conflict**. It is not copied until the crew chooses *keep both*
      (the new file gets `-2`) or *skip* (right-click a row, or answer when uploading). Only then are
      files hashed, to find out whether the file is already there under another name.
    - Two different files in one batch that would get the same name are numbered `-2`, `-3`.
-   - After copying, every file is checked again -- the original still there, the job's copy there at
-     the same byte size -- and only then does the app say the upload is complete.
-   - Every file, including conflicts and skips, gets a row in the download folder's `upload-manifest.csv`
-     mapping its original name to its final name.
+   - After copying, every file is checked again -- the original still there, the copy there at the
+     same byte size -- and only then does the app say the upload is complete.
+   - Every file, including conflicts and skips, gets a row in the download folder's `upload-manifest.csv`.
 
 **New field notes** and **New as-built notes** start a document from `config\templates\`, already named
 for the visit and in its download folder; **Type field notes** saves typed notes the same way.
@@ -71,7 +84,7 @@ stand-ins for Klinic Slab and Franklin Gothic URW). Each drop box carries its ty
 secondary palette, repeated as a stripe in the Type column. Logo files and colours are in
 `config\branding\` and the `branding` section of the config.
 
-Everything -- the Clients root, downloads folder, work types, upload types, codes, keywords and name
+Everything -- the registry file, Unprocessed folder, work types, upload types, codes, keywords and name
 patterns -- is in `config\job-folders.json`, copied beside the exe. The app refuses to start with a
 config that does not validate and says what is wrong.
 

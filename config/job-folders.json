@@ -1,8 +1,10 @@
 {
   "version": "1",
   "jobsRoot": "\\\\parametrix.com\\pmx\\PSO\\Projects\\Clients",
+  "registryFile": "project-registry.json",
+  "requireUncPaths": true,
   "projectNumberPattern": "^[0-9]+-[0-9A-Z]+$",
-  "downloadsFolder": "99Svcs\\Survey\\02Field\\01FLD_DR_FN_DCfile",
+  "unprocessedFolder": "02Field\\01FLD_DR_FN_DCfile\\Unprocessed",
   "downloadName": "{date}-{crew}-{projectNumber}-{workType}",
   "fileName": "{download}-{code}",
   "dateFormat": "yyyyMMdd",

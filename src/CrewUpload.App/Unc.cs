@@ -30,9 +30,5 @@ namespace CrewUpload.App
                 return path; // not Windows
             }
         }
-
-        /// <summary>True when the path is on the project share by its UNC name.</summary>
-        public static bool IsUnder(string path, string root) =>
-            !string.IsNullOrEmpty(root) && Path.GetFullPath(path).TrimEnd('\\').StartsWith(Path.GetFullPath(root).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase);
     }
 }

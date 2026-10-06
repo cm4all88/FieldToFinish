@@ -128,17 +128,28 @@ namespace CrewUpload
         [JsonProperty("version")] public string Version { get; set; } = "1";
 
         /// <summary>
-        /// The Clients folder on the share, as a UNC path so it works whatever drive letters a PC
-        /// has mapped. Holds client folders (1711-CityOfOrting), which hold project folders
-        /// (554-1800-119 TDLE Phase 3).
+        /// Where the PM's folder picker opens when registering a project: the Clients folder on the
+        /// share. Only a starting point -- the app never searches it or decides a folder from it.
         /// </summary>
         [JsonProperty("jobsRoot")] public string JobsRoot { get; set; }
+
+        /// <summary>
+        /// The shared list of registered projects (client-task -> base Survey folder). Relative paths
+        /// are relative to this config file, so a copy of the app on the share uses one list for all.
+        /// </summary>
+        [JsonProperty("registryFile")] public string RegistryFile { get; set; } = "project-registry.json";
+
+        /// <summary>Only UNC paths may be registered, never a mapped drive letter.</summary>
+        [JsonProperty("requireUncPaths")] public bool RequireUncPaths { get; set; } = true;
 
         /// <summary>A client-task number (1800-119) has to match this before anything is looked up.</summary>
         [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^[0-9]+-[0-9A-Z]+$";
 
-        /// <summary>Where download folders go, under the project folder.</summary>
-        [JsonProperty("downloadsFolder")] public string DownloadsFolder { get; set; } = @"99Svcs\Survey\02Field\01FLD_DR_FN_DCfile";
+        /// <summary>
+        /// Under the registered base Survey folder, the one place the app writes: each crew download
+        /// keeps its own folder in here. Moving it on to its processed location is office work.
+        /// </summary>
+        [JsonProperty("unprocessedFolder")] public string UnprocessedFolder { get; set; } = @"02Field\01FLD_DR_FN_DCfile\Unprocessed";
 
         /// <summary>
         /// Name of one crew download: {date}, {crew}, {projectNumber}, {workType}. The same pattern
@@ -194,6 +205,13 @@ namespace CrewUpload
             return File.Exists(path) ? path : null;
         }
 
+        /// <summary>The registry file's full path.</summary>
+        [JsonIgnore]
+        public string RegistryPath =>
+            string.IsNullOrWhiteSpace(RegistryFile) ? null
+            : Path.IsPathRooted(RegistryFile) ? RegistryFile
+            : Naming.Combine(BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory, RegistryFile, new Dictionary<string, string>());
+
         [JsonIgnore] public UploadCategory FallbackCategory => Categories.FirstOrDefault(c => c.Fallback) ?? Categories.LastOrDefault();
 
         /// <summary>
@@ -238,13 +256,13 @@ namespace CrewUpload
         /// <summary>Everything wrong with the config, in words a CAD manager can act on.</summary>
         public void Validate(ICollection<string> problems)
         {
-            if (string.IsNullOrWhiteSpace(JobsRoot)) problems.Add("jobsRoot is not set: the Clients folder that holds the client folders.");
+            if (string.IsNullOrWhiteSpace(RegistryFile)) problems.Add("registryFile is not set: the shared list of registered projects.");
+            if (string.IsNullOrWhiteSpace(UnprocessedFolder) || Path.IsPathRooted(UnprocessedFolder) || Naming.Segments(UnprocessedFolder).Any(x => x == ".."))
+                problems.Add("unprocessedFolder must be a folder inside the project's Survey folder.");
             if (SequenceDigits < 1 || SequenceDigits > 6) problems.Add("sequenceDigits must be 1 to 6.");
             if (string.IsNullOrWhiteSpace(FileName)) problems.Add("fileName is empty.");
             if (string.IsNullOrWhiteSpace(DownloadName) || DownloadName.IndexOf("{projectNumber}", StringComparison.Ordinal) < 0)
                 problems.Add("downloadName must contain {projectNumber}.");
-            if (Path.IsPathRooted(DownloadsFolder ?? string.Empty) || Naming.Segments(DownloadsFolder).Any(x => x == ".."))
-                problems.Add("downloadsFolder must stay inside the project folder.");
             if (WorkTypes.Count == 0) problems.Add("No workTypes: a download needs one (TOPO, LINEOUT ...).");
             foreach (var w in WorkTypes)
                 if (string.IsNullOrWhiteSpace(w.Code) || !Regex.IsMatch(w.Code, "^[A-Za-z0-9]+$"))

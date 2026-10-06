@@ -45,10 +45,10 @@ namespace CrewUpload.App
         private ProjectFolder _project;
         private bool _busy;
 
-        public MainForm(JobFolderConfig config, string projectNumber, IList<string> dropped)
+        public MainForm(JobFolderConfig config, string projectNumber, IList<string> dropped, bool setup = false)
         {
             _config = config;
-            _projects = new ProjectStore(config);
+            _projects = new ProjectStore(config, new ProjectRegistry(config.RegistryPath, config.RequireUncPaths));
             _planner = new UploadPlanner(config);
 
             Text = (Theme.CompanyName.Length > 0 ? Theme.CompanyName + " " : string.Empty) + Theme.AppTitle;
@@ -73,10 +73,22 @@ namespace CrewUpload.App
             var find = Theme.Button("Find", false);
             find.Click += (s, e) => FindProject();
             top.Controls.Add(find, 2, 0);
-            _openFolder = Theme.Button("Open job folder", false);
+            _openFolder = Theme.Button("Open upload folder", false);
             _openFolder.Enabled = false;
-            _openFolder.Click += (s, e) => { if (_project != null) Process.Start("explorer.exe", "\"" + _project.Path + "\""); };
+            _openFolder.Click += (s, e) =>
+            {
+                if (_project == null) return;
+                var folder = Directory.Exists(_project.UploadRoot) ? _project.UploadRoot : _project.Path;
+                Process.Start("explorer.exe", "\"" + folder + "\"");
+            };
             top.Controls.Add(_openFolder, 3, 0);
+            if (setup)
+            {
+                // PMs start the app with --setup (their own shortcut); crews never see this.
+                var pm = Theme.Button("Project setup (PM)...", false);
+                pm.Click += (s, e) => ProjectSetup();
+                top.Controls.Add(pm, 4, 0);
+            }
 
             _projectLabel = new Label { AutoSize = true, Font = Theme.Body(12f, FontStyle.Bold), ForeColor = Muted, Margin = new Padding(3, 4, 3, 8), Text = "Type the project number and press Enter." };
             top.Controls.Add(_projectLabel, 1, 1);
@@ -242,9 +254,9 @@ namespace CrewUpload.App
                 _number.Text = projectNumber;
                 Shown += (s, e) => FindProject();
             }
-            else if (!Directory.Exists(_config.JobsRoot))
+            else if (!RegistryReachable())
             {
-                Say("The jobs folder " + _config.JobsRoot + " cannot be reached. Connect to the office network or VPN.", Bad);
+                Say("The project list " + _config.RegistryPath + " cannot be reached. Connect to the office network or VPN.", Bad);
             }
             if (dropped != null && dropped.Count > 0) Shown += (s, e) => AddPaths(dropped);
         }
@@ -264,9 +276,15 @@ namespace CrewUpload.App
 
         // ------------------------------------------------------------------ project
 
+        private bool RegistryReachable()
+        {
+            var path = _config.RegistryPath;
+            return path != null && (File.Exists(path) || Directory.Exists(Path.GetDirectoryName(path)));
+        }
+
         /// <summary>
-        /// Looks the client-task number up under the Clients share. Exactly one folder is used;
-        /// zero or several go to the crew to choose. A project folder is never created.
+        /// Looks the client-task number up in the PM's project list. The crew only picks the project;
+        /// where it goes was set by the PM, and nothing here lets them choose or create a folder.
         /// </summary>
         private void FindProject()
         {
@@ -278,35 +296,41 @@ namespace CrewUpload.App
                 SetProject(null, "'" + number + "' is not a client-task number like 1800-119.");
                 return;
             }
-            if (!Directory.Exists(_config.JobsRoot))
+            if (!RegistryReachable())
             {
-                SetProject(null, "Cannot reach " + _config.JobsRoot + ". Connect to the office network or VPN.");
+                SetProject(null, "Cannot reach the project list. Connect to the office network or VPN.");
                 return;
             }
+            ProjectFolder found;
+            try
+            {
+                found = _projects.Find(number);
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is Newtonsoft.Json.JsonException)
+            {
+                SetProject(null, "Cannot read the project list: " + e.Message);
+                return;
+            }
+            if (found == null)
+            {
+                SetProject(null, number + " has not been set up for crew uploads yet. The PM needs to set the project location.");
+                return;
+            }
+            if (!Directory.Exists(found.Path))
+            {
+                SetProject(null, number + " is set up, but its folder " + found.Path + " cannot be found. Ask the PM to check the project location.");
+                return;
+            }
+            SetProject(found, null);
+        }
 
-            var found = _projects.Resolve(number);
-            if (found.Count == 1)
+        private void ProjectSetup()
+        {
+            using (var form = new ProjectSetupForm(_config, _projects, _number.Text))
             {
-                SetProject(found[0], null);
-                return;
-            }
-            using (var pick = new PickProjectForm(number, found, _config.JobsRoot))
-            {
-                if (pick.ShowDialog(this) != DialogResult.OK)
-                {
-                    SetProject(null, found.Count == 0
-                        ? "No project folder found for " + number + ". Nothing was created."
-                        : found.Count + " folders match " + number + ". Pick one to upload.");
-                    return;
-                }
-                try
-                {
-                    SetProject(_projects.Open(pick.ChosenPath, number), null);
-                }
-                catch (DirectoryNotFoundException e)
-                {
-                    SetProject(null, e.Message);
-                }
+                form.ShowDialog(this);
+                if (form.Registered != null && string.Equals(form.Registered, JobFolderConfig.NormalizeProjectNumber(_number.Text), StringComparison.OrdinalIgnoreCase))
+                    FindProject();
             }
         }
 
@@ -316,13 +340,13 @@ namespace CrewUpload.App
             _openFolder.Enabled = _documents.Enabled = project != null;
             if (project != null)
             {
-                _projectLabel.Text = project.Display + "     " + project.Path;
+                _projectLabel.Text = project.Display + "     " + project.UploadRoot;
                 _projectLabel.ForeColor = Good;
                 _remembered.Used(project.Info.ProjectNumber);
                 if (!_number.Items.Contains(project.Info.ProjectNumber)) _number.Items.Insert(0, project.Info.ProjectNumber);
-                Say(Directory.Exists(_planner.DownloadsRoot(project))
-                    ? "Project found."
-                    : "Project found. Its " + _config.DownloadsFolder + " folder will be made on the first upload.", Good);
+                Say(Directory.Exists(project.UploadRoot)
+                    ? "Project found. Uploads go to its Unprocessed folder."
+                    : "Project found. Its Unprocessed folder will be made on the first upload.", Good);
             }
             else
             {
@@ -520,7 +544,8 @@ namespace CrewUpload.App
 
             var toCopy = _items.Count(i => i.State == UploadState.Ready || i.State == UploadState.Conflict || i.State == UploadState.Failed);
             _upload.Enabled = !_busy && _project != null && Visit != null && _items.Count(i => !i.Done) > 0;
-            _upload.Text = toCopy > 0 ? "Upload " + toCopy + " file" + (toCopy == 1 ? "" : "s") + " to job" : "Check and record";
+            _upload.Text = toCopy > 0 ? "Upload " + toCopy + " file" + (toCopy == 1 ? "" : "s") + " to job"
+                : _items.Count(i => !i.Done) > 0 ? "Check and record" : "Upload to job";
             foreach (var box in _boxes) box.SetCount(_items.Count(i => i.Category == box.Category));
             _dropHelp.Text = _items.Count == 0
                 ? HelpText
@@ -544,8 +569,8 @@ namespace CrewUpload.App
         private string Relative(string folder)
         {
             if (_project == null || folder == null) return folder;
-            return folder.StartsWith(_project.Path, StringComparison.OrdinalIgnoreCase)
-                ? folder.Substring(_project.Path.Length).TrimStart('\\', '/')
+            return folder.StartsWith(_project.UploadRoot, StringComparison.OrdinalIgnoreCase)
+                ? folder.Substring(_project.UploadRoot.Length).TrimStart('\\', '/')
                 : folder;
         }
 
