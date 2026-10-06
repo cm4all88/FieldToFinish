@@ -27,19 +27,31 @@ public sealed class CrewUploadTests : IDisposable
         try { Directory.Delete(_root, true); } catch (IOException) { }
     }
 
-    private static readonly DateTime FieldDay = new(2026, 10, 6);
+    private const string Download = "20260128-JAM-1521-799-TOPO";
+    private static readonly FieldVisit Visit = new() { Crew = "jam", Date = new DateTime(2026, 1, 28), WorkType = "topo" };
 
-    private string CardFile(string relative, string content = "x", DateTime? modified = null)
+    private string CardFile(string relative, string content = "x")
     {
         var path = Path.Combine(new[] { _card }.Concat(relative.Split('\\')).ToArray());
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
-        if (modified != null) File.SetLastWriteTime(path, modified.Value);
         return path;
     }
 
-    private ProjectFolder NewProject(string number = "2169171001", string name = "Silver Lake") =>
-        new ProjectStore(_config).Create(new ProjectInfo { ProjectNumber = number, ProjectName = name, Client = "City", Created = FieldDay });
+    /// <summary>The download from the crew's screenshot.</summary>
+    private string CrewDownload()
+    {
+        CardFile(Download + @"\Photos\IMG_0412.JPG", "p1");
+        CardFile(Download + @"\Photos\IMG_0413.JPG", "p2");
+        CardFile(Download + @"\" + Download + "-DR.docx", "dr");
+        CardFile(Download + @"\" + Download + "-FN.pdf", "fn");
+        CardFile(Download + @"\" + Download + ".job", "job");
+        CardFile(Download + @"\" + Download + ".jxl", "jxl");
+        return Path.Combine(_card, Download);
+    }
+
+    private ProjectFolder NewProject(string number = "1521-799", string name = "Main St") =>
+        new ProjectStore(_config).Create(new ProjectInfo { ProjectNumber = number, ProjectName = name, Client = "City", Created = Visit.Date });
 
     private static string Rel(ProjectFolder p, string path) => Path.GetRelativePath(p.Path, path).Replace(Path.DirectorySeparatorChar, '\\');
 
@@ -56,15 +68,27 @@ public sealed class CrewUploadTests : IDisposable
     }
 
     [Fact]
-    public void ValidateCatchesCategoryFoldersLeavingTheProject()
+    public void ValidateCatchesFoldersLeavingTheProject()
     {
+        _config.DownloadsFolder = @"..\Elsewhere";
         _config.Categories[0].Folder = @"..\..\Elsewhere";
         var problems = new List<string>();
         _config.Validate(problems);
-        Assert.Contains(problems, p => p.Contains("inside the project folder"));
+        Assert.Contains(problems, p => p.Contains("downloadsFolder"));
+        Assert.Contains(problems, p => p.Contains("inside the download folder"));
+    }
+
+    [Fact]
+    public void BrandingColoursAreChecked()
+    {
+        _config.Branding.PrimaryColor = "charcoal";
+        var problems = new List<string>();
+        _config.Validate(problems);
+        Assert.Contains(problems, x => x.Contains("primaryColor"));
     }
 
     [Theory]
+    [InlineData("1521-799", true)]
     [InlineData("2169171001", true)]
     [InlineData(" 554-3744-009 ", true)]
     [InlineData("", false)]
@@ -72,28 +96,47 @@ public sealed class CrewUploadTests : IDisposable
     [InlineData("2169/171", false)]
     public void ProjectNumbers(string number, bool ok) => Assert.Equal(ok, _config.IsValidProjectNumber(number));
 
+    // ---------------------------------------------------------- download names
+
+    [Fact]
+    public void DownloadNameIsDateCrewProjectWorkType() =>
+        Assert.Equal(Download, DownloadNames.Name(_config, "1521-799", Visit));
+
+    [Fact]
+    public void ADownloadFolderNameIsReadBack()
+    {
+        var parsed = DownloadNames.Parse(_config, Download)!;
+        Assert.Equal("1521-799", parsed.ProjectNumber);
+        Assert.Equal("JAM", parsed.Visit.Crew);
+        Assert.Equal(new DateTime(2026, 1, 28), parsed.Visit.Date);
+        Assert.Equal("TOPO", parsed.Visit.WorkType);
+    }
+
+    [Theory]
+    [InlineData("Photos")]
+    [InlineData("20261399-JAM-1521-799-TOPO")] // no 99th day
+    [InlineData("20260128-JAM-TOPO")]
+    public void OtherFolderNamesAreNotDownloads(string name) => Assert.Null(DownloadNames.Parse(_config, name));
+
     // ---------------------------------------------------------------- projects
 
     [Fact]
     public void PmCreatesTheProjectSkeleton()
     {
         var p = NewProject();
-        Assert.Equal(Path.Combine(_jobs, "2169171001 Silver Lake"), p.Path);
+        Assert.Equal(Path.Combine(_jobs, "1521-799 Main St"), p.Path);
         Assert.True(File.Exists(Path.Combine(p.Path, ProjectInfo.FileName)));
         Assert.True(Directory.Exists(Path.Combine(p.Path, "Survey", "CAD")));
-        Assert.True(Directory.Exists(Path.Combine(p.Path, "Survey", "Field", "Lineouts")));
-        // Dated levels are made when something is uploaded for that day, not up front.
-        Assert.True(Directory.Exists(Path.Combine(p.Path, "Survey", "Field", "Photos")));
-        Assert.Empty(Directory.GetDirectories(Path.Combine(p.Path, "Survey", "Field", "Photos")));
+        Assert.True(Directory.Exists(Path.Combine(p.Path, "Survey", "Field", "Downloads")));
     }
 
     [Fact]
     public void CrewFindsTheProjectByNumber()
     {
         NewProject();
-        var found = new ProjectStore(_config).Find(" 2169171001");
+        var found = new ProjectStore(_config).Find(" 1521-799");
         Assert.NotNull(found);
-        Assert.Equal("Silver Lake", found!.Info.ProjectName);
+        Assert.Equal("Main St", found!.Info.ProjectName);
         Assert.True(found.HasInfoFile);
     }
 
@@ -110,16 +153,16 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void ANumberThatIsOnlyAPrefixIsNotAMatch()
     {
-        NewProject("2169171001");
-        Assert.Null(new ProjectStore(_config).Find("216917100"));
+        NewProject("1521-799");
+        Assert.Null(new ProjectStore(_config).Find("1521-79"));
     }
 
     [Fact]
     public void TwoFoldersForOneNumberIsAnErrorNotAGuess()
     {
-        Directory.CreateDirectory(Path.Combine(_jobs, "2169171001 Silver Lake"));
-        Directory.CreateDirectory(Path.Combine(_jobs, "2026", "2169171001 Silver Lake OLD"));
-        Assert.Throws<InvalidOperationException>(() => new ProjectStore(_config).Find("2169171001"));
+        Directory.CreateDirectory(Path.Combine(_jobs, "1521-799 Main St"));
+        Directory.CreateDirectory(Path.Combine(_jobs, "2026", "1521-799 Main St OLD"));
+        Assert.Throws<InvalidOperationException>(() => new ProjectStore(_config).Find("1521-799"));
     }
 
     [Fact]
@@ -133,116 +176,122 @@ public sealed class CrewUploadTests : IDisposable
 
     [Theory]
     [InlineData("IMG_0412.JPG", "photos")]
-    [InlineData("Field Notes 10-06.pdf", "notes")]
-    [InlineData("fieldnotes.pdf", "notes")]
-    [InlineData("SVLK lineout.pdf", "lineout")]
-    [InlineData("lineout sketch.jpg", "lineout")]
-    [InlineData("Cut Sheet north.xlsx", "stakeout")]
-    [InlineData("SILVERLAKE1006.job", "rawdata")]
+    [InlineData("Field Notes 01-28.pdf", "notes")]
+    [InlineData("JAM FN.pdf", "notes")]
+    [InlineData("Daily Report.docx", "report")]
+    [InlineData("TOPO.job", "rawdata")]
+    [InlineData("points.csv", "rawdata")]
+    [InlineData("sketch.pdf", "other")]
     [InlineData("drawing.pdf", "other")]
-    [InlineData("rawdrawing.pdf", "other")]
     public void ClassifiesByNameThenExtension(string file, string key) =>
         Assert.Equal(key, new UploadPlanner(_config).Classify(file).Key);
 
     [Fact]
-    public void FolderNamesAreHintsNearestFirst()
+    public void TheCrewDownloadSortsItself()
     {
-        var planner = new UploadPlanner(_config);
-        Assert.Equal("notes", planner.Classify("scan001.jpg", new[] { "Day 3", "Field_Notes" }).Key);
-        Assert.Equal("lineout", planner.Classify("scan001.pdf", new[] { "Field Notes", "Lineouts" }).Key);
-        // A keyword in the file's own name beats its folder.
-        Assert.Equal("lineout", planner.Classify("lineout.pdf", new[] { "Field Notes" }).Key);
+        var items = new UploadPlanner(_config).Collect(new[] { CrewDownload() });
+        var types = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => i.Category!.Key);
+        Assert.Equal("report", types[Download + "-DR.docx"]);
+        Assert.Equal("notes", types[Download + "-FN.pdf"]);
+        Assert.Equal("rawdata", types[Download + ".job"]);
+        Assert.Equal("rawdata", types[Download + ".jxl"]);
+        Assert.Equal("photos", types["IMG_0412.JPG"]);
     }
 
     [Fact]
-    public void ADroppedFolderBringsEverythingButJunk()
+    public void CrewInitialsInTheDownloadNameNeverDecideTheType()
     {
-        CardFile(@"Day 3\Photos\IMG_1.jpg");
-        CardFile(@"Day 3\Photos\Thumbs.db");
-        CardFile(@"Day 3\Field Notes\page1.pdf");
-        CardFile(@"Day 3\~$lineout.xlsx");
-        CardFile(@"Day 3\SVLK.job");
-        var items = new UploadPlanner(_config).Collect(new[] { Path.Combine(_card, "Day 3") });
-        Assert.Equal(new[] { "SVLK.job", "page1.pdf", "IMG_1.jpg" }, items.Select(i => Path.GetFileName(i.SourcePath)));
-        Assert.Equal(new[] { "rawdata", "notes", "photos" }, items.Select(i => i.Category!.Key));
-        Assert.Equal(@"Day 3\Photos\IMG_1.jpg", items[2].DroppedAs);
+        // A crew whose initials are "DR" must not turn every file into a daily report.
+        const string dl = "20260128-DR-1521-799-TOPO";
+        CardFile(dl + @"\" + dl + ".job");
+        CardFile(dl + @"\" + dl + "-FN.pdf");
+        var items = new UploadPlanner(_config).Collect(new[] { Path.Combine(_card, dl) });
+        var types = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => i.Category!.Key);
+        Assert.Equal("rawdata", types[dl + ".job"]);
+        Assert.Equal("notes", types[dl + "-FN.pdf"]);
     }
 
     [Fact]
     public void DroppingOnATypesBoxDecidesTheTypeForEverything()
     {
         CardFile(@"Day 3\IMG_1.jpg");
-        CardFile(@"Day 3\Field Notes\page1.pdf");
         CardFile(@"Day 3\SVLK.job");
-        var items = new UploadPlanner(_config).Collect(new[] { Path.Combine(_card, "Day 3") }, _config.Category("lineout"));
-        Assert.Equal(3, items.Count);
-        Assert.All(items, i => Assert.Equal("lineout", i.Category!.Key));
-
-        var p = NewProject();
-        new UploadPlanner(_config).Assign(p, items, "cmm", FieldDay);
-        Assert.All(items, i => Assert.StartsWith(Path.Combine(p.Path, "Survey", "Field", "Lineouts"), i.Destination));
+        var items = new UploadPlanner(_config).Collect(new[] { Path.Combine(_card, "Day 3") }, _config.Category("notes"));
+        Assert.Equal(2, items.Count);
+        Assert.All(items, i => Assert.Equal("notes", i.Category!.Key));
     }
 
     [Fact]
-    public void BrandingColoursAreChecked()
+    public void FindDownloadReadsTheDroppedFolder()
     {
-        _config.Branding.PrimaryColor = "charcoal";
-        var problems = new List<string>();
-        _config.Validate(problems);
-        Assert.Contains(problems, x => x.Contains("primaryColor"));
+        var parsed = new UploadPlanner(_config).FindDownload(new[] { CrewDownload() });
+        Assert.NotNull(parsed);
+        Assert.Equal("1521-799", parsed!.ProjectNumber);
     }
 
     // ------------------------------------------------------------------ naming
 
     [Fact]
-    public void NamesFollowTheProjectAndNumberOn()
+    public void TheCrewDownloadLandsInTheJobUnderTheSameNames()
     {
         var p = NewProject();
-        var photoDay = new DateTime(2026, 10, 2);
-        CardFile("IMG_1.JPG", "a", photoDay);
-        CardFile("IMG_2.JPG", "b", photoDay);
-        CardFile("notes.pdf", "c");
-        CardFile("SVLK.job", "d");
+        var planner = new UploadPlanner(_config);
+        var items = planner.Collect(new[] { CrewDownload() });
+        planner.Assign(p, items, Visit);
 
+        var to = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => Rel(p, i.Destination!));
+        var dl = @"Survey\Field\Downloads\" + Download + @"\";
+        Assert.Equal(dl + Download + "-DR.docx", to[Download + "-DR.docx"]);
+        Assert.Equal(dl + Download + "-FN.pdf", to[Download + "-FN.pdf"]);
+        Assert.Equal(dl + Download + ".job", to[Download + ".job"]);
+        Assert.Equal(dl + Download + ".jxl", to[Download + ".jxl"]);
+        Assert.Equal(dl + @"Photos\IMG_0412.jpg", to["IMG_0412.JPG"]);
+    }
+
+    [Fact]
+    public void LooseFilesAreNamedForTheVisit()
+    {
+        var p = NewProject();
+        CardFile("notes.pdf");
+        CardFile("Job001.job");
+        CardFile("scan.pdf");
         var planner = new UploadPlanner(_config);
         var items = planner.Collect(Directory.GetFiles(_card).OrderBy(f => f));
-        planner.Assign(p, items, "cmm", FieldDay);
+        planner.Assign(p, items, new FieldVisit { Crew = "cmm", Date = new DateTime(2026, 10, 6), WorkType = "LINEOUT" });
 
-        var names = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => Rel(p, i.Destination!));
-        // Photos are filed by the day they were taken, extension lower-cased.
-        Assert.Equal(@"Survey\Field\Photos\20261002\SV-2169171001-PHOTO-20261002-01.jpg", names["IMG_1.JPG"]);
-        Assert.Equal(@"Survey\Field\Photos\20261002\SV-2169171001-PHOTO-20261002-02.jpg", names["IMG_2.JPG"]);
-        Assert.Equal(@"Survey\Field\Field Notes\SV-2169171001-FN-20261006-01.pdf", names["notes.pdf"]);
-        // Data collector files keep their job name.
-        Assert.Equal(@"Survey\Field\Raw Data\20261006\SV-2169171001-RAW-20261006-SVLK.job", names["SVLK.job"]);
+        Assert.Equal(new[]
+        {
+            "20261006-CMM-1521-799-LINEOUT.job",
+            "20261006-CMM-1521-799-LINEOUT-FN.pdf",
+            "20261006-CMM-1521-799-LINEOUT-scan.pdf",
+        }, items.Select(i => Path.GetFileName(i.Destination)));
     }
 
     [Fact]
-    public void NumberingContinuesFromWhatIsAlreadyInTheJob()
+    public void ASecondFileOfTheSameKindIsNumbered()
     {
         var p = NewProject();
-        var notes = Path.Combine(p.Path, "Survey", "Field", "Field Notes");
-        File.WriteAllText(Path.Combine(notes, "SV-2169171001-FN-20261006-01.pdf"), "earlier");
-        CardFile("notes.pdf", "new");
+        CardFile("notes page 1.pdf", "1");
+        CardFile("notes page 2.pdf", "2");
         var planner = new UploadPlanner(_config);
-        var items = planner.Collect(new[] { Path.Combine(_card, "notes.pdf") });
-        planner.Assign(p, items, "cmm", FieldDay);
-        Assert.Equal("SV-2169171001-FN-20261006-02.pdf", Path.GetFileName(items[0].Destination));
+        var items = planner.Collect(Directory.GetFiles(_card).OrderBy(f => f));
+        planner.Assign(p, items, Visit);
+        Assert.Equal(new[] { Download + "-FN.pdf", Download + "-FN-2.pdf" }, items.Select(i => Path.GetFileName(i.Destination)));
     }
 
     [Fact]
-    public void ChangingTheTypeRenamesAndRefiles()
+    public void ChangingTheTypeRenames()
     {
         var p = NewProject();
         CardFile("scan.pdf");
         var planner = new UploadPlanner(_config);
         var items = planner.Collect(new[] { Path.Combine(_card, "scan.pdf") });
-        planner.Assign(p, items, "cmm", FieldDay);
-        Assert.Equal("other", items[0].Category!.Key);
+        planner.Assign(p, items, Visit);
+        Assert.Equal(Download + "-scan.pdf", Path.GetFileName(items[0].Destination));
 
-        items[0].Category = _config.Category("lineout");
-        planner.Assign(p, items, "cmm", FieldDay);
-        Assert.Equal(@"Survey\Field\Lineouts\SV-2169171001-LINEOUT-20261006-01.pdf", Rel(p, items[0].Destination!));
+        items[0].Category = _config.Category("report");
+        planner.Assign(p, items, Visit);
+        Assert.Equal(Download + "-DR.pdf", Path.GetFileName(items[0].Destination));
     }
 
     [Theory]
@@ -252,57 +301,46 @@ public sealed class CrewUploadTests : IDisposable
     [InlineData("a   b", "a b")]
     public void CleanMakesLegalWindowsNames(string raw, string clean) => Assert.Equal(clean, Naming.Clean(raw));
 
-    [Fact]
-    public void ABlankTokenDoesNotLeaveDoubleDashes()
-    {
-        var p = NewProject();
-        _config.FileName = "SV-{projectNumber}-{crew}-{code}-{seq}";
-        CardFile("notes.pdf");
-        var planner = new UploadPlanner(_config);
-        var items = planner.Collect(new[] { Path.Combine(_card, "notes.pdf") });
-        planner.Assign(p, items, "", FieldDay);
-        Assert.Equal("SV-2169171001-FN-01.pdf", Path.GetFileName(items[0].Destination));
-    }
-
     // ---------------------------------------------------------------- uploading
 
     [Fact]
     public void UploadCopiesLogsAndLeavesTheOriginals()
     {
         var p = NewProject();
-        var src = CardFile("IMG_1.jpg", "photo", FieldDay);
+        var src = CrewDownload();
         var planner = new UploadPlanner(_config);
         var items = planner.Collect(new[] { src });
-        planner.Assign(p, items, "cmm", FieldDay);
+        planner.Assign(p, items, Visit);
 
-        Assert.Equal(1, new UploadRunner(_config).Run(p, items, "cmm"));
-        Assert.True(items[0].Done);
-        Assert.Equal("photo", File.ReadAllText(items[0].Destination!));
-        Assert.True(File.Exists(src));
-        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(items[0].Destination!)!, "*.partial"));
+        Assert.Equal(6, new UploadRunner(_config).Run(p, items, "JAM"));
+        Assert.All(items, i => Assert.True(i.Done));
+        Assert.Equal("fn", File.ReadAllText(Path.Combine(p.Path, "Survey", "Field", "Downloads", Download, Download + "-FN.pdf")));
+        Assert.True(Directory.Exists(src));
+        Assert.Empty(Directory.GetFiles(p.Path, "*.partial", SearchOption.AllDirectories));
 
         var log = File.ReadAllLines(Path.Combine(p.Path, "Survey", "Field", "upload-log.csv"));
         Assert.Equal(UploadRunner.LogHeader, log[0]);
-        Assert.Contains("CMM", log[1]);
+        Assert.Equal(7, log.Length);
         Assert.EndsWith("uploaded", log[1]);
     }
 
     [Fact]
-    public void TheSameFileDroppedTwiceIsNotCopiedTwice()
+    public void TheSameDownloadDroppedTwiceIsNotCopiedTwice()
     {
         var p = NewProject();
-        var src = CardFile("IMG_1.jpg", "photo", FieldDay);
+        var src = CrewDownload();
         var planner = new UploadPlanner(_config);
         var first = planner.Collect(new[] { src });
-        planner.Assign(p, first, "cmm", FieldDay);
-        new UploadRunner(_config).Run(p, first, "cmm");
+        planner.Assign(p, first, Visit);
+        new UploadRunner(_config).Run(p, first, "JAM");
 
+        // The crew adds two more photos and drops the folder again.
+        CardFile(Download + @"\Photos\IMG_0414.JPG", "p3");
         var again = planner.Collect(new[] { src });
-        planner.Assign(p, again, "cmm", FieldDay);
-        Assert.True(again[0].Skip);
-        Assert.Equal(first[0].Destination, again[0].AlreadyUploadedAs);
-        Assert.Equal(0, new UploadRunner(_config).Run(p, again, "cmm"));
-        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(first[0].Destination!)!));
+        planner.Assign(p, again, Visit);
+        Assert.Equal(6, again.Count(i => i.Skip));
+        Assert.Equal(1, new UploadRunner(_config).Run(p, again, "JAM"));
+        Assert.Equal(3, Directory.GetFiles(Path.Combine(p.Path, "Survey", "Field", "Downloads", Download, "Photos")).Length);
     }
 
     [Fact]
@@ -310,14 +348,14 @@ public sealed class CrewUploadTests : IDisposable
     {
         var p = NewProject();
         CardFile("a.pdf", "1");
-        CardFile("b.pdf", "2");
+        CardFile("b.job", "2");
         var planner = new UploadPlanner(_config);
-        var items = planner.Collect(new[] { Path.Combine(_card, "a.pdf"), Path.Combine(_card, "b.pdf") });
-        planner.Assign(p, items, "cmm", FieldDay);
+        var items = planner.Collect(new[] { Path.Combine(_card, "a.pdf"), Path.Combine(_card, "b.job") });
+        planner.Assign(p, items, Visit);
         Directory.CreateDirectory(Path.GetDirectoryName(items[0].Destination!)!);
         File.WriteAllText(items[0].Destination!, "someone else");
 
-        Assert.Equal(1, new UploadRunner(_config).Run(p, items, "cmm"));
+        Assert.Equal(1, new UploadRunner(_config).Run(p, items, "JAM"));
         Assert.NotNull(items[0].Error);
         Assert.Equal("someone else", File.ReadAllText(items[0].Destination!));
         Assert.True(items[1].Done);
@@ -326,39 +364,27 @@ public sealed class CrewUploadTests : IDisposable
     // ---------------------------------------------------------------- documents
 
     [Fact]
-    public void NewLineoutFromTemplateIsNamedAndFiled()
+    public void NewDailyReportFromTemplateIsNamedForTheVisit()
     {
         var p = NewProject();
         Directory.CreateDirectory(Path.Combine(_root, "templates"));
-        File.WriteAllText(Path.Combine(_root, "templates", "Field Lineout.xlsx"), "template");
-        var doc = _config.Documents.First(d => d.Category == "lineout");
+        File.WriteAllText(Path.Combine(_root, "templates", "Daily Report.docx"), "template");
+        var doc = _config.Documents.First(d => d.Category == "report");
 
-        var maker = new DocumentMaker(_config);
-        var first = maker.Create(p, doc, "cmm", FieldDay);
-        var second = maker.Create(p, doc, "cmm", FieldDay);
-        Assert.Equal(@"Survey\Field\Lineouts\SV-2169171001-LINEOUT-20261006-01.xlsx", Rel(p, first));
-        Assert.Equal("SV-2169171001-LINEOUT-20261006-02.xlsx", Path.GetFileName(second));
-        Assert.Equal("template", File.ReadAllText(first));
+        var path = new DocumentMaker(_config).Create(p, doc, Visit);
+        Assert.Equal(@"Survey\Field\Downloads\" + Download + @"\" + Download + "-DR.docx", Rel(p, path));
+        Assert.Equal("template", File.ReadAllText(path));
     }
 
     [Fact]
-    public void WithoutATemplateATextSheetIsWritten()
+    public void TypedFieldNotesLandInTheDownload()
     {
         var p = NewProject();
-        var doc = _config.Documents.First(d => d.Category == "lineout");
-        var path = new DocumentMaker(_config).Create(p, doc, "cmm", FieldDay, "Set 4 lath on the north line.");
-        Assert.EndsWith(".txt", path);
+        var path = new DocumentMaker(_config).CreateNotes(p, _config.Category("notes")!, Visit, "Found 1/2\" rebar at NE corner.");
+        Assert.Equal(Download + "-FN.txt", Path.GetFileName(path));
         var text = File.ReadAllText(path);
-        Assert.Contains("2169171001 - Silver Lake", text);
-        Assert.Contains("CMM", text);
-        Assert.Contains("Set 4 lath", text);
-    }
-
-    [Fact]
-    public void TypedFieldNotesLandWithTheOtherNotes()
-    {
-        var p = NewProject();
-        var path = new DocumentMaker(_config).CreateNotes(p, _config.Category("notes")!, "cmm", FieldDay, "Found 1/2\" rebar at NE corner.");
-        Assert.Equal(@"Survey\Field\Field Notes\SV-2169171001-FN-20261006-01.txt", Rel(p, path));
+        Assert.Contains("1521-799 - Main St", text);
+        Assert.Contains("TOPO", text);
+        Assert.Contains("rebar", text);
     }
 }

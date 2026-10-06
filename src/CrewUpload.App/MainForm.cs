@@ -38,6 +38,8 @@ namespace CrewUpload.App
         private readonly Button _upload;
         private readonly Button _openFolder;
         private readonly FlowLayoutPanel _documents;
+        private readonly ComboBox _work;
+        private readonly Label _downloadLabel;
         private readonly Label _status;
 
         private ProjectFolder _project;
@@ -85,21 +87,37 @@ namespace CrewUpload.App
 
             top.Controls.Add(Caption("Crew initials"), 0, 2);
             _crew = new TextBox { Width = 90, CharacterCasing = CharacterCasing.Upper, Text = _remembered.Crew ?? string.Empty };
-            _crew.Leave += (s, e) => Replan();
+            _crew.TextChanged += (s, e) => Replan();
             top.Controls.Add(_crew, 1, 2);
             top.Controls.Add(Caption("Field date"), 2, 2);
             _date = new DateTimePicker { Format = DateTimePickerFormat.Short, Width = 140, Value = DateTime.Today };
             _date.ValueChanged += (s, e) => Replan();
             top.Controls.Add(_date, 3, 2);
-            var dateNote = new Label { AutoSize = true, ForeColor = Muted, Text = "Photos use the day they were taken.", Margin = new Padding(3, 6, 3, 3) };
-            top.Controls.Add(dateNote, 4, 2);
-            top.SetColumnSpan(dateNote, 2);
+            var workRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+            workRow.Controls.Add(Caption("Work type"));
+            _work = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250 };
+            _work.Items.AddRange(_config.WorkTypes.Cast<object>().ToArray());
+            _work.SelectedIndexChanged += (s, e) => Replan();
+            workRow.Controls.Add(_work);
+            top.Controls.Add(workRow, 4, 2);
+            top.SetColumnSpan(workRow, 2);
 
-            // ---- one drop box per type: the box decides the type, nothing is guessed
-            var boxes = new TableLayoutPanel { Dock = DockStyle.Top, Height = 128, ColumnCount = _config.Categories.Count, RowCount = 1, Padding = new Padding(9, 0, 9, 0) };
+            top.Controls.Add(Caption("Download folder"), 0, 3);
+            _downloadLabel = new Label { AutoSize = true, Font = Theme.Body(12f, FontStyle.Bold), Margin = new Padding(3, 7, 3, 6) };
+            top.Controls.Add(_downloadLabel, 1, 3);
+            top.SetColumnSpan(_downloadLabel, 5);
+
+            // ---- the whole download, sorted for them, then one box per type: the box decides
+            // the type, nothing is guessed
+            var boxes = new TableLayoutPanel { Dock = DockStyle.Top, Height = 128, ColumnCount = _config.Categories.Count + 1, RowCount = 1, Padding = new Padding(9, 0, 9, 0) };
+            boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 200f / (_config.Categories.Count + 2)));
+            var whole = new DropBox(null, "Whole download", "the crew's folder -- sorted for you", Theme.Charcoal);
+            whole.FilesDropped += (b, paths) => { if (!_busy) AddPaths(paths); };
+            whole.Browse += b => BrowseFolder();
+            boxes.Controls.Add(whole);
             foreach (var category in _config.Categories)
             {
-                boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / _config.Categories.Count));
+                boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / (_config.Categories.Count + 2)));
                 var box = new DropBox(category);
                 box.FilesDropped += (b, paths) => { if (!_busy) AddPaths(paths, b.Category); };
                 box.Browse += b => Browse(b.Category);
@@ -109,7 +127,7 @@ namespace CrewUpload.App
             _dropHelp = new Label
             {
                 Dock = DockStyle.Top, Height = 30, Padding = new Padding(16, 8, 16, 0), ForeColor = Theme.Muted,
-                Text = "Drag each kind of file onto its box -- a whole folder works too. Or click a box to choose files.",
+                Text = HelpText,
             };
             var dropWrap = new Panel { Dock = DockStyle.Top, Height = 168, Padding = new Padding(0, 0, 0, 10) };
             dropWrap.Controls.Add(boxes);
@@ -147,7 +165,7 @@ namespace CrewUpload.App
             _typeColumn.Items.AddRange(_config.Categories.Select(c => (object)c.Name).ToArray());
             _grid.Columns.Add(_typeColumn);
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "name", HeaderText = "New name", ReadOnly = true, FillWeight = 30 });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "folder", HeaderText = "Goes to (in the job)", ReadOnly = true, FillWeight = 22 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "folder", HeaderText = "Goes in", ReadOnly = true, FillWeight = 22 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "status", HeaderText = "", ReadOnly = true, FillWeight = 12 });
             _grid.CurrentCellDirtyStateChanged += (s, e) => { if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
             _grid.CellValueChanged += TypeChanged;
@@ -212,7 +230,7 @@ namespace CrewUpload.App
                 _remembered.Save();
             };
 
-            Refill();
+            Replan();
             if (!string.IsNullOrWhiteSpace(projectNumber))
             {
                 _number.Text = projectNumber;
@@ -223,6 +241,19 @@ namespace CrewUpload.App
                 Say("The jobs folder " + _config.JobsRoot + " cannot be reached. Connect to the office network or VPN.", Bad);
             }
             if (dropped != null && dropped.Count > 0) Shown += (s, e) => AddPaths(dropped);
+        }
+
+        private const string HelpText = "Drop the crew's download folder on the first box -- it reads the project, crew, date and work type from its name. Or drop files on their own type's box.";
+
+        /// <summary>What the form says this download is; null until crew and work type are filled in.</summary>
+        private FieldVisit Visit
+        {
+            get
+            {
+                var work = _work.SelectedItem as WorkType;
+                if (string.IsNullOrWhiteSpace(_crew.Text) || work == null) return null;
+                return new FieldVisit { Crew = _crew.Text.Trim(), Date = _date.Value.Date, WorkType = work.Code };
+            }
         }
 
         // ------------------------------------------------------------------ project
@@ -294,6 +325,41 @@ namespace CrewUpload.App
 
         // ------------------------------------------------------------------ dropping
 
+        private void BrowseFolder()
+        {
+            if (_busy) return;
+            using (var dialog = new FolderBrowserDialog { Description = "Choose the crew's download folder", ShowNewFolderButton = false })
+                if (dialog.ShowDialog(this) == DialogResult.OK) AddPaths(new[] { dialog.SelectedPath });
+        }
+
+        /// <summary>
+        /// A dropped download folder named 20260128-JAM-1521-799-TOPO fills in the project, crew,
+        /// date and work type, so the crew types nothing.
+        /// </summary>
+        private void ReadDownloadName(IEnumerable<string> paths)
+        {
+            var parsed = _planner.FindDownload(paths);
+            if (parsed == null) return;
+            var v = parsed.Visit;
+            if (!string.IsNullOrEmpty(v.Crew)) _crew.Text = v.Crew;
+            if (v.Date != default(DateTime)) _date.Value = v.Date;
+            if (!string.IsNullOrEmpty(v.WorkType))
+            {
+                var work = _config.WorkType(v.WorkType);
+                if (work == null)
+                {
+                    work = new WorkType { Code = v.WorkType, Name = "(not in the office list)" };
+                    _work.Items.Add(work);
+                }
+                _work.SelectedItem = work;
+            }
+            if (_project == null || !string.Equals(_project.Info.ProjectNumber, parsed.ProjectNumber, StringComparison.OrdinalIgnoreCase))
+            {
+                _number.Text = parsed.ProjectNumber;
+                FindProject();
+            }
+        }
+
         private void Browse(UploadCategory category)
         {
             if (_busy) return;
@@ -304,10 +370,13 @@ namespace CrewUpload.App
         /// <summary>
         /// Adds files to the list. With a category (dropped on its box) they are that type; a file
         /// already in the list that is dropped on another box changes to that type. Without one
-        /// (the command line) the type is guessed from names and extensions.
+        /// (the whole-download box, the command line) the type is guessed from names, folders and
+        /// extensions, and an already-named download folder fills in the form.
         /// </summary>
         private void AddPaths(IEnumerable<string> paths, UploadCategory category = null)
         {
+            paths = paths.ToList();
+            if (category == null) ReadDownloadName(paths);
             List<UploadItem> found;
             try
             {
@@ -334,7 +403,7 @@ namespace CrewUpload.App
             }
             Replan();
             var what = category == null ? string.Empty : " as " + category.Name.ToLowerInvariant();
-            Say(added + " file" + (added == 1 ? "" : "s") + " added" + what + "." + (_project == null ? " Pick the project to see their names." : " Check the names, then Upload."), Muted);
+            Say(added + " file" + (added == 1 ? "" : "s") + " added" + what + "." + (_project == null ? " Pick the project to see their names." : Visit == null ? " Fill in the crew and work type to see their names." : " Check the names, then Upload."), Muted);
         }
 
         private void RemoveSelected()
@@ -361,11 +430,16 @@ namespace CrewUpload.App
         {
             if (_busy) return;
             _items.RemoveAll(i => i.Done);
-            if (_project != null && _items.Count > 0)
+            var visit = Visit;
+            _downloadLabel.Text = _project == null ? "(pick the project)"
+                : visit == null ? "(fill in the crew initials and work type)"
+                : DownloadNames.Name(_config, _project.Info.ProjectNumber, visit);
+            _downloadLabel.ForeColor = _project != null && visit != null ? Theme.Charcoal : Muted;
+            if (_project != null && visit != null && _items.Count > 0)
             {
                 try
                 {
-                    _planner.Assign(_project, _items, _crew.Text, _date.Value.Date);
+                    _planner.Assign(_project, _items, visit);
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
                 {
@@ -379,29 +453,37 @@ namespace CrewUpload.App
         {
             _grid.CellValueChanged -= TypeChanged;
             _grid.Rows.Clear();
+            var visit = Visit;
+            var download = _project != null && visit != null ? _planner.DownloadFolder(_project, visit) : null;
             foreach (var item in _items)
             {
                 var i = _grid.Rows.Add();
                 var row = _grid.Rows[i];
                 row.Tag = item;
-                row.Cells["file"].Value = item.DroppedAs;
+                // Inside a named download the folder name is already shown above: leave it off.
+                row.Cells["file"].Value = item.NamePrefix != null && item.DroppedAs.StartsWith(item.NamePrefix + "\\", StringComparison.OrdinalIgnoreCase)
+                    ? item.DroppedAs.Substring(item.NamePrefix.Length + 1)
+                    : item.DroppedAs;
+                row.Cells["file"].ToolTipText = item.SourcePath;
                 row.Cells["type"].Value = item.Category?.Name;
-                if (_project == null)
+                if (_project == null || Visit == null)
                 {
-                    row.Cells["name"].Value = "(pick the project)";
+                    row.Cells["name"].Value = _project == null ? "(pick the project)" : "(fill in crew and work type)";
                     row.Cells["name"].Style.ForeColor = Muted;
                 }
                 else if (item.Skip)
                 {
                     row.Cells["name"].Value = Path.GetFileName(item.AlreadyUploadedAs);
-                    row.Cells["folder"].Value = Relative(Path.GetDirectoryName(item.AlreadyUploadedAs));
+                    row.Cells["folder"].Value = InDownload(download, Path.GetDirectoryName(item.AlreadyUploadedAs));
+                    row.Cells["folder"].ToolTipText = item.AlreadyUploadedAs;
                     row.Cells["status"].Value = "Already in job";
                     row.DefaultCellStyle.ForeColor = Muted;
                 }
                 else
                 {
                     row.Cells["name"].Value = Path.GetFileName(item.Destination);
-                    row.Cells["folder"].Value = Relative(Path.GetDirectoryName(item.Destination));
+                    row.Cells["folder"].Value = InDownload(download, Path.GetDirectoryName(item.Destination));
+                    row.Cells["folder"].ToolTipText = item.Destination;
                 }
                 if (item.Error != null)
                 {
@@ -413,12 +495,20 @@ namespace CrewUpload.App
             _grid.CellValueChanged += TypeChanged;
 
             var toCopy = _items.Count(i => !i.Skip && !i.Done);
-            _upload.Enabled = !_busy && _project != null && toCopy > 0;
+            _upload.Enabled = !_busy && _project != null && Visit != null && toCopy > 0;
             _upload.Text = toCopy > 0 ? "Upload " + toCopy + " file" + (toCopy == 1 ? "" : "s") + " to job" : "Upload to job";
             foreach (var box in _boxes) box.SetCount(_items.Count(i => i.Category == box.Category && !i.Skip));
             _dropHelp.Text = _items.Count == 0
-                ? "Drag each kind of file onto its box -- a whole folder works too. Or click a box to choose files."
-                : "Check the names below. Drop on another box, or change the Type, to move a file. Delete removes it from the list.";
+                ? HelpText
+                : "Check the names below. Drop a file on another box, or change its Type, to move it. Delete removes it from the list.";
+        }
+
+        /// <summary>Where in the download folder: "(download folder)" or "Photos".</summary>
+        private string InDownload(string download, string folder)
+        {
+            if (download == null || folder == null) return Relative(folder);
+            if (string.Equals(folder.TrimEnd('\\', '/'), download.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) return "(download folder)";
+            return folder.StartsWith(download, StringComparison.OrdinalIgnoreCase) ? folder.Substring(download.Length).TrimStart('\\', '/') : Relative(folder);
         }
 
         private string Relative(string folder)
@@ -434,10 +524,10 @@ namespace CrewUpload.App
         private async Task Upload()
         {
             if (_busy || _project == null) return;
-            if (string.IsNullOrWhiteSpace(_crew.Text))
+            if (Visit == null)
             {
-                MessageBox.Show(this, "Enter the crew's initials first, so the office knows who brought this in.", "Upload", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                _crew.Focus();
+                MessageBox.Show(this, "Enter the crew's initials and pick the work type first: they make the download folder's name.", "Upload", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (string.IsNullOrWhiteSpace(_crew.Text)) _crew.Focus(); else _work.Focus();
                 return;
             }
 
@@ -480,15 +570,23 @@ namespace CrewUpload.App
 
         // ------------------------------------------------------------------ documents
 
+        private bool HaveVisit()
+        {
+            if (_project == null) return false;
+            if (Visit != null) return true;
+            MessageBox.Show(this, "Enter the crew's initials and pick the work type first: they name the document.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return false;
+        }
+
         private void NewDocument(DocumentTemplate document)
         {
-            if (_project == null) return;
+            if (!HaveVisit()) return;
             try
             {
                 var maker = new DocumentMaker(_config);
                 if (maker.TemplatePath(document) == null && !string.IsNullOrWhiteSpace(document.Template))
                     Say("Template " + document.Template + " not found; started a blank text sheet instead.", Bad);
-                var path = maker.Create(_project, document, _crew.Text, _date.Value.Date);
+                var path = maker.Create(_project, document, Visit);
                 if (maker.TemplatePath(document) != null) Say("Created " + Path.GetFileName(path) + " in " + Relative(Path.GetDirectoryName(path)), Good);
                 Open(path);
             }
@@ -500,14 +598,14 @@ namespace CrewUpload.App
 
         private void TypeNotes()
         {
-            if (_project == null) return;
+            if (!HaveVisit()) return;
             var category = _config.Category("notes") ?? _config.FallbackCategory;
             using (var form = new NotesForm(_project.Display, _crew.Text, _date.Value.Date))
             {
                 if (form.ShowDialog(this) != DialogResult.OK) return;
                 try
                 {
-                    var path = new DocumentMaker(_config).CreateNotes(_project, category, _crew.Text, _date.Value.Date, form.Notes);
+                    var path = new DocumentMaker(_config).CreateNotes(_project, category, Visit, form.Notes);
                     Say("Field notes saved as " + Path.GetFileName(path) + " in " + Relative(Path.GetDirectoryName(path)), Good);
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)

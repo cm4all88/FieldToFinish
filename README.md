@@ -22,25 +22,37 @@ Nothing downstream should re-implement the grammar.
 `CrewUpload.exe` is a separate Windows app (no Civil 3D needed) for getting what a crew brings back
 into the right job folder with the right names.
 
+A crew download is one folder per crew, day, project and kind of work, and everything in it carries
+that folder's name:
+
+```
+20260128-JAM-1521-799-TOPO\            {date}-{crew}-{project}-{work type}
+    20260128-JAM-1521-799-TOPO.job      raw data: the download's name
+    20260128-JAM-1521-799-TOPO.jxl
+    20260128-JAM-1521-799-TOPO-FN.pdf   field notes
+    20260128-JAM-1521-799-TOPO-DR.docx  daily report
+    Photos\IMG_0412.jpg                 photos keep the camera's names
+```
+
 1. **Project.** The crew types the project number and presses Enter; the app finds the job folder
    under `jobsRoot` (directly, or one level down, e.g. filed by year). A PM uses **New project (PM)**
-   to make the folder from the office layout (`projectFolders` plus a folder per category) and a
-   `project.json` holding number, name, client and PM.
-2. **Drop.** The window has one drop box per type (Field lineout, Stakeout / cut sheet, Control,
-   Field notes, Photos, Raw data, Other). Whatever lands on a box -- files or a whole folder -- is
-   that type; nothing is guessed. Clicking a box opens a file picker for that type. Files given on
-   the command line (Explorer's *Send to*) are sorted by name and extension instead.
-3. **Check.** Each file shows its type, new name and destination before anything is copied. Dropping
-   it on another box, or changing its Type, moves it.
-4. **Upload.** Files are copied (never moved), checked, and named
-   `SV-{projectNumber}-{code}-{date}-{seq}` — e.g. `SV-2169171001-PHOTO-20261002-01.jpg`. Numbering
-   continues from what is already in the job, nothing is overwritten, and a file whose exact contents
-   are already there is skipped. Photos are dated by when they were taken. Every upload is recorded in
-   `Survey\Field\upload-log.csv` in the job.
+   to make the folder from the office layout and a `project.json` holding number, name, client and PM.
+2. **Visit.** Crew initials, field date and work type (TOPO, LINEOUT, STAKE, BNDY, CTRL, ASBLT, ESMT)
+   make the download folder's name, shown on the form.
+3. **Drop.** The crew's download folder goes on the **Whole download** box: its name fills in the
+   project, crew, date and work type, and its files are sorted by their suffix (`-FN`, `-DR`), folder
+   (`Photos`) and extension (`.job`, `.jxl`). Crew initials inside the name never decide a type.
+   Loose files go on their own type's box (Raw data, Field notes, Daily report, Photos, Other) and
+   take that type without guessing. Clicking a box opens a picker.
+4. **Check.** Each file shows its type and new name before anything is copied; dropping it on another
+   box, or changing its Type, renames it.
+5. **Upload.** The download lands in `[job]\Survey\Field\Downloads\20260128-JAM-1521-799-TOPO\`.
+   Files are copied (never moved) and checked; nothing is overwritten (a second field notes file
+   becomes `-FN-2`); files already in the job are skipped, so dropping the folder again after adding
+   photos only copies the new photos. Every upload is logged in `Survey\Field\upload-log.csv`.
 
-The buttons along the bottom start a **field lineout**, **field notes** sheet or **cut sheet** from the
-templates in `config\templates\`, already named and filed for the project; **Type field notes** saves
-typed notes the same way.
+**New daily report** and **New field notes** start a document from `config\templates\`, already named
+for the visit and in its download folder; **Type field notes** saves typed notes the same way.
 
 The window follows the Parametrix Brand Guide (Nov 2023): the primary logo on a white header, charcoal
 and white with Parametrix Red kept to the Upload button and problems, the red spacer arrow under the
@@ -51,7 +63,7 @@ secondary palette, repeated as a stripe in the Type column. Logo files and colou
 
 Everything — the jobs root, folder layout, categories, codes, keywords and name pattern — is in
 `config\job-folders.json`, copied beside the exe. **The shipped values are placeholders**:
-`jobsRoot` (`U:\PSO\Jobs`) and the `Survey\Field\...` layout must be set to the office's real ones before
+`jobsRoot` (`U:\PSO\Jobs`) and `downloadsFolder` (`Survey\Field\Downloads`) must be set to the office's real ones before
 crews use it. The app refuses to start with a config that does not validate and says what is wrong.
 
 ```

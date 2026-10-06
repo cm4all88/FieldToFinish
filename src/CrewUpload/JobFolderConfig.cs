@@ -8,8 +8,20 @@ using Newtonsoft.Json;
 namespace CrewUpload
 {
     /// <summary>
-    /// One kind of thing a crew brings back: photos, field notes, a lineout, raw data.
-    /// Decides which job subfolder a file lands in and the code in its name.
+    /// What the crew went out to do: TOPO, LINEOUT, STAKE ... The code ends the download
+    /// folder's name (20260128-JAM-1521-799-TOPO) and so every file in it.
+    /// </summary>
+    public sealed class WorkType
+    {
+        [JsonProperty("code")] public string Code { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+
+        public override string ToString() => Code + " - " + Name;
+    }
+
+    /// <summary>
+    /// One kind of file inside a crew download: raw data, field notes, daily report, photos.
+    /// Decides where in the download folder it goes and the suffix on its name.
     /// </summary>
     public sealed class UploadCategory
     {
@@ -19,10 +31,10 @@ namespace CrewUpload
         /// <summary>What the crew sees in the Type column.</summary>
         [JsonProperty("name")] public string Name { get; set; }
 
-        /// <summary>Goes into the file name through {code}: SV-2169171001-PHOTO-...</summary>
+        /// <summary>Goes into the file name through {code}: ...-TOPO-FN.pdf. May be empty (raw data has none).</summary>
         [JsonProperty("code")] public string Code { get; set; }
 
-        /// <summary>Path under the project folder. May use {date}, {year}, {crew}.</summary>
+        /// <summary>Subfolder of the download folder ("Photos"). Empty = the download folder itself.</summary>
         [JsonProperty("folder")] public string Folder { get; set; }
 
         /// <summary>
@@ -37,12 +49,6 @@ namespace CrewUpload
 
         /// <summary>Overrides the config-wide file name pattern for this category.</summary>
         [JsonProperty("fileName")] public string FileName { get; set; }
-
-        /// <summary>
-        /// Date the file by when it was last modified rather than the upload date. For
-        /// photos: a crew uploading Friday's pictures on Monday still files them under Friday.
-        /// </summary>
-        [JsonProperty("useFileDate")] public bool UseFileDate { get; set; }
 
         /// <summary>The category used when nothing else matches. Exactly one should be set.</summary>
         [JsonProperty("fallback")] public bool Fallback { get; set; }
@@ -139,16 +145,30 @@ namespace CrewUpload
         /// <summary>Name of a new project folder. {projectNumber}, {projectName}, {client}.</summary>
         [JsonProperty("projectFolderName")] public string ProjectFolderName { get; set; } = "{projectNumber} {projectName}";
 
+        /// <summary>Where download folders go, under the project folder.</summary>
+        [JsonProperty("downloadsFolder")] public string DownloadsFolder { get; set; } = @"Survey\Field\Downloads";
+
         /// <summary>
-        /// Name of an uploaded file, without extension. {projectNumber}, {code}, {date}, {seq},
-        /// {crew}, {original}, {projectName}, {client}, {year}.
+        /// Name of one crew download: {date}, {crew}, {projectNumber}, {workType}. The same pattern
+        /// reads a folder the crew already named, so dropping it fills in the project, crew, date and type.
         /// </summary>
-        [JsonProperty("fileName")] public string FileName { get; set; } = "SV-{projectNumber}-{code}-{date}-{seq}";
+        [JsonProperty("downloadName")] public string DownloadName { get; set; } = "{date}-{crew}-{projectNumber}-{workType}";
+
+        /// <summary>
+        /// Name of a file in the download, without extension: {download} (the folder's name),
+        /// {code}, {original}, and the download's own tokens. A category's fileName overrides it.
+        /// </summary>
+        [JsonProperty("fileName")] public string FileName { get; set; } = "{download}-{code}";
 
         [JsonProperty("dateFormat")] public string DateFormat { get; set; } = "yyyyMMdd";
 
-        /// <summary>Digits in {seq}: 2 gives -01, -02 ...</summary>
-        [JsonProperty("sequenceDigits")] public int SequenceDigits { get; set; } = 2;
+        /// <summary>
+        /// Digits of the number added when a name is taken: 1 gives -2, -3 ...; a pattern with {seq}
+        /// numbers every file instead.
+        /// </summary>
+        [JsonProperty("sequenceDigits")] public int SequenceDigits { get; set; } = 1;
+
+        [JsonProperty("workTypes")] public List<WorkType> WorkTypes { get; set; } = new List<WorkType>();
 
         /// <summary>Folders every new project gets, under the project folder.</summary>
         [JsonProperty("projectFolders")] public List<string> ProjectFolders { get; set; } = new List<string>();
@@ -164,6 +184,9 @@ namespace CrewUpload
 
         /// <summary>Folder the config was read from; relative template paths resolve against it.</summary>
         [JsonIgnore] public string BaseDirectory { get; set; }
+
+        public WorkType WorkType(string code) =>
+            WorkTypes.FirstOrDefault(w => string.Equals(w.Code, code, StringComparison.OrdinalIgnoreCase));
 
         public UploadCategory Category(string key) =>
             Categories.FirstOrDefault(c => string.Equals(c.Key, key, StringComparison.OrdinalIgnoreCase));
@@ -209,6 +232,16 @@ namespace CrewUpload
             if (SearchDepth < 1 || SearchDepth > 4) problems.Add("searchDepth must be 1 to 4.");
             if (SequenceDigits < 1 || SequenceDigits > 6) problems.Add("sequenceDigits must be 1 to 6.");
             if (string.IsNullOrWhiteSpace(FileName)) problems.Add("fileName is empty.");
+            if (string.IsNullOrWhiteSpace(DownloadName) || DownloadName.IndexOf("{projectNumber}", StringComparison.Ordinal) < 0)
+                problems.Add("downloadName must contain {projectNumber}.");
+            if (Path.IsPathRooted(DownloadsFolder ?? string.Empty) || Naming.Segments(DownloadsFolder).Any(x => x == ".."))
+                problems.Add("downloadsFolder must stay inside the project folder.");
+            if (WorkTypes.Count == 0) problems.Add("No workTypes: a download needs one (TOPO, LINEOUT ...).");
+            foreach (var w in WorkTypes)
+                if (string.IsNullOrWhiteSpace(w.Code) || !Regex.IsMatch(w.Code, "^[A-Za-z0-9]+$"))
+                    problems.Add("Work type '" + w.Name + "' needs a code of letters and digits only.");
+            foreach (var g in WorkTypes.GroupBy(w => (w.Code ?? string.Empty).ToUpperInvariant()).Where(g => g.Count() > 1))
+                problems.Add("Work type code '" + g.Key + "' is used more than once.");
             if (string.IsNullOrWhiteSpace(ProjectFolderName) || ProjectFolderName.IndexOf("{projectNumber}", StringComparison.Ordinal) < 0)
                 problems.Add("projectFolderName must contain {projectNumber}, or projects cannot be found again.");
             try { Regex.IsMatch(string.Empty, ProjectNumberPattern ?? string.Empty); }
@@ -228,11 +261,9 @@ namespace CrewUpload
                 var label = "Category '" + (c.Name ?? c.Key) + "'";
                 if (string.IsNullOrWhiteSpace(c.Key)) problems.Add(label + " has no key.");
                 if (string.IsNullOrWhiteSpace(c.Name)) problems.Add("Category '" + c.Key + "' has no name.");
-                if (string.IsNullOrWhiteSpace(c.Folder)) problems.Add(label + " has no folder.");
-                else if (Path.IsPathRooted(c.Folder) || Naming.Segments(c.Folder).Any(s => s == ".."))
-                    problems.Add(label + " folder must stay inside the project folder.");
-                if (string.IsNullOrWhiteSpace(c.Code)) problems.Add(label + " has no code.");
-                else if (c.Code.IndexOfAny(Naming.WindowsInvalid) >= 0) problems.Add(label + " code has characters a file name cannot hold.");
+                if (Path.IsPathRooted(c.Folder ?? string.Empty) || Naming.Segments(c.Folder).Any(x => x == ".."))
+                    problems.Add(label + " folder must stay inside the download folder.");
+                if (!string.IsNullOrEmpty(c.Code) && c.Code.IndexOfAny(Naming.WindowsInvalid) >= 0) problems.Add(label + " code has characters a file name cannot hold.");
                 if (c.Color != null && !Branding.IsColor(c.Color)) problems.Add(label + " color must be like #3FB549.");
                 if (c.Extensions.Any(e => string.IsNullOrEmpty(e) || e[0] != '.')) problems.Add(label + " extensions must start with a dot.");
             }
@@ -262,47 +293,45 @@ namespace CrewUpload
                     @"Survey\Field",
                     @"Survey\Research",
                 },
+                WorkTypes = new List<WorkType>
+                {
+                    new WorkType { Code = "TOPO", Name = "Topographic survey" },
+                    new WorkType { Code = "LINEOUT", Name = "Field lineout" },
+                    new WorkType { Code = "STAKE", Name = "Construction stakeout" },
+                    new WorkType { Code = "BNDY", Name = "Boundary" },
+                    new WorkType { Code = "CTRL", Name = "Control" },
+                    new WorkType { Code = "ASBLT", Name = "As-built" },
+                    new WorkType { Code = "ESMT", Name = "Easement" },
+                },
                 Categories = new List<UploadCategory>
                 {
                     new UploadCategory
                     {
-                        Key = "lineout", Name = "Field lineout", Code = "LINEOUT", Color = "#F36E21", Folder = @"Survey\Field\Lineouts",
-                        Keywords = { "lineout", "line out", "line-out", "lineouts" },
-                    },
-                    new UploadCategory
-                    {
-                        Key = "stakeout", Name = "Stakeout / cut sheet", Code = "STAKE", Color = "#FCC214", Folder = @"Survey\Field\Stakeout",
-                        Keywords = { "stakeout", "stake out", "staking", "cut sheet", "cutsheet", "cut sheets", "cutsheets" },
-                    },
-                    new UploadCategory
-                    {
-                        Key = "control", Name = "Control", Code = "CTRL", Color = "#0073BB", Folder = @"Survey\Control",
-                        Keywords = { "control", "ctrl", "opus", "static" },
-                    },
-                    new UploadCategory
-                    {
-                        Key = "notes", Name = "Field notes", Code = "FN", Color = "#3FB549", Folder = @"Survey\Field\Field Notes",
-                        Keywords = { "field notes", "field note", "fieldnotes", "notes", "note", "fieldbook", "field book", "fn" },
-                        Extensions = { ".txt", ".rtf", ".doc", ".docx" },
-                    },
-                    new UploadCategory
-                    {
-                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#ED715D", Folder = @"Survey\Field\Photos\{date}", UseFileDate = true,
-                        Keywords = { "photo", "photos", "pics", "pictures", "picture" },
-                        Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
-                    },
-                    new UploadCategory
-                    {
-                        // Data collector files keep their own name in the new one: the job file
-                        // name is what the crew and the office both search for.
-                        Key = "rawdata", Name = "Raw data", Code = "RAW", Color = "#676768", Folder = @"Survey\Field\Raw Data\{date}",
-                        FileName = "SV-{projectNumber}-{code}-{date}-{original}",
+                        // 20260128-JAM-1521-799-TOPO.job / .jxl: the data carries the download's own name.
+                        Key = "rawdata", Name = "Raw data", Code = "", Color = "#0073BB", Folder = "", FileName = "{download}",
                         Keywords = { "raw", "raw data", "rawdata" },
                         Extensions = { ".job", ".jxl", ".raw", ".rw5", ".dc", ".t01", ".t02", ".t04", ".dat", ".fbk", ".gsi", ".sdr", ".crd", ".csv", ".pnt", ".tsj", ".jbk" },
                     },
                     new UploadCategory
                     {
-                        Key = "other", Name = "Other field document", Code = "MISC", Color = "#B3B4B5", Folder = @"Survey\Field\Other", Fallback = true,
+                        Key = "notes", Name = "Field notes", Code = "FN", Color = "#3FB549", Folder = "",
+                        Keywords = { "fn", "field notes", "field note", "fieldnotes", "notes", "fieldbook", "field book" },
+                    },
+                    new UploadCategory
+                    {
+                        Key = "report", Name = "Daily report", Code = "DR", Color = "#F36E21", Folder = "",
+                        Keywords = { "dr", "daily report", "daily", "dailyreport" },
+                    },
+                    new UploadCategory
+                    {
+                        // Photos keep the camera's names inside the download's Photos folder.
+                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{original}",
+                        Keywords = { "photo", "photos", "pics", "pictures", "picture" },
+                        Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
+                    },
+                    new UploadCategory
+                    {
+                        Key = "other", Name = "Other", Code = "", Color = "#B3B4B5", Folder = "", FileName = "{download}-{original}", Fallback = true,
                     },
                 },
                 Branding = new Branding
@@ -312,9 +341,8 @@ namespace CrewUpload
                 },
                 Documents = new List<DocumentTemplate>
                 {
-                    new DocumentTemplate { Name = "New field lineout", Category = "lineout", Template = @"templates\Field Lineout.xlsx" },
+                    new DocumentTemplate { Name = "New daily report", Category = "report", Template = @"templates\Daily Report.docx" },
                     new DocumentTemplate { Name = "New field notes", Category = "notes", Template = @"templates\Field Notes.docx" },
-                    new DocumentTemplate { Name = "New cut sheet", Category = "stakeout", Template = @"templates\Cut Sheet.xlsx" },
                 },
             };
         }

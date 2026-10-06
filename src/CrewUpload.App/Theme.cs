@@ -168,7 +168,8 @@ namespace CrewUpload.App
     }
 
     /// <summary>
-    /// One drop box per kind of upload. Whatever lands on it is that type -- nothing is guessed.
+    /// One drop box per kind of upload, plus one for the whole download. Whatever lands on a
+    /// type's box is that type -- nothing is guessed.
     /// Clicking it opens a file picker for that type. Its band is the type's colour, which the
     /// Type column repeats so a file's box is easy to see in the list.
     /// </summary>
@@ -186,9 +187,15 @@ namespace CrewUpload.App
         public event Action<DropBox> Browse;
 
         public DropBox(UploadCategory category)
+            : this(category, category.Name, "drop here", Theme.Parse(category.Color, Theme.MediumGray))
+        {
+        }
+
+        /// <summary>A box with no category takes anything and lets the planner sort it.</summary>
+        public DropBox(UploadCategory category, string title, string hintText, Color color)
         {
             Category = category;
-            _color = Theme.Parse(category.Color, Theme.MediumGray);
+            _color = color;
             DoubleBuffered = true;
             AllowDrop = true;
             Cursor = Cursors.Hand;
@@ -200,12 +207,12 @@ namespace CrewUpload.App
 
             var name = new Label
             {
-                Text = category.Name, Dock = DockStyle.Top, Height = 48, TextAlign = ContentAlignment.BottomCenter,
+                Text = title, Dock = DockStyle.Top, Height = 48, TextAlign = ContentAlignment.BottomCenter,
                 Font = Theme.Body(12f, FontStyle.Bold), ForeColor = Theme.Charcoal, BackColor = Color.Transparent,
             };
             var hint = new Label
             {
-                Text = "drop here", Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.TopCenter,
+                Text = hintText, Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.TopCenter,
                 Font = Theme.Body(9.5f), ForeColor = Theme.MediumGray, BackColor = Color.Transparent,
             };
             _count = new Label

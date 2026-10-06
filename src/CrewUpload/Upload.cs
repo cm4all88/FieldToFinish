@@ -19,10 +19,13 @@ namespace CrewUpload
         /// <summary>Folders between what was dropped and the file, outermost first. Their names are hints.</summary>
         public IList<string> FolderHints { get; set; } = new List<string>();
 
-        public UploadCategory Category { get; set; }
+        /// <summary>
+        /// The download folder name it came in, when the crew dropped an already-named download.
+        /// Left out when its type is guessed, so crew initials like "DR" or "FN" never decide it.
+        /// </summary>
+        public string NamePrefix { get; set; }
 
-        /// <summary>The date that goes into its name and dated folder.</summary>
-        public DateTime Date { get; set; }
+        public UploadCategory Category { get; set; }
 
         /// <summary>Full path it will be copied to. Set by <see cref="UploadPlanner.Assign"/>.</summary>
         public string Destination { get; set; }
@@ -40,7 +43,7 @@ namespace CrewUpload
 
     /// <summary>
     /// Turns what a crew dropped into a list of files with a category, a correct name and a
-    /// place in the job folder. Nothing is copied here, so the crew sees and can correct the
+    /// place in the job's download folder. Nothing is copied here, so the crew sees and can correct the
     /// whole plan first.
     /// </summary>
     public sealed class UploadPlanner
@@ -75,7 +78,16 @@ namespace CrewUpload
                 if (Directory.Exists(path))
                 {
                     var root = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                    AddFolder(items, seen, path, new List<string> { root }, root);
+                    // An already-named download: its name is the files' prefix, not a hint.
+                    var download = DownloadNames.Parse(_config, root) != null;
+                    var before = items.Count;
+                    AddFolder(items, seen, path, download ? new List<string>() : new List<string> { root }, root);
+                    if (download)
+                        for (var i = before; i < items.Count; i++)
+                        {
+                            items[i].NamePrefix = root;
+                            items[i].Category = Classify(Path.GetFileName(items[i].SourcePath), items[i].FolderHints, root);
+                        }
                 }
                 else if (File.Exists(path))
                 {
@@ -121,9 +133,11 @@ namespace CrewUpload
         /// in (nearest first), then its extension, then the fallback. Categories are tried in
         /// config order, so the more specific ones go first.
         /// </summary>
-        public UploadCategory Classify(string fileName, IList<string> folderHints = null)
+        public UploadCategory Classify(string fileName, IList<string> folderHints = null, string namePrefix = null)
         {
             var bare = Path.GetFileNameWithoutExtension(fileName);
+            if (!string.IsNullOrEmpty(namePrefix) && bare.StartsWith(namePrefix, StringComparison.OrdinalIgnoreCase))
+                bare = bare.Substring(namePrefix.Length);
             var byName = _config.Categories.FirstOrDefault(c => c.Keywords.Any(k => Naming.HasWord(bare, k)));
             if (byName != null) return byName;
 
@@ -140,25 +154,43 @@ namespace CrewUpload
             return byExt ?? _config.FallbackCategory;
         }
 
+        /// <summary>The first dropped folder whose name is a download name, read back; null when none is.</summary>
+        public ParsedDownload FindDownload(IEnumerable<string> dropped)
+        {
+            foreach (var raw in dropped ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(raw) || !Directory.Exists(raw)) continue;
+                var parsed = DownloadNames.Parse(_config, Path.GetFileName(Path.GetFullPath(raw).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+                if (parsed != null) return parsed;
+            }
+            return null;
+        }
+
+        /// <summary>The download folder for a visit: [project]\[downloadsFolder]\20260128-JAM-1521-799-TOPO.</summary>
+        public string DownloadFolder(ProjectFolder project, FieldVisit visit) =>
+            Path.Combine(Naming.Combine(project.Path, _config.DownloadsFolder, DownloadNames.Values(_config, project.Info.ProjectNumber, visit)),
+                DownloadNames.Name(_config, project.Info.ProjectNumber, visit));
+
         /// <summary>
-        /// Gives every item its date, destination and name. Numbers continue from what is already
-        /// in the job folder and from earlier items in the same batch, so nothing is overwritten.
-        /// A file whose exact contents are already in its destination folder is marked
-        /// <see cref="UploadItem.AlreadyUploadedAs"/> instead: dropping the same card twice
-        /// does not make a second copy. Call again after the crew changes a type.
+        /// Gives every item its destination and name inside the visit's download folder. Names are
+        /// the download's name plus the type's suffix; a name already taken (on disk or earlier in
+        /// the batch) gets -2, -3, so nothing is overwritten. A file whose exact contents are
+        /// already in its destination folder is marked <see cref="UploadItem.AlreadyUploadedAs"/>
+        /// instead: dropping the same download twice does not make copies, and adding the photos
+        /// later to a download already in the job just adds them. Call again after any change.
         /// </summary>
-        public void Assign(ProjectFolder project, IList<UploadItem> items, string crew, DateTime fieldDate)
+        public void Assign(ProjectFolder project, IList<UploadItem> items, FieldVisit visit)
         {
             var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var download = DownloadFolder(project, visit);
             foreach (var item in items)
             {
                 item.Destination = null;
                 item.AlreadyUploadedAs = null;
-                item.Category = item.Category ?? Classify(Path.GetFileName(item.SourcePath), item.FolderHints);
-                item.Date = item.Category.UseFileDate ? FileDate(item.SourcePath, fieldDate) : fieldDate.Date;
+                item.Category = item.Category ?? Classify(Path.GetFileName(item.SourcePath), item.FolderHints, item.NamePrefix);
 
-                var values = Values(project, item.Category, crew, item.Date, Path.GetFileNameWithoutExtension(item.SourcePath));
-                var folder = Naming.Combine(project.Path, item.Category.Folder, values);
+                var values = Values(project, item.Category, visit, Path.GetFileNameWithoutExtension(item.SourcePath));
+                var folder = Naming.Combine(download, item.Category.Folder, values);
 
                 var existing = SameContent(folder, item.SourcePath);
                 if (existing != null)
@@ -174,20 +206,16 @@ namespace CrewUpload
         internal string PatternFor(UploadCategory category) =>
             string.IsNullOrWhiteSpace(category.FileName) ? _config.FileName : category.FileName;
 
-        internal Dictionary<string, string> Values(ProjectFolder project, UploadCategory category, string crew, DateTime date, string original)
+        internal Dictionary<string, string> Values(ProjectFolder project, UploadCategory category, FieldVisit visit, string original)
         {
-            return new Dictionary<string, string>
-            {
-                { "projectNumber", project.Info.ProjectNumber },
-                { "projectName", project.Info.ProjectName },
-                { "client", project.Info.Client },
-                { "code", category.Code },
-                { "category", category.Name },
-                { "date", date.ToString(_config.DateFormat, CultureInfo.InvariantCulture) },
-                { "year", date.Year.ToString(CultureInfo.InvariantCulture) },
-                { "crew", (crew ?? string.Empty).Trim().ToUpperInvariant() },
-                { "original", original ?? string.Empty },
-            };
+            var values = DownloadNames.Values(_config, project.Info.ProjectNumber, visit);
+            values["download"] = DownloadNames.Name(_config, project.Info.ProjectNumber, visit);
+            values["projectName"] = project.Info.ProjectName;
+            values["client"] = project.Info.Client;
+            values["code"] = category.Code;
+            values["category"] = category.Name;
+            values["original"] = original ?? string.Empty;
+            return values;
         }
 
         /// <summary>
@@ -211,13 +239,6 @@ namespace CrewUpload
                 return candidate;
             }
             throw new IOException("No free file name left in " + folder);
-        }
-
-        private static DateTime FileDate(string path, DateTime fallback)
-        {
-            try { return File.GetLastWriteTime(path).Date; }
-            catch (IOException) { return fallback.Date; }
-            catch (UnauthorizedAccessException) { return fallback.Date; }
         }
 
         /// <summary>A file in the folder with the same bytes as the source, or null.</summary>

@@ -6,8 +6,8 @@ using System.Text;
 namespace CrewUpload
 {
     /// <summary>
-    /// Starts a new field document -- a lineout, a field notes sheet, a cut sheet -- in the
-    /// project, named and filed exactly as an upload of that type would be.
+    /// Starts a new field document -- a daily report, a field notes sheet -- in the visit's
+    /// download folder, named exactly as an upload of that type would be (...-TOPO-DR.docx).
     /// </summary>
     public sealed class DocumentMaker
     {
@@ -28,21 +28,21 @@ namespace CrewUpload
         /// otherwise a text sheet headed with the project, date and crew, followed by
         /// <paramref name="body"/> (what the crew typed, for typed field notes).
         /// </summary>
-        public string Create(ProjectFolder project, DocumentTemplate document, string crew, DateTime date, string body = null)
+        public string Create(ProjectFolder project, DocumentTemplate document, FieldVisit visit, string body = null)
         {
             var category = _config.Category(document.Category);
             if (category == null) throw new InvalidOperationException("'" + document.Name + "' uses category '" + document.Category + "', which is not in job-folders.json.");
-            return Create(project, category, crew, date, TemplatePath(document), document.Name, body);
+            return Create(project, category, visit, TemplatePath(document), document.Name, body);
         }
 
         /// <summary>Typed field notes, saved as a text file in the field notes folder.</summary>
-        public string CreateNotes(ProjectFolder project, UploadCategory category, string crew, DateTime date, string body) =>
-            Create(project, category, crew, date, null, category.Name, body);
+        public string CreateNotes(ProjectFolder project, UploadCategory category, FieldVisit visit, string body) =>
+            Create(project, category, visit, null, category.Name, body);
 
-        private string Create(ProjectFolder project, UploadCategory category, string crew, DateTime date, string template, string title, string body)
+        private string Create(ProjectFolder project, UploadCategory category, FieldVisit visit, string template, string title, string body)
         {
-            var values = _planner.Values(project, category, crew, date.Date, title);
-            var folder = Naming.Combine(project.Path, category.Folder, values);
+            var values = _planner.Values(project, category, visit, title);
+            var folder = Naming.Combine(_planner.DownloadFolder(project, visit), category.Folder, values);
             var ext = template != null ? Path.GetExtension(template) : ".txt";
             var path = _planner.NextFreeName(folder, _planner.PatternFor(category), values, ext, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             Directory.CreateDirectory(folder);
@@ -57,8 +57,9 @@ namespace CrewUpload
             sb.AppendLine((title ?? category.Name).ToUpperInvariant());
             sb.AppendLine("Project: " + project.Display);
             if (!string.IsNullOrWhiteSpace(project.Info.Client)) sb.AppendLine("Client:  " + project.Info.Client);
-            sb.AppendLine("Date:    " + date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
-            sb.AppendLine("Crew:    " + (crew ?? string.Empty).Trim().ToUpperInvariant());
+            sb.AppendLine("Date:    " + visit.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+            sb.AppendLine("Crew:    " + visit.CrewCode);
+            sb.AppendLine("Work:    " + visit.WorkCode);
             sb.AppendLine(new string('-', 60));
             if (!string.IsNullOrEmpty(body)) sb.AppendLine(body.TrimEnd());
             File.WriteAllText(path, sb.ToString());

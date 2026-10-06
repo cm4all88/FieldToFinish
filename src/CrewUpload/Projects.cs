@@ -115,8 +115,8 @@ namespace CrewUpload
         }
 
         /// <summary>
-        /// Makes the project folder, the office's standard folders and every category's folder
-        /// (up to its first dated level), then writes project.json. Refuses a number that already
+        /// Makes the project folder, the office's standard folders and the downloads folder,
+        /// then writes project.json. Refuses a number that already
         /// has a folder.
         /// </summary>
         public ProjectFolder Create(ProjectInfo info)
@@ -149,8 +149,7 @@ namespace CrewUpload
             Directory.CreateDirectory(path);
             foreach (var f in _config.ProjectFolders)
                 Directory.CreateDirectory(Naming.Combine(path, f, values));
-            foreach (var c in _config.Categories)
-                Directory.CreateDirectory(Naming.Combine(path, Naming.StaticPart(c.Folder), values));
+            Directory.CreateDirectory(Naming.Combine(path, Naming.StaticPart(_config.DownloadsFolder), values));
 
             File.WriteAllText(Path.Combine(path, ProjectInfo.FileName), JsonConvert.SerializeObject(info, Formatting.Indented));
             return new ProjectFolder { Path = path, Info = info, HasInfoFile = true };

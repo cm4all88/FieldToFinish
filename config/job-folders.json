@@ -5,9 +5,41 @@
   "newProjectParent": "",
   "projectNumberPattern": "^[0-9][0-9A-Z.\\-]{2,}$",
   "projectFolderName": "{projectNumber} {projectName}",
-  "fileName": "SV-{projectNumber}-{code}-{date}-{seq}",
+  "downloadsFolder": "Survey\\Field\\Downloads",
+  "downloadName": "{date}-{crew}-{projectNumber}-{workType}",
+  "fileName": "{download}-{code}",
   "dateFormat": "yyyyMMdd",
-  "sequenceDigits": 2,
+  "sequenceDigits": 1,
+  "workTypes": [
+    {
+      "code": "TOPO",
+      "name": "Topographic survey"
+    },
+    {
+      "code": "LINEOUT",
+      "name": "Field lineout"
+    },
+    {
+      "code": "STAKE",
+      "name": "Construction stakeout"
+    },
+    {
+      "code": "BNDY",
+      "name": "Boundary"
+    },
+    {
+      "code": "CTRL",
+      "name": "Control"
+    },
+    {
+      "code": "ASBLT",
+      "name": "As-built"
+    },
+    {
+      "code": "ESMT",
+      "name": "Easement"
+    }
+  ],
   "projectFolders": [
     "Admin",
     "Survey\\CAD",
@@ -19,120 +51,10 @@
   ],
   "categories": [
     {
-      "key": "lineout",
-      "name": "Field lineout",
-      "code": "LINEOUT",
-      "folder": "Survey\\Field\\Lineouts",
-      "keywords": [
-        "lineout",
-        "line out",
-        "line-out",
-        "lineouts"
-      ],
-      "extensions": [],
-      "fileName": null,
-      "useFileDate": false,
-      "fallback": false,
-      "color": "#F36E21"
-    },
-    {
-      "key": "stakeout",
-      "name": "Stakeout / cut sheet",
-      "code": "STAKE",
-      "folder": "Survey\\Field\\Stakeout",
-      "keywords": [
-        "stakeout",
-        "stake out",
-        "staking",
-        "cut sheet",
-        "cutsheet",
-        "cut sheets",
-        "cutsheets"
-      ],
-      "extensions": [],
-      "fileName": null,
-      "useFileDate": false,
-      "fallback": false,
-      "color": "#FCC214"
-    },
-    {
-      "key": "control",
-      "name": "Control",
-      "code": "CTRL",
-      "folder": "Survey\\Control",
-      "keywords": [
-        "control",
-        "ctrl",
-        "opus",
-        "static"
-      ],
-      "extensions": [],
-      "fileName": null,
-      "useFileDate": false,
-      "fallback": false,
-      "color": "#0073BB"
-    },
-    {
-      "key": "notes",
-      "name": "Field notes",
-      "code": "FN",
-      "folder": "Survey\\Field\\Field Notes",
-      "keywords": [
-        "field notes",
-        "field note",
-        "fieldnotes",
-        "notes",
-        "note",
-        "fieldbook",
-        "field book",
-        "fn"
-      ],
-      "extensions": [
-        ".txt",
-        ".rtf",
-        ".doc",
-        ".docx"
-      ],
-      "fileName": null,
-      "useFileDate": false,
-      "fallback": false,
-      "color": "#3FB549"
-    },
-    {
-      "key": "photos",
-      "name": "Photos",
-      "code": "PHOTO",
-      "folder": "Survey\\Field\\Photos\\{date}",
-      "keywords": [
-        "photo",
-        "photos",
-        "pics",
-        "pictures",
-        "picture"
-      ],
-      "extensions": [
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".heic",
-        ".heif",
-        ".gif",
-        ".bmp",
-        ".tif",
-        ".tiff",
-        ".mp4",
-        ".mov"
-      ],
-      "fileName": null,
-      "useFileDate": true,
-      "fallback": false,
-      "color": "#ED715D"
-    },
-    {
       "key": "rawdata",
       "name": "Raw data",
-      "code": "RAW",
-      "folder": "Survey\\Field\\Raw Data\\{date}",
+      "code": "",
+      "folder": "",
       "keywords": [
         "raw",
         "raw data",
@@ -157,39 +79,96 @@
         ".tsj",
         ".jbk"
       ],
-      "fileName": "SV-{projectNumber}-{code}-{date}-{original}",
-      "useFileDate": false,
+      "fileName": "{download}",
       "fallback": false,
-      "color": "#676768"
+      "color": "#0073BB"
+    },
+    {
+      "key": "notes",
+      "name": "Field notes",
+      "code": "FN",
+      "folder": "",
+      "keywords": [
+        "fn",
+        "field notes",
+        "field note",
+        "fieldnotes",
+        "notes",
+        "fieldbook",
+        "field book"
+      ],
+      "extensions": [],
+      "fileName": null,
+      "fallback": false,
+      "color": "#3FB549"
+    },
+    {
+      "key": "report",
+      "name": "Daily report",
+      "code": "DR",
+      "folder": "",
+      "keywords": [
+        "dr",
+        "daily report",
+        "daily",
+        "dailyreport"
+      ],
+      "extensions": [],
+      "fileName": null,
+      "fallback": false,
+      "color": "#F36E21"
+    },
+    {
+      "key": "photos",
+      "name": "Photos",
+      "code": "PHOTO",
+      "folder": "Photos",
+      "keywords": [
+        "photo",
+        "photos",
+        "pics",
+        "pictures",
+        "picture"
+      ],
+      "extensions": [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".heic",
+        ".heif",
+        ".gif",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".mp4",
+        ".mov"
+      ],
+      "fileName": "{original}",
+      "fallback": false,
+      "color": "#FCC214"
     },
     {
       "key": "other",
-      "name": "Other field document",
-      "code": "MISC",
-      "folder": "Survey\\Field\\Other",
+      "name": "Other",
+      "code": "",
+      "folder": "",
       "keywords": [],
       "extensions": [],
-      "fileName": null,
-      "useFileDate": false,
+      "fileName": "{download}-{original}",
       "fallback": true,
       "color": "#B3B4B5"
     }
   ],
   "documents": [
     {
-      "name": "New field lineout",
-      "category": "lineout",
-      "template": "templates\\Field Lineout.xlsx"
+      "name": "New daily report",
+      "category": "report",
+      "template": "templates\\Daily Report.docx"
     },
     {
       "name": "New field notes",
       "category": "notes",
       "template": "templates\\Field Notes.docx"
-    },
-    {
-      "name": "New cut sheet",
-      "category": "stakeout",
-      "template": "templates\\Cut Sheet.xlsx"
     }
   ],
   "logFile": "Survey\\Field\\upload-log.csv",
