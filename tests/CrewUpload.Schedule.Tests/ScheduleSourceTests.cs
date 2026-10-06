@@ -157,6 +157,22 @@ namespace CrewUpload.Schedule.Tests
         }
 
         [Fact]
+        public void TimestampsAreComparedAsTheAppWritesThem()
+        {
+            using (var f = ScheduleFixture.Standard())
+            {
+                // half a second after the owner's edit (2026-07-05T10:00:00.000Z): newer, so it applies
+                f.Write("pso-overrides.json", new object[]
+                {
+                    new { id = "a4", kind = "asn", at = "2026-07-05T10:00:00.500Z", byPm = "pm_ann", op = "delete" },
+                    new { id = "a3", kind = "asn", at = "2026-07-05T10:00:00.000Z", byPm = "pm_ann", op = "delete" }, // same instant: owner wins
+                });
+                var w = Assert.Single(Source(f).WorkFor("jim_martin", Mon13));
+                Assert.Equal(new[] { "jim_martin", "colston_bravo", "jeff_bearson" }, w.CrewEmployeeIds);
+            }
+        }
+
+        [Fact]
         public void MissingOrBrokenPmFeedCountsAsEmpty()
         {
             using (var f = ScheduleFixture.Standard())

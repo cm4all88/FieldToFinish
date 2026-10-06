@@ -466,6 +466,11 @@ namespace CrewUpload.App
             using (var form = new DailyReportForm(_config, _projects, crewList, choice?.Draft ?? manual))
             {
                 if (prefill != null) form.SetChoices(prefill, manual, choice ?? (prefill.Choices.Count == 1 ? prefill.Choices[0] : null));
+                form.Submitted += result =>
+                {
+                    var status = ScheduleStatus.Report(_config, Schedule(), result.Report, crewList);
+                    if (status != null) result.Copies.Add(status);
+                };
                 if (form.ShowDialog(this) != DialogResult.OK || form.Result == null) return;
                 Say("Daily report " + form.Result.Report.ReportId + " submitted.", Good);
             }

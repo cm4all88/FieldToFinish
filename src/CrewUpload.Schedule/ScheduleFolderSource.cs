@@ -14,10 +14,11 @@ namespace CrewUpload.Schedule
     /// Reads the Survey Schedule's shared folder (pso-master.json, pm-*.json, pso-requests.json,
     /// pso-overrides.json) and answers Crew Upload's questions about it. Read-only: files are opened
     /// for reading with sharing for writers, so the schedule app is never blocked and nothing it owns
-    /// is ever written. Never throws; when the folder cannot be read, Available is false and Message
+    /// is ever written -- except, only when features.scheduleReportStatus is on, the shared
+    /// pso-progress.json through <see cref="MarkReported"/>. Never throws; when the folder cannot be read, Available is false and Message
     /// says so in one sentence.
     /// </summary>
-    public sealed class ScheduleFolderSource : IScheduleSource
+    public sealed class ScheduleFolderSource : IScheduleSource, IScheduleStatusWriter
     {
         public const string UnavailableMessage = "Schedule unavailable. Report can still be entered manually.";
 
@@ -171,6 +172,20 @@ namespace CrewUpload.Schedule
             }
         }
 
+        /// <summary>
+        /// Optional, behind features.scheduleReportStatus: marks the entries as reported in
+        /// pso-progress.json. The only file this assembly ever writes; never a PM file.
+        /// </summary>
+        public bool MarkReported(IEnumerable<string> assignmentIds, string reportId, string activity, out string message)
+        {
+            try { return ProgressWriter.MarkReported(_folder, assignmentIds, reportId, activity, out message); }
+            catch (Exception e) when (!(e is OutOfMemoryException))
+            {
+                message = "The schedule could not be marked: " + e.Message;
+                return false;
+            }
+        }
+
         // ---- the crew, as the hand-off says to reconstruct it: same project, same day ----
 
         /// <summary>
@@ -282,6 +297,12 @@ namespace CrewUpload.Schedule
         }
 
         /// <summary>
+        /// Timestamps stay the exact text the app wrote: it compares them as strings ("a &gt; b"), so
+        /// they must not be turned into dates and back, which would lose their fractions of a second.
+        /// </summary>
+        private static readonly JsonSerializerSettings Settings = new JsonSerializerSettings { DateParseHandling = DateParseHandling.None };
+
+        /// <summary>
         /// readJson(): the file's contents, or null when it is missing or will not parse. A file caught
         /// mid-write is tried again a few times before it counts as unreadable.
         /// </summary>
@@ -297,7 +318,7 @@ namespace CrewUpload.Schedule
                     using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                     using (var r = new StreamReader(fs))
                         text = r.ReadToEnd();
-                    return JsonConvert.DeserializeObject<T>(text);
+                    return JsonConvert.DeserializeObject<T>(text, Settings);
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is JsonException)
                 {
