@@ -111,11 +111,17 @@ namespace CrewUpload.App
             refresh.Click += (s, e) => Reload(null);
             var close = Theme.Button("Close", false);
             close.DialogResult = DialogResult.Cancel;
+            var crew = Theme.Button("Crew && work types...", false);
+            crew.Click += (s, e) =>
+            {
+                using (var f = new CrewSettingsForm(_config, CrewSettingsStore.For(_config), _schedule)) f.ShowDialog(this);
+            };
             var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 8) };
             buttons.Controls.Add(_save);
             buttons.Controls.Add(_active);
             buttons.Controls.Add(refresh);
             buttons.Controls.Add(close);
+            buttons.Controls.Add(crew);
             stack.Controls.Add(buttons, 0, 7);
             stack.SetColumnSpan(buttons, 3);
             CancelButton = close;

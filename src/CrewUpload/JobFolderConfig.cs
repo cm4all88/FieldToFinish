@@ -257,6 +257,10 @@ namespace CrewUpload
             : Path.IsPathRooted(RegistryFile) || ProjectRegistry.IsUnc(RegistryFile) ? RegistryFile
             : Naming.Combine(BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory, RegistryFile, new Dictionary<string, string>());
 
+        /// <summary>crew-settings.json (crew initials, activity mapping), beside the registry in the shared Config folder.</summary>
+        [JsonIgnore]
+        public string CrewSettingsPath => RegistryPath == null ? null : Path.Combine(Path.GetDirectoryName(RegistryPath), CrewSettings.FileName);
+
         [JsonIgnore] public UploadCategory FallbackCategory => Categories.FirstOrDefault(c => c.Fallback) ?? Categories.LastOrDefault();
 
         /// <summary>
