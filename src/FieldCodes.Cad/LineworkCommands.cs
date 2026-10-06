@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -298,6 +298,26 @@ namespace FieldCodes.Cad
             ed.WriteMessage("\nFTFLABELLINE: {0} label(s) placed.\n", placedCount);
         }
 
+        /// <summary>
+        /// What should it say? Asked only where the rules have no answer: a line on a layer
+        /// nobody has configured, or a feature configured without wording. The drafter
+        /// deciding is not FTF guessing -- and it is better than a command that stops dead at
+        /// a crosswalk because nobody has written down what a crosswalk is called.
+        ///
+        /// Nothing is remembered: the wording goes on this label, and the next line asks
+        /// again. Wording that gets typed every day belongs in the rules, where everyone gets
+        /// it.
+        /// </summary>
+        private static string AskForWording(Editor ed)
+        {
+            var options = new PromptStringOptions("\nWhat should it say? (Enter to skip): ");
+            options.AllowSpaces = true;
+            var typed = ed.GetString(options);
+            if (typed.Status != PromptStatus.OK) return null;
+            var text = (typed.StringResult ?? string.Empty).Trim();
+            return text.Length == 0 ? null : text;
+        }
+
         /// <summary>One pick-identify-jig-place cycle. Returns true if a label was
         /// placed. Every refusal explains itself; nothing is ever guessed.</summary>
         private static bool PlaceOneInteractiveLabel(
@@ -379,21 +399,28 @@ namespace FieldCodes.Cad
                 if (byLayer.Count > 0) { candidates = byLayer; how = "layer"; }
             }
 
+            string typedWording = null;
             if (candidates == null)
             {
                 ed.WriteMessage(
-                    "\nNot a configured line feature. Found: layer \"{0}\"{1}{2}{3}. " +
-                    "Nothing was placed.",
+                    "\nNot a configured line feature. Found: layer \"{0}\"{1}{2}{3}.",
                     entity.Layer,
                     string.IsNullOrEmpty(figureName) ? "" : ", figure \"" + figureName + "\"",
                     string.IsNullOrEmpty(trimbleName) ? "" : ", Trimble name \"" + trimbleName + "\"",
                     notes != null && notes.SampleNotes.Count > 0
                         ? ", point notes " + string.Join(" / ", notes.SampleNotes.ToArray())
                         : "");
-                return false;
+
+                typedWording = AskForWording(ed);
+                if (typedWording == null)
+                {
+                    ed.WriteMessage("\nNothing was placed.");
+                    return false;
+                }
+                candidates = new List<LineFeatureRule>();
             }
 
-            var labelText = LineworkCatalog.UnanimousLabel(candidates);
+            var labelText = typedWording ?? LineworkCatalog.UnanimousLabel(candidates);
             if (labelText == null)
             {
                 var descriptions = string.Join(", ", candidates
@@ -402,13 +429,24 @@ namespace FieldCodes.Cad
                     .ToArray());
                 ed.WriteMessage(
                     "\nIdentified, but no single labelling standard applies: {0}. " +
-                    "FTF will not choose silently -- nothing was placed.", descriptions);
-                return false;
+                    "FTF will not choose one silently.", descriptions);
+
+                typedWording = AskForWording(ed);
+                if (typedWording == null)
+                {
+                    ed.WriteMessage("\nNothing was placed.");
+                    return false;
+                }
+                labelText = typedWording;
             }
 
-            var featureName = string.Join(" / ", candidates
-                .Select(c => string.IsNullOrEmpty(c.Name) ? c.Code : c.Name)
-                .Distinct().ToArray());
+            var featureName = candidates.Count == 0
+                ? "typed by hand"
+                : string.Join(" / ", candidates
+                    .Select(c => string.IsNullOrEmpty(c.Name) ? c.Code : c.Name)
+                    .Distinct().ToArray());
+            var featureCode = candidates.Count == 0 ? string.Empty : candidates[0].Code;
+            if (typedWording != null) how = how ?? "typed";
 
             // The label layer: the rule's explicit choice, else the office-standard
             // text layer that actually exists in this drawing, else the default --
@@ -417,7 +455,9 @@ namespace FieldCodes.Cad
             var resolution = LabelLayerResolver.Resolve(entity.Layer, candidates,
                                                         layerCatalog, ls.DefaultLabelLayer);
 
-            var wordings = LineworkCatalog.LabelChoices(candidates);
+            var wordings = typedWording != null
+                ? new List<string> { typedWording }
+                : LineworkCatalog.LabelChoices(candidates);
 
             ed.WriteMessage("\nFeature: {0} ({1})", featureName, how);
             ed.WriteMessage("\nSource layer: {0}", entity.Layer);
@@ -473,7 +513,7 @@ namespace FieldCodes.Cad
                 Ownership.EnsureRegApp(db, tr);
 
                 PlaceLineLabel(db, tr, jig.Plan, labelText, textHeight, styleId,
-                               layerId, layerName, ls.DrawMask, candidates[0].Code,
+                               layerId, layerName, ls.DrawMask, featureCode,
                                rulesVersion, ManualLineLabelMark);
 
                 ed.WriteMessage("\nPlaced \"{0}\" on layer {1}, {2}.",
@@ -483,7 +523,7 @@ namespace FieldCodes.Cad
                 // Span markers ride along: two fence shots noted GATE get their
                 // GATE label centred between them, no extra clicks.
                 PlaceSpanLabels(db, tr, ed, curve, spanMarkers, ls, textHeight,
-                                styleId, layerId, layerName, candidates[0].Code,
+                                styleId, layerId, layerName, featureCode,
                                 rulesVersion);
                 return true;
             }
