@@ -90,7 +90,8 @@ public sealed class DailyReportTests : TestShare
         Assert.EndsWith("%%EOF\n", text);
         Assert.Contains("(TDLE Ph3) Tj", text);
         Assert.Contains("(20260507-JBB-1800-119-STK) Tj", text);
-        Assert.Contains("(Colin Priest / Ryan Meldrum) Tj", text);
+        Assert.Contains("(Crew:) Tj", text);   // three people: the form's boxes stay, everyone is listed
+        Assert.Contains("(Jeff Bearson / Colin Priest / Ryan Meldrum) Tj", text);
         Assert.Contains("(layout curb lines \\(#2\\) for the bus test at Tacoma Dome parking lot.) Tj", text);
         Assert.Contains("DAILY FIELD SURVEYOR\u0092S REPORT", text); // the curly apostrophe in WinAnsi
         // the xref offsets point at the objects
@@ -98,6 +99,17 @@ public sealed class DailyReportTests : TestShare
         Assert.StartsWith("xref", text.Substring(xref));
         var first = text.Substring(xref).Split('\n')[3];
         Assert.StartsWith("1 0 obj", text.Substring(int.Parse(first.Substring(0, 10))));
+    }
+
+    [Fact]
+    public void TwoPersonCrewUsesTheFormsOwnBox()
+    {
+        var r = Sample();
+        r.Crew.RemoveAt(2);
+        var text = Encoding.Latin1.GetString(Filer().Render(r));
+        Assert.Contains("(Colin Priest) Tj", text);
+        Assert.DoesNotContain("(Crew:) Tj", text);
+        Assert.Contains("(Two-Person Crew) Tj", text);
     }
 
     [Fact]

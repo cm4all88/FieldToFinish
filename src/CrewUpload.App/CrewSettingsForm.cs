@@ -23,6 +23,8 @@ namespace CrewUpload.App
         private readonly Label _notice;
         private readonly Button _save;
         private readonly List<ScheduledEmployee> _people;
+        private DataGridViewComboBoxColumn _who;
+        private List<EmployeeChoice> _choices = new List<EmployeeChoice>();
         private CrewSettings _loaded;
 
         public CrewSettingsForm(JobFolderConfig config, CrewSettingsStore store, IScheduleSource schedule)
@@ -31,7 +33,7 @@ namespace CrewUpload.App
             _store = store;
             _schedule = schedule;
             _people = schedule != null && (schedule.Refresh() || schedule.Available)
-                ? schedule.Employees().Where(e => e.Active).OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList()
+                ? schedule.Employees().ToList()
                 : new List<ScheduledEmployee>();
 
             Text = "Crew and work types (PM)";
@@ -55,10 +57,10 @@ namespace CrewUpload.App
             _crew.Columns.Add(new DataGridViewTextBoxColumn { Name = "name", HeaderText = "Name", Width = 200 });
             if (schedule != null)
             {
-                var who = new DataGridViewComboBoxColumn { Name = "schedule", HeaderText = "Schedule person", Width = 230, DisplayMember = "Text", ValueMember = "Id", FlatStyle = FlatStyle.Flat };
-                who.Items.Add(new Choice(string.Empty, "(not linked)"));
-                foreach (var p in _people) who.Items.Add(new Choice(p.Id, p.Name + "  [" + p.Id + "]"));
-                _crew.Columns.Add(who);
+                // The cells hold the person's name (each choice's text is unique); the id is looked up when
+                // saving. Plain text items behave the same on every runtime, unlike DisplayMember binding.
+                _who = new DataGridViewComboBoxColumn { Name = "schedule", HeaderText = "Schedule person", Width = 230, FlatStyle = FlatStyle.Flat };
+                _crew.Columns.Add(_who);
             }
             _crew.Columns.Add(new DataGridViewTextBoxColumn { Name = "user", HeaderText = "Windows sign-in", Width = 140 });
             _crew.Columns.Add(new DataGridViewCheckBoxColumn { Name = "active", HeaderText = "Active", Width = 60 });
@@ -125,13 +127,6 @@ namespace CrewUpload.App
             Reload(null);
         }
 
-        private sealed class Choice
-        {
-            public Choice(string id, string text) { Id = id; Text = text; }
-            public string Id { get; }
-            public string Text { get; }
-        }
-
         private static DataGridView Grid() => new DataGridView
         {
             Dock = DockStyle.Fill, BackgroundColor = Color.White, BorderStyle = BorderStyle.FixedSingle, RowHeadersVisible = false,
@@ -156,19 +151,20 @@ namespace CrewUpload.App
             var s = _loaded ?? new CrewSettings();
 
             _crew.Rows.Clear();
+            if (_who != null)
+            {
+                _choices = EmployeeChoices.Build(_people, s.Members.Select(m => m.ScheduleEmployeeId));
+                _who.Items.Clear();
+                _who.Items.AddRange(_choices.Select(c => (object)c.Display).ToArray());
+                _crew.Rows.Clear(); // changing the items can leave an empty row behind
+            }
             foreach (var m in s.Members.OrderBy(m => m.Initials, StringComparer.Ordinal))
             {
                 var i = _crew.Rows.Add();
                 var row = _crew.Rows[i];
                 row.Cells["initials"].Value = m.Initials;
                 row.Cells["name"].Value = m.Name;
-                if (_schedule != null)
-                {
-                    var cell = (DataGridViewComboBoxCell)row.Cells["schedule"];
-                    if (!string.IsNullOrEmpty(m.ScheduleEmployeeId) && !_people.Any(p => p.Id == m.ScheduleEmployeeId))
-                        cell.Items.Add(new Choice(m.ScheduleEmployeeId, m.ScheduleEmployeeId + " (not in the schedule now)"));
-                    cell.Value = m.ScheduleEmployeeId ?? string.Empty;
-                }
+                if (_schedule != null) row.Cells["schedule"].Value = DisplayOf(m.ScheduleEmployeeId);
                 row.Cells["user"].Value = m.User;
                 row.Cells["active"].Value = m.Active;
                 if (!m.Active) row.DefaultCellStyle.ForeColor = Theme.MediumGray;
@@ -182,20 +178,29 @@ namespace CrewUpload.App
                 _types.Rows.Add(m.WorkType, "(not in job-folders.json)", string.Join(", ", m.Activities));
         }
 
+        private string DisplayOf(string id) =>
+            (_choices.FirstOrDefault(c => c.Id == (id ?? string.Empty)) ?? _choices.FirstOrDefault())?.Display ?? string.Empty;
+
+        private string IdOf(string display)
+        {
+            var c = _choices.FirstOrDefault(x => x.Display == display);
+            return c == null || c.Id.Length == 0 ? null : c.Id;
+        }
+
         private static IEnumerable<string> Activities(CrewSettings s, string code) =>
             s.ActivityMap.Where(m => string.Equals(m.WorkType, code, StringComparison.OrdinalIgnoreCase)).SelectMany(m => m.Activities);
 
         private void AddFromSchedule()
         {
             var listed = new HashSet<string>(_crew.Rows.Cast<DataGridViewRow>().Where(r => !r.IsNewRow)
-                .Select(r => r.Cells["schedule"].Value as string).Where(v => !string.IsNullOrEmpty(v)));
+                .Select(r => IdOf(r.Cells["schedule"].Value as string)).Where(v => !string.IsNullOrEmpty(v)));
             var added = 0;
-            foreach (var p in _people.Where(p => !listed.Contains(p.Id)))
+            foreach (var p in _people.Where(p => p.Active && !listed.Contains(p.Id)))
             {
                 var i = _crew.Rows.Add();
                 var row = _crew.Rows[i];
                 row.Cells["name"].Value = p.Name;
-                row.Cells["schedule"].Value = p.Id;
+                row.Cells["schedule"].Value = DisplayOf(p.Id);
                 row.Cells["active"].Value = true;
                 added++;
             }
@@ -210,7 +215,7 @@ namespace CrewUpload.App
                 if (r.IsNewRow) continue;
                 var initials = CrewSettings.NormalizeInitials(r.Cells["initials"].Value as string);
                 var name = ((r.Cells["name"].Value as string) ?? string.Empty).Trim();
-                var id = _schedule != null ? r.Cells["schedule"].Value as string : null;
+                var id = _schedule != null ? IdOf(r.Cells["schedule"].Value as string) : null;
                 var user = ((r.Cells["user"].Value as string) ?? string.Empty).Trim();
                 if (initials.Length == 0 && name.Length == 0 && string.IsNullOrEmpty(id)) continue;
                 s.Members.Add(new CrewMember

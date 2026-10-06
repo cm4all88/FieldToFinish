@@ -51,6 +51,7 @@ namespace CrewUpload.Reports
                 Row("Data File Name:", r.DataFileName),
                 Row("Control File:", r.ControlFile),
             };
+            if (members.Count > 1) leftRows.Insert(3, Row("Crew:", string.Join(" / ", r.Crew.Select(c => c.Name ?? c.Initials))));
             var rightRows = new List<KeyValuePair<string, string>>
             {
                 Row("Date:", r.Date.ToString("M-d-yy", CultureInfo.InvariantCulture)),
@@ -68,11 +69,13 @@ namespace CrewUpload.Reports
                 {
                     if (leftRows[i].Key == null)
                     {
+                        // The form's own two boxes. A crew of three or more checks neither and lists
+                        // everyone after "Crew:" -- one report for the whole crew, never split.
                         pdf.CheckBox(Left, rowY - 7, members.Count == 0);
                         pdf.Text(Left + 12, rowY, "Solo Crew", 9);
-                        pdf.CheckBox(Left + 70, rowY - 7, members.Count > 0);
-                        pdf.Text(Left + 82, rowY, members.Count > 1 ? "Crew:" : "Two-Person Crew:", 9);
-                        Field(pdf, Left + (members.Count > 1 ? 112 : 160), rowY, 300 - (members.Count > 1 ? 112 : 160), string.Join(" / ", members));
+                        pdf.CheckBox(Left + 70, rowY - 7, members.Count == 1);
+                        pdf.Text(Left + 82, rowY, "Two-Person Crew", 9);
+                        if (members.Count <= 1) Field(pdf, Left + 160, rowY, 140, string.Join(" / ", members));
                     }
                     else Labeled(pdf, Left, rowY, 88, 300, leftRows[i].Key, leftRows[i].Value);
                 }

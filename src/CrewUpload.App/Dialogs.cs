@@ -430,7 +430,16 @@ namespace CrewUpload.App
             close.DialogResult = DialogResult.Cancel;
             buttons.Controls.Add(_save);
             buttons.Controls.Add(close);
-            stack.Controls.Add(buttons, 0, 5);
+            if (config.Features?.DailyReports ?? true)
+            {
+                stack.Controls.Add(MainForm.Caption("Daily reports (admin)"), 0, 5);
+                stack.Controls.Add(new Label
+                {
+                    AutoSize = true, MaximumSize = new Size(700, 0), ForeColor = Theme.MediumGray, Margin = new Padding(3, 8, 3, 3),
+                    Text = (config.DailyReport?.AdminFolder ?? "(not set)") + "\r\nSet by dailyReport.adminFolder in the settings file; change it there to move it.",
+                }, 1, 5);
+            }
+            stack.Controls.Add(buttons, 0, 6);
             stack.SetColumnSpan(buttons, 3);
             CancelButton = close;
 
