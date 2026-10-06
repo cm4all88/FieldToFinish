@@ -80,11 +80,15 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>
-        /// Which layer a mark on this line belongs on. A line drawn to one of the configured
-        /// utility standards gets that standard's text layer, so a hand-placed mark sits with
-        /// the automatic ones. Anything else -- a lot line, a fence, a line from another
-        /// office -- keeps its own layer, and the drafter is told so rather than finding the
-        /// mark somewhere unexpected.
+        /// Which layer a mark on this line belongs on. A tilde is not only a utility thing --
+        /// it goes on paint, a fence, a lot line, anything that runs off the sheet -- so the
+        /// rule has to work for all of them.
+        ///
+        /// A line drawn to one of the configured utility standards gets that standard's text
+        /// layer, so a hand-placed mark sits with the automatic ones. Everything else goes
+        /// through the same resolver the line labels use: the office's own -TEXT-E twin of the
+        /// line's layer when that layer exists in this drawing, and the configured default
+        /// when it does not. Nothing is invented, and the drafter is told which it chose.
         /// </summary>
         private static string TextLayerFor(Database db, Transaction tr, string lineLayer,
                                            FtfSettings settings, Editor ed)
@@ -98,11 +102,11 @@ namespace FieldCodes.Cad
                 return standard.LabelLayer;
             }
 
-            if (lineLayer.IndexOf("-TEXT", StringComparison.OrdinalIgnoreCase) >= 0) return lineLayer;
-
-            ed.WriteMessage("\nFTFTILDE: {0} is not one of the configured utility layers, " +
-                            "so the mark goes on that layer itself.", lineLayer);
-            return lineLayer;
+            var resolution = FieldCodes.Linework.LabelLayerResolver.Resolve(
+                lineLayer, null, FtfLineworkService.LayerNames(db, tr),
+                settings.LineLabels.DefaultLabelLayer);
+            ed.WriteMessage("\nLayer: {0}", resolution.Describe());
+            return resolution.Layer;
         }
 
         private static ObjectId DrawMark(Database db, Transaction tr, FtfSettings settings,
