@@ -43,10 +43,13 @@ namespace CrewUpload
     public sealed class RegistrationChange
     {
         public const string Registered = "registered", Moved = "moved", Deactivated = "inactive", Reactivated = "active";
+        public const string ScheduleLinked = "schedule-linked", ScheduleUnlinked = "schedule-unlinked";
 
         [JsonProperty("change")] public string Change { get; set; }
         [JsonProperty("surveyFolder")] public string SurveyFolder { get; set; }
         [JsonProperty("previousFolder")] public string PreviousFolder { get; set; }
+        [JsonProperty("scheduleProjectId", NullValueHandling = NullValueHandling.Ignore)] public string ScheduleProjectId { get; set; }
+        [JsonProperty("previousScheduleProjectId", NullValueHandling = NullValueHandling.Ignore)] public string PreviousScheduleProjectId { get; set; }
         [JsonProperty("by")] public string By { get; set; }
         [JsonProperty("on")] public DateTime On { get; set; }
     }
@@ -71,6 +74,16 @@ namespace CrewUpload
 
         [JsonProperty("registeredBy")] public string RegisteredBy { get; set; }
         [JsonProperty("registeredOn")] public DateTime RegisteredOn { get; set; }
+
+        /// <summary>
+        /// The Survey Schedule's permanent id for this project ("2l8vhmyoodt"), set by a PM; null when
+        /// not linked. Only ever chosen by a person -- never matched automatically.
+        /// </summary>
+        [JsonProperty("scheduleProjectId", NullValueHandling = NullValueHandling.Ignore)] public string ScheduleProjectId { get; set; }
+
+        /// <summary>The schedule's name for it when it was linked. For display only; the id is the link.</summary>
+        [JsonProperty("scheduleProjectName", NullValueHandling = NullValueHandling.Ignore)] public string ScheduleProjectName { get; set; }
+
         [JsonProperty("history")] public List<RegistrationChange> History { get; set; } = new List<RegistrationChange>();
 
         [JsonIgnore] public string ProjectNumber => Key;
@@ -360,6 +373,30 @@ namespace CrewUpload
                 if (entry.Active == active) return null;
                 entry.Active = active;
                 entry.History.Add(new RegistrationChange { Change = active ? RegistrationChange.Reactivated : RegistrationChange.Deactivated, SurveyFolder = entry.SurveyFolder, By = user, On = now });
+                return entry;
+            });
+        }
+
+        /// <summary>
+        /// Links the project to a Survey Schedule project by the schedule's permanent id, or unlinks it
+        /// (<paramref name="scheduleProjectId"/> null). The name is kept only to show the PM what it is.
+        /// </summary>
+        public RegistrySaveResult LinkSchedule(string projectNumber, string scheduleProjectId, string scheduleProjectName, string user, RegistrySnapshot basis = null)
+        {
+            var key = KeyFor(projectNumber) ?? throw new ArgumentException("'" + projectNumber + "' is not a full project number. Register the 3-4-3 number, like 554-1800-119.");
+            var id = string.IsNullOrWhiteSpace(scheduleProjectId) ? null : scheduleProjectId.Trim();
+            return Save(key, user, basis, (entry, now) =>
+            {
+                if (entry == null) throw new InvalidOperationException(key + " is not registered. Register it before linking it to the schedule.");
+                if (entry.ScheduleProjectId == id && (id == null || entry.ScheduleProjectName == scheduleProjectName)) return null;
+                entry.History.Add(new RegistrationChange
+                {
+                    Change = id == null ? RegistrationChange.ScheduleUnlinked : RegistrationChange.ScheduleLinked,
+                    SurveyFolder = entry.SurveyFolder, ScheduleProjectId = id, PreviousScheduleProjectId = entry.ScheduleProjectId,
+                    By = user, On = now,
+                });
+                entry.ScheduleProjectId = id;
+                entry.ScheduleProjectName = id == null ? null : scheduleProjectName;
                 return entry;
             });
         }

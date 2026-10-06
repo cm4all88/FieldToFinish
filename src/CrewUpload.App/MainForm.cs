@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CrewUpload.Integration;
 
 namespace CrewUpload.App
 {
@@ -46,6 +47,8 @@ namespace CrewUpload.App
 
         private ProjectFolder _project;
         private bool _busy;
+        private IScheduleSource _schedule;
+        private bool _scheduleTried;
 
         public MainForm(JobFolderConfig config, string projectNumber, IList<string> dropped, bool setup = false)
         {
@@ -409,6 +412,19 @@ namespace CrewUpload.App
             }
         }
 
+        /// <summary>
+        /// The Survey Schedule, when the integration is installed and switched on; otherwise null and
+        /// Crew Upload works on its own. Connecting reads nothing: each question reads (with a time limit).
+        /// </summary>
+        private IScheduleSource Schedule()
+        {
+            if (_scheduleTried) return _schedule;
+            _scheduleTried = true;
+            string message;
+            _schedule = ScheduleConnector.Connect(_config, out message);
+            return _schedule;
+        }
+
         private void OpenSettings()
         {
             // Changing where the app looks is for PMs: --setup, and the optional PM list. Anyone can look.
@@ -417,6 +433,7 @@ namespace CrewUpload.App
             {
                 if (form.ShowDialog(this) != DialogResult.OK) return;
                 _projects = new ProjectStore(_config, ProjectRegistry.For(_config));
+                _scheduleTried = false;
                 SetProject(null, "Settings saved. Type the project number and press Enter.");
                 FillProjectList();
                 if (!RegistryReachable())
@@ -437,7 +454,7 @@ namespace CrewUpload.App
                 MessageBox.Show(this, domainUser + " is not on the project manager list in job-folders.json.", "Project setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            using (var form = new ProjectSetupForm(_config, _projects.Registry, _number.Text))
+            using (var form = new ProjectSetupForm(_config, _projects.Registry, _number.Text, Schedule()))
             {
                 form.ShowDialog(this);
                 if (!form.Changed) return;

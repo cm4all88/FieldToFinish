@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using CrewUpload.Integration;
 
 namespace CrewUpload.App
 {
@@ -29,14 +30,19 @@ namespace CrewUpload.App
         private readonly Button _active;
         private readonly ListView _list;
         private readonly CheckBox _showInactive;
+        private readonly IScheduleSource _schedule;
+        private readonly Label _link;
+        private readonly Button _linkButton;
         private RegistrySnapshot _snapshot;
 
         public bool Changed { get; private set; }
 
-        public ProjectSetupForm(JobFolderConfig config, ProjectRegistry registry, string number)
+        /// <param name="schedule">The Survey Schedule, or null when the integration is off or absent (no link row then).</param>
+        public ProjectSetupForm(JobFolderConfig config, ProjectRegistry registry, string number, IScheduleSource schedule = null)
         {
             _config = config;
             _registry = registry;
+            _schedule = schedule;
             Text = "Project setup (PM)";
             Font = Theme.Body(10f);
             ForeColor = Theme.Charcoal;
@@ -82,8 +88,19 @@ namespace CrewUpload.App
             stack.Controls.Add(_uploads, 1, 4);
             stack.SetColumnSpan(_uploads, 2);
 
+            var scheduleLabel = MainForm.Caption("Schedule project");
+            _link = new Label { AutoSize = true, MaximumSize = new Size(600, 0), Margin = new Padding(3, 8, 3, 3) };
+            _linkButton = Theme.Button("Link...", false);
+            _linkButton.Click += (s, e) => LinkSchedule();
+            if (schedule != null)
+            {
+                stack.Controls.Add(scheduleLabel, 0, 5);
+                stack.Controls.Add(_link, 1, 5);
+                stack.Controls.Add(_linkButton, 2, 5);
+            }
+
             _notice = new Label { AutoSize = true, MaximumSize = new Size(900, 0), Margin = new Padding(0, 6, 0, 0) };
-            stack.Controls.Add(_notice, 0, 5);
+            stack.Controls.Add(_notice, 0, 6);
             stack.SetColumnSpan(_notice, 3);
 
             _save = Theme.Button("Register project", true);
@@ -99,14 +116,15 @@ namespace CrewUpload.App
             buttons.Controls.Add(_active);
             buttons.Controls.Add(refresh);
             buttons.Controls.Add(close);
-            stack.Controls.Add(buttons, 0, 6);
+            stack.Controls.Add(buttons, 0, 7);
             stack.SetColumnSpan(buttons, 3);
             CancelButton = close;
 
             _list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, BorderStyle = BorderStyle.FixedSingle };
             _list.Columns.Add("Project", 90);
             _list.Columns.Add("Status", 70);
-            _list.Columns.Add("Survey folder", 520);
+            _list.Columns.Add("Survey folder", schedule != null ? 360 : 520);
+            if (schedule != null) _list.Columns.Add("Schedule project", 160);
             _list.Columns.Add("By", 80);
             _list.Columns.Add("On", 130);
             _list.SelectedIndexChanged += (s, e) => { if (_list.SelectedItems.Count == 1) _number.Text = _list.SelectedItems[0].Text; };
@@ -159,6 +177,7 @@ namespace CrewUpload.App
                 var row = new ListViewItem(r.Key);
                 row.SubItems.Add(r.Active ? "Active" : "Inactive");
                 row.SubItems.Add(r.SurveyFolder);
+                if (_schedule != null) row.SubItems.Add(r.ScheduleProjectId == null ? "" : r.ScheduleProjectName ?? r.ScheduleProjectId);
                 row.SubItems.Add(r.RegisteredBy);
                 row.SubItems.Add(r.RegisteredOn.ToString("yyyy-MM-dd HH:mm"));
                 if (!r.Active) row.ForeColor = Theme.MediumGray;
@@ -189,6 +208,32 @@ namespace CrewUpload.App
             _active.Visible = reg != null;
             _active.Enabled = !blocked;
             _active.Text = reg != null && !reg.Active ? "Reactivate" : "Mark inactive";
+
+            _link.ForeColor = reg?.ScheduleProjectId == null ? Theme.MediumGray : Theme.Charcoal;
+            _link.Text = reg == null ? "Register the project first."
+                : reg.ScheduleProjectId == null ? "Not linked. Crews' reports for it will not be prefilled from the schedule."
+                : (reg.ScheduleProjectName ?? "(schedule project)") + "   [" + reg.ScheduleProjectId + "]";
+            _linkButton.Enabled = !blocked && reg != null;
+            _linkButton.Text = reg?.ScheduleProjectId == null ? "Link..." : "Change link...";
+        }
+
+        private void LinkSchedule()
+        {
+            var reg = Key == null ? null : _snapshot.Get(Key);
+            if (reg == null || _schedule == null) return;
+            if (!_schedule.Refresh() && !_schedule.Available)
+            {
+                Say(_schedule.Message ?? "Schedule unavailable.", true);
+                return;
+            }
+            using (var pick = new SchedulePickForm(Key, _schedule.Projects(), reg.ScheduleProjectId))
+            {
+                if (pick.ShowDialog(this) != DialogResult.OK) return;
+                var chosen = pick.Chosen;
+                if (chosen?.Id == reg.ScheduleProjectId) return;
+                Run(() => _registry.LinkSchedule(Key, chosen?.Id, chosen?.Name, Environment.UserName, _snapshot),
+                    chosen == null ? Key + " unlinked from the schedule." : Key + " linked to schedule project \"" + chosen.Name + "\".");
+            }
         }
 
         private void Choose()
@@ -472,6 +517,112 @@ namespace CrewUpload.App
             Controls.Add(body);
             Controls.Add(head);
             Controls.Add(buttons);
+        }
+    }
+
+    /// <summary>
+    /// Picks the Survey Schedule project a registered project is linked to. Projects whose number is
+    /// exactly this project's are listed first as suggestions, but nothing is chosen until the PM
+    /// picks it. "Not linked" removes a link.
+    /// </summary>
+    internal sealed class SchedulePickForm : Form
+    {
+        private readonly List<ScheduledProject> _all;
+        private readonly HashSet<string> _suggested;
+        private readonly ListView _list;
+        private readonly TextBox _filter;
+        private readonly Button _ok;
+        private const string NotLinked = "(not linked)";
+
+        public ScheduledProject Chosen { get; private set; }
+
+        public SchedulePickForm(string key, IEnumerable<ScheduledProject> projects, string currentId)
+        {
+            _all = (projects ?? Enumerable.Empty<ScheduledProject>()).Where(p => p?.Id != null).ToList();
+            var suggestions = ScheduleLinks.Suggest(key, _all);
+            _suggested = new HashSet<string>(suggestions.Select(p => p.Id));
+
+            Text = "Link " + key + " to the schedule";
+            Font = Theme.Body(10f);
+            ForeColor = Theme.Charcoal;
+            BackColor = Color.White;
+            StartPosition = FormStartPosition.CenterParent;
+            MinimizeBox = MaximizeBox = false;
+            ShowInTaskbar = false;
+            ClientSize = new Size(720, 520);
+
+            var head = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(16, 14, 16, 6) };
+            head.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            head.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            var intro = new Label
+            {
+                AutoSize = true, MaximumSize = new Size(680, 0), Margin = new Padding(0, 0, 0, 8),
+                Text = suggestions.Count == 0
+                    ? "No schedule project carries the number " + key + ". Find it by name, or leave it not linked."
+                    : "Suggested: the schedule project" + (suggestions.Count > 1 ? "s" : "") + " whose name or number is " + key + ". Check it is the right one before linking.",
+            };
+            head.Controls.Add(intro, 0, 0);
+            head.SetColumnSpan(intro, 2);
+            head.Controls.Add(MainForm.Caption("Find"), 0, 1);
+            _filter = new TextBox { Dock = DockStyle.Fill };
+            _filter.TextChanged += (s, e) => Fill(null);
+            head.Controls.Add(_filter, 1, 1);
+
+            _list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, MultiSelect = false, BorderStyle = BorderStyle.FixedSingle };
+            _list.Columns.Add("Schedule project", 430);
+            _list.Columns.Add("Number", 110);
+            _list.Columns.Add("", 120);
+            _list.SelectedIndexChanged += (s, e) => _ok.Enabled = _list.SelectedItems.Count == 1;
+            _list.DoubleClick += (s, e) => { if (_ok.Enabled) Accept(); };
+            var wrap = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 4, 16, 4) };
+            wrap.Controls.Add(_list);
+
+            _ok = Theme.Button("Link", true);
+            _ok.Enabled = false;
+            _ok.Click += (s, e) => Accept();
+            var cancel = Theme.Button("Cancel", false);
+            cancel.DialogResult = DialogResult.Cancel;
+            CancelButton = cancel;
+            var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(16, 6, 16, 12) };
+            buttons.Controls.Add(_ok);
+            buttons.Controls.Add(cancel);
+
+            Controls.Add(wrap);
+            Controls.Add(buttons);
+            Controls.Add(head);
+            Fill(currentId);
+        }
+
+        private void Fill(string select)
+        {
+            var q = _filter.Text.Trim();
+            _list.BeginUpdate();
+            _list.Items.Clear();
+            var none = new ListViewItem(NotLinked) { Tag = null, ForeColor = Theme.MediumGray };
+            none.SubItems.Add("");
+            none.SubItems.Add("removes the link");
+            _list.Items.Add(none);
+            var rows = _all.Where(p => q.Length == 0 || (p.Name ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0
+                                       || (p.JobNumber ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+                .OrderBy(p => _suggested.Contains(p.Id) ? 0 : 1).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+            foreach (var p in rows)
+            {
+                var row = new ListViewItem(p.Name ?? p.Id) { Tag = p };
+                row.SubItems.Add(p.JobNumber ?? "");
+                row.SubItems.Add(_suggested.Contains(p.Id) ? "suggested" : p.Id == select ? "linked now" : "");
+                if (_suggested.Contains(p.Id)) row.Font = Theme.Body(10f, FontStyle.Bold);
+                _list.Items.Add(row);
+                if (p.Id == select) { row.Selected = true; row.EnsureVisible(); } // the existing link only -- never a guess
+            }
+            _list.EndUpdate();
+        }
+
+        private void Accept()
+        {
+            if (_list.SelectedItems.Count != 1) return;
+            Chosen = _list.SelectedItems[0].Tag as ScheduledProject;
+            DialogResult = DialogResult.OK;
+            Close();
         }
     }
 }
