@@ -628,10 +628,19 @@ namespace FtfUiTest
         /// <summary>The whole normal capture: size, type, direction, then the MD and Enter.</summary>
         private static bool Capture(string size, string type, string direction, string md)
         {
-            var found = Choose(size) && Choose(type) && Choose(direction);
+            var found = Pick(size) && Pick(type) && Pick(direction);
             MdText = md;
             PressInMd(Keys.Enter);
             return found;
+        }
+
+        /// <summary>Presses a chooser button, and says what was on offer when it is not there.</summary>
+        private static bool Pick(string text)
+        {
+            if (Choose(text)) return true;
+            Log("   no \"" + text + "\" in the " + OpenChooser + " chooser; it offered: " +
+                string.Join(" ", ChooserButtons.ToArray()));
+            return false;
         }
 
         /// <summary>The words above the chips -- "Pipe 2 of 3" while a slot is open.</summary>
