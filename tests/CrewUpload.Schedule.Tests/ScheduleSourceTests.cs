@@ -37,7 +37,7 @@ namespace CrewUpload.Schedule.Tests
         }
 
         [Fact]
-        public void RangesAreInclusiveAndSkipWeekendsTheyRunAcross()
+        public void RangesAreInclusiveOfEveryDayAsTheBoardDrawsThem()
         {
             using (var f = ScheduleFixture.Standard())
             {
@@ -47,8 +47,8 @@ namespace CrewUpload.Schedule.Tests
                 Assert.Empty(s.WorkFor("jim_martin", new DateTime(2026, 7, 15))); // OFF day: nothing to report
 
                 Assert.Single(s.WorkFor("tim_do", new DateTime(2026, 7, 17)));
-                Assert.Empty(s.WorkFor("tim_do", new DateTime(2026, 7, 18)));
-                Assert.Empty(s.WorkFor("tim_do", new DateTime(2026, 7, 19)));
+                Assert.Single(s.WorkFor("tim_do", new DateTime(2026, 7, 18))); // Fri-Mon entry: the board shows Sat and Sun too
+                Assert.Single(s.WorkFor("tim_do", new DateTime(2026, 7, 19)));
                 Assert.Single(s.WorkFor("tim_do", new DateTime(2026, 7, 20)));
                 Assert.Single(s.WorkFor("tim_do", new DateTime(2026, 7, 25))); // scheduled for the Saturday itself
             }

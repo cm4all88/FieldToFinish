@@ -72,19 +72,18 @@ namespace CrewUpload
         }
 
         /// <summary>
-        /// The work type a Schedule activity maps to, or null. An activity that is exactly a mapped name
-        /// wins; otherwise free text ("Topo, 7:00 start") maps only when exactly one work type's names
-        /// appear in it as whole words. Never guesses beyond the PM's mapping.
+        /// The work type a Schedule activity maps to, or null. Exact only: the activity text, trimmed and
+        /// ignoring case, must be one of the names a PM listed for exactly one work type. Free text
+        /// ("Topo, 7:00 start") is never searched for words -- a wrong work type is worse than none, so
+        /// anything not clearly mapped is left for the crew to choose.
         /// </summary>
         public string WorkTypeFor(string activity)
         {
             var text = (activity ?? string.Empty).Trim();
             if (text.Length == 0) return null;
-            var exact = ActivityMap.FirstOrDefault(m => m.Activities.Any(a => string.Equals((a ?? "").Trim(), text, StringComparison.OrdinalIgnoreCase)));
-            if (exact != null) return exact.WorkType;
-            var hits = ActivityMap.Where(m => m.Activities.Any(a => !string.IsNullOrWhiteSpace(a)
-                    && Regex.IsMatch(text, @"(?<![\p{L}\p{N}])" + Regex.Escape(a.Trim()) + @"(?![\p{L}\p{N}])", RegexOptions.IgnoreCase)))
-                .Select(m => m.WorkType).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var hits = ActivityMap.Where(m => m != null && m.Activities != null && !string.IsNullOrWhiteSpace(m.WorkType)
+                    && m.Activities.Any(a => string.Equals((a ?? string.Empty).Trim(), text, StringComparison.OrdinalIgnoreCase)))
+                .Select(m => m.WorkType.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             return hits.Count == 1 ? hits[0] : null;
         }
 

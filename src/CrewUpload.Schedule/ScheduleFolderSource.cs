@@ -218,17 +218,15 @@ namespace CrewUpload.Schedule
         }
 
         /// <summary>
-        /// start..end inclusive. A range that runs across a weekend does not cover the weekend (the board
-        /// does not draw it, and nobody is scheduled on it); an entry made for a Saturday does.
+        /// start..end inclusive, every day -- weekends too, as the board draws them
+        /// (boardHTML: ds&gt;=a.start&amp;&amp;ds&lt;=a.end for each visible day).
         /// </summary>
         internal static bool Covers(AssignmentRecord a, DateTime day)
         {
             DateTime s, e;
             if (!TryDate(a.Start, out s)) return false;
             if (!TryDate(a.End, out e)) e = s;
-            if (day < s || day > e) return false;
-            if (s == e) return true;
-            return day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday;
+            return day >= s && day <= e;
         }
 
         private static bool TryDate(string s, out DateTime d) =>

@@ -47,10 +47,12 @@ public sealed class CrewSettingsTests : TestShare
     [Theory]
     [InlineData("Topo", "TOPO")]
     [InlineData("topo", "TOPO")]
-    [InlineData("Topo, 7:00 start", "TOPO")]
-    [InlineData("Set control, 7:00 start", "CTRL")]
-    [InlineData("Topo and staking", null)]   // two work types: not a guess the app makes
-    [InlineData("Topographical", null)]       // whole words only
+    [InlineData("  Topographic ", "TOPO")]
+    [InlineData("Topo, 7:00 start", null)]          // comments are never searched for words
+    [InlineData("Set control, 7:00 start", null)]
+    [InlineData("Control", "CTRL")]
+    [InlineData("Topo and staking", null)]
+    [InlineData("Topographical", null)]
     [InlineData("Processing", null)]          // not mapped
     [InlineData("", null)]
     public void MapsActivitiesOnlyAsThePmSaid(string activity, string expected) =>
@@ -58,6 +60,14 @@ public sealed class CrewSettingsTests : TestShare
 
     [Fact]
     public void NothingMapsByDefault() => Assert.Null(new CrewSettings().WorkTypeFor("Topo"));
+
+    [Fact]
+    public void WorksWithAnyCodesInTheListNotJustThePlaceholders()
+    {
+        var s = new CrewSettings { ActivityMap = { new ActivityMapping { WorkType = "STK", Activities = { "Staking" } }, new ActivityMapping { WorkType = "ASBUILT", Activities = { "As-builts" } } } };
+        Assert.Equal("STK", s.WorkTypeFor("staking"));
+        Assert.Equal("ASBUILT", s.WorkTypeFor("As-builts"));
+    }
 
     [Fact]
     public void CatchesBadSettings()
