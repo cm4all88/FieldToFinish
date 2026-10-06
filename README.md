@@ -84,6 +84,13 @@ deleted; *Reactivate* opens one again). Project keys are always `####-###`: `180
 `--setup` can point it at another folder there (a mapped-drive pick is stored as its UNC path); it is
 saved to the job-folders.json the app was started with.
 
+**Project numbers** are prefix-client-task, 3-4-3 (`554-1800-119`), with the client in the middle;
+projects are filed by client first. PMs register the full number. Crews may type the full number or just
+client-task (`1800-119`, as in their download names): one matching registered project is used, several
+are offered as a short list of registered projects to choose from. Names keep using client-task
+(`20261005-JBB-1800-119-TOPO`, `1800-119-20261005-0412.jpg`). The PM's folder picker opens in the
+project's client folder.
+
 **Crew uploads.** The crew types client-task, or drops a named download, and that is all they choose.
 An unregistered project stops with "The PM needs to set the project location"; there is no browsing for
 a destination. Uploads land in the one place the app writes:

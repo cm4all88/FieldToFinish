@@ -5,7 +5,7 @@
   "registryBackups": 5,
   "projectManagers": [],
   "requireUncPaths": true,
-  "projectNumberPattern": "^[0-9]{4}-[0-9]{3}$",
+  "projectNumberPattern": "^([0-9]{3}-)?[0-9]{4}-[0-9]{3}$",
   "unprocessedFolder": "02Field\\01FLD_DR_FN_DCfile\\Unprocessed",
   "downloadName": "{date}-{crew}-{projectNumber}-{workType}",
   "fileName": "{download}-{code}",

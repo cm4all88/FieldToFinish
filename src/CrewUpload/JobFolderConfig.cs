@@ -154,7 +154,7 @@ namespace CrewUpload
         [JsonProperty("requireUncPaths")] public bool RequireUncPaths { get; set; } = true;
 
         /// <summary>A client-task number (1800-119) has to match this before anything is looked up.</summary>
-        [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^[0-9]{4}-[0-9]{3}$";
+        [JsonProperty("projectNumberPattern")] public string ProjectNumberPattern { get; set; } = @"^([0-9]{3}-)?[0-9]{4}-[0-9]{3}$";
 
         /// <summary>
         /// Under the registered base Survey folder, the one place the app writes: each crew download
@@ -236,30 +236,46 @@ namespace CrewUpload
         }
 
         /// <summary>
-        /// Reads a project number as crews and folders write it: 1800-119, 1800-119-141 (with a phase),
-        /// 554-1800-119 (with the office prefix), 554-1800-119-141. Client-task comes back as ####-###:
-        /// zeros are padded on, never dropped, so 1800-011 and 1800-119 stay apart and 1800-11 is the
-        /// same project as 1800-011. The phase is kept as written. False when there is no client-task in it.
+        /// Reads a project number as crews and folders write it. A Parametrix project number is
+        /// prefix-client-task, 3-4-3 (554-1800-119), with the client in the middle; crews often write just
+        /// client-task (1800-119); either may end in a phase (554-1800-119-141, 1800-119-141). Parts come
+        /// back padded -- prefix ###, client ####, task ### -- so zeros are never dropped (1800-011 is
+        /// not 1800-119). Prefix and phase are null when absent. False when there is no client-task.
         /// </summary>
-        public static bool ParseProjectNumber(string number, out string clientTask, out string phase)
+        public static bool ParseProjectNumber(string number, out string prefix, out string clientTask, out string phase)
         {
-            clientTask = null;
-            phase = null;
+            prefix = clientTask = phase = null;
             var parts = Compact(number).Split('-');
-            // Client is the 4-digit part followed by a task of up to 3 digits; a 3-digit part before it
-            // is the office prefix, one after it the phase.
+            // The client is the 4-digit part followed by a task of up to 3 digits. Only a prefix of up to
+            // 3 digits may come before it, and only a phase after the task.
             for (var pass = 0; pass < 2 && clientTask == null; pass++)
-                for (var i = 0; i + 1 < parts.Length; i++)
+                for (var i = 0; i <= 1 && i + 1 < parts.Length; i++)
                 {
+                    if (i == 1 && !Regex.IsMatch(parts[0], "^[0-9]{1,3}$")) continue;
                     var clientOk = pass == 0 ? Regex.IsMatch(parts[i], "^[0-9]{4}$") : Regex.IsMatch(parts[i], "^[0-9]{1,4}$");
                     if (!clientOk || !Regex.IsMatch(parts[i + 1], "^[0-9]{1,3}$")) continue;
                     if (i + 2 < parts.Length && !Regex.IsMatch(parts[i + 2], "^[0-9]{1,4}$")) continue;
                     if (i + 3 < parts.Length) continue;
+                    prefix = i == 1 ? parts[0].PadLeft(3, '0') : null;
                     clientTask = parts[i].PadLeft(4, '0') + "-" + parts[i + 1].PadLeft(3, '0');
                     phase = i + 2 < parts.Length ? parts[i + 2] : null;
                     break;
                 }
             return clientTask != null;
+        }
+
+        public static bool ParseProjectNumber(string number, out string clientTask, out string phase)
+        {
+            string prefix;
+            return ParseProjectNumber(number, out prefix, out clientTask, out phase);
+        }
+
+        /// <summary>The full 3-4-3 number (554-1800-119) when the prefix is there, else client-task (1800-119).</summary>
+        public static string NormalizeFullNumber(string number)
+        {
+            string prefix, clientTask, phase;
+            if (!ParseProjectNumber(number, out prefix, out clientTask, out phase)) return Compact(number);
+            return prefix == null ? clientTask : prefix + "-" + clientTask;
         }
 
         /// <summary>A phase as crews type it: digits only, or null for none.</summary>
@@ -290,11 +306,17 @@ namespace CrewUpload
             return parts.Length == 2 && client.Length > 0 && task.Length > 0;
         }
 
+        /// <summary>
+        /// A full number (554-1800-119) or client-task (1800-119), with or without a phase. Either form
+        /// matching projectNumberPattern is enough, so an older settings file still accepts full numbers.
+        /// </summary>
         public bool IsValidProjectNumber(string number)
         {
-            var n = NormalizeProjectNumber(number);
-            return n.Length > 0 && n.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && n.IndexOfAny(Naming.WindowsInvalid) < 0
-                && Regex.IsMatch(n, ProjectNumberPattern ?? ".+", RegexOptions.IgnoreCase);
+            string prefix, clientTask, phase;
+            if (!ParseProjectNumber(number, out prefix, out clientTask, out phase)) return false;
+            var full = prefix == null ? clientTask : prefix + "-" + clientTask;
+            var pattern = ProjectNumberPattern ?? ".+";
+            return Regex.IsMatch(full, pattern, RegexOptions.IgnoreCase) || Regex.IsMatch(clientTask, pattern, RegexOptions.IgnoreCase);
         }
 
         public static JobFolderConfig Load(string path)

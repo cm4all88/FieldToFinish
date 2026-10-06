@@ -313,23 +313,25 @@ namespace CrewUpload.App
         }
 
         /// <summary>
-        /// Looks the client-task number up in the PM's project list. The crew only picks the project;
-        /// where it goes was set by the PM, and nothing here lets them choose or create a folder.
+        /// Looks the project up in the PM's project list: the full number (554-1800-119) or just
+        /// client-task (1800-119). The crew only picks the project; where it goes was set by the PM, and
+        /// nothing here lets them choose or create a folder.
         /// </summary>
         private void FindProject()
         {
-            // 1800-119-141 typed in one box: the phase goes to its own box.
-            string number, phase;
-            if (JobFolderConfig.ParseProjectNumber(_number.Text, out number, out phase))
+            // 554-1800-119-141 typed in one box: the phase goes to its own box.
+            string prefix, clientTask, phase, number;
+            if (JobFolderConfig.ParseProjectNumber(_number.Text, out prefix, out clientTask, out phase))
             {
                 if (phase != null) _phase.Text = phase;
+                number = prefix == null ? clientTask : prefix + "-" + clientTask;
             }
-            else number = JobFolderConfig.NormalizeProjectNumber(_number.Text);
+            else number = JobFolderConfig.NormalizeFullNumber(_number.Text);
             _number.Text = number;
             if (number.Length == 0) return;
             if (!_config.IsValidProjectNumber(number))
             {
-                SetProject(null, "'" + number + "' is not a client-task number like 1800-119.");
+                SetProject(null, "'" + number + "' is not a project number like 554-1800-119 (or 1800-119).");
                 return;
             }
             if (!RegistryReachable())
@@ -339,14 +341,24 @@ namespace CrewUpload.App
             }
             ProjectFolder found;
             string problem;
+            List<ProjectRegistration> candidates;
             try
             {
                 // Retries a briefly unavailable file a few times before giving up.
-                found = _projects.Find(number, out problem);
+                found = _projects.Find(number, out problem, out candidates);
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is InvalidDataException)
             {
                 SetProject(null, "Cannot read the project list right now. Try again in a minute. (" + e.Message + ")");
+                return;
+            }
+            if (found == null && candidates.Count > 1)
+            {
+                // The same client-task under more than one prefix: the crew picks which registered project.
+                var picked = PickRegistered(number, candidates);
+                if (picked == null) { SetProject(null, problem); return; }
+                _number.Text = picked;
+                FindProject();
                 return;
             }
             if (found == null)
@@ -354,12 +366,47 @@ namespace CrewUpload.App
                 SetProject(null, problem);
                 return;
             }
+            _number.Text = found.Info.FullNumber;
             if (!Directory.Exists(found.Path))
             {
                 SetProject(null, number + " is set up, but its folder " + found.Path + " cannot be found. Ask the PM to check the project location.");
                 return;
             }
             SetProject(found, null);
+        }
+
+        /// <summary>A short list of registered projects to choose from. Only projects; never folders.</summary>
+        private string PickRegistered(string number, IList<ProjectRegistration> candidates)
+        {
+            using (var form = new Form
+            {
+                Text = "Which project is " + number + "?", Font = Theme.Body(10f), ForeColor = Theme.Charcoal, BackColor = Color.White,
+                FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
+                ShowInTaskbar = false, ClientSize = new Size(620, 260),
+            })
+            {
+                var list = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false, Font = Theme.Body(10.5f) };
+                foreach (var c in candidates)
+                    list.Items.Add(c.Key + "    " + _projects.FromRegistration(c).Display);
+                list.SelectedIndex = 0;
+                var ok = Theme.Button("Use this project", true);
+                ok.DialogResult = DialogResult.OK;
+                var cancel = Theme.Button("Cancel", false);
+                cancel.DialogResult = DialogResult.Cancel;
+                var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(8) };
+                buttons.Controls.Add(ok);
+                buttons.Controls.Add(cancel);
+                var head = new Label { Dock = DockStyle.Top, Height = 34, Padding = new Padding(12, 10, 12, 0), Text = number + " is registered under more than one project number. Which one is this download for?" };
+                var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 4, 12, 4) };
+                body.Controls.Add(list);
+                list.DoubleClick += (s, e) => form.DialogResult = DialogResult.OK;
+                form.Controls.Add(body);
+                form.Controls.Add(head);
+                form.Controls.Add(buttons);
+                form.AcceptButton = ok;
+                form.CancelButton = cancel;
+                return form.ShowDialog(this) == DialogResult.OK && list.SelectedIndex >= 0 ? candidates[list.SelectedIndex].Key : null;
+            }
         }
 
         private void OpenSettings()
@@ -407,8 +454,8 @@ namespace CrewUpload.App
             {
                 _projectLabel.Text = project.Display + "     " + project.UploadRoot;
                 _projectLabel.ForeColor = Good;
-                _remembered.Used(project.Info.ProjectNumber);
-                if (!_number.Items.Contains(project.Info.ProjectNumber)) _number.Items.Insert(0, project.Info.ProjectNumber);
+                _remembered.Used(project.Info.FullNumber);
+                if (!_number.Items.Contains(project.Info.FullNumber)) _number.Items.Insert(0, project.Info.FullNumber);
                 Say(Directory.Exists(project.UploadRoot)
                     ? "Project found. Uploads go to its Unprocessed folder."
                     : "Project found. Its Unprocessed folder will be made on the first upload.", Good);
@@ -445,7 +492,7 @@ namespace CrewUpload.App
                 }
                 _work.SelectedItem = work;
             }
-            if (_project == null || !string.Equals(_project.Info.ProjectNumber, parsed.ProjectNumber, StringComparison.OrdinalIgnoreCase))
+            if (_project == null || !string.Equals(_project.Info.ProjectNumber, JobFolderConfig.NormalizeProjectNumber(parsed.ProjectNumber), StringComparison.Ordinal))
             {
                 _number.Text = parsed.ProjectNumber;
                 FindProject();

@@ -73,8 +73,11 @@ namespace CrewUpload
             }
             visit.Crew = m.Groups["crew"].Success ? m.Groups["crew"].Value.ToUpperInvariant() : null;
             visit.WorkType = m.Groups["workType"].Success ? m.Groups["workType"].Value.ToUpperInvariant() : null;
-            string number, phase;
-            if (!JobFolderConfig.ParseProjectNumber(m.Groups["projectNumber"].Value, out number, out phase) || !config.IsValidProjectNumber(number)) return null;
+            string prefix, clientTask, phase;
+            if (!JobFolderConfig.ParseProjectNumber(m.Groups["projectNumber"].Value, out prefix, out clientTask, out phase)) return null;
+            // 1800-119 as crews usually write it, or the full 554-1800-119 when they did.
+            var number = prefix == null ? clientTask : prefix + "-" + clientTask;
+            if (!config.IsValidProjectNumber(number)) return null;
             visit.Phase = phase;
             return new ParsedDownload { FolderName = folderName.Trim(), ProjectNumber = number, Visit = visit };
         }

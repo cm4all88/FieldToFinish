@@ -84,7 +84,7 @@ public sealed class CrewUploadTests : IDisposable
     /// <summary>The PM registers 1521-799 to its Survey folder; the crew then finds it by number.</summary>
     private ProjectFolder Project()
     {
-        Registry().Register("1521-799", SurveyDir(), "pm");
+        Registry().Register("554-1521-799", SurveyDir(), "pm");
         return Store().Find("1521-799")!;
     }
 
@@ -223,7 +223,7 @@ public sealed class CrewUploadTests : IDisposable
     public void APmRegistersTheProjectsSurveyFolderOnce()
     {
         var survey = SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3");
-        Registry().Register("1800-119", survey, "pm1");
+        Registry().Register("554-1800-119", survey, "pm1");
 
         var p = Store().Find("1800-119")!;
         Assert.Equal(survey, p.Path);
@@ -247,8 +247,8 @@ public sealed class CrewUploadTests : IDisposable
     {
         var first = SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3");
         var second = SurveyDir("1800-HDR", "554-1800-119 TDLE Phase 3 (moved)");
-        Registry().Register("1800-119", first, "pm1");
-        Registry().Register("1800-119", second, "pm2");
+        Registry().Register("554-1800-119", first, "pm1");
+        Registry().Register("554-1800-119", second, "pm2");
 
         var reg = Registry().Find("1800-119")!;
         Assert.Equal(second, reg.SurveyFolder);
@@ -261,16 +261,16 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void RegistrationKeepsOtherProjects()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
-        Registry().Register("1711-042", SurveyDir("1711-CityOfOrting", "1711-042 Harman Way"), "pm");
-        Assert.Equal(new[] { "1711-042", "1800-119" }, Registry().All().Select(r => r.ProjectNumber));
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("554-1711-042", SurveyDir("1711-CityOfOrting", "1711-042 Harman Way"), "pm");
+        Assert.Equal(new[] { "554-1711-042", "554-1800-119" }, Registry().All().Select(r => r.ProjectNumber));
     }
 
     [Fact]
     public void OnlyAnExistingFolderCanBeRegisteredAndNothingIsCreated()
     {
         var missing = Path.Combine(_clients, "1800-HDR", "nope", "Survey");
-        Assert.Throws<DirectoryNotFoundException>(() => Registry().Register("1800-119", missing, "pm"));
+        Assert.Throws<DirectoryNotFoundException>(() => Registry().Register("554-1800-119", missing, "pm"));
         Assert.False(Directory.Exists(Path.Combine(_clients, "1800-HDR")));
     }
 
@@ -278,7 +278,7 @@ public sealed class CrewUploadTests : IDisposable
     public void ADriveLetterPathIsRefusedWhenUncIsRequired()
     {
         var registry = new ProjectRegistry(Path.Combine(_root, "r.json"), requireUnc: true);
-        var e = Assert.Throws<ArgumentException>(() => registry.Register("1800-119", SurveyDir(), "pm"));
+        var e = Assert.Throws<ArgumentException>(() => registry.Register("554-1800-119", SurveyDir(), "pm"));
         Assert.Contains("UNC", e.Message);
         Assert.True(ProjectRegistry.IsUnc(@"\\parametrix.com\pmx\PSO\Projects\Clients\1800-HDR\554-1800-119 TDLE Phase 3\99Svcs\Survey"));
         Assert.False(ProjectRegistry.IsUnc(@"U:\PSO\Projects\Clients"));
@@ -321,9 +321,9 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void KeysKeepTheirLeadingZeros()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
-        Registry().Register("1800-011", SurveyDir("1800-HDR", "554-1800-011 Other"), "pm");
-        Assert.Equal(new[] { "1800-011", "1800-119" }, Registry().All().Select(r => r.Key));
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("554-1800-011", SurveyDir("1800-HDR", "554-1800-011 Other"), "pm");
+        Assert.Equal(new[] { "554-1800-011", "554-1800-119" }, Registry().All().Select(r => r.Key));
         Assert.EndsWith("554-1800-011 Other" + Path.DirectorySeparatorChar + "99Svcs" + Path.DirectorySeparatorChar + "Survey", Registry().Find("1800-11")!.SurveyFolder);
     }
 
@@ -331,7 +331,7 @@ public sealed class CrewUploadTests : IDisposable
     public void EverySaveReplacesTheWholeFileAndKeepsFiveBackups()
     {
         for (var i = 0; i < 7; i++)
-            Registry().Register("1800-1" + i.ToString("00"), SurveyDir("1800-HDR", "554-1800-1" + i.ToString("00") + " P"), "pm");
+            Registry().Register("554-1800-1" + i.ToString("00"), SurveyDir("1800-HDR", "554-1800-1" + i.ToString("00") + " P"), "pm");
 
         var registry = Registry();
         var live = registry.Load();
@@ -348,12 +348,12 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void AWriteThatDoesNotReadBackNeverReplacesTheLiveFile()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
         var before = File.ReadAllText(RegistryFile);
 
         var registry = Registry();
         registry.AfterTempWritten = temp => File.WriteAllText(temp, "{ \"projects\": [ broken");
-        Assert.Throws<InvalidDataException>(() => registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm"));
+        Assert.Throws<InvalidDataException>(() => registry.Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm"));
 
         Assert.Equal(before, File.ReadAllText(RegistryFile));
         Assert.False(File.Exists(registry.BackupPath(1)));
@@ -367,11 +367,11 @@ public sealed class CrewUploadTests : IDisposable
         var a = SurveyDir("1800-HDR", "554-1800-119 TDLE");
         var b = SurveyDir("1800-HDR", "554-1800-119 TDLE moved");
         var c = SurveyDir("1800-HDR", "554-1800-119 TDLE elsewhere");
-        Registry().Register("1800-119", a, "pm1");
+        Registry().Register("554-1800-119", a, "pm1");
 
         var myScreen = Registry().Load();               // PM 2 opens setup
-        Registry().Register("1800-119", b, "pm3");      // PM 3 moves it meanwhile
-        var e = Assert.Throws<RegistryConflictException>(() => Registry().Register("1800-119", c, "pm2", myScreen));
+        Registry().Register("554-1800-119", b, "pm3");      // PM 3 moves it meanwhile
+        var e = Assert.Throws<RegistryConflictException>(() => Registry().Register("554-1800-119", c, "pm2", myScreen));
         Assert.Contains("pm3", e.Message);
         Assert.Contains("Refresh", e.Message);
         Assert.Equal(b, Registry().Find("1800-119")!.SurveyFolder);
@@ -380,11 +380,11 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void ChangesToOtherProjectsMeanwhileAreMergedNotLost()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
         var myScreen = Registry().Load();
-        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm3");
+        Registry().Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm3");
 
-        var result = Registry().SetActive("1800-119", false, "pm2", myScreen);
+        var result = Registry().SetActive("554-1800-119", false, "pm2", myScreen);
         Assert.True(result.MergedOtherChanges);
         Assert.NotNull(Registry().Find("1711-042"));
         Assert.False(Registry().Find("1800-119")!.Active);
@@ -399,7 +399,7 @@ public sealed class CrewUploadTests : IDisposable
         {
             var registry = Registry();
             registry.LockWait = TimeSpan.FromSeconds(30); // ten PMs queueing for one lock
-            registry.Register("1800-2" + i.ToString("00"), folders[i], "pm" + i);
+            registry.Register("554-1800-2" + i.ToString("00"), folders[i], "pm" + i);
         });
         var live = Registry().Load();
         Assert.Equal(10, live.Projects.Count);
@@ -409,7 +409,7 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void CrewReadsRideOutABrieflyLockedFile()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
         var held = new FileStream(RegistryFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         var release = Task.Run(async () => { await Task.Delay(120); held.Dispose(); });
         Assert.NotNull(Registry().Find("1800-119"));
@@ -419,14 +419,14 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void ADamagedLiveFileFallsBackToTheLastGoodBackupAndBlocksSaves()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
-        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm");
         File.WriteAllText(RegistryFile, "{ hand edited, oops");
 
         var snapshot = Registry().Load();
         Assert.Equal(Registry().BackupPath(1), snapshot.ReadFromBackup);
-        Assert.NotNull(snapshot.Get("1800-119"));
-        var e = Assert.Throws<InvalidDataException>(() => Registry().Register("1700-001", SurveyDir("1700-X", "1700-001 Y"), "pm"));
+        Assert.NotNull(snapshot.Get("554-1800-119"));
+        var e = Assert.Throws<InvalidDataException>(() => Registry().Register("554-1700-001", SurveyDir("1700-X", "1700-001 Y"), "pm"));
         Assert.Contains("Restore", e.Message);
         Assert.Equal("{ hand edited, oops", File.ReadAllText(RegistryFile));
     }
@@ -444,12 +444,12 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void ALockHeldByAnotherPmIsNeverRemoved()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
         var before = File.ReadAllText(RegistryFile);
         using var held = new FileStream(LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         WriteOwner(@"PMX\pmother", "PC-0099", DateTime.UtcNow.AddSeconds(-5));
 
-        var e = Assert.Throws<RegistryLockedException>(() => Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2"));
+        var e = Assert.Throws<RegistryLockedException>(() => Registry().Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2"));
         Assert.Contains(@"PMX\pmother on PC-0099", e.Message);
         Assert.Contains("try again", e.Message);
         Assert.True(File.Exists(LockFile));
@@ -467,7 +467,7 @@ public sealed class CrewUploadTests : IDisposable
         var registry = Registry();
         registry.StaleLockAfter = TimeSpan.FromMinutes(2);
 
-        var e = Assert.Throws<RegistryLockedException>(() => registry.Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm2"));
+        var e = Assert.Throws<RegistryLockedException>(() => registry.Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm2"));
         Assert.Contains("PC-0042", e.Message);
         Assert.Contains("12 min", e.Message);
         Assert.Contains("never breaks a lock that is still held", e.Message);
@@ -483,7 +483,7 @@ public sealed class CrewUploadTests : IDisposable
         File.WriteAllText(LockFile, "{\"user\":\"pmcrashed\"}");   // the crash left the file behind
         WriteOwner(@"PMX\pmcrashed", "PC-0042", DateTime.UtcNow.AddHours(-3));
 
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm2");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm2");
         Assert.NotNull(Registry().Find("1800-119"));
         var log = Log();
         Assert.Contains("op=\"recover stale registry lock\"", log);
@@ -494,8 +494,8 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void ACleanReleaseIsNotReportedAsStale()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
-        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
         Assert.DoesNotContain("recover stale", Log());
     }
 
@@ -505,7 +505,7 @@ public sealed class CrewUploadTests : IDisposable
         // A folder where the lock file should be: opening it is "access denied" on every attempt,
         // like a share where this user lacks Modify.
         Directory.CreateDirectory(LockFile);
-        var e = Record.Exception(() => Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm"));
+        var e = Record.Exception(() => Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm"));
         Assert.IsType<UnauthorizedAccessException>(e);
         Assert.Contains("check Modify on the folder", Log());
         Assert.False(File.Exists(RegistryFile));
@@ -514,11 +514,11 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void ASharingViolationOnTheSwapIsRetried()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
         var registry = Registry();
         registry.BeforeFileStep = (op, attempt) => { if (op == "replace live registry" && attempt <= 2) throw SharingViolation(); };
 
-        registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        registry.Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
         Assert.NotNull(Registry().Find("1711-042"));
         Assert.Equal(2, Registry().Load().Revision);
         var log = Log();
@@ -533,15 +533,15 @@ public sealed class CrewUploadTests : IDisposable
     [InlineData("replace live registry")]
     public void APersistentShareErrorLeavesTheLiveRegistryExactlyAsItWas(string failingStep)
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
-        Registry().Register("1800-011", SurveyDir("1800-HDR", "554-1800-011 Early"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-011", SurveyDir("1800-HDR", "554-1800-011 Early"), "pm1");
         var folder = Path.GetDirectoryName(RegistryFile)!;
         var before = File.ReadAllText(RegistryFile);
         var backupsBefore = Directory.GetFiles(folder, "*.backup-*").OrderBy(f => f).Select(File.ReadAllText).ToList();
 
         var registry = Registry();
         registry.BeforeFileStep = (op, attempt) => { if (op == failingStep) throw SharingViolation(); };
-        Assert.ThrowsAny<IOException>(() => registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2"));
+        Assert.ThrowsAny<IOException>(() => registry.Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2"));
 
         Assert.Equal(before, File.ReadAllText(RegistryFile));
         Assert.Equal(backupsBefore, Directory.GetFiles(folder, "*.backup-*").OrderBy(f => f).Select(File.ReadAllText).ToList());
@@ -559,24 +559,24 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void AnAntivirusLockOnTheBackupCopyIsRetried()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
         var registry = Registry();
         registry.BeforeFileStep = (op, attempt) =>
         {
             if (op == "copy live registry to backup" && attempt == 1) throw new UnauthorizedAccessException("Access to the path is denied.");
         };
-        registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        registry.Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
         Assert.Contains("\"revision\": 1", File.ReadAllText(registry.BackupPath(1)));
     }
 
     [Fact]
     public void ABackupRotationFailureStillSavesAndKeepsThePreviousVersion()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
         var registry = Registry();
         registry.BeforeFileStep = (op, attempt) => { if (op == "delete oldest backup") throw SharingViolation(); };
 
-        var result = registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        var result = registry.Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
         Assert.NotNull(result.Warning);
         Assert.Equal(2, Registry().Load().Revision);
         var kept = Assert.Single(Directory.GetFiles(Path.GetDirectoryName(RegistryFile)!, "*.backup-new-*"));
@@ -587,7 +587,7 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void AReplaceThatFinishedButLostItsReplyIsNotRetriedIntoAFailure()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm1");
         var registry = Registry();
         var folder = Path.GetDirectoryName(RegistryFile)!;
         registry.BeforeFileStep = (op, attempt) =>
@@ -596,7 +596,7 @@ public sealed class CrewUploadTests : IDisposable
             File.Replace(Directory.GetFiles(folder, "*.tmp-*").Single(), RegistryFile, null); // the server did it ...
             throw new IOException("The specified network name is no longer available.", unchecked((int)0x80070040)); // ... the reply was lost
         };
-        registry.Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
+        registry.Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm2");
         Assert.Equal(2, Registry().Load().Revision);
         Assert.Contains("win32=64", Log());
         Assert.DoesNotContain("\tERROR\t", Log());
@@ -612,32 +612,75 @@ public sealed class CrewUploadTests : IDisposable
     [Fact]
     public void AnInactiveProjectLeavesCrewSelectionButKeepsItsHistory()
     {
-        Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
-        Registry().Register("1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm");
-        Registry().SetActive("1800-119", false, "pm");
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("554-1711-042", SurveyDir("1711-Orting", "1711-042 Harman"), "pm");
+        Registry().SetActive("554-1800-119", false, "pm");
 
         string problem;
         Assert.Null(Store().Find("1800-119", out problem));
         Assert.Contains("inactive", problem);
-        Assert.Equal(new[] { "1711-042" }, Store().ActiveProjects());
+        Assert.Equal(new[] { "554-1711-042" }, Store().ActiveProjects());
         var reg = Registry().Find("1800-119")!;
         Assert.Equal(RegistrationChange.Deactivated, reg.History.Last().Change);
 
-        Registry().SetActive("1800-119", true, "pm");
+        Registry().SetActive("554-1800-119", true, "pm");
         Assert.NotNull(Store().Find("1800-119"));
         Assert.Equal(3, Registry().Find("1800-119")!.History.Count);
     }
 
     [Fact]
-    public void AVersionOneRegistryIsStillRead()
+    public void ThePmRegistersTheFullProjectNumber()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(RegistryFile)!);
-        var survey = SurveyDir("1800-HDR", "554-1800-119 TDLE").Replace("\\", "\\\\");
-        File.WriteAllText(RegistryFile, "{\"version\":\"1\",\"projects\":[{\"client\":\"1800\",\"task\":\"119\",\"surveyFolder\":\"" + survey + "\"}]}");
-        var reg = Registry().Find("1800-119")!;
-        Assert.Equal("1800-119", reg.Key);
-        Assert.True(reg.Active);
+        var e = Assert.Throws<ArgumentException>(() => Registry().Register("1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm"));
+        Assert.Contains("554-1800-119", e.Message);
+        Assert.Equal("554-1800-119", ProjectRegistry.KeyFor(" 554-1800-119 "));
+        Assert.Equal("054-1800-011", ProjectRegistry.KeyFor("54-1800-11"));
+        Assert.Null(ProjectRegistry.KeyFor("1800-119"));
     }
+
+    [Fact]
+    public void CrewsCanTypeJustClientTaskWhenItIsUnique()
+    {
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Assert.Equal("554-1800-119", Store().Find("1800-119")!.Info.FullNumber);
+        Assert.Equal("1800-119", Store().Find("1800-119")!.Info.ProjectNumber); // what goes in names
+        Assert.NotNull(Store().Find("554-1800-119-141"));
+    }
+
+    [Fact]
+    public void TheSameClientTaskUnderTwoPrefixesIsTheCrewsChoiceNotAGuess()
+    {
+        Registry().Register("554-1800-119", SurveyDir("1800-HDR", "554-1800-119 TDLE"), "pm");
+        Registry().Register("553-1800-119", SurveyDir("1800-HDR", "553-1800-119 Other office"), "pm");
+
+        Assert.Null(Store().Find("1800-119", out var problem, out var candidates));
+        Assert.Contains("2 registered projects", problem);
+        Assert.Equal(new[] { "553-1800-119", "554-1800-119" }, candidates.Select(c => c.Key));
+        Assert.Equal("553-1800-119", Store().Find("553-1800-119")!.Info.FullNumber);
+    }
+
+    [Theory]
+    [InlineData("554-1800-119", "554", "1800-119", null)]
+    [InlineData("554-1800-119-141", "554", "1800-119", "141")]
+    [InlineData("1800-119-141", null, "1800-119", "141")]
+    [InlineData("1800-119", null, "1800-119", null)]
+    public void FullNumbersAreThreeFourThree(string typed, string? prefix, string clientTask, string? phase)
+    {
+        Assert.True(JobFolderConfig.ParseProjectNumber(typed, out var p, out var ct, out var ph));
+        Assert.Equal((prefix, clientTask, phase), (p, ct, ph));
+    }
+
+    [Fact]
+    public void AnOlderSettingsFileStillAcceptsFullNumbers()
+    {
+        _config.ProjectNumberPattern = @"^[0-9]{4}-[0-9]{3}$"; // as shipped before 3-4-3 numbers
+        Assert.True(_config.IsValidProjectNumber("554-1800-119"));
+        Assert.True(_config.IsValidProjectNumber("1800-119"));
+    }
+
+    [Fact]
+    public void ADownloadNamedWithTheFullNumberKeepsThePrefix() =>
+        Assert.Equal("554-1800-119", DownloadNames.Parse(_config, "20261005-JBB-554-1800-119-TOPO")!.ProjectNumber);
 
     // ------------------------------------------------------------- classifying
 

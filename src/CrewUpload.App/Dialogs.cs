@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace CrewUpload.App
@@ -59,8 +60,8 @@ namespace CrewUpload.App
             stack.Controls.Add(intro, 0, 0);
             stack.SetColumnSpan(intro, 3);
 
-            stack.Controls.Add(MainForm.Caption("Client-task"), 0, 1);
-            _number = new TextBox { Width = 160, CharacterCasing = CharacterCasing.Upper, Text = JobFolderConfig.NormalizeProjectNumber(number) };
+            stack.Controls.Add(MainForm.Caption("Project number"), 0, 1);
+            _number = new TextBox { Width = 160, CharacterCasing = CharacterCasing.Upper, Text = JobFolderConfig.NormalizeFullNumber(number) };
             _number.TextChanged += (s, e) => { _chosen.Text = string.Empty; ShowState(); };
             stack.Controls.Add(_number, 1, 1);
 
@@ -170,7 +171,7 @@ namespace CrewUpload.App
         {
             var reg = Key == null ? null : _snapshot.Get(Key);
             _current.ForeColor = Theme.Charcoal;
-            _current.Text = Key == null ? "Type a client-task number like 1800-119."
+            _current.Text = Key == null ? "Type the full project number, prefix-client-task, like 554-1800-119."
                 : reg == null ? "Not registered yet -- crews cannot upload to " + Key + "."
                 : reg.SurveyFolder + "\r\n" + (reg.Active ? "Active" : "INACTIVE -- hidden from crews") + ", set by " + reg.RegisteredBy + " on " + reg.RegisteredOn.ToString("yyyy-MM-dd")
                     + (reg.History.Count > 1 ? "  (" + reg.History.Count + " changes in its history)" : string.Empty);
@@ -196,7 +197,7 @@ namespace CrewUpload.App
             var reg = _snapshot.Get(Key);
             using (var dialog = new FolderBrowserDialog { Description = "Choose the base Survey folder for " + Key + " (for example ...\\99Svcs\\Survey)", ShowNewFolderButton = false })
             {
-                var start = reg != null && Directory.Exists(reg.SurveyFolder) ? reg.SurveyFolder : _config.JobsRoot;
+                var start = reg != null && Directory.Exists(reg.SurveyFolder) ? reg.SurveyFolder : StartFolder(Key);
                 if (!string.IsNullOrEmpty(start) && Directory.Exists(start)) dialog.SelectedPath = start;
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
 
@@ -217,6 +218,30 @@ namespace CrewUpload.App
                     return;
                 _chosen.Text = path;
                 ShowState();
+            }
+        }
+
+        /// <summary>
+        /// Where the picker opens for a new registration: projects are filed by client first, so the
+        /// client folder (Clients\1800-...), and inside it the project folder when there is exactly one.
+        /// Only a starting point -- the PM still picks the folder.
+        /// </summary>
+        private string StartFolder(string key)
+        {
+            var root = _config.JobsRoot;
+            try
+            {
+                if (key == null || string.IsNullOrEmpty(root) || !Directory.Exists(root)) return root;
+                var client = key.Split('-')[1];
+                var clients = Directory.GetDirectories(root, client + "*").Where(d => Regex.IsMatch(Path.GetFileName(d), "^" + client + "($|[\\s_-])")).ToList();
+                if (clients.Count != 1) return root;
+                var projects = Directory.GetDirectories(clients[0]).Where(d => ProjectStore.LooksLike(Path.GetFileName(d), key)
+                    && Path.GetFileName(d).StartsWith(key, StringComparison.OrdinalIgnoreCase)).ToList();
+                return projects.Count == 1 ? projects[0] : clients[0];
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                return root;
             }
         }
 

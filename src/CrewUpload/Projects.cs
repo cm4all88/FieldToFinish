@@ -15,6 +15,9 @@ namespace CrewUpload
         /// <summary>Client-task as crews write it: 1800-119. The number in every upload's name.</summary>
         public string ProjectNumber { get; set; }
 
+        /// <summary>The full project number, prefix-client-task: 554-1800-119.</summary>
+        public string FullNumber { get; set; }
+
         /// <summary>The project folder's name above the Survey folder: "554-1800-119 TDLE Phase 3".</summary>
         public string ProjectName { get; set; }
 
@@ -51,8 +54,9 @@ namespace CrewUpload
     /// <summary>One project's registration: client and task, and the base Survey folder the PM picked.</summary>
     public sealed class ProjectRegistration
     {
-        /// <summary>####-###: 1800-119. The registry's key; zeros are kept (1800-011 is not 1800-119).</summary>
+        /// <summary>The full project number, prefix-client-task (554-1800-119): the registry's key. Zeros are kept.</summary>
         [JsonProperty("key")] public string Key { get; set; }
+        [JsonProperty("prefix")] public string Prefix { get; set; }
         [JsonProperty("client")] public string Client { get; set; }
         [JsonProperty("task")] public string Task { get; set; }
 
@@ -70,6 +74,9 @@ namespace CrewUpload
         [JsonProperty("history")] public List<RegistrationChange> History { get; set; } = new List<RegistrationChange>();
 
         [JsonIgnore] public string ProjectNumber => Key;
+
+        /// <summary>1800-119: what crews write in download names.</summary>
+        [JsonIgnore] public string ClientTask => ProjectRegistry.ClientTaskOf(Key);
     }
 
     /// <summary>The registry as read at one moment. Its revision is what a later save is checked against.</summary>
@@ -178,11 +185,15 @@ namespace CrewUpload
         public static bool IsUnc(string path) =>
             !string.IsNullOrEmpty(path) && (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal));
 
+        /// <summary>The registry key: the full 3-4-3 project number (554-1800-119). Null without the prefix.</summary>
         public static string KeyFor(string projectNumber)
         {
-            var key = JobFolderConfig.NormalizeProjectNumber(projectNumber);
-            return Regex.IsMatch(key, "^[0-9]{4}-[0-9]{3}$") ? key : null;
+            var key = JobFolderConfig.NormalizeFullNumber(projectNumber);
+            return Regex.IsMatch(key, "^[0-9]{3}-[0-9]{4}-[0-9]{3}$") ? key : null;
         }
+
+        /// <summary>554-1800-119 -> 1800-119.</summary>
+        public static string ClientTaskOf(string key) => JobFolderConfig.NormalizeProjectNumber(key);
 
         // ------------------------------------------------------------------ reading
 
@@ -221,11 +232,29 @@ namespace CrewUpload
             throw new IOException("The project list " + _path + " could not be read after " + _retries + " tries: " + last?.Message, last);
         }
 
-        /// <summary>The registration for <paramref name="projectNumber"/>, active or not; null when there is none.</summary>
+        /// <summary>
+        /// The registration for <paramref name="projectNumber"/>, active or not: the full number exactly,
+        /// or client-task when exactly one registered project has it. Null otherwise.
+        /// </summary>
         public ProjectRegistration Find(string projectNumber)
         {
+            var matches = Matches(Load(), projectNumber);
+            return matches.Count == 1 ? matches[0] : null;
+        }
+
+        /// <summary>Every registration a number could mean: the one full number, or all with that client-task.</summary>
+        public static List<ProjectRegistration> Matches(RegistrySnapshot snapshot, string projectNumber)
+        {
             var key = KeyFor(projectNumber);
-            return key == null ? null : Load().Get(key);
+            if (key != null)
+            {
+                var exact = snapshot.Get(key);
+                return exact == null ? new List<ProjectRegistration>() : new List<ProjectRegistration> { exact };
+            }
+            string clientTask, phase;
+            if (!JobFolderConfig.ParseProjectNumber(projectNumber, out clientTask, out phase)) return new List<ProjectRegistration>();
+            return snapshot.Projects.Where(p => string.Equals(ClientTaskOf(p.Key), clientTask, StringComparison.Ordinal))
+                .OrderBy(p => p.Key, StringComparer.Ordinal).ToList();
         }
 
         public IReadOnlyList<ProjectRegistration> All() => Load().Projects.OrderBy(p => p.Key, StringComparer.Ordinal).ToList();
@@ -243,14 +272,12 @@ namespace CrewUpload
             try { doc = JsonConvert.DeserializeObject<RegistrySnapshot>(text); }
             catch (JsonException e) { throw new InvalidDataException(where + " is not a readable project list: " + e.Message, e); }
             if (doc == null || doc.Projects == null) throw new InvalidDataException(where + " is empty or not a project list.");
-            // Version 1 files had no key: derive it, padded to ####-###.
-            foreach (var p in doc.Projects.Where(p => p != null && string.IsNullOrEmpty(p.Key)))
-                p.Key = KeyFor((p.Client ?? string.Empty) + "-" + (p.Task ?? string.Empty));
             foreach (var p in doc.Projects.Where(p => p?.Key != null && KeyFor(p.Key) == p.Key))
             {
                 var parts = p.Key.Split('-');
-                p.Client = parts[0];
-                p.Task = parts[1];
+                p.Prefix = parts[0];
+                p.Client = parts[1];
+                p.Task = parts[2];
             }
             var problems = Problems(doc);
             if (problems.Count > 0) throw new InvalidDataException(where + ": " + string.Join(" ", problems));
@@ -262,7 +289,7 @@ namespace CrewUpload
             var problems = new List<string>();
             foreach (var p in doc.Projects)
             {
-                if (p == null || KeyFor(p.Key) != p.Key) problems.Add("Entry '" + p?.Key + "' does not have a ####-### key.");
+                if (p == null || KeyFor(p.Key) != p.Key) problems.Add("Entry '" + p?.Key + "' does not have a full ###-####-### project number.");
                 else if (string.IsNullOrWhiteSpace(p.SurveyFolder)) problems.Add(p.Key + " has no Survey folder.");
             }
             foreach (var g in doc.Projects.Where(p => p != null).GroupBy(p => p.Key, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1))
@@ -298,7 +325,7 @@ namespace CrewUpload
         /// </summary>
         public RegistrySaveResult Register(string projectNumber, string surveyFolder, string user, RegistrySnapshot basis = null)
         {
-            var key = KeyFor(projectNumber) ?? throw new ArgumentException("'" + projectNumber + "' is not a client-task number like 1800-119.");
+            var key = KeyFor(projectNumber) ?? throw new ArgumentException("'" + projectNumber + "' is not a full project number. Register the 3-4-3 number, like 554-1800-119.");
             var folder = (surveyFolder ?? string.Empty).Trim().TrimEnd('\\', '/');
             if (_requireUnc && !IsUnc(folder))
                 throw new ArgumentException(folder + " is not a network (UNC) path. Pick the folder through \\\\parametrix.com\\... rather than a drive letter.");
@@ -310,7 +337,7 @@ namespace CrewUpload
                 if (entry == null)
                 {
                     var parts = key.Split('-');
-                    entry = new ProjectRegistration { Key = key, Client = parts[0], Task = parts[1], SurveyFolder = folder, RegisteredBy = user, RegisteredOn = now };
+                    entry = new ProjectRegistration { Key = key, Prefix = parts[0], Client = parts[1], Task = parts[2], SurveyFolder = folder, RegisteredBy = user, RegisteredOn = now };
                     entry.History.Add(new RegistrationChange { Change = RegistrationChange.Registered, SurveyFolder = folder, By = user, On = now });
                     return entry;
                 }
@@ -326,7 +353,7 @@ namespace CrewUpload
         /// <summary>Makes a project inactive (gone from crew selection, kept with its history) or active again.</summary>
         public RegistrySaveResult SetActive(string projectNumber, bool active, string user, RegistrySnapshot basis = null)
         {
-            var key = KeyFor(projectNumber) ?? throw new ArgumentException("'" + projectNumber + "' is not a client-task number like 1800-119.");
+            var key = KeyFor(projectNumber) ?? throw new ArgumentException("'" + projectNumber + "' is not a full project number. Register the 3-4-3 number, like 554-1800-119.");
             return Save(key, user, basis, (entry, now) =>
             {
                 if (entry == null) throw new InvalidOperationException(key + " is not registered.");
@@ -557,18 +584,43 @@ namespace CrewUpload
         public ProjectRegistry Registry => _registry;
 
         /// <summary>
-        /// The project for crew uploads: registered and active. Null when it is not registered or is
-        /// inactive. <paramref name="problem"/> says which, in words for the crew.
+        /// The project for crew uploads: registered and active. The full number (554-1800-119) finds
+        /// exactly that project; client-task (1800-119) finds it when only one active registered project
+        /// has it, and otherwise leaves <paramref name="candidates"/> for the crew to choose from -- those
+        /// registered projects only, never a folder. <paramref name="problem"/> says why, for the crew.
         /// </summary>
+        public ProjectFolder Find(string projectNumber, out string problem, out List<ProjectRegistration> candidates)
+        {
+            candidates = new List<ProjectRegistration>();
+            if (!_config.IsValidProjectNumber(projectNumber))
+            {
+                problem = "'" + projectNumber + "' is not a project number like 554-1800-119 (or 1800-119).";
+                return null;
+            }
+            var shown = JobFolderConfig.NormalizeFullNumber(projectNumber);
+            var matches = ProjectRegistry.Matches(_registry.Load(), projectNumber);
+            var active = matches.Where(m => m.Active).ToList();
+            if (active.Count == 1)
+            {
+                problem = null;
+                return FromRegistration(active[0]);
+            }
+            if (active.Count > 1)
+            {
+                candidates = active;
+                problem = shown + " matches " + active.Count + " registered projects (" + string.Join(", ", active.Select(a => a.Key)) + "). Pick the right one.";
+                return null;
+            }
+            problem = matches.Count > 0
+                ? shown + " is closed for crew uploads (inactive). Ask the PM if it should be reopened."
+                : shown + " has not been set up for crew uploads yet. The PM needs to set the project location.";
+            return null;
+        }
+
         public ProjectFolder Find(string projectNumber, out string problem)
         {
-            var key = ProjectRegistry.KeyFor(projectNumber);
-            if (key == null) { problem = "'" + projectNumber + "' is not a client-task number like 1800-119."; return null; }
-            var reg = _registry.Load().Get(key);
-            if (reg == null) { problem = key + " has not been set up for crew uploads yet. The PM needs to set the project location."; return null; }
-            if (!reg.Active) { problem = key + " is closed for crew uploads (inactive). Ask the PM if it should be reopened."; return null; }
-            problem = null;
-            return FromRegistration(reg);
+            List<ProjectRegistration> candidates;
+            return Find(projectNumber, out problem, out candidates);
         }
 
         public ProjectFolder Find(string projectNumber)
@@ -577,7 +629,7 @@ namespace CrewUpload
             return Find(projectNumber, out problem);
         }
 
-        /// <summary>The active projects, for the crew's list.</summary>
+        /// <summary>The active projects (full numbers), for the crew's list.</summary>
         public IReadOnlyList<string> ActiveProjects() => _registry.All().Where(r => r.Active).Select(r => r.Key).ToList();
 
         public ProjectFolder FromRegistration(ProjectRegistration reg)
@@ -602,7 +654,7 @@ namespace CrewUpload
             {
                 Path = survey,
                 UploadRoot = Naming.Combine(survey, _config.UnprocessedFolder, new Dictionary<string, string>()),
-                Info = new ProjectInfo { ProjectNumber = number, ProjectName = project ?? number, Client = client },
+                Info = new ProjectInfo { ProjectNumber = reg.ClientTask, FullNumber = number, ProjectName = project ?? number, Client = client },
             };
         }
 
