@@ -27,10 +27,10 @@ that folder's name:
 
 ```
 20260128-JAM-1521-799-TOPO\            {date}-{crew}-{project}-{work type}
-    20260128-JAM-1521-799-TOPO.job      raw data: the download's name
+    20260128-JAM-1521-799-TOPO.job      data files: the download's name
     20260128-JAM-1521-799-TOPO.jxl
     20260128-JAM-1521-799-TOPO-FN.pdf   field notes
-    20260128-JAM-1521-799-TOPO-DR.docx  daily report
+    20260128-JAM-1521-799-TOPO-ASB.pdf  as-built notes
     Photos\IMG_0412.jpg                 photos keep the camera's names
 ```
 
@@ -39,11 +39,9 @@ that folder's name:
    to make the folder from the office layout and a `project.json` holding number, name, client and PM.
 2. **Visit.** Crew initials, field date and work type (TOPO, LINEOUT, STAKE, BNDY, CTRL, ASBLT, ESMT)
    make the download folder's name, shown on the form.
-3. **Drop.** The crew's download folder goes on the **Whole download** box: its name fills in the
-   project, crew, date and work type, and its files are sorted by their suffix (`-FN`, `-DR`), folder
-   (`Photos`) and extension (`.job`, `.jxl`). Crew initials inside the name never decide a type.
-   Loose files go on their own type's box (Raw data, Field notes, Daily report, Photos, Other) and
-   take that type without guessing. Clicking a box opens a picker.
+3. **Drop.** Four boxes -- Photos, Field notes, Data files, As-built notes. Whatever lands on a box
+   is that type, files or whole folders. A folder already named like `20260128-JAM-1521-799-TOPO`
+   fills in the project, crew, date and work type from its name. Clicking a box opens a picker.
 4. **Check.** Each file shows its type and new name before anything is copied; dropping it on another
    box, or changing its Type, renames it.
 5. **Upload.** The download lands in `[job]\Survey\Field\Downloads\20260128-JAM-1521-799-TOPO\`.
@@ -51,7 +49,7 @@ that folder's name:
    becomes `-FN-2`); files already in the job are skipped, so dropping the folder again after adding
    photos only copies the new photos. Every upload is logged in `Survey\Field\upload-log.csv`.
 
-**New daily report** and **New field notes** start a document from `config\templates\`, already named
+**New field notes** and **New as-built notes** start a document from `config\templates\`, already named
 for the visit and in its download folder; **Type field notes** saves typed notes the same way.
 
 The window follows the Parametrix Brand Guide (Nov 2023): the primary logo on a white header, charcoal

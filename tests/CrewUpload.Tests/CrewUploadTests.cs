@@ -43,7 +43,7 @@ public sealed class CrewUploadTests : IDisposable
     {
         CardFile(Download + @"\Photos\IMG_0412.JPG", "p1");
         CardFile(Download + @"\Photos\IMG_0413.JPG", "p2");
-        CardFile(Download + @"\" + Download + "-DR.docx", "dr");
+        CardFile(Download + @"\" + Download + "-ASB.pdf", "asb");
         CardFile(Download + @"\" + Download + "-FN.pdf", "fn");
         CardFile(Download + @"\" + Download + ".job", "job");
         CardFile(Download + @"\" + Download + ".jxl", "jxl");
@@ -178,11 +178,11 @@ public sealed class CrewUploadTests : IDisposable
     [InlineData("IMG_0412.JPG", "photos")]
     [InlineData("Field Notes 01-28.pdf", "notes")]
     [InlineData("JAM FN.pdf", "notes")]
-    [InlineData("Daily Report.docx", "report")]
-    [InlineData("TOPO.job", "rawdata")]
-    [InlineData("points.csv", "rawdata")]
-    [InlineData("sketch.pdf", "other")]
-    [InlineData("drawing.pdf", "other")]
+    [InlineData("As-Built Notes.pdf", "asbuilt")]
+    [InlineData("asbuilt.pdf", "asbuilt")]
+    [InlineData("TOPO.job", "data")]
+    [InlineData("points.csv", "data")]
+    [InlineData("drawing.pdf", "data")]
     public void ClassifiesByNameThenExtension(string file, string key) =>
         Assert.Equal(key, new UploadPlanner(_config).Classify(file).Key);
 
@@ -191,24 +191,24 @@ public sealed class CrewUploadTests : IDisposable
     {
         var items = new UploadPlanner(_config).Collect(new[] { CrewDownload() });
         var types = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => i.Category!.Key);
-        Assert.Equal("report", types[Download + "-DR.docx"]);
+        Assert.Equal("asbuilt", types[Download + "-ASB.pdf"]);
         Assert.Equal("notes", types[Download + "-FN.pdf"]);
-        Assert.Equal("rawdata", types[Download + ".job"]);
-        Assert.Equal("rawdata", types[Download + ".jxl"]);
+        Assert.Equal("data", types[Download + ".job"]);
+        Assert.Equal("data", types[Download + ".jxl"]);
         Assert.Equal("photos", types["IMG_0412.JPG"]);
     }
 
     [Fact]
     public void CrewInitialsInTheDownloadNameNeverDecideTheType()
     {
-        // A crew whose initials are "DR" must not turn every file into a daily report.
-        const string dl = "20260128-DR-1521-799-TOPO";
+        // A crew whose initials are "FN" must not turn every file into field notes.
+        const string dl = "20260128-FN-1521-799-TOPO";
         CardFile(dl + @"\" + dl + ".job");
-        CardFile(dl + @"\" + dl + "-FN.pdf");
+        CardFile(dl + @"\" + dl + "-ASB.pdf");
         var items = new UploadPlanner(_config).Collect(new[] { Path.Combine(_card, dl) });
         var types = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => i.Category!.Key);
-        Assert.Equal("rawdata", types[dl + ".job"]);
-        Assert.Equal("notes", types[dl + "-FN.pdf"]);
+        Assert.Equal("data", types[dl + ".job"]);
+        Assert.Equal("asbuilt", types[dl + "-ASB.pdf"]);
     }
 
     [Fact]
@@ -241,7 +241,7 @@ public sealed class CrewUploadTests : IDisposable
 
         var to = items.ToDictionary(i => Path.GetFileName(i.SourcePath), i => Rel(p, i.Destination!));
         var dl = @"Survey\Field\Downloads\" + Download + @"\";
-        Assert.Equal(dl + Download + "-DR.docx", to[Download + "-DR.docx"]);
+        Assert.Equal(dl + Download + "-ASB.pdf", to[Download + "-ASB.pdf"]);
         Assert.Equal(dl + Download + "-FN.pdf", to[Download + "-FN.pdf"]);
         Assert.Equal(dl + Download + ".job", to[Download + ".job"]);
         Assert.Equal(dl + Download + ".jxl", to[Download + ".jxl"]);
@@ -254,16 +254,16 @@ public sealed class CrewUploadTests : IDisposable
         var p = NewProject();
         CardFile("notes.pdf");
         CardFile("Job001.job");
-        CardFile("scan.pdf");
+        CardFile("asbuilt.pdf");
         var planner = new UploadPlanner(_config);
         var items = planner.Collect(Directory.GetFiles(_card).OrderBy(f => f));
         planner.Assign(p, items, new FieldVisit { Crew = "cmm", Date = new DateTime(2026, 10, 6), WorkType = "LINEOUT" });
 
         Assert.Equal(new[]
         {
+            "20261006-CMM-1521-799-LINEOUT-ASB.pdf",
             "20261006-CMM-1521-799-LINEOUT.job",
             "20261006-CMM-1521-799-LINEOUT-FN.pdf",
-            "20261006-CMM-1521-799-LINEOUT-scan.pdf",
         }, items.Select(i => Path.GetFileName(i.Destination)));
     }
 
@@ -287,11 +287,11 @@ public sealed class CrewUploadTests : IDisposable
         var planner = new UploadPlanner(_config);
         var items = planner.Collect(new[] { Path.Combine(_card, "scan.pdf") });
         planner.Assign(p, items, Visit);
-        Assert.Equal(Download + "-scan.pdf", Path.GetFileName(items[0].Destination));
+        Assert.Equal(Download + ".pdf", Path.GetFileName(items[0].Destination));
 
-        items[0].Category = _config.Category("report");
+        items[0].Category = _config.Category("asbuilt");
         planner.Assign(p, items, Visit);
-        Assert.Equal(Download + "-DR.pdf", Path.GetFileName(items[0].Destination));
+        Assert.Equal(Download + "-ASB.pdf", Path.GetFileName(items[0].Destination));
     }
 
     [Theory]
@@ -364,15 +364,15 @@ public sealed class CrewUploadTests : IDisposable
     // ---------------------------------------------------------------- documents
 
     [Fact]
-    public void NewDailyReportFromTemplateIsNamedForTheVisit()
+    public void NewAsBuiltNotesFromTemplateAreNamedForTheVisit()
     {
         var p = NewProject();
         Directory.CreateDirectory(Path.Combine(_root, "templates"));
-        File.WriteAllText(Path.Combine(_root, "templates", "Daily Report.docx"), "template");
-        var doc = _config.Documents.First(d => d.Category == "report");
+        File.WriteAllText(Path.Combine(_root, "templates", "As-Built Notes.docx"), "template");
+        var doc = _config.Documents.First(d => d.Category == "asbuilt");
 
         var path = new DocumentMaker(_config).Create(p, doc, Visit);
-        Assert.Equal(@"Survey\Field\Downloads\" + Download + @"\" + Download + "-DR.docx", Rel(p, path));
+        Assert.Equal(@"Survey\Field\Downloads\" + Download + @"\" + Download + "-ASB.docx", Rel(p, path));
         Assert.Equal("template", File.ReadAllText(path));
     }
 

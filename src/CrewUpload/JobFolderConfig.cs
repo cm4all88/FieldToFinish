@@ -20,7 +20,7 @@ namespace CrewUpload
     }
 
     /// <summary>
-    /// One kind of file inside a crew download: raw data, field notes, daily report, photos.
+    /// One kind of file inside a crew download: photos, field notes, data files, as-built notes.
     /// Decides where in the download folder it goes and the suffix on its name.
     /// </summary>
     public sealed class UploadCategory
@@ -307,10 +307,10 @@ namespace CrewUpload
                 {
                     new UploadCategory
                     {
-                        // 20260128-JAM-1521-799-TOPO.job / .jxl: the data carries the download's own name.
-                        Key = "rawdata", Name = "Raw data", Code = "", Color = "#0073BB", Folder = "", FileName = "{download}",
-                        Keywords = { "raw", "raw data", "rawdata" },
-                        Extensions = { ".job", ".jxl", ".raw", ".rw5", ".dc", ".t01", ".t02", ".t04", ".dat", ".fbk", ".gsi", ".sdr", ".crd", ".csv", ".pnt", ".tsj", ".jbk" },
+                        // Photos keep the camera's names inside the download's Photos folder.
+                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{original}",
+                        Keywords = { "photo", "photos", "pics", "pictures", "picture" },
+                        Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
                     },
                     new UploadCategory
                     {
@@ -319,19 +319,15 @@ namespace CrewUpload
                     },
                     new UploadCategory
                     {
-                        Key = "report", Name = "Daily report", Code = "DR", Color = "#F36E21", Folder = "",
-                        Keywords = { "dr", "daily report", "daily", "dailyreport" },
+                        // 20260128-JAM-1521-799-TOPO.job / .jxl: the data carries the download's own name.
+                        Key = "data", Name = "Data files", Code = "", Color = "#0073BB", Folder = "", FileName = "{download}", Fallback = true,
+                        Keywords = { "raw", "raw data", "rawdata", "data" },
+                        Extensions = { ".job", ".jxl", ".raw", ".rw5", ".dc", ".t01", ".t02", ".t04", ".dat", ".fbk", ".gsi", ".sdr", ".crd", ".csv", ".pnt", ".tsj", ".jbk" },
                     },
                     new UploadCategory
                     {
-                        // Photos keep the camera's names inside the download's Photos folder.
-                        Key = "photos", Name = "Photos", Code = "PHOTO", Color = "#FCC214", Folder = "Photos", FileName = "{original}",
-                        Keywords = { "photo", "photos", "pics", "pictures", "picture" },
-                        Extensions = { ".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".bmp", ".tif", ".tiff", ".mp4", ".mov" },
-                    },
-                    new UploadCategory
-                    {
-                        Key = "other", Name = "Other", Code = "", Color = "#B3B4B5", Folder = "", FileName = "{download}-{original}", Fallback = true,
+                        Key = "asbuilt", Name = "As-built notes", Code = "ASB", Color = "#F36E21", Folder = "",
+                        Keywords = { "asb", "asbuilt", "as built", "asbuilts", "as builts" },
                     },
                 },
                 Branding = new Branding
@@ -341,8 +337,8 @@ namespace CrewUpload
                 },
                 Documents = new List<DocumentTemplate>
                 {
-                    new DocumentTemplate { Name = "New daily report", Category = "report", Template = @"templates\Daily Report.docx" },
                     new DocumentTemplate { Name = "New field notes", Category = "notes", Template = @"templates\Field Notes.docx" },
+                    new DocumentTemplate { Name = "New as-built notes", Category = "asbuilt", Template = @"templates\As-Built Notes.docx" },
                 },
             };
         }

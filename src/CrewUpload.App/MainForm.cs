@@ -107,17 +107,11 @@ namespace CrewUpload.App
             top.Controls.Add(_downloadLabel, 1, 3);
             top.SetColumnSpan(_downloadLabel, 5);
 
-            // ---- the whole download, sorted for them, then one box per type: the box decides
-            // the type, nothing is guessed
-            var boxes = new TableLayoutPanel { Dock = DockStyle.Top, Height = 128, ColumnCount = _config.Categories.Count + 1, RowCount = 1, Padding = new Padding(9, 0, 9, 0) };
-            boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 200f / (_config.Categories.Count + 2)));
-            var whole = new DropBox(null, "Whole download", "the crew's folder -- sorted for you", Theme.Charcoal);
-            whole.FilesDropped += (b, paths) => { if (!_busy) AddPaths(paths); };
-            whole.Browse += b => BrowseFolder();
-            boxes.Controls.Add(whole);
+            // ---- one box per type: the box decides the type, nothing is guessed
+            var boxes = new TableLayoutPanel { Dock = DockStyle.Top, Height = 128, ColumnCount = _config.Categories.Count, RowCount = 1, Padding = new Padding(9, 0, 9, 0) };
             foreach (var category in _config.Categories)
             {
-                boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / (_config.Categories.Count + 2)));
+                boxes.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / _config.Categories.Count));
                 var box = new DropBox(category);
                 box.FilesDropped += (b, paths) => { if (!_busy) AddPaths(paths, b.Category); };
                 box.Browse += b => Browse(b.Category);
@@ -243,7 +237,7 @@ namespace CrewUpload.App
             if (dropped != null && dropped.Count > 0) Shown += (s, e) => AddPaths(dropped);
         }
 
-        private const string HelpText = "Drop the crew's download folder on the first box -- it reads the project, crew, date and work type from its name. Or drop files on their own type's box.";
+        private const string HelpText = "Drop each kind of file on its box -- a folder works too. A folder named like 20260128-JAM-1521-799-TOPO fills in the project, crew, date and work type.";
 
         /// <summary>What the form says this download is; null until crew and work type are filled in.</summary>
         private FieldVisit Visit
@@ -325,13 +319,6 @@ namespace CrewUpload.App
 
         // ------------------------------------------------------------------ dropping
 
-        private void BrowseFolder()
-        {
-            if (_busy) return;
-            using (var dialog = new FolderBrowserDialog { Description = "Choose the crew's download folder", ShowNewFolderButton = false })
-                if (dialog.ShowDialog(this) == DialogResult.OK) AddPaths(new[] { dialog.SelectedPath });
-        }
-
         /// <summary>
         /// A dropped download folder named 20260128-JAM-1521-799-TOPO fills in the project, crew,
         /// date and work type, so the crew types nothing.
@@ -370,13 +357,13 @@ namespace CrewUpload.App
         /// <summary>
         /// Adds files to the list. With a category (dropped on its box) they are that type; a file
         /// already in the list that is dropped on another box changes to that type. Without one
-        /// (the whole-download box, the command line) the type is guessed from names, folders and
-        /// extensions, and an already-named download folder fills in the form.
+        /// (the command line) the type is guessed from names, folders and extensions. A folder
+        /// already named as a download fills in the form either way.
         /// </summary>
         private void AddPaths(IEnumerable<string> paths, UploadCategory category = null)
         {
             paths = paths.ToList();
-            if (category == null) ReadDownloadName(paths);
+            ReadDownloadName(paths);
             List<UploadItem> found;
             try
             {

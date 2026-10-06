@@ -129,23 +129,32 @@ namespace CrewUpload
         }
 
         /// <summary>
+        /// The category whose longest keyword appears in the name, so "as-built notes" is as-built
+        /// notes, not field notes, whatever order the categories are listed in.
+        /// </summary>
+        private UploadCategory ByKeyword(string name) =>
+            _config.Categories
+                .SelectMany(c => c.Keywords.Where(k => Naming.HasWord(name, k)).Select(k => new { c, k.Length }))
+                .OrderByDescending(x => x.Length)
+                .Select(x => x.c)
+                .FirstOrDefault();
+
+        /// <summary>
         /// The category for a file: a keyword in its own name first, then in the folders it came
-        /// in (nearest first), then its extension, then the fallback. Categories are tried in
-        /// config order, so the more specific ones go first.
+        /// in (nearest first), then its extension, then the fallback.
         /// </summary>
         public UploadCategory Classify(string fileName, IList<string> folderHints = null, string namePrefix = null)
         {
             var bare = Path.GetFileNameWithoutExtension(fileName);
             if (!string.IsNullOrEmpty(namePrefix) && bare.StartsWith(namePrefix, StringComparison.OrdinalIgnoreCase))
                 bare = bare.Substring(namePrefix.Length);
-            var byName = _config.Categories.FirstOrDefault(c => c.Keywords.Any(k => Naming.HasWord(bare, k)));
+            var byName = ByKeyword(bare);
             if (byName != null) return byName;
 
             if (folderHints != null)
                 for (var i = folderHints.Count - 1; i >= 0; i--)
                 {
-                    var hint = folderHints[i];
-                    var byFolder = _config.Categories.FirstOrDefault(c => c.Keywords.Any(k => Naming.HasWord(hint, k)));
+                    var byFolder = ByKeyword(folderHints[i]);
                     if (byFolder != null) return byFolder;
                 }
 

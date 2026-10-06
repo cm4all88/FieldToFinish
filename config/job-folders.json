@@ -51,74 +51,6 @@
   ],
   "categories": [
     {
-      "key": "rawdata",
-      "name": "Raw data",
-      "code": "",
-      "folder": "",
-      "keywords": [
-        "raw",
-        "raw data",
-        "rawdata"
-      ],
-      "extensions": [
-        ".job",
-        ".jxl",
-        ".raw",
-        ".rw5",
-        ".dc",
-        ".t01",
-        ".t02",
-        ".t04",
-        ".dat",
-        ".fbk",
-        ".gsi",
-        ".sdr",
-        ".crd",
-        ".csv",
-        ".pnt",
-        ".tsj",
-        ".jbk"
-      ],
-      "fileName": "{download}",
-      "fallback": false,
-      "color": "#0073BB"
-    },
-    {
-      "key": "notes",
-      "name": "Field notes",
-      "code": "FN",
-      "folder": "",
-      "keywords": [
-        "fn",
-        "field notes",
-        "field note",
-        "fieldnotes",
-        "notes",
-        "fieldbook",
-        "field book"
-      ],
-      "extensions": [],
-      "fileName": null,
-      "fallback": false,
-      "color": "#3FB549"
-    },
-    {
-      "key": "report",
-      "name": "Daily report",
-      "code": "DR",
-      "folder": "",
-      "keywords": [
-        "dr",
-        "daily report",
-        "daily",
-        "dailyreport"
-      ],
-      "extensions": [],
-      "fileName": null,
-      "fallback": false,
-      "color": "#F36E21"
-    },
-    {
       "key": "photos",
       "name": "Photos",
       "code": "PHOTO",
@@ -148,27 +80,86 @@
       "color": "#FCC214"
     },
     {
-      "key": "other",
-      "name": "Other",
+      "key": "notes",
+      "name": "Field notes",
+      "code": "FN",
+      "folder": "",
+      "keywords": [
+        "fn",
+        "field notes",
+        "field note",
+        "fieldnotes",
+        "notes",
+        "fieldbook",
+        "field book"
+      ],
+      "extensions": [],
+      "fileName": null,
+      "fallback": false,
+      "color": "#3FB549"
+    },
+    {
+      "key": "data",
+      "name": "Data files",
       "code": "",
       "folder": "",
-      "keywords": [],
-      "extensions": [],
-      "fileName": "{download}-{original}",
+      "keywords": [
+        "raw",
+        "raw data",
+        "rawdata",
+        "data"
+      ],
+      "extensions": [
+        ".job",
+        ".jxl",
+        ".raw",
+        ".rw5",
+        ".dc",
+        ".t01",
+        ".t02",
+        ".t04",
+        ".dat",
+        ".fbk",
+        ".gsi",
+        ".sdr",
+        ".crd",
+        ".csv",
+        ".pnt",
+        ".tsj",
+        ".jbk"
+      ],
+      "fileName": "{download}",
       "fallback": true,
-      "color": "#B3B4B5"
+      "color": "#0073BB"
+    },
+    {
+      "key": "asbuilt",
+      "name": "As-built notes",
+      "code": "ASB",
+      "folder": "",
+      "keywords": [
+        "asb",
+        "asbuilt",
+        "as built",
+        "asbuilts",
+        "as builts"
+      ],
+      "extensions": [],
+      "fileName": null,
+      "fallback": false,
+      "color": "#F36E21"
     }
   ],
   "documents": [
     {
-      "name": "New daily report",
-      "category": "report",
-      "template": "templates\\Daily Report.docx"
-    },
-    {
       "name": "New field notes",
       "category": "notes",
       "template": "templates\\Field Notes.docx"
+    },
+    {
+      "name": "New as-built notes",
+      "category": "asbuilt",
+      "template": "templates\\As-Built Notes.docx"
     }
   ],
   "logFile": "Survey\\Field\\upload-log.csv",
