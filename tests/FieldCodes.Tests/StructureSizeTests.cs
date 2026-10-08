@@ -31,10 +31,10 @@ public sealed class StructureSizeTests
         var s = Structure("PT 1045 SDMH\n12 RCP N 6.41");
         var project = new UtilityProject();
         project.Structures.Add(s);
-        Assert.Equal("SDMH 1045", UtilityLabelFormatter.StructureLabel(project, s, settings)[0]);   // no size, nothing added
+        Assert.Equal("SDMH #1045", UtilityLabelFormatter.StructureLabel(project, s, settings)[0]);   // no size, nothing added
 
         s.EnteredInsideWidthIn = 48;
-        Assert.Equal("SDMH 1045 48\"", UtilityLabelFormatter.StructureLabel(project, s, settings)[0]);
+        Assert.Equal("SDMH #1045 48\"", UtilityLabelFormatter.StructureLabel(project, s, settings)[0]);
     }
 
     [Fact]

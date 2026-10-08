@@ -241,7 +241,7 @@ public sealed class DipNetworkWalkTests
         Assert.Equal("24\"x36\"", StructureDimensions.SizeText(s, settings));
         Assert.Equal("CB 1047", s.Label);
         Assert.Equal("Catch basins and inlets", settings.PipeChoicesFor(s.EffectiveCode, s.System).RuleName);
-        Assert.StartsWith("CB 1047", UtilityLabelFormatter.StructureLabel(new UtilityProject { Structures = { s } }, s, settings)[0]);
+        Assert.StartsWith("CB #1047", UtilityLabelFormatter.StructureLabel(new UtilityProject { Structures = { s } }, s, settings)[0]);
 
         // The field observation is untouched.
         Assert.Equal("SDMH", s.Field.FieldCode);

@@ -344,7 +344,7 @@ namespace FieldCodes.Settings
             PipeLabelFormat = "{size} {material} {system}[ @ {slope}]";
             OutsideLimitsStubFt = 5.0;
             OutsideLimitsMark = "~";
-            StructureHeaderFormat = "{code} {number}[ {size}]";
+            StructureHeaderFormat = "{code} #{number}[ {size}]";
             RimLineFormat = "RIM = {rim}";
             // As the office writes a pipe on a structure callout: 6" CONC (N) IE = 154.35'
             PipeLineFormat = "{size} {material} ({direction})[ {role}] {prefix} = {elevation}'";

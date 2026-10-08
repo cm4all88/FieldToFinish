@@ -1208,7 +1208,7 @@ namespace FtfUiTest
             add("diameter on the label", () =>
             {
                 Check(S("1045").EnteredInsideWidthIn == 48, "diameter 48 saved");
-                Check(Field<TextBox>("_labelPreview").Text.StartsWith("SDMH 1045 48\""), "label header reads SDMH 1045 48\"");
+                Check(Field<TextBox>("_labelPreview").Text.StartsWith("SDMH #1045 48\""), "label header reads SDMH #1045 48\"");
             }, 3500);
 
             // Finding where one pipe runs is on the pipe's own card now, not in a section below.

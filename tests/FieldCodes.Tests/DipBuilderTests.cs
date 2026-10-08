@@ -463,7 +463,7 @@ public sealed class DipBuilderTests
 
         Assert.Equal(new[]
         {
-            "SDMH 1045",
+            "SDMH #1045",
             "RIM = 328.42",
             "8\" PVC (E) IN IE = 322.69'",
             "18\" RCP (SW) IN IE = 321.40'",
