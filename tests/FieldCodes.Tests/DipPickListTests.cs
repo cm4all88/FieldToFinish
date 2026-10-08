@@ -223,6 +223,30 @@ public sealed class DipPickListTests
         Assert.Equal("N/NW 17.5\" RIBBED PVC IE 6.415", QuickPipeEntry.Summary(pipe, new UtilitySettings()));
     }
 
+    /// <summary>
+    /// A structure can have three pipes and one dip: the others were silted, submerged, or
+    /// could not be reached. What was seen is worth recording, so the measure down is not
+    /// required -- and a pipe that was never dipped claims nothing about what a dip was taken
+    /// to, however the panel's reference chip was set at the time.
+    /// </summary>
+    [Fact]
+    public void QuickEntryRecordsAPipeThatWasNeverDipped()
+    {
+        var pipe = new QuickPipeEntry
+        {
+            Direction = DirectionShortcuts.For("E"), SizeIn = 8, Material = "PVC",
+            MeasuredDip = null,
+            Reference = MeasurementReference.Invert, ReferenceFromDrafter = true
+        }.Create();
+
+        Assert.Equal(8, pipe.WidthIn);
+        Assert.Equal("PVC", pipe.Material);
+        Assert.Equal("E", pipe.Direction.Text);
+        Assert.Null(pipe.MeasuredDip);
+        Assert.Equal(MeasurementReference.Unspecified, pipe.Reference);
+        Assert.Equal(ReferenceBasis.NotStated, pipe.ReferenceBasis);
+    }
+
     [Theory]
     [InlineData(17.5)]
     [InlineData(6.41)]

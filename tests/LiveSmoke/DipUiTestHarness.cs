@@ -593,6 +593,9 @@ namespace FtfUiTest
             set { Quick.GetType().GetProperty("MdText").SetValue(Quick, value, null); }
         }
 
+        /// <summary>How many pipes 1047 had before the undipped one was entered.</summary>
+        private static int _undippedBefore;
+
         /// <summary>Which card holds the 17.5" RIBBED PVC N/NW pipe -- the last one entered at 1047.</summary>
         private static int _nnw;
 
@@ -1371,16 +1374,13 @@ namespace FtfUiTest
             }, 1500);
 
             // ---- safety: nothing is created by accident -----------------------------------
-            add("an empty or bad MD creates nothing", () =>
+            add("nothing is created by accident, but a pipe may go undipped", () =>
             {
                 var before = S("1047").Field.Pipes.Count;
                 PressInMd(Keys.Enter);                       // MD disabled, nothing chosen
                 Check(S("1047").Field.Pipes.Count == before, "Enter with nothing chosen creates nothing");
 
                 Choose("12\""); Choose("RCP"); Choose("W");
-                PressInMd(Keys.Enter);                       // blank MD
-                Check(S("1047").Field.Pipes.Count == before, "Enter with a blank MD creates nothing");
-
                 MdText = "six";
                 PressInMd(Keys.Enter);
                 Check(S("1047").Field.Pipes.Count == before, "Enter with an unreadable MD creates nothing");
@@ -1414,6 +1414,28 @@ namespace FtfUiTest
                 Check(p.Reference == FU.MeasurementReference.TopOfPipe && p.ReferenceBasis == FU.ReferenceBasis.EnteredByDrafter && p.MeasuredDip == 5.23,
                       "saved as top of pipe, chosen by the drafter");
                 Check(ChosenReference == FU.MeasurementReference.Invert, "the next pipe is back at the office default");
+            }, 1500);
+
+            // A structure can have three pipes and one dip: silted, submerged, or out of reach.
+            // What was seen is recorded; FTF says NOT DIPPED rather than inventing a depth.
+            add("a pipe nobody could dip is still recorded", () =>
+            {
+                _undippedBefore = S("1047").Field.Pipes.Count;
+                Check(Capture("8\"", "PVC", "E", ""), "the buttons were all there");
+            }, 1500);
+            add("the undipped pipe is kept, and says so", () =>
+            {
+                var st = S("1047");
+                Check(st.Field.Pipes.Count == _undippedBefore + 1,
+                      "a pipe with no measure down is recorded all the same (" + st.Field.Pipes.Count + ")");
+                var p = st.Field.Pipes.Last();
+                Check(p.WidthIn == 8 && p.Material == "PVC" && p.Direction.Text == "E",
+                      "8\" PVC E kept exactly");
+                Check(!p.MeasuredDip.HasValue, "with no measure down");
+                Check(p.Reference == FU.MeasurementReference.Unspecified &&
+                      p.ReferenceBasis == FU.ReferenceBasis.NotStated,
+                      "and no claim about what it was measured to, since nothing was");
+                Check(Shown(Quick) && !ChosenSize.HasValue, "and the next slot starts clean");
             }, 1500);
 
             // ---- the values no button carries ----------------------------------------------

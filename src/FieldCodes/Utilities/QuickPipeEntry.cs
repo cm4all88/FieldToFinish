@@ -44,10 +44,12 @@ namespace FieldCodes.Utilities
         {
             var pipe = new PipeObservation { Source = ObservationSource.UserEntry };
             ApplyTo(pipe);
-            pipe.Reference = Reference;
+            // Nothing was measured, so nothing was measured to: a pipe seen but not dipped
+            // carries no reference rather than the office default for a dip it never had.
+            pipe.Reference = MeasuredDip.HasValue ? Reference : MeasurementReference.Unspecified;
             // What the drafter picked is the drafter's. Nothing picked stays unspecified: FTF
             // does not decide what a measure down was taken to.
-            pipe.ReferenceBasis = Reference == MeasurementReference.Unspecified
+            pipe.ReferenceBasis = pipe.Reference == MeasurementReference.Unspecified
                 ? ReferenceBasis.NotStated : ReferenceBasis.EnteredByDrafter;
             pipe.Prefilled = (Prefilled ?? new List<string>()).Distinct().ToList();
             pipe.PrefilledFrom = pipe.Prefilled.Count > 0 ? PrefilledFrom : null;

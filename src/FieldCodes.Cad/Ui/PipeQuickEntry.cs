@@ -637,6 +637,7 @@ namespace FieldCodes.Cad.Ui
             {
                 _entry.MeasuredDip = null;
                 if (required) { Problem("Type the measure down, then press Enter."); return false; }
+                _entry.ReferenceFromDrafter = false;
                 Problem(null);
                 return true;
             }
@@ -654,7 +655,11 @@ namespace FieldCodes.Cad.Ui
         private void Submit()
         {
             if (!Complete()) { Problem("Choose the size, type and direction first."); return; }
-            if (!ReadDip(true)) return;
+            // The measure down is not required. A structure can have three pipes and one dip:
+            // the others were silted, submerged, or could not be reached. What was seen is worth
+            // recording, and FTF draws and labels it as NOT DIPPED rather than inventing a depth.
+            // An unreadable measure down is still refused -- that is a typo, not a decision.
+            if (!ReadDip(false)) return;
 
             var entry = new QuickPipeEntry
             {
