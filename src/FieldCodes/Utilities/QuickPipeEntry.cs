@@ -82,8 +82,7 @@ namespace FieldCodes.Utilities
             pipe.WidthIn = SizeIn;
             // Round pipe: the rise is the size. A non-round pipe keeps its observed rise.
             if (pipe.Shape == PipeShape.Round || !pipe.HeightIn.HasValue) pipe.HeightIn = SizeIn;
-            var material = (Material ?? string.Empty).Trim().ToUpperInvariant();
-            pipe.Material = material.Length == 0 ? null : material;
+            pipe.Material = PipeMaterials.Normalize(Material);
             pipe.MeasuredDip = MeasuredDip;
         }
 

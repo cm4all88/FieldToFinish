@@ -315,7 +315,7 @@ namespace FieldCodes.Settings
 
             Materials = new List<string>
             {
-                "RCP", "CMP", "CPEP", "HDPE", "PVC", "DI", "DIP", "CI", "VCP", "CLAY",
+                "RCP", "CMP", "CPEP", "CPP", "HDPE", "PVC", "DIP", "CI", "VCP", "CLAY",
                 "CONC", "STEEL", "AC", "ADS", "PE", "UNK"
             };
 
@@ -464,7 +464,7 @@ namespace FieldCodes.Settings
                     Name = "Sanitary", System = UtilitySystem.Sanitary,
                     CommonSizes = { 4, 6, 8, 10, 12, 15, 18, 24 },
                     LargerSizes = { 9, 20, 21, 27, 30, 33, 36, 42, 48, 54, 60, 72 },
-                    CommonMaterials = { "VCP", "PVC", "RCP", "DI", "CONC", "UNK" }
+                    CommonMaterials = { "VCP", "PVC", "RCP", "DIP", "CONC", "UNK" }
                 },
                 new PipeChoiceRule
                 {

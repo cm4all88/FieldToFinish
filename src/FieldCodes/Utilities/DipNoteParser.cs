@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -115,7 +115,9 @@ namespace FieldCodes.Utilities
         public DipNoteParser(UtilitySettings settings)
         {
             _settings = settings ?? new UtilitySettings();
-            _materials = new HashSet<string>(_settings.Materials ?? new List<string>(),
+            // The crew writes what the crew writes. Spellings the office does not keep on its
+            // list are still read, and recorded the office's way.
+            _materials = new HashSet<string>(PipeMaterials.WithSpellings(_settings.Materials),
                                              StringComparer.OrdinalIgnoreCase);
         }
 
@@ -319,7 +321,7 @@ namespace FieldCodes.Utilities
 
                 if (pipe.Material == null && _materials.Contains(token))
                 {
-                    pipe.Material = token.ToUpperInvariant();
+                    pipe.Material = PipeMaterials.Normalize(token);
                     continue;
                 }
 
