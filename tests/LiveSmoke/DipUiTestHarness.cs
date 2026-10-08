@@ -1420,8 +1420,10 @@ namespace FtfUiTest
             // What was seen is recorded; FTF says NOT DIPPED rather than inventing a depth.
             add("a pipe nobody could dip is still recorded", () =>
             {
+                // SW, where there is no other structure: an undipped pipe aimed at one would
+                // connect itself and quietly change what the later steps are looking at.
                 _undippedBefore = S("1047").Field.Pipes.Count;
-                Check(Capture("8\"", "PVC", "E", ""), "the buttons were all there");
+                Check(Capture("8\"", "PVC", "SW", ""), "the buttons were all there");
             }, 1500);
             add("the undipped pipe is kept, and says so", () =>
             {
@@ -1429,8 +1431,8 @@ namespace FtfUiTest
                 Check(st.Field.Pipes.Count == _undippedBefore + 1,
                       "a pipe with no measure down is recorded all the same (" + st.Field.Pipes.Count + ")");
                 var p = st.Field.Pipes.Last();
-                Check(p.WidthIn == 8 && p.Material == "PVC" && p.Direction.Text == "E",
-                      "8\" PVC E kept exactly");
+                Check(p.WidthIn == 8 && p.Material == "PVC" && p.Direction.Text == "SW",
+                      "8\" PVC SW kept exactly");
                 Check(!p.MeasuredDip.HasValue, "with no measure down");
                 Check(p.Reference == FU.MeasurementReference.Unspecified &&
                       p.ReferenceBasis == FU.ReferenceBasis.NotStated,

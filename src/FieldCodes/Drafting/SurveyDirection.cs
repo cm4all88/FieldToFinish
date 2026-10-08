@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 
 namespace FieldCodes.Drafting
@@ -399,6 +399,23 @@ namespace FieldCodes.Drafting
             if (decimals < 0) decimals = 0;
             var text = distanceFeet.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture),
                                              CultureInfo.InvariantCulture);
+            return footSymbol ? text + "'" : text;
+        }
+
+        /// <summary>
+        /// The same, with trailing zeros dropped: a 30.00 ft right-of-way half width reads 30',
+        /// an odd one reads 30.25'. For widths a drafter states, rather than courses, where
+        /// every figure is carried to the same place.
+        /// </summary>
+        public static string FormatDistanceTrimmed(double distanceFeet, int maxDecimals,
+                                                   bool footSymbol)
+        {
+            var text = FormatDistance(distanceFeet, maxDecimals, false);
+            if (text.IndexOf('.') >= 0)
+            {
+                text = text.TrimEnd('0').TrimEnd('.');
+                if (text.Length == 0 || text == "-") text = "0";
+            }
             return footSymbol ? text + "'" : text;
         }
     }

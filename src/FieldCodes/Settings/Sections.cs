@@ -329,6 +329,15 @@ namespace FieldCodes.Settings
         [JsonProperty("textHeightPlotted")]
         public double TextHeightPlotted { get; set; }
 
+        /// <summary>Height of a right-of-way width label as plotted. Wider than a line label
+        /// on purpose: it is read off the sheet rather than traced along a line.</summary>
+        [JsonProperty("rowWidthTextPlotted")]
+        public double RowWidthTextPlotted { get; set; }
+
+        /// <summary>Most decimals a right-of-way width shows; trailing zeros are dropped.</summary>
+        [JsonProperty("rowWidthDecimals")]
+        public int RowWidthDecimals { get; set; }
+
         /// <summary>Layer for line labels when the feature does not name its own.</summary>
         [JsonProperty("defaultLabelLayer")]
         public string DefaultLabelLayer { get; set; }
@@ -374,6 +383,8 @@ namespace FieldCodes.Settings
             Enabled = false;
             TextStyle = string.Empty;
             TextHeightPlotted = 0.08;
+            RowWidthTextPlotted = 0.10;
+            RowWidthDecimals = 2;
             DefaultLabelLayer = "V-LINE-TEXT";
             AlignToLine = true;
             RepeatIntervalFeet = 200.0;

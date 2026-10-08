@@ -113,7 +113,9 @@ namespace FieldCodes.Cad
         /// <summary>The tilde across a line where it runs off the view.</summary>
         BreakMark = 42,
         /// <summary>The zigzag along the seam a viewport cuts.</summary>
-        BreakLine = 43
+        BreakLine = 43,
+        /// <summary>A width stated between a centerline and a right-of-way line.</summary>
+        RowWidth = 44
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

@@ -82,7 +82,8 @@ namespace FieldCodes.Cad
                     "Select the stair lines; the step count places itself. FTFS for short.",
                     FtfIcons.Stairs),
                 Small("Spot Shots", "FTFSPOT", FtfIcons.Spot),
-                Small("Tilde", "FTFTILDE", FtfIcons.Lines)));
+                Small("Tilde", "FTFTILDE", FtfIcons.Lines),
+                Small("ROW Width", "FTFROWDIM", FtfIcons.Between)));
 
             tab.Panels.Add(Panel("Finish",
                 Large("Process\nDrawing", "FTFRUN",

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using FieldCodes.Sheets;
 using Xunit;
@@ -23,6 +23,28 @@ namespace FieldCodes.Tests
             var dy = y2 - y1;
             var length = Math.Sqrt(dx * dx + dy * dy);
             return ((p.X - x1) * (-dy) + (p.Y - y1) * dx) / length;
+        }
+
+        /// <summary>
+        /// A right-of-way width is a figure a drafter states, not a course carried to two
+        /// places: 30 feet reads 30', and only an odd one carries decimals.
+        /// </summary>
+        [Theory]
+        [InlineData(30.0, "30'")]
+        [InlineData(30.25, "30.25'")]
+        [InlineData(30.5, "30.5'")]
+        [InlineData(30.004, "30'")]
+        [InlineData(0.0, "0'")]
+        [InlineData(7.1, "7.1'")]
+        public void a_width_drops_its_trailing_zeros(double feet, string expected)
+        {
+            Assert.Equal(expected, FieldCodes.Drafting.SurveyDirection.FormatDistanceTrimmed(feet, 2, true));
+        }
+
+        [Fact]
+        public void a_width_can_be_stated_without_the_foot_mark()
+        {
+            Assert.Equal("30", FieldCodes.Drafting.SurveyDirection.FormatDistanceTrimmed(30, 2, false));
         }
 
         [Fact]
