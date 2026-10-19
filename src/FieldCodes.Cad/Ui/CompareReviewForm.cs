@@ -102,6 +102,13 @@ namespace FieldCodes.Cad.Ui
                 CompareSession.LastMessage = n + " confident result(s) accepted. Apply approved changes when ready.";
                 return true;
             })));
+            filterRow.Controls.Add(Small("Keep all unresolved plotting", (s, e) => Post("keep unresolved", (db, tr, ed) =>
+            {
+                var n = CompareSession.KeepUnresolvedPlotting();
+                CompareSession.SaveDecisions(db, tr);
+                CompareSession.LastMessage = n + " unresolved result(s) set to keep plotting (nothing stops plotting).";
+                return true;
+            })));
             bar.Controls.Add(filterRow);
 
             // ---- list and detail -----------------------------------------------

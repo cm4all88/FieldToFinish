@@ -36,7 +36,9 @@ namespace FtfCompareTest
         private static void Check(Editor ed, bool ok, string what)
         {
             if (!ok) _failures++;
-            ed.WriteMessage("\n  [{0}] {1}", ok ? "PASS" : "FAIL", what);
+            // A marker of its own: FTFCOMPAREQC prints [PASS]/[FAIL] lines too, and the
+            // build script must count only these.
+            ed.WriteMessage("\n  [VERIFY {0}] {1}", ok ? "PASS" : "FAIL", what);
         }
 
         private static string Here()

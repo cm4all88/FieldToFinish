@@ -49,7 +49,7 @@ namespace FieldCodes.Cad.Compare
             CompareSession.RunPending();
         }
 
-        private static void Hook()
+        internal static void Hook()
         {
             if (_hooked) return;
             _hooked = true;
@@ -60,6 +60,24 @@ namespace FieldCodes.Cad.Compare
                     CompareSession.Reset();
                     CompareSession.RefreshForm();
                 }
+            };
+            foreach (Document doc in AcadApp.DocumentManager) HookDocument(doc);
+            AcadApp.DocumentManager.DocumentCreated += (s, e) => HookDocument(e.Document);
+        }
+
+        /// <summary>After SAVE AS the result and report files follow the drawing to its new
+        /// name, so a working copy saved as a separate comparison drawing keeps its review
+        /// (the applied record and decisions already travel inside the DWG).</summary>
+        private static void HookDocument(Document doc)
+        {
+            if (doc == null) return;
+            doc.CommandEnded += (s, e) =>
+            {
+                var name = e.GlobalCommandName.ToUpperInvariant();
+                if (name != "SAVEAS" && name != "QSAVE" && name != "SAVE" && name != "SAVEALL") return;
+                if (CompareSession.Result == null || CompareSession.DatabaseKey != doc.Database.UnmanagedObject) return;
+                CompareSession.SaveResult(doc.Database);
+                CompareSession.WriteReport(doc.Database, null);
             };
         }
 
@@ -72,6 +90,7 @@ namespace FieldCodes.Cad.Compare
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             var ed = doc.Editor;
+            Hook();
 
             ICollection<ObjectId> only = null;
             var options = new PromptKeywordOptions("\nCompare [All/Select/Window] <All>: ", "All Select Window") { AllowNone = true };
@@ -149,17 +168,21 @@ namespace FieldCodes.Cad.Compare
         }
 
         /// <summary>A decision from the command line (also what scripts and the smoke test use):
-        /// FTFCOMPAREDECIDE handle AcceptMatch|KeepPlotting|MakeNonplot|AcceptPartial|Exclude|None.</summary>
+        /// FTFCOMPAREDECIDE handle AcceptMatch|KeepPlotting|MakeNonplot|AcceptPartial|Exclude|None,
+        /// or FTFCOMPAREDECIDE Confident (accept every confident result), or
+        /// FTFCOMPAREDECIDE Unresolved (keep every unresolved result plotting).</summary>
         [CommandMethod("FTFCOMPAREDECIDE", CommandFlags.Modal)]
         public void Decide()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             var ed = doc.Editor;
-            var handle = ed.GetString(new PromptStringOptions("\nSurvey object handle (or Confident to accept every confident result): ") { AllowSpaces = false });
+            var handle = ed.GetString(new PromptStringOptions("\nSurvey object handle (or Confident to accept every confident result, Unresolved to keep every unresolved one plotting): ") { AllowSpaces = false });
             if (handle.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(handle.StringResult)) return;
             string decision = null;
-            if (!string.Equals(handle.StringResult, "Confident", StringComparison.OrdinalIgnoreCase))
+            var bulk = string.Equals(handle.StringResult, "Confident", StringComparison.OrdinalIgnoreCase) ||
+                       string.Equals(handle.StringResult, "Unresolved", StringComparison.OrdinalIgnoreCase);
+            if (!bulk)
             {
                 var options = new PromptKeywordOptions("\nDecision [AcceptMatch/KeepPlotting/MakeNonplot/AcceptPartial/Exclude/None]: ", "AcceptMatch KeepPlotting MakeNonplot AcceptPartial Exclude None");
                 var answer = ed.GetKeywords(options);
@@ -171,12 +194,22 @@ namespace FieldCodes.Cad.Compare
                 CompareSession.EnsureLoaded(db, tr);
                 if (CompareSession.Result == null) { e.WriteMessage("\nRun the comparison first."); return; }
                 int n;
-                if (decision == null) n = CompareSession.AcceptConfident();
+                if (decision == null)
+                    n = string.Equals(handle.StringResult, "Unresolved", StringComparison.OrdinalIgnoreCase) ? CompareSession.KeepUnresolvedPlotting() : CompareSession.AcceptConfident();
                 else n = CompareSession.Decide(new[] { handle.StringResult.Trim() }, (ReviewDecision)Enum.Parse(typeof(ReviewDecision), decision), "command line");
                 CompareSession.SaveDecisions(db, tr);
                 e.WriteMessage("\n{0} decision(s) recorded. Run FTFCOMPAREAPPLY to apply them.", n);
             });
             CompareSession.RefreshForm();
+        }
+
+        /// <summary>Read-only report of what the comparison holds in this drawing: applied
+        /// changes, objects on the nonplot layers, split copies, block twins, restyled points.
+        /// "CLEAN" after a restore means nothing of the comparison is left in effect.</summary>
+        [CommandMethod("FTFCOMPAREAUDIT", CommandFlags.Modal)]
+        public void Audit()
+        {
+            FtfSession.Run("FTFCOMPAREAUDIT", (db, tr, ed) => CompareSession.Audit(db, tr, ed));
         }
 
         /// <summary>Lists, chooses or saves the drawing's comparison profile.</summary>

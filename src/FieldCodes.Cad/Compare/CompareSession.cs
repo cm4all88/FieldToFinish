@@ -458,6 +458,94 @@ namespace FieldCodes.Cad.Compare
             return n;
         }
 
+        /// <summary>Keeps every unresolved result plotting (discrepancies, review items,
+        /// not-evaluated objects) by recording Keep Plotting on each. Safe by construction:
+        /// nothing stops plotting; it only settles the QC for a drawing a person has looked
+        /// over and chosen to deliver with our version of the exceptions.</summary>
+        public static int KeepUnresolvedPlotting()
+        {
+            if (Result == null) return 0;
+            RebuildPlan();
+            var n = 0;
+            foreach (var r in Result.Results)
+            {
+                if (r.Decision != ReviewDecision.None) continue;
+                if (r.EffectiveStatus != MatchStatus.Discrepancy && r.EffectiveStatus != MatchStatus.NeedsReview && r.EffectiveStatus != MatchStatus.NotEvaluated) continue;
+                Decisions.Set(r, ReviewDecision.KeepPlotting, "bulk: keep unresolved plotting");
+                n++;
+            }
+            RebuildPlan();
+            return n;
+        }
+
+        // ================================================================== audit
+
+        /// <summary>Read-only: what the comparison currently holds in this drawing, so a
+        /// person can see whether it is clean after a restore or what a run left behind.</summary>
+        public static bool Audit(Database db, Transaction tr, Editor ed)
+        {
+            EnsureLoaded(db, tr);
+            var profile = EffectiveProfile() ?? new CompareProfile();
+            var layers = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            var onNonplot = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in profile.NonplotLayers.All) onNonplot[name] = 0;
+            var splits = 0;
+            var styled = 0;
+            var hiddenLabels = 0;
+            var invisible = 0;
+            var ms = CadUtil.ModelSpace(db, tr, OpenMode.ForRead);
+            foreach (ObjectId id in ms)
+            {
+                if (id.IsErased) continue;
+                var entity = tr.GetObject(id, OpenMode.ForRead, false, true) as Autodesk.AutoCAD.DatabaseServices.Entity;
+                if (entity == null) continue;
+                if (onNonplot.ContainsKey(entity.Layer)) onNonplot[entity.Layer]++;
+                var stamp = Ownership.Read(entity);
+                if (stamp != null && stamp.Kind == FtfEntityKind.CompareSplit) splits++;
+                if (!entity.Visible && Applied != null && Applied.Find(entity.Handle.ToString()) != null) invisible++;
+                var cogo = entity as Autodesk.Civil.DatabaseServices.CogoPoint;
+                if (cogo != null)
+                {
+                    if (!cogo.IsLabelVisible && Applied != null && Applied.Find(entity.Handle.ToString()) != null) hiddenLabels++;
+                    try
+                    {
+                        var style = tr.GetObject(cogo.StyleId, OpenMode.ForRead) as Autodesk.Civil.DatabaseServices.Styles.PointStyle;
+                        if (style != null && string.Equals(style.Name, CogoPointPlotting.NonplotStyleName, StringComparison.OrdinalIgnoreCase)) styled++;
+                    }
+                    catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                }
+            }
+            var twins = 0;
+            var blocks = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            foreach (ObjectId id in blocks)
+            {
+                var btr = tr.GetObject(id, OpenMode.ForRead) as BlockTableRecord;
+                if (btr != null && BlockTwins.IsTwin(btr.Name)) twins++;
+            }
+
+            var applied = Applied != null ? Applied.Changes.Count : 0;
+            ed.WriteMessage("\nFTFCOMPAREAUDIT for {0}", string.IsNullOrEmpty(db.Filename) ? "(unsaved drawing)" : Path.GetFileName(db.Filename));
+            ed.WriteMessage("\n  Profile: {0} [{1}]; consultant source: {2}", profile.Name, ProfileLevel, Source != null ? Source.Describe() : "-");
+            ed.WriteMessage("\n  Applied record: {0} change(s){1}", applied, Applied != null ? " from run " + Applied.RunId + " at " + Applied.AppliedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : string.Empty);
+            ed.WriteMessage("\n  Review decisions stored: {0}", Decisions != null ? Decisions.Entries.Count : 0);
+            ed.WriteMessage("\n  Result on disk: {0}", Result != null ? Result.Results.Count + " feature(s), run " + Result.RunId : "none (run the comparison)");
+            foreach (var kv in onNonplot)
+            {
+                var exists = layers.Has(kv.Key);
+                var plottable = exists && ((LayerTableRecord)tr.GetObject(layers[kv.Key], OpenMode.ForRead)).IsPlottable;
+                ed.WriteMessage("\n  {0}: {1} object(s){2}", kv.Key, kv.Value, !exists ? " (layer not present)" : plottable ? " (!! PLOTTABLE)" : " (no plot)");
+            }
+            ed.WriteMessage("\n  Split copies (FTF kind CompareSplit): {0}", splits);
+            ed.WriteMessage("\n  Nonplot block twins (PMX-COMP-NP$...): {0}", twins);
+            ed.WriteMessage("\n  COGO points on the PMX-COMP-NP point style: {0}; with label hidden by the comparison: {1}", styled, hiddenLabels);
+            ed.WriteMessage("\n  Objects hidden by the comparison: {0}", invisible);
+            var clean = applied == 0 && splits == 0 && twins == 0 && styled == 0 && onNonplot.Values.Sum() == 0;
+            ed.WriteMessage(clean
+                ? "\n  CLEAN: nothing from the comparison is in effect in this drawing.\n"
+                : "\n  Comparison changes are in effect. FTFCOMPARERESTORE reverses them; FTFCOMPAREQC checks them.\n");
+            return clean;
+        }
+
         // ===================================================================== QC
 
         public static IList<QcCheck> RunQc(Database db, Transaction tr, Editor ed)

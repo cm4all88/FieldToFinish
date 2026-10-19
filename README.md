@@ -631,46 +631,11 @@ on purpose; prove the single-site workflow first).
 
 ### Compile, load and test on one real drawing
 
-1. On a machine with Civil 3D 2024 and the .NET 8 SDK, from the repository root:
-   `dotnet build FieldToFinish.sln`. This is the real compile against the Autodesk
-   assemblies (the csproj looks for them under `C:\Program Files\Autodesk\AutoCAD 2024`;
-   pass `-p:C3D2024=...` otherwise). If it fails, the error names the file; the Civil 3D
-   style members used by `FieldCodes.Cad\Compare\CogoPointPlotting.cs` are the ones to
-   check first (see "Not verified" below).
-2. `dotnet test FieldToFinish.sln` (1,051 tests; the only ones that cannot pass on a
-   non-Windows machine are four path tests).
-3. Close Civil 3D, run `deploy\install-dev.ps1`. It copies the bundle, `rules.json` and
-   `config\compare-profiles\Default.json` into
-   `%APPDATA%\Autodesk\ApplicationPlugins\FieldToFinish.bundle`. Start Civil 3D; the FTF
-   ribbon has a Compare panel and `FTFCOMPARE` is on the command line.
-4. Headless proof first: `tests\LiveSmoke\run-compare.ps1`. It seeds a consultant xref
-   (clipped), a survey with curbs, a fragmented fence, poles, a manhole with a fixed-layer
-   point style, a symbol block whose definition draws on its own layer, and rim/invert
-   labels; then drives RUN, APPLY, QC, RUN again, APPLY, RESTORE, APPLY, SAVE and checks
-   the plotting state after each step. Expect `COMPAREVERIFY: 0 failure(s)` three times
-   in `tests\LiveSmoke\compare_out.log` and a deliverable under `compare-out\`.
-5. One real site:
-   - Copy the survey drawing to a working folder. Open the COPY. Attach the consultant
-     base map as an xref if it is not already (or `FTFCOMPARESOURCE File` to read it
-     without attaching).
-   - `FTFCOMPARE`, Run comparison. Read the command line: it lists every consultant
-     layer the profile could not map and every reference it could not load. Nothing on an
-     unmapped layer is ever called matched or missing.
-   - `FTFCOMPAREPROFILE SaveAs <consultant>`, then `Edit`: put their layer / block names
-     under the right categories' `consultant` mappings. Run again.
-   - In the window, the default filter is "Needs attention". Click a row: the drawing
-     zooms, ours is highlighted magenta and theirs cyan. Decide the exceptions. "Accept
-     all confident" takes the obvious matches.
-   - Apply approved changes. Watch the command line for "NOT changed" lines: those are
-     changes the plugin refused because the object would still have plotted (a point
-     group overriding a point style, a block it could not twin); they stay as they were
-     and are listed in the window.
-   - Plot preview (or publish to PDF) and compare against a preview of the untouched
-     copy: nothing on `PMX-COMP-NP-*` appears; the matched points' markers and labels are
-     gone; the split copies are there; everything missing is there.
-   - `FTFCOMPAREQC`, then `FTFCOMPARESAVE`. Open the deliverable and preview it too.
-   - `FTFCOMPARERESTORE` on the working copy and confirm it looks exactly like the
-     original (layer list, point styles, block definitions: no `PMX-COMP-NP$` twins left).
+See `FTFCOMPARE-SETUP.md` at the repository root: what to pull, how to build against the
+installed Civil 3D 2024 assemblies, install, run the smoke test, run the comparison on a
+project drawing, judge the results, and restore. `deploy\build-install-test.ps1` does
+the build, the unit tests, the install and the smoke test in one run and stops at the
+first failure with the reason.
 
 ### How it decides
 
