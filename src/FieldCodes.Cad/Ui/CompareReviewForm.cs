@@ -365,7 +365,7 @@ namespace FieldCodes.Cad.Ui
                         r.VerticalDifference.HasValue ? (r.VerticalDifference.Value / Units(result)).ToString("0.00", CultureInfo.InvariantCulture) : string.Empty,
                         r.Confidence.ToString("0.00", CultureInfo.InvariantCulture),
                         r.Decision == ReviewDecision.None ? (r.Action == PlannedAction.None ? string.Empty : "auto " + r.Action) : r.Decision.ToString(),
-                        r.NotesText
+                        (string.IsNullOrEmpty(r.ApplyProblem) ? string.Empty : "NOT APPLIED: " + r.ApplyProblem + "; ") + r.NotesText
                     })
                     { Tag = r, ToolTipText = r.Description + "\n" + r.NotesText, ForeColor = ColorFor(r.EffectiveStatus) };
                     if (selected.Contains(r.Handle)) item.Selected = true;
@@ -439,6 +439,7 @@ namespace FieldCodes.Cad.Ui
                     (r.Decision != ReviewDecision.None ? "   decision: " + r.Decision + (string.IsNullOrEmpty(r.DecisionNote) ? string.Empty : " - " + r.DecisionNote) : string.Empty),
                 "Plan: " + (r.Action == PlannedAction.None ? "keep as is" : r.Action + " -> " + r.NonplotLayer)
             };
+            if (!string.IsNullOrEmpty(r.ApplyProblem)) lines.Add("NOT APPLIED: " + r.ApplyProblem);
             if (r.MatchedHandles.Count > 0) lines.Add("Consultant object(s): " + string.Join(", ", r.MatchedHandles.ToArray()));
             if (r.Kind == FeatureKind.Line && r.Intervals.Count > 0)
                 lines.Add("Stations: " + string.Join("  ", r.Intervals.Select(i => i.ToString()).ToArray()));

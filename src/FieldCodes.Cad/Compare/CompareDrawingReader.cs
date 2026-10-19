@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.DatabaseServices.Filters;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.Civil.DatabaseServices;
 using FieldCodes.Compare;
@@ -130,6 +132,15 @@ namespace FieldCodes.Cad.Compare
                 var br = entity as BlockReference;
                 if (br != null && IsXref(tr, br)) continue;
 
+                // Survey objects that do not plot as the drawing stands (frozen, off or
+                // no-plot layer, invisible) are not deliverable content: left out, counted.
+                var verdict = PlotVisibility.Of(entity, db, tr);
+                if (verdict.Plots == false)
+                {
+                    dataset.CountHidden(verdict.Note);
+                    continue;
+                }
+
                 ReadEntity(entity, tr, context);
                 if (++n % 500 == 0 && progress != null) progress.Step(n, ids.Count);
             }
@@ -176,6 +187,7 @@ namespace FieldCodes.Cad.Compare
                 {
                     dataset.Name = "xrefs of " + (string.IsNullOrEmpty(hostDb.Filename) ? "the drawing" : Path.GetFileName(hostDb.Filename));
                     context.HostDirectory = string.IsNullOrEmpty(hostDb.Filename) ? null : Path.GetDirectoryName(hostDb.Filename);
+                    context.HostLayers = HostLayerStates(hostDb, tr);
                     var wanted = spec.XrefNames != null && spec.XrefNames.Count > 0
                         ? new HashSet<string>(spec.XrefNames, StringComparer.OrdinalIgnoreCase) : null;
                     var found = 0;
@@ -253,6 +265,16 @@ namespace FieldCodes.Cad.Compare
                 return;
             }
 
+            // An insert the drawing does not show is not consultant information in this
+            // deliverable; comparing against it would suppress ours for nothing.
+            var insertDb = br.Database;
+            if (!br.Visible || !PlotVisibility.LayerPlots(insertDb, tr, br.Layer))
+            {
+                context.Dataset.AddIssue(Severity.Error, "XREF-HIDDEN", "Reference " + name + " is not shown (insert invisible, or its layer " + br.Layer +
+                    " frozen, off or no-plot); thaw it or detach it before comparing.", true);
+                return;
+            }
+
             Database xdb = null;
             var status = btr.XrefStatus;
             switch (status)
@@ -297,10 +319,19 @@ namespace FieldCodes.Cad.Compare
                 }
             }
 
-            if (IsClipped(br, tr))
-                context.Dataset.AddIssue(Severity.Warning, "XREF-CLIPPED", "Reference " + name + " is clipped; its whole content is compared, including what the clip hides.", false);
-
             var child = context.Child(FromMatrix(br.BlockTransform), name);
+            var clip = ReadClip(br, tr, context);
+            if (clip != null)
+            {
+                child.Clips.Add(clip);
+                context.Dataset.AddIssue(Severity.Info, "XREF-CLIPPED", "Reference " + name + " is clipped" + (clip.Inverted ? " (inverted)" : string.Empty) +
+                    "; only the content inside the clip is compared.", false);
+            }
+            else if (IsClipped(br, tr))
+            {
+                context.Dataset.AddIssue(Severity.Error, "XREF-CLIPPED", "Reference " + name + " is clipped but the clip boundary could not be read; its content is left out of the comparison.", true);
+                return;
+            }
             child.HostDirectory = Path.GetDirectoryName(SafeFilename(xdb)) ?? context.HostDirectory;
             if (!string.IsNullOrEmpty(SafeFilename(xdb)) && !context.Dataset.FilesRead.Contains(SafeFilename(xdb), StringComparer.OrdinalIgnoreCase))
                 context.Dataset.FilesRead.Add(SafeFilename(xdb));
@@ -344,6 +375,89 @@ namespace FieldCodes.Cad.Compare
             catch (Autodesk.AutoCAD.Runtime.Exception) { return false; }
         }
 
+        /// <summary>The insert's spatial filter as a polygon in the coordinates the content is
+        /// read in, or null when it has none. The boundary is taken through the filter's own
+        /// clip-to-world transform, the inverse block transform recorded when the clip was
+        /// made, and the insert's current transform, so a clipped xref that was moved since
+        /// still clips where it shows on screen.</summary>
+        private static Clip ReadClip(BlockReference br, Transaction tr, ReadContext context)
+        {
+            try
+            {
+                if (br.ExtensionDictionary.IsNull) return null;
+                var dict = tr.GetObject(br.ExtensionDictionary, OpenMode.ForRead) as DBDictionary;
+                if (dict == null || !dict.Contains("ACAD_FILTER")) return null;
+                var filters = tr.GetObject(dict.GetAt("ACAD_FILTER"), OpenMode.ForRead) as DBDictionary;
+                if (filters == null || !filters.Contains("SPATIAL")) return null;
+                var filter = tr.GetObject(filters.GetAt("SPATIAL"), OpenMode.ForRead) as SpatialFilter;
+                if (filter == null) return null;
+                var definition = filter.Definition;
+                if (definition == null || !definition.Enabled) return null;
+
+                var points = definition.GetPoints();
+                var corners = new List<Point3d>();
+                if (points.Count == 2)
+                {
+                    var minX = Math.Min(points[0].X, points[1].X); var maxX = Math.Max(points[0].X, points[1].X);
+                    var minY = Math.Min(points[0].Y, points[1].Y); var maxY = Math.Max(points[0].Y, points[1].Y);
+                    corners.Add(new Point3d(minX, minY, 0)); corners.Add(new Point3d(maxX, minY, 0));
+                    corners.Add(new Point3d(maxX, maxY, 0)); corners.Add(new Point3d(minX, maxY, 0));
+                }
+                else
+                {
+                    foreach (Point2d p in points) corners.Add(new Point3d(p.X, p.Y, 0));
+                }
+                if (corners.Count < 3) return null;
+
+                var toWorld = filter.ClipSpaceToWorldCoordinateSystemTransform;
+                Matrix3d? originalInverse = null;
+                try { originalInverse = filter.OriginalInverseBlockTransform; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                var current = br.BlockTransform;
+                var polygon = new List<CPoint>();
+                foreach (var corner in corners)
+                {
+                    var w = corner.TransformBy(toWorld);
+                    if (originalInverse.HasValue) w = w.TransformBy(originalInverse.Value).TransformBy(current);
+                    polygon.Add(context.Transform.Apply(new CPoint(w.X, w.Y)));
+                }
+                var inverted = false;
+                var flag = ReadProperty(filter, "Inverted") ?? ReadProperty(definition, "Inverted");
+                if (flag is bool) inverted = (bool)flag;
+                return new Clip { Polygon = polygon, Inverted = inverted };
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { return null; }
+            catch (TargetInvocationException) { return null; }
+        }
+
+        private static object ReadProperty(object target, string name)
+        {
+            if (target == null) return null;
+            var property = target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+            return property == null ? null : property.GetValue(target, null);
+        }
+
+        private static object Invoke(object target, string method, params object[] args)
+        {
+            if (target == null) return null;
+            var m = target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.Public);
+            return m == null ? null : m.Invoke(target, args);
+        }
+
+        /// <summary>Host-side state of every layer, including the xref-dependent ones
+        /// ("BASE|E-CURB"), which is what the drawing actually shows and plots.</summary>
+        private static Dictionary<string, LayerState> HostLayerStates(Database db, Transaction tr)
+        {
+            var states = new Dictionary<string, LayerState>(StringComparer.OrdinalIgnoreCase);
+            var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+            foreach (ObjectId id in table)
+            {
+                var record = tr.GetObject(id, OpenMode.ForRead) as LayerTableRecord;
+                if (record == null) continue;
+                states[record.Name] = new LayerState { Name = record.Name, Exists = true, Plottable = record.IsPlottable, Frozen = record.IsFrozen, Off = record.IsOff };
+            }
+            return states;
+        }
+
         /// <summary>Model space of a database, through its own open/close transaction.</summary>
         private static void ReadDatabase(Database db, ReadContext context, Dictionary<string, Database> opened, int depth)
         {
@@ -378,6 +492,12 @@ namespace FieldCodes.Cad.Compare
 
         // ================================================================ entities
 
+        private sealed class Clip
+        {
+            public List<CPoint> Polygon;
+            public bool Inverted;
+        }
+
         private sealed class ReadContext
         {
             public CompareDataset Dataset;
@@ -391,6 +511,11 @@ namespace FieldCodes.Cad.Compare
             public int BlockDepth;
             public readonly Dictionary<string, int> Unsupported = new Dictionary<string, int>(StringComparer.Ordinal);
             public int CivilLabels;
+            public int OpaqueLabels;
+            /// <summary>Every clip in force for this content: the insert's own and its ancestors'.</summary>
+            public List<Clip> Clips = new List<Clip>();
+            /// <summary>The host drawing's layer states, which override an xref's own.</summary>
+            public Dictionary<string, LayerState> HostLayers;
 
             public ReadContext Child(Affine2 insert, string ownerName)
             {
@@ -400,8 +525,39 @@ namespace FieldCodes.Cad.Compare
                     Transform = Transform.Then(insert),
                     OwnerPath = string.IsNullOrEmpty(OwnerPath) ? ownerName : OwnerPath + ">" + ownerName,
                     HostDirectory = HostDirectory, ChordTolerance = ChordTolerance, IsSurvey = IsSurvey, BlockDepth = BlockDepth,
-                    Shared = Shared ?? this
+                    Shared = Shared ?? this,
+                    Clips = new List<Clip>(Clips),
+                    HostLayers = HostLayers
                 };
+            }
+
+            /// <summary>Whether a consultant entity's layer is shown and plotted: the host's
+            /// xref-dependent record when there is one, else the layer in its own file.</summary>
+            public bool LayerShown(AcEntity entity, Transaction tr, out string reason)
+            {
+                reason = null;
+                var layer = entity.Layer ?? string.Empty;
+                if (HostLayers != null && !string.IsNullOrEmpty(OwnerPath) && !OwnerPath.StartsWith("BLOCK:", StringComparison.Ordinal))
+                {
+                    var path = OwnerPath;
+                    var blockAt = path.IndexOf(">BLOCK:", StringComparison.Ordinal);
+                    if (blockAt >= 0) path = path.Substring(0, blockAt);
+                    foreach (var candidate in new[] { path.Replace(">", "|") + "|" + layer, path.Split('>')[0] + "|" + layer })
+                    {
+                        LayerState state;
+                        if (!HostLayers.TryGetValue(candidate, out state)) continue;
+                        if (state.Frozen) { reason = "layer " + candidate + " frozen in the drawing"; return false; }
+                        if (state.Off) { reason = "layer " + candidate + " off in the drawing"; return false; }
+                        if (!state.Plottable) { reason = "layer " + candidate + " set to no-plot in the drawing"; return false; }
+                        return true;
+                    }
+                }
+                if (!PlotVisibility.LayerPlots(entity.Database, tr, layer))
+                {
+                    reason = "layer " + layer + " frozen, off or no-plot in " + (string.IsNullOrEmpty(OwnerPath) ? "the drawing" : OwnerPath);
+                    return false;
+                }
+                return true;
             }
 
             /// <summary>The root context, which owns the tallies.</summary>
@@ -413,7 +569,8 @@ namespace FieldCodes.Cad.Compare
                 foreach (var kv in root.Unsupported)
                     Dataset.AddIssue(Severity.Info, "UNSUPPORTED", kv.Value + " " + kv.Key + " object(s) are not compared (listed as not evaluated).", false);
                 if (root.CivilLabels > 0)
-                    Dataset.AddIssue(Severity.Info, "UNSUPPORTED", root.CivilLabels + " Civil 3D label object(s) were not compared (their text is style-driven).", false);
+                    Dataset.AddIssue(Severity.Info, "LABELS", root.CivilLabels + " Civil 3D label(s) read as annotation" +
+                        (root.OpaqueLabels > 0 ? "; " + root.OpaqueLabels + " of them with text that could not be read (" + (IsSurvey ? "not evaluated, still plotting" : "they send our annotation beside them to review") + ")" : string.Empty) + ".", false);
             }
 
             public void CountUnsupported(string type)
@@ -429,12 +586,61 @@ namespace FieldCodes.Cad.Compare
         {
             try
             {
+                if (!context.IsSurvey)
+                {
+                    string reason;
+                    if (!entity.Visible) { context.Dataset.CountHidden("invisible"); return; }
+                    if (!context.LayerShown(entity, tr, out reason)) { context.Dataset.CountHidden(reason); return; }
+                }
                 var feature = ToFeature(entity, tr, context);
-                if (feature != null) context.Dataset.Add(feature);
+                if (feature == null) return;
+                foreach (var piece in ApplyClips(feature, context))
+                    context.Dataset.Add(piece);
             }
             catch (Autodesk.AutoCAD.Runtime.Exception ex)
             {
                 context.Dataset.Add(Shell(entity, context, "could not be read: " + ex.Message));
+            }
+        }
+
+        /// <summary>What remains of a feature inside every clip in force: points and text
+        /// inside or nothing; linework cut to its inside pieces (each its own feature).</summary>
+        private static IEnumerable<CompareFeature> ApplyClips(CompareFeature feature, ReadContext context)
+        {
+            if (context.Clips.Count == 0) { yield return feature; yield break; }
+            if (feature.Kind != FeatureKind.Line)
+            {
+                foreach (var clip in context.Clips)
+                {
+                    var inside = Geometry2.PointInPolygon(feature.Position, clip.Polygon);
+                    if (inside == clip.Inverted) { context.Dataset.CountHidden("outside xref clip"); yield break; }
+                }
+                yield return feature;
+                yield break;
+            }
+            var pieces = new List<List<CPoint>> { feature.Vertices };
+            foreach (var clip in context.Clips)
+            {
+                var next = new List<List<CPoint>>();
+                foreach (var piece in pieces) next.AddRange(Geometry2.ClipPolylineToPolygon(piece, clip.Polygon, clip.Inverted));
+                pieces = next;
+            }
+            if (pieces.Count == 0) { context.Dataset.CountHidden("outside xref clip"); yield break; }
+            if (pieces.Count == 1 && pieces[0].Count == feature.Vertices.Count)
+            {
+                feature.Vertices = pieces[0];
+                feature.InvalidateCache();
+                yield return feature;
+                yield break;
+            }
+            for (var i = 0; i < pieces.Count; i++)
+            {
+                yield return new CompareFeature
+                {
+                    Handle = feature.Handle + "#" + (i + 1), OwnerPath = feature.OwnerPath, EntityType = feature.EntityType, Layer = feature.Layer,
+                    Kind = FeatureKind.Line, Description = feature.Description, Attributes = feature.Attributes, Vertices = pieces[i],
+                    HasCurves = feature.HasCurves, Closed = false
+                };
             }
         }
 
@@ -523,10 +729,32 @@ namespace FieldCodes.Cad.Compare
                 return f.Vertices.Count >= 2 ? f : null;
             }
 
-            if (entity is Autodesk.Civil.DatabaseServices.Label)
+            var civilLabel = entity as Autodesk.Civil.DatabaseServices.Label;
+            if (civilLabel != null)
             {
-                (context.Shared ?? context).CivilLabels++;
-                return null;
+                var root = context.Shared ?? context;
+                root.CivilLabels++;
+                var f = NewFeature(handle, context, entity.GetType().Name.ToUpperInvariant(), layer, FeatureKind.Annotation);
+                var labelText = ReadLabelText(civilLabel);
+                CPoint position;
+                var location = ReadProperty(civilLabel, "LabelLocation");
+                if (location is Point3d) position = ToPoint((Point3d)location);
+                else
+                {
+                    var extents = civilLabel.GeometricExtents;
+                    position = new CPoint((extents.MinPoint.X + extents.MaxPoint.X) / 2, (extents.MinPoint.Y + extents.MaxPoint.Y) / 2);
+                }
+                f.Position = t.Apply(position);
+                if (labelText != null)
+                {
+                    f.Description = labelText;
+                    return f;
+                }
+                root.OpaqueLabels++;
+                f.Description = string.Empty;
+                if (context.IsSurvey) f.ReadProblem = "Civil 3D " + entity.GetType().Name + " text is style-driven and could not be read; it keeps plotting";
+                else f.Opaque = true;
+                return f;
             }
 
             // ---- AutoCAD linework -------------------------------------------------
@@ -809,6 +1037,31 @@ namespace FieldCodes.Cad.Compare
             catch (Autodesk.AutoCAD.Runtime.Exception) { }
             try { return mleader.TextLocation; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
             return mleader.GeometricExtents.MinPoint;
+        }
+
+        /// <summary>The visible text of a Civil 3D label through its text components, read
+        /// by reflection so a release without these members degrades to "could not read"
+        /// instead of a plugin that fails to load. Null when the text is not available or
+        /// still contains unresolved property fields.</summary>
+        private static string ReadLabelText(Autodesk.Civil.DatabaseServices.Label label)
+        {
+            try
+            {
+                var ids = Invoke(label, "GetTextComponentIds") as ObjectIdCollection;
+                if (ids == null || ids.Count == 0) return null;
+                var parts = new List<string>();
+                foreach (ObjectId id in ids)
+                {
+                    var text = Invoke(label, "GetTextComponentText", id) as string;
+                    if (string.IsNullOrWhiteSpace(text)) continue;
+                    if (text.IndexOf("<[", StringComparison.Ordinal) >= 0) return null;
+                    parts.Add(text.Trim());
+                }
+                return parts.Count == 0 ? null : string.Join(" ", parts.ToArray());
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { return null; }
+            catch (TargetInvocationException) { return null; }
+            catch (ArgumentException) { return null; }
         }
 
         /// <summary>Points along any curve: a step small enough that chords of a tight

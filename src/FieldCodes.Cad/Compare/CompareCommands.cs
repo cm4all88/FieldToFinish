@@ -433,8 +433,8 @@ namespace FieldCodes.Cad.Compare
                                 var earlier = AppliedChangeSet.FromJson(DrawingStore.ReadCompareText(db, tr, "APPLIED"));
                                 if (earlier != null && earlier.Changes.Count > 0)
                                 {
-                                    int orphans;
-                                    CompareLayerManager.RestoreAll(db, tr, earlier, null, out orphans);
+                                    int orphans, twins;
+                                    CompareLayerManager.RestoreAll(db, tr, earlier, null, out orphans, out twins);
                                     DrawingStore.DeleteCompareText(db, tr, "APPLIED");
                                 }
 
@@ -455,8 +455,10 @@ namespace FieldCodes.Cad.Compare
 
                                     var plan = ChangePlanner.Build(result, profile);
                                     int applied, reversed, skipped;
+                                    var problems = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                                     var record = CompareLayerManager.Reconcile(db, tr, plan, result, profile, rules != null ? rules.Version : string.Empty, null, true, null,
-                                                                              out applied, out reversed, out skipped);
+                                                                              out applied, out reversed, out skipped, problems);
+                                    foreach (var kv in problems) { var pr = result.Find(kv.Key); if (pr != null) { pr.ApplyProblem = kv.Value; pr.Note("not applied: " + kv.Value); } }
                                     DrawingStore.WriteCompareText(db, tr, "APPLIED", record.ToJson());
                                     DrawingStore.WriteCompareText(db, tr, "DECISIONS", decisions.ToJson());
                                     DrawingStore.WriteCompareText(db, tr, "PROFILE", profile.Name);

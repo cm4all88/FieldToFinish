@@ -15,7 +15,8 @@
     "sampleStepFeet": 1.0,
     "reviewOffsetFraction": 0.6,
     "autoAcceptConfidence": 0.75,
-    "chordToleranceFeet": 0.05
+    "chordToleranceFeet": 0.05,
+    "sliverNearFactor": 2.0
   },
   "categories": [
     {

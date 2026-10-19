@@ -161,9 +161,12 @@ namespace FieldCodes.Compare
             var sweep = counterClockwise ? endAngle - startAngle : startAngle - endAngle;
             while (sweep < 0) sweep += 2 * Math.PI;
             if (sweep <= 1e-12) sweep = 2 * Math.PI;
-            // Segment count from the sagitta: tolerance = r(1 - cos(theta/2)).
-            var maxTheta = chordTolerance > 0 && chordTolerance < radius ? 2 * Math.Acos(1 - chordTolerance / radius) : Math.PI / 8;
-            if (maxTheta <= 0 || double.IsNaN(maxTheta)) maxTheta = Math.PI / 8;
+            // Segment count from the sagitta: tolerance = r(1 - cos(theta/2)); never more
+            // than 10 degrees per chord, so tight returns chord finely enough that two
+            // independent chordings of one arc stay within the direction tolerance.
+            var maxTheta = chordTolerance > 0 && chordTolerance < radius ? 2 * Math.Acos(1 - chordTolerance / radius) : Math.PI / 18;
+            if (maxTheta <= 0 || double.IsNaN(maxTheta)) maxTheta = Math.PI / 18;
+            maxTheta = Math.Min(maxTheta, Math.PI / 18);
             var n = Math.Max(2, (int)Math.Ceiling(sweep / maxTheta));
             for (var i = 0; i <= n; i++)
             {
@@ -171,6 +174,75 @@ namespace FieldCodes.Compare
                 points.Add(new CPoint(center.X + radius * Math.Cos(a), center.Y + radius * Math.Sin(a)));
             }
             return points;
+        }
+
+        /// <summary>Where segments ab and cd cross, as parameters along each (0..1); false
+        /// when parallel or not crossing within both.</summary>
+        public static bool SegmentsIntersect(CPoint a, CPoint b, CPoint c, CPoint d, out double t, out double u)
+        {
+            t = u = 0;
+            var r1x = b.X - a.X; var r1y = b.Y - a.Y;
+            var r2x = d.X - c.X; var r2y = d.Y - c.Y;
+            var denominator = r1x * r2y - r1y * r2x;
+            if (Math.Abs(denominator) < 1e-12) return false;
+            var qx = c.X - a.X; var qy = c.Y - a.Y;
+            t = (qx * r2y - qy * r2x) / denominator;
+            u = (qx * r1y - qy * r1x) / denominator;
+            return t >= -1e-9 && t <= 1 + 1e-9 && u >= -1e-9 && u <= 1 + 1e-9;
+        }
+
+        /// <summary>
+        /// The parts of a chorded polyline that lie inside a polygon (or outside, when
+        /// inverted), as separate polylines. Each segment is cut at every polygon edge it
+        /// crosses and each piece is kept by where its midpoint lies, so geometry that an
+        /// xref clip hides never takes part in a comparison.
+        /// </summary>
+        public static List<List<CPoint>> ClipPolylineToPolygon(IList<CPoint> v, IList<CPoint> polygon, bool inverted)
+        {
+            var pieces = new List<List<CPoint>>();
+            if (v == null || v.Count < 2 || polygon == null || polygon.Count < 3) return pieces;
+            List<CPoint> current = null;
+            for (var i = 0; i + 1 < v.Count; i++)
+            {
+                var a = v[i];
+                var b = v[i + 1];
+                var cuts = new List<double> { 0.0, 1.0 };
+                for (int j = 0, k = polygon.Count - 1; j < polygon.Count; k = j++)
+                {
+                    double t, u;
+                    if (SegmentsIntersect(a, b, polygon[j], polygon[k], out t, out u) && t > 1e-9 && t < 1 - 1e-9) cuts.Add(t);
+                }
+                cuts.Sort();
+                for (var c = 0; c + 1 < cuts.Count; c++)
+                {
+                    var t0 = cuts[c];
+                    var t1 = cuts[c + 1];
+                    if (t1 - t0 < 1e-9) continue;
+                    var p0 = Lerp(a, b, t0);
+                    var p1 = Lerp(a, b, t1);
+                    var mid = Lerp(a, b, (t0 + t1) / 2);
+                    var inside = PointInPolygon(mid, polygon);
+                    if (inside == inverted)
+                    {
+                        current = null;
+                        continue;
+                    }
+                    if (current == null || current[current.Count - 1].DistanceTo(p0) > 1e-9)
+                    {
+                        current = new List<CPoint> { p0 };
+                        pieces.Add(current);
+                    }
+                    current.Add(p1);
+                }
+            }
+            pieces.RemoveAll(p => p.Count < 2 || Length(p) < 1e-9);
+            return pieces;
+        }
+
+        private static CPoint Lerp(CPoint a, CPoint b, double t)
+        {
+            var z = a.HasZ && b.HasZ ? a.Z + t * (b.Z - a.Z) : double.NaN;
+            return new CPoint(a.X + t * (b.X - a.X), a.Y + t * (b.Y - a.Y), z);
         }
 
         /// <summary>Chords a polyline segment with a bulge (AutoCAD convention: tan of a

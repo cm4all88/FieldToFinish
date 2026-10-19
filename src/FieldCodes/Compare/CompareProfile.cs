@@ -78,6 +78,11 @@ namespace FieldCodes.Compare
         /// <summary>Maximum chord deviation when the reader samples arcs and splines.</summary>
         [JsonProperty("chordToleranceFeet")] public double ChordToleranceFeet { get; set; }
 
+        /// <summary>An uncovered stretch is absorbed as a sliver or a drafting gap only while
+        /// our line stays within this many tolerances of theirs. A short stretch that swings
+        /// farther away is a real difference and keeps plotting however short it is.</summary>
+        [JsonProperty("sliverNearFactor")] public double SliverNearFactor { get; set; }
+
         public CompareTolerances()
         {
             PointFeet = 2.0;
@@ -92,6 +97,7 @@ namespace FieldCodes.Compare
             ReviewOffsetFraction = 0.6;
             AutoAcceptConfidence = 0.75;
             ChordToleranceFeet = 0.05;
+            SliverNearFactor = 2.0;
         }
 
         public void Validate(string prefix, ICollection<string> problems)
@@ -104,6 +110,7 @@ namespace FieldCodes.Compare
             if (double.IsNaN(MinUncoveredFeet) || MinUncoveredFeet < 0) problems.Add(prefix + "minUncoveredFeet must not be negative");
             if (double.IsNaN(FullCoverageFraction) || FullCoverageFraction <= 0.5 || FullCoverageFraction > 1.0) problems.Add(prefix + "fullCoverageFraction must be between 0.5 and 1");
             if (double.IsNaN(AutoAcceptConfidence) || AutoAcceptConfidence < 0.5 || AutoAcceptConfidence > 1.0) problems.Add(prefix + "autoAcceptConfidence must be between 0.5 and 1");
+            if (double.IsNaN(SliverNearFactor) || SliverNearFactor < 1.0) problems.Add(prefix + "sliverNearFactor must be at least 1");
         }
 
         private static void Check(double v, string message, ICollection<string> problems)

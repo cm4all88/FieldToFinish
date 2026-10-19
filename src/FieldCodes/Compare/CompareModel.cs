@@ -228,6 +228,11 @@ namespace FieldCodes.Compare
         /// declared missing.</summary>
         public string ReadProblem { get; set; }
 
+        /// <summary>Annotation whose text could not be read (a Civil 3D label whose content
+        /// is style-driven). It proves a label exists at this place and nothing more: our
+        /// annotation beside it goes to review rather than being matched or declared missing.</summary>
+        public bool Opaque { get; set; }
+
         // ---- derived, cached ---------------------------------------------------
 
         private double[] _stations;
@@ -355,13 +360,26 @@ namespace FieldCodes.Compare
         /// <summary>Layers seen, with entity counts -- for the unknown-layer report.</summary>
         public Dictionary<string, int> LayerCounts { get; set; }
 
+        /// <summary>Objects the reader left out because they are not shown: on frozen, off or
+        /// no-plot layers, invisible, or outside an xref clip. Counted by reason so the run
+        /// says what it ignored; never used to cover anything.</summary>
+        public Dictionary<string, int> HiddenCounts { get; set; }
+
         public CompareDataset()
         {
             Features = new List<CompareFeature>();
             Issues = new List<DatasetIssue>();
             FilesRead = new List<string>();
             LayerCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            HiddenCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             UnitsPerFoot = 1.0;
+        }
+
+        public void CountHidden(string reason)
+        {
+            int n;
+            HiddenCounts.TryGetValue(reason ?? "hidden", out n);
+            HiddenCounts[reason ?? "hidden"] = n + 1;
         }
 
         /// <summary>True when something that should have been read was not (an unresolved

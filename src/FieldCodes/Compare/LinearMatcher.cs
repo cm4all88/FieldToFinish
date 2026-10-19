@@ -7,12 +7,19 @@ namespace FieldCodes.Compare
 {
     /// <summary>
     /// Linework: the physical feature is compared, not the CAD entity. Our line is sampled
-    /// along its length; each sample is covered when a consultant line of the same category
-    /// runs within the offset tolerance and in the same direction. Runs of covered and
-    /// uncovered samples become station intervals, small interior gaps in the consultant's
-    /// drafting are bridged, slivers are absorbed, and the line is then matched, missing or
-    /// partial. One of ours against many of theirs and many of ours against one of theirs
-    /// fall out of the same arithmetic.
+    /// along its length (every vertex, plus a regular step that shrinks for short lines);
+    /// each sample is covered when a consultant line of the same category runs within the
+    /// offset tolerance and in the same direction. Where coverage changes between two
+    /// samples the boundary is found by bisection to a tenth of a foot. Runs become station
+    /// intervals with their end points on our line, so a split is made at exact points.
+    ///
+    /// Gaps and slivers are absorbed only when our geometry stays close to theirs: a
+    /// drafting gap is bridged when our line runs straight across it; a short uncovered
+    /// stretch is a sliver only while it stays within a couple of tolerances of their line.
+    /// A short stretch that swings away is a real difference and keeps plotting.
+    ///
+    /// One of ours against many of theirs and many of ours against one of theirs fall out
+    /// of the same arithmetic.
     /// </summary>
     public static class LinearMatcher
     {
@@ -26,6 +33,66 @@ namespace FieldCodes.Compare
             public double? Dz;
             public bool NearUnknown;
             public string UnknownLayer;
+            /// <summary>Distance to the nearest same-category consultant line, within tolerance or not.</summary>
+            public double NearestSame = double.MaxValue;
+            /// <summary>Refined station where the kind changes between this sample and the next.</summary>
+            public double? BoundaryAfter;
+        }
+
+        private sealed class Sampler
+        {
+            public CompareFeature Line;
+            public MatchContext Ctx;
+            public List<CompareFeature> Same;
+            public List<CompareFeature> Unknown;
+            public double OffTol, AngTol;
+
+            public Sample At(double station)
+            {
+                var p = Geometry2.PointAtStation(Line.Vertices, Line.Stations, station);
+                double dx, dy;
+                Geometry2.DirectionAtStation(Line.Vertices, Line.Stations, station, out dx, out dy);
+                var sample = new Sample { Station = station, Point = p, Kind = IntervalKind.Uncovered };
+                if (Ctx.IsOutsideLimits(p))
+                {
+                    sample.Kind = IntervalKind.OutsideLimits;
+                    return sample;
+                }
+                var best = double.MaxValue;
+                foreach (var c in Same)
+                {
+                    // Nearness is tracked beyond the tolerance (up to a few tolerances) so a
+                    // short uncovered stretch can be told apart: a near miss or a real swing.
+                    if (!c.Bounds.Expand(OffTol * 4).Contains(p)) continue;
+                    double cst; int seg;
+                    var d = Geometry2.ClosestOnPolyline(p, c.Vertices, c.Stations, out cst, out seg);
+                    if (d < sample.NearestSame) sample.NearestSame = d;
+                    if (d > OffTol || d >= best) continue;
+                    var a = c.Vertices[seg];
+                    var b = c.Vertices[Math.Min(seg + 1, c.Vertices.Count - 1)];
+                    if (Geometry2.AngleBetweenUndirected(dx, dy, b.X - a.X, b.Y - a.Y) > AngTol) continue;
+                    best = d;
+                    sample.Kind = IntervalKind.Covered;
+                    sample.CoveredBy = c.Id;
+                    sample.Offset = d;
+                    sample.Dz = Dz(p, c, cst);
+                }
+                if (sample.Kind != IntervalKind.Covered)
+                {
+                    foreach (var u in Unknown)
+                    {
+                        if (!u.Bounds.Expand(OffTol).Contains(p)) continue;
+                        double cst; int seg;
+                        if (Geometry2.ClosestOnPolyline(p, u.Vertices, u.Stations, out cst, out seg) <= OffTol)
+                        {
+                            sample.NearUnknown = true;
+                            sample.UnknownLayer = u.Layer;
+                            break;
+                        }
+                    }
+                }
+                return sample;
+            }
         }
 
         public static FeatureResult Match(CompareFeature s, MatchContext ctx)
@@ -36,9 +103,9 @@ namespace FieldCodes.Compare
             var offTol = ctx.Feet(profile.LineOffsetTolerance(category));
             var angTol = profile.AngleTolerance(category);
             var elevTol = ctx.Feet(profile.ElevationTolerance(category));
-            var step = ctx.Feet(profile.Tolerances.SampleStepFeet);
             var gap = ctx.Feet(profile.Tolerances.GapFeet);
             var minUncovered = ctx.Feet(profile.Tolerances.MinUncoveredFeet);
+            var near = offTol * Math.Max(1.0, profile.Tolerances.SliverNearFactor);
 
             if (s.Vertices == null || s.Vertices.Count < 2 || s.Length <= 1e-9)
             {
@@ -47,62 +114,47 @@ namespace FieldCodes.Compare
                 return r;
             }
 
-            var candidates = ctx.ConsultantLines.QueryFeatures(s.Bounds.Expand(offTol))
+            var candidates = ctx.ConsultantLines.QueryFeatures(s.Bounds.Expand(offTol * 4))
                 .Where(c => c.Vertices != null && c.Vertices.Count >= 2)
                 .ToList();
-            var same = candidates.Where(c => !c.Class.IsUnknown && string.Equals(c.Class.Category, s.Class.Category, StringComparison.OrdinalIgnoreCase)).ToList();
-            var unknown = candidates.Where(c => c.Class.IsUnknown).ToList();
-
-            // ---- sample ------------------------------------------------------------
-            var samples = new List<Sample>();
-            foreach (var st in Geometry2.SampleStations(s.Stations, step))
+            var sampler = new Sampler
             {
-                var p = Geometry2.PointAtStation(s.Vertices, s.Stations, st);
-                double dx, dy;
-                Geometry2.DirectionAtStation(s.Vertices, s.Stations, st, out dx, out dy);
-                var sample = new Sample { Station = st, Point = p, Kind = IntervalKind.Uncovered };
-                if (ctx.IsOutsideLimits(p))
+                Line = s, Ctx = ctx, OffTol = offTol, AngTol = angTol,
+                Same = candidates.Where(c => !c.Class.IsUnknown && string.Equals(c.Class.Category, s.Class.Category, StringComparison.OrdinalIgnoreCase)).ToList(),
+                Unknown = candidates.Where(c => c.Class.IsUnknown).ToList()
+            };
+
+            // ---- sample: every vertex plus a step that shrinks for short lines -----------
+            var step = Math.Min(ctx.Feet(profile.Tolerances.SampleStepFeet), Math.Max(ctx.Feet(0.25), s.Length / 8.0));
+            var samples = Geometry2.SampleStations(s.Stations, step).Select(sampler.At).ToList();
+
+            // ---- refine every covered/uncovered transition to a tenth of a foot ----------
+            var refineTo = ctx.Feet(0.1);
+            for (var i = 0; i + 1 < samples.Count; i++)
+            {
+                var a = samples[i];
+                var b = samples[i + 1];
+                if (a.Kind == b.Kind || a.Kind == IntervalKind.OutsideLimits || b.Kind == IntervalKind.OutsideLimits) continue;
+                var lo = a.Station;
+                var hi = b.Station;
+                var loKind = a.Kind;
+                for (var k = 0; k < 8 && hi - lo > refineTo; k++)
                 {
-                    sample.Kind = IntervalKind.OutsideLimits;
-                    samples.Add(sample);
-                    continue;
+                    var mid = (lo + hi) / 2.0;
+                    var m = sampler.At(mid);
+                    if (m.Kind == loKind) lo = mid; else hi = mid;
                 }
-                var best = double.MaxValue;
-                foreach (var c in same)
-                {
-                    if (!c.Bounds.Expand(offTol).Contains(p)) continue;
-                    double cst; int seg;
-                    var d = Geometry2.ClosestOnPolyline(p, c.Vertices, c.Stations, out cst, out seg);
-                    if (d > offTol || d >= best) continue;
-                    var a = c.Vertices[seg];
-                    var b = c.Vertices[Math.Min(seg + 1, c.Vertices.Count - 1)];
-                    if (Geometry2.AngleBetweenUndirected(dx, dy, b.X - a.X, b.Y - a.Y) > angTol) continue;
-                    best = d;
-                    sample.Kind = IntervalKind.Covered;
-                    sample.CoveredBy = c.Id;
-                    sample.Offset = d;
-                    sample.Dz = Dz(p, c, cst);
-                }
-                if (sample.Kind != IntervalKind.Covered)
-                {
-                    foreach (var u in unknown)
-                    {
-                        if (!u.Bounds.Expand(offTol).Contains(p)) continue;
-                        double cst; int seg;
-                        if (Geometry2.ClosestOnPolyline(p, u.Vertices, u.Stations, out cst, out seg) <= offTol)
-                        {
-                            sample.NearUnknown = true;
-                            sample.UnknownLayer = u.Layer;
-                            break;
-                        }
-                    }
-                }
-                samples.Add(sample);
+                a.BoundaryAfter = (lo + hi) / 2.0;
             }
 
-            // ---- intervals ---------------------------------------------------------
-            var intervals = Intervals(samples, s.Length);
-            Absorb(intervals, gap, minUncovered);
+            // ---- intervals -------------------------------------------------------------
+            var intervals = Intervals(samples, s);
+            Absorb(intervals, samples, s, gap, minUncovered, near, offTol);
+            foreach (var iv in intervals)
+            {
+                iv.StartPoint = Geometry2.PointAtStation(s.Vertices, s.Stations, iv.Start);
+                iv.EndPoint = Geometry2.PointAtStation(s.Vertices, s.Stations, iv.End);
+            }
             r.Intervals = intervals;
             r.CoveredLength = intervals.Where(i => i.Kind == IntervalKind.Covered).Sum(i => i.Length);
             r.UncoveredLength = intervals.Where(i => i.Kind == IntervalKind.Uncovered).Sum(i => i.Length);
@@ -120,7 +172,7 @@ namespace FieldCodes.Compare
             var coveredSamples = samples.Where(x => x.Kind == IntervalKind.Covered).ToList();
             if (coveredSamples.Count > 0) r.HorizontalOffset = coveredSamples.Average(x => x.Offset);
 
-            // ---- status ------------------------------------------------------------
+            // ---- status ----------------------------------------------------------------
             if (inBounds <= 1e-9)
             {
                 r.Status = MatchStatus.Excluded;
@@ -133,7 +185,7 @@ namespace FieldCodes.Compare
             var uncoveredNearUnknown = samples.Count(x => x.Kind != IntervalKind.OutsideLimits && x.NearUnknown);
             var inBoundSamples = samples.Count(x => x.Kind != IntervalKind.OutsideLimits);
 
-            if (fraction >= profile.Tolerances.FullCoverageFraction)
+            if (fraction >= profile.Tolerances.FullCoverageFraction && !intervals.Any(i => i.Kind == IntervalKind.Uncovered && i.Length > 0))
             {
                 r.Status = MatchStatus.Matched;
                 r.Confidence = Confidence(s, ctx, coveredSamples, covering, offTol, r, profile);
@@ -165,6 +217,10 @@ namespace FieldCodes.Compare
                 r.Confidence = Confidence(s, ctx, coveredSamples, covering, offTol, r, profile);
                 r.Note(string.Format(CultureInfo.InvariantCulture, "{0:0.0} of {1:0.0} ft represented; {2:0.0} ft not",
                     r.CoveredLength / ctx.UnitsPerFoot, inBounds / ctx.UnitsPerFoot, r.UncoveredLength / ctx.UnitsPerFoot));
+                var shortDifferences = intervals.Where(i => i.Kind == IntervalKind.Uncovered && i.Length < minUncovered).ToList();
+                if (shortDifferences.Count > 0)
+                    r.Note(string.Format(CultureInfo.InvariantCulture, "{0} short stretch(es) differ from their line by up to {1:0.0} ft and keep plotting",
+                        shortDifferences.Count, shortDifferences.Max(i => i.MaxDistance == double.MaxValue ? 0 : i.MaxDistance) / ctx.UnitsPerFoot));
                 if (uncoveredNearUnknown > 0)
                     r.Note("part of the uncovered length runs along unmapped consultant linework (layer " + samples.First(x => x.NearUnknown).UnknownLayer + ")");
                 if (uncoveredNearUnknown > inBoundSamples * 0.25) { r.Status = MatchStatus.NeedsReview; r.Confidence = Math.Min(r.Confidence, 0.4); }
@@ -220,9 +276,9 @@ namespace FieldCodes.Compare
             return confidence;
         }
 
-        /// <summary>Runs of equal-kind samples become intervals; the boundary between two
-        /// runs sits halfway between the last sample of one and the first of the next.</summary>
-        internal static List<CoverageInterval> Intervals(List<Sample> samples, double length)
+        /// <summary>Runs of equal-kind samples become intervals. The boundary between two runs
+        /// is the refined station when one was found, else halfway between the samples.</summary>
+        internal static List<CoverageInterval> Intervals(List<Sample> samples, CompareFeature line)
         {
             var intervals = new List<CoverageInterval>();
             if (samples.Count == 0) return intervals;
@@ -232,32 +288,42 @@ namespace FieldCodes.Compare
                 var x = samples[i];
                 if (current == null || current.Kind != x.Kind)
                 {
-                    var start = current == null ? 0.0 : (samples[i - 1].Station + x.Station) / 2.0;
+                    var start = current == null ? 0.0 : (samples[i - 1].BoundaryAfter ?? (samples[i - 1].Station + x.Station) / 2.0);
                     if (current != null) current.End = start;
                     current = new CoverageInterval { Start = start, End = start, Kind = x.Kind };
                     intervals.Add(current);
                 }
                 if (x.Kind == IntervalKind.Covered && x.CoveredBy != null && !current.CoveredBy.Contains(x.CoveredBy)) current.CoveredBy.Add(x.CoveredBy);
             }
-            intervals[intervals.Count - 1].End = length;
+            intervals[intervals.Count - 1].End = line.Length;
+            Measure(intervals, samples);
+            return intervals;
+        }
+
+        private static void Measure(List<CoverageInterval> intervals, List<Sample> samples)
+        {
             foreach (var iv in intervals)
             {
-                var inside = samples.Where(x => x.Kind == IntervalKind.Covered && x.Station >= iv.Start - 1e-9 && x.Station <= iv.End + 1e-9).ToList();
-                iv.MeanOffset = inside.Count > 0 ? inside.Average(x => x.Offset) : 0;
+                var inside = samples.Where(x => x.Station >= iv.Start - 1e-9 && x.Station <= iv.End + 1e-9).ToList();
+                var covered = inside.Where(x => x.Kind == IntervalKind.Covered).ToList();
+                iv.MeanOffset = covered.Count > 0 ? covered.Average(x => x.Offset) : 0;
+                iv.MaxDistance = inside.Count > 0 ? inside.Max(x => x.NearestSame) : 0;
             }
-            return intervals;
         }
 
         /// <summary>
         /// Bridges consultant drafting gaps and removes slivers, repeating until stable:
-        ///   - an uncovered run no longer than the gap tolerance BETWEEN covered runs is covered;
+        ///   - an uncovered run no longer than the gap tolerance BETWEEN covered runs is
+        ///     covered when our line runs straight across it (within tolerance of the chord
+        ///     joining the run's ends) -- a driveway break in their curb, not a jog in ours;
         ///   - an uncovered run shorter than the minimum beside a covered run is covered
-        ///     (no 2 ft plotting stub at the end of a matched curb);
+        ///     only while every sample stays within the nearness distance of their line
+        ///     (a near miss); a short stretch that swings away keeps plotting;
         ///   - a covered run shorter than the minimum beside uncovered runs is uncovered
         ///     (no 2 ft nonplot hole in a line we plot).
         /// Outside-limits intervals never change.
         /// </summary>
-        internal static void Absorb(List<CoverageInterval> intervals, double gap, double minUncovered)
+        internal static void Absorb(List<CoverageInterval> intervals, List<Sample> samples, CompareFeature line, double gap, double minUncovered, double near, double offTol)
         {
             for (var pass = 0; pass < 10; pass++)
             {
@@ -275,9 +341,9 @@ namespace FieldCodes.Compare
 
                     if (iv.Kind == IntervalKind.Uncovered)
                     {
-                        var bridge = prevCovered && nextCovered && iv.Length <= gap;
-                        var sliver = iv.Length < minUncovered && (prevCovered || nextCovered);
-                        if (bridge || sliver)
+                        var straight = prevCovered && nextCovered && iv.Length <= gap && RunsStraight(line, iv, offTol);
+                        var nearMiss = iv.Length < minUncovered && (prevCovered || nextCovered) && iv.MaxDistance <= near;
+                        if (straight || nearMiss)
                         {
                             iv.Kind = IntervalKind.Covered;
                             changed = true;
@@ -296,6 +362,24 @@ namespace FieldCodes.Compare
                 Merge(intervals);
                 if (!changed) break;
             }
+            Measure(intervals, samples);
+        }
+
+        /// <summary>True when our line, over the interval, never leaves the straight chord
+        /// between the interval's ends by more than the tolerance: their line simply stops
+        /// and restarts, ours does not turn.</summary>
+        private static bool RunsStraight(CompareFeature line, CoverageInterval iv, double offTol)
+        {
+            var a = Geometry2.PointAtStation(line.Vertices, line.Stations, iv.Start);
+            var b = Geometry2.PointAtStation(line.Vertices, line.Stations, iv.End);
+            var probes = Math.Max(4, (int)Math.Ceiling(iv.Length / Math.Max(0.1, offTol)));
+            for (var k = 1; k < probes; k++)
+            {
+                var p = Geometry2.PointAtStation(line.Vertices, line.Stations, iv.Start + iv.Length * k / probes);
+                double t;
+                if (Geometry2.DistanceToSegment(p, a, b, out t) > offTol) return false;
+            }
+            return true;
         }
 
         private static void Merge(List<CoverageInterval> intervals)
@@ -308,6 +392,7 @@ namespace FieldCodes.Compare
                 a.End = b.End;
                 foreach (var id in b.CoveredBy) if (!a.CoveredBy.Contains(id)) a.CoveredBy.Add(id);
                 a.MeanOffset = (a.MeanOffset + b.MeanOffset) / 2.0;
+                a.MaxDistance = Math.Max(a.MaxDistance, b.MaxDistance);
                 intervals.RemoveAt(i);
             }
         }

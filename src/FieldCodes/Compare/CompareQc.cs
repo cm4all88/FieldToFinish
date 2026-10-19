@@ -19,6 +19,11 @@ namespace FieldCodes.Compare
         public string Handle { get; set; }
         public bool Exists { get; set; }
         public string Layer { get; set; }
+        /// <summary>Whether the object will actually plot, resolved from everything that
+        /// decides it (visibility, its layer, a block definition's own layers, a COGO
+        /// point's style). Null means it could not be determined, which fails the check.</summary>
+        public bool? Plots { get; set; }
+        public string PlotNote { get; set; }
     }
 
     public sealed class XrefState
@@ -130,6 +135,7 @@ namespace FieldCodes.Compare
             var notPlotting = new List<string>();
             var stillPlotting = new List<string>();
             var notApplied = new List<string>();
+            var unverified = new List<string>();
             foreach (var r in result.Results)
             {
                 EntityState entity;
@@ -138,27 +144,38 @@ namespace FieldCodes.Compare
                 {
                     if (entity == null) continue;
                     if (!entity.Exists) { notPlotting.Add(r.Handle + " (erased)"); continue; }
-                    if (profile.NonplotLayers.Contains(entity.Layer)) { notPlotting.Add(r.Handle + " (on " + entity.Layer + ")"); continue; }
-                    LayerState layer;
-                    if (input.Layers.TryGetValue(entity.Layer ?? string.Empty, out layer) && (!layer.Plottable || layer.Frozen || layer.Off))
-                        notPlotting.Add(r.Handle + " (layer " + entity.Layer + (layer.Frozen ? " frozen" : layer.Off ? " off" : " nonplot") + ")");
+                    var plots = Plots(entity, input, profile);
+                    if (plots == false) notPlotting.Add(r.Handle + " (" + (entity.PlotNote ?? "will not plot") + ")");
+                    else if (plots == null) unverified.Add(r.Handle + " (" + (entity.PlotNote ?? "plot state unknown") + ")");
                 }
                 if (r.Action == PlannedAction.Nonplot || r.Action == PlannedAction.SplitNonplot)
                 {
                     var applied = input.Applied != null ? input.Applied.Find(r.Handle) : null;
-                    if (applied == null) { notApplied.Add(r.Handle); continue; }
+                    if (applied == null) { notApplied.Add(r.Handle + (string.IsNullOrEmpty(r.ApplyProblem) ? string.Empty : " (" + r.ApplyProblem + ")")); continue; }
                     if (entity == null) continue;
                     if (!entity.Exists) { stillPlotting.Add(r.Handle + " (erased)"); continue; }
-                    if (!string.Equals(entity.Layer, r.NonplotLayer, StringComparison.OrdinalIgnoreCase))
-                        stillPlotting.Add(r.Handle + " (on " + entity.Layer + ", expected " + r.NonplotLayer + ")");
+                    var plots = Plots(entity, input, profile);
+                    if (plots == true) stillPlotting.Add(r.Handle + " (" + (entity.PlotNote ?? "still plots") + ")");
+                    else if (plots == null) unverified.Add(r.Handle + " (" + (entity.PlotNote ?? "plot state unknown") + ")");
+                    if (r.Action == PlannedAction.SplitNonplot)
+                        foreach (var h in applied.SplitHandles)
+                        {
+                            EntityState copy;
+                            if (!input.Entities.TryGetValue(h, out copy) || !copy.Exists) continue;
+                            var copyPlots = Plots(copy, input, profile);
+                            if (copyPlots == false) notPlotting.Add(h + " (split copy of " + r.Handle + ": " + (copy.PlotNote ?? "will not plot") + ")");
+                            else if (copyPlots == null) unverified.Add(h + " (split copy of " + r.Handle + ")");
+                        }
                 }
             }
             Add(checks, "MISSING-PLOT", true, notPlotting.Count == 0,
                 notPlotting.Count == 0 ? "Every feature meant for delivery is on a plotting layer." : notPlotting.Count + " feature(s) meant to plot will not: " + Preview(notPlotting));
             Add(checks, "APPLIED", true, notApplied.Count == 0,
-                notApplied.Count == 0 ? "Every planned change has been applied." : notApplied.Count + " planned change(s) not applied yet (run Apply): " + Preview(notApplied));
+                notApplied.Count == 0 ? "Every planned change has been applied and verified." : notApplied.Count + " planned change(s) not applied (run Apply, or decide the ones it refused): " + Preview(notApplied));
             Add(checks, "DUPLICATES-NONPLOT", true, stillPlotting.Count == 0,
-                stillPlotting.Count == 0 ? "Every matched duplicate is on its nonplot layer." : stillPlotting.Count + " matched duplicate(s) still plot: " + Preview(stillPlotting));
+                stillPlotting.Count == 0 ? "Every matched duplicate will not plot (layer, style and block content checked)." : stillPlotting.Count + " matched duplicate(s) still plot: " + Preview(stillPlotting));
+            Add(checks, "PLOT-VERIFIED", true, unverified.Count == 0,
+                unverified.Count == 0 ? "The plot state of every object was determined." : unverified.Count + " object(s) whose plot state could not be determined: " + Preview(unverified));
 
             // 6. Duplicate additions from previous runs.
             var missingSplits = new List<string>();
@@ -195,6 +212,19 @@ namespace FieldCodes.Compare
                 Add(checks, "WARNING", false, false, warning);
 
             return checks;
+        }
+
+        /// <summary>The object's real plot state when the gatherer resolved it; otherwise
+        /// the layer-based answer, which is all a core-only caller can know.</summary>
+        private static bool? Plots(EntityState entity, QcInput input, CompareProfile profile)
+        {
+            if (entity.Plots.HasValue) return entity.Plots;
+            if (entity.PlotNote != null) return null;     // resolved, and found undeterminable
+            if (profile.NonplotLayers.Contains(entity.Layer)) return false;
+            LayerState layer;
+            if (input.Layers.TryGetValue(entity.Layer ?? string.Empty, out layer))
+                return layer.Exists && layer.Plottable && !layer.Frozen && !layer.Off;
+            return true;
         }
 
         public static bool Passes(IEnumerable<QcCheck> checks)

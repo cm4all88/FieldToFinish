@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.Civil.DatabaseServices;
 using FieldCodes.Compare;
 
 using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
@@ -14,13 +15,19 @@ using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
 namespace FieldCodes.Cad.Compare
 {
     /// <summary>
-    /// The only code that changes survey objects: moves approved duplicates to the
-    /// comparison nonplot layers, copies the uncovered portions of partly represented
-    /// lines back onto their plotting layer, and reverses all of it from the record
-    /// it keeps. Original geometry is never altered: a split is a stamped COPY of the
-    /// portion that still plots, while the original moves to nonplot intact.
+    /// The only code that changes survey objects: makes approved duplicates not plot,
+    /// copies the uncovered portions of partly represented lines back onto their plotting
+    /// layer, and reverses all of it from the record it keeps.
     ///
-    /// UNTESTED in Civil 3D.
+    /// Every change is VERIFIED the moment it is made, with the same resolver the final
+    /// QC uses (layer, visibility, block definition content, point style and label). A
+    /// change that leaves the object plotting, or whose plot state cannot be determined,
+    /// is reverted on the spot and reported; it is never recorded as done.
+    ///
+    /// Original geometry is never altered: a split is a stamped COPY of the portion that
+    /// still plots, while the original moves to nonplot intact. Shared block definitions
+    /// are never edited: an insert whose block draws on its own layers is pointed at a
+    /// nonplot twin instead. UNTESTED in Civil 3D.
     /// </summary>
     internal static class CompareLayerManager
     {
@@ -45,7 +52,7 @@ namespace FieldCodes.Cad.Compare
                     }
                     if (record.IsFrozen || record.IsOff)
                     {
-                        // Nonplot objects must stay visible on screen for review.
+                        // Nonplot objects stay visible on screen for review.
                         record.UpgradeOpen();
                         record.IsFrozen = false;
                         record.IsOff = false;
@@ -71,13 +78,15 @@ namespace FieldCodes.Cad.Compare
         /// <summary>
         /// Brings the drawing in line with the plan: changes already applied and still in
         /// the plan are left alone, changes no longer in the plan (a reviewer chose Keep
-        /// Plotting) are reversed, new ones are made. Returns the record to store.
+        /// Plotting) are reversed, new ones are made and verified. Returns the record to
+        /// store; <paramref name="problems"/> lists every change refused, with why.
         /// </summary>
         public static AppliedChangeSet Reconcile(Database db, Transaction tr, ChangePlan plan, ComparisonResult result, CompareProfile profile,
                                                  string rulesVersion, AppliedChangeSet existing, bool includeAutomatic, Editor ed,
-                                                 out int applied, out int reversed, out int skipped)
+                                                 out int applied, out int reversed, out int skipped, IDictionary<string, string> problems)
         {
             applied = reversed = skipped = 0;
+            problems = problems ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var record = existing ?? new AppliedChangeSet();
             record.RunId = result != null ? result.RunId : record.RunId;
             record.Profile = profile.Name;
@@ -106,6 +115,7 @@ namespace FieldCodes.Cad.Compare
 
             EnsureNonplotLayers(db, tr, profile, ed);
             var minUncovered = profile.Tolerances.MinUncoveredFeet * (result != null && result.UnitsPerFoot > 0 ? result.UnitsPerFoot : 1.0);
+            ObjectId nonplotPointStyle = ObjectId.Null;
 
             foreach (var change in wanted.Values)
             {
@@ -114,9 +124,10 @@ namespace FieldCodes.Cad.Compare
                 if (entity == null)
                 {
                     skipped++;
-                    if (ed != null) ed.WriteMessage("\n  {0}: object no longer in the drawing; skipped.", change.Handle);
+                    problems[change.Handle] = "object no longer in the drawing";
                     continue;
                 }
+
                 var done = new AppliedChange
                 {
                     Handle = change.Handle,
@@ -129,43 +140,124 @@ namespace FieldCodes.Cad.Compare
                     OriginalLineweight = entity.LineWeight.ToString(),
                     OriginalPlotStyle = SafePlotStyle(entity),
                     OriginalTransparency = entity.Transparency.ToString(),
+                    OriginalVisible = entity.Visible,
                     NonplotLayer = change.ToLayer,
                     Action = change.Action,
-                    IntervalsKey = change.IntervalsKey
+                    IntervalsKey = change.IntervalsKey,
+                    Method = "Layer"
                 };
 
-                if (change.Action == PlannedAction.SplitNonplot)
+                string problem = null;
+                try
                 {
-                    var feature = result != null ? result.Find(change.Handle) : null;
-                    bool approximated;
-                    var copies = SplitCopies(db, tr, entity, change, feature, minUncovered, rulesVersion, out approximated);
-                    done.SplitApproximated = approximated;
-                    if (copies.Count == 0 && change.KeepIntervals.Count > 0)
+                    if (change.Action == PlannedAction.SplitNonplot)
                     {
-                        skipped++;
-                        if (ed != null) ed.WriteMessage("\n  {0}: the uncovered portion could not be copied; left plotting as is.", change.Handle);
-                        continue;
+                        var feature = result != null ? result.Find(change.Handle) : null;
+                        bool approximated;
+                        var copies = SplitCopies(db, tr, entity, change, feature, minUncovered, rulesVersion, out approximated, out problem);
+                        if (problem == null && copies.Count == 0 && change.KeepIntervals.Count > 0)
+                            problem = "the uncovered portion could not be copied";
+                        if (problem == null)
+                        {
+                            done.SplitApproximated = approximated;
+                            done.SplitHandles.AddRange(copies);
+                            foreach (var h in copies)
+                            {
+                                var copy = Resolve(db, tr, h, OpenMode.ForRead);
+                                var verdict = PlotVisibility.Of(copy, db, tr);
+                                if (verdict.Plots != true) { problem = "the plotting copy would not plot (" + verdict.Note + ")"; break; }
+                            }
+                        }
                     }
-                    done.SplitHandles.AddRange(copies);
-                }
 
-                entity.Layer = change.ToLayer;
-                var br = entity as BlockReference;
-                if (br != null)
-                {
-                    foreach (ObjectId attId in br.AttributeCollection)
+                    if (problem == null) problem = MakeNonplot(entity, change, done, db, tr, profile, ref nonplotPointStyle);
+
+                    if (problem == null)
                     {
-                        if (attId.IsErased) continue;
-                        var att = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
-                        if (att == null) continue;
-                        done.AttributeLayers[att.Handle.ToString()] = att.Layer;
-                        att.Layer = change.ToLayer;
+                        var verdict = PlotVisibility.Of(entity, db, tr);
+                        if (verdict.Plots == true) problem = "it would still plot: " + verdict.Note;
+                        else if (verdict.Plots == null) problem = "its plot state could not be determined: " + verdict.Note;
+                        else done.Verified = true;
                     }
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception ex) { problem = "AutoCAD refused the change: " + ex.Message; }
+                catch (InvalidOperationException ex) { problem = ex.Message; }
+
+                if (problem != null)
+                {
+                    // Undo whatever part of the change was made; the object stays as it was.
+                    RestoreOne(db, tr, done, null);
+                    skipped++;
+                    problems[change.Handle] = problem;
+                    if (ed != null) ed.WriteMessage("\n  {0}: NOT changed - {1}", change.Handle, problem);
+                    continue;
                 }
                 record.Changes.Add(done);
                 applied++;
             }
             return record;
+        }
+
+        /// <summary>Moves the object to its nonplot layer and does whatever else its kind
+        /// needs so that it really stops plotting. Returns a problem, or null.</summary>
+        private static string MakeNonplot(AcEntity entity, PlannedChange change, AppliedChange done, Database db, Transaction tr,
+                                          CompareProfile profile, ref ObjectId nonplotPointStyle)
+        {
+            entity.Layer = change.ToLayer;
+
+            var cogo = entity as CogoPoint;
+            if (cogo != null)
+            {
+                done.OriginalLabelVisible = cogo.IsLabelVisible;
+                done.OriginalPointStyle = cogo.StyleId.IsNull ? null : cogo.StyleId.Handle.ToString();
+                var effective = CogoPointPlotting.Resolve(cogo, db, tr);
+                if (effective.Problem != null) return "point display could not be determined (" + effective.Problem + ")";
+                if (effective.StyleOverriddenByGroup)
+                    return "point group '" + effective.GroupName + "' overrides the point style, so the marker would still plot; remove the override, or exclude the point";
+
+                cogo.IsLabelVisible = false;
+                var markerLayer = string.IsNullOrEmpty(effective.MarkerLayer) || effective.MarkerLayer == "0" ? change.ToLayer : effective.MarkerLayer;
+                if (effective.MarkerVisible && PlotVisibility.LayerPlots(db, tr, markerLayer))
+                {
+                    // The style fixes the marker's layer: give the point the nonplot style.
+                    if (nonplotPointStyle.IsNull) nonplotPointStyle = CogoPointPlotting.EnsureNonplotStyle(db, tr, profile.NonplotLayers.Point);
+                    cogo.StyleId = nonplotPointStyle;
+                    done.Method = "LayerAndPointStyle";
+                }
+                return null;
+            }
+
+            var br = entity as BlockReference;
+            if (br != null)
+            {
+                foreach (ObjectId attId in br.AttributeCollection)
+                {
+                    if (attId.IsErased) continue;
+                    var att = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                    if (att == null) continue;
+                    done.AttributeLayers[att.Handle.ToString()] = att.Layer;
+                    att.Layer = change.ToLayer;
+                }
+                var definition = tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+                if (definition == null) return "the block definition could not be opened";
+                if (!PlotVisibility.DrawsOnOwnLayers(definition, tr, 0)) return null;
+
+                if (br.IsDynamicBlock)
+                {
+                    // A dynamic block's displayed geometry lives in an anonymous definition
+                    // that AutoCAD manages; it is hidden as a whole rather than twinned.
+                    br.Visible = false;
+                    done.Method = "Invisible";
+                    return null;
+                }
+                done.OriginalBlockDefinition = br.BlockTableRecord.Handle.ToString();
+                var twinId = BlockTwins.Ensure(db, tr, br.BlockTableRecord, profile.NonplotLayers.Block, 0);
+                done.TwinBlockDefinition = twinId.Handle.ToString();
+                br.BlockTableRecord = twinId;
+                done.Method = "BlockTwin";
+                return null;
+            }
+            return null;
         }
 
         private static string SafePlotStyle(AcEntity entity)
@@ -176,39 +268,40 @@ namespace FieldCodes.Cad.Compare
         // ================================================================== split
 
         /// <summary>
-        /// Copies of the stations to keep plotting. The original curve is split with the
-        /// real AutoCAD geometry (arcs stay arcs); closed curves and Civil 3D figures,
-        /// which do not split cleanly, get a 3D polyline sampled along the real curve
-        /// instead, and the record says so.
+        /// Copies of the stations to keep plotting. The original curve is split with the real
+        /// AutoCAD geometry at the closest points to the interval's end points (arcs stay arcs,
+        /// elevations stay); closed curves and Civil 3D figures, which do not split cleanly,
+        /// get a 3D polyline sampled along the real curve, and the record says so. Every
+        /// piece is checked against the expected end points before it is kept.
         /// </summary>
         private static List<string> SplitCopies(Database db, Transaction tr, AcEntity entity, PlannedChange change, FeatureResult feature,
-                                                double minUncovered, string rulesVersion, out bool approximated)
+                                                double minUncovered, string rulesVersion, out bool approximated, out string problem)
         {
             approximated = false;
+            problem = null;
             var handles = new List<string>();
             var curve = entity as Curve;
-            if (curve == null) return handles;
+            if (curve == null) { problem = "not a curve; cannot be split"; return handles; }
 
-            double trueLength;
-            double start;
+            double trueLength, start;
             try
             {
                 start = curve.GetDistanceAtParameter(curve.StartParam);
                 trueLength = curve.GetDistanceAtParameter(curve.EndParam) - start;
             }
-            catch (Autodesk.AutoCAD.Runtime.Exception) { return handles; }
-            if (trueLength <= 1e-9) return handles;
+            catch (Autodesk.AutoCAD.Runtime.Exception ex) { problem = "length could not be read: " + ex.Message; return handles; }
+            if (trueLength <= 1e-9) { problem = "zero length"; return handles; }
 
-            // Stations were measured along the chorded copy; scale them onto the real curve.
             var chordLength = feature != null && feature.Length > 0 ? feature.Length : trueLength;
-            var scale = trueLength / chordLength;
             var closed = IsClosed(curve);
-            var civil = entity is Autodesk.Civil.DatabaseServices.FeatureLine;
+            var civil = entity is FeatureLine;
+            var tolerance = Math.Max(0.05, minUncovered * 0.25);
 
             foreach (var interval in change.KeepIntervals)
             {
-                var a = Math.Max(0, interval.Start * scale);
-                var b = Math.Min(trueLength, interval.End * scale);
+                double a, b;
+                Point3d expectedStart, expectedEnd;
+                if (!StationsOf(curve, start, trueLength, chordLength, interval, out a, out b, out expectedStart, out expectedEnd)) continue;
                 if (b - a < Math.Max(0.01, minUncovered * 0.5)) continue;
 
                 AcEntity copy = null;
@@ -216,13 +309,24 @@ namespace FieldCodes.Cad.Compare
                 {
                     try { copy = SplitPiece(curve, start, a, b, trueLength); }
                     catch (Autodesk.AutoCAD.Runtime.Exception) { copy = null; }
+                    if (copy != null && !EndsMatch(copy, expectedStart, expectedEnd, tolerance))
+                    {
+                        copy.Dispose();
+                        copy = null;
+                    }
                 }
                 if (copy == null)
                 {
-                    copy = SampledPolyline(curve, start, a, b, db);
+                    copy = SampledPolyline(curve, start, a, b);
                     approximated = true;
+                    if (copy != null && !EndsMatch(copy, expectedStart, expectedEnd, tolerance))
+                    {
+                        copy.Dispose();
+                        problem = string.Format(CultureInfo.InvariantCulture, "the piece from station {0:0.0} to {1:0.0} did not land on the expected points", a, b);
+                        return handles;
+                    }
                 }
-                if (copy == null) continue;
+                if (copy == null) { problem = "the piece could not be built"; return handles; }
 
                 copy.SetDatabaseDefaults(db);
                 copy.Layer = change.FromLayer;
@@ -231,12 +335,69 @@ namespace FieldCodes.Cad.Compare
                 try { copy.LinetypeScale = entity.LinetypeScale; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
                 copy.LineWeight = entity.LineWeight;
                 try { copy.PlotStyleName = entity.PlotStyleName; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                try { copy.Transparency = entity.Transparency; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                copy.Visible = true;
                 CadUtil.AddToModelSpace(db, tr, copy);
                 Ownership.Stamp(copy, change.Handle, rulesVersion ?? string.Empty, FtfEntityKind.CompareSplit, null, CompareTag);
                 handles.Add(copy.Handle.ToString());
             }
             return handles;
         }
+
+        /// <summary>Stations on the real curve for an interval: from its recorded end points
+        /// (closest points on the curve) when it has them, else by scaled station.</summary>
+        private static bool StationsOf(Curve curve, double start, double trueLength, double chordLength, CoverageInterval interval,
+                                       out double a, out double b, out Point3d expectedStart, out Point3d expectedEnd)
+        {
+            a = b = 0;
+            expectedStart = expectedEnd = Point3d.Origin;
+            var havePoints = interval.StartPoint.X != 0 || interval.StartPoint.Y != 0 || interval.EndPoint.X != 0 || interval.EndPoint.Y != 0;
+            try
+            {
+                if (havePoints)
+                {
+                    expectedStart = curve.GetClosestPointTo(ToPoint3d(interval.StartPoint, curve), false);
+                    expectedEnd = curve.GetClosestPointTo(ToPoint3d(interval.EndPoint, curve), false);
+                    a = curve.GetDistAtPoint(expectedStart) - start;
+                    b = curve.GetDistAtPoint(expectedEnd) - start;
+                }
+                else
+                {
+                    var scale = trueLength / chordLength;
+                    a = Math.Max(0, interval.Start * scale);
+                    b = Math.Min(trueLength, interval.End * scale);
+                    expectedStart = curve.GetPointAtDist(start + a);
+                    expectedEnd = curve.GetPointAtDist(start + b);
+                }
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { return false; }
+            if (b < a) { var t = a; a = b; b = t; var p = expectedStart; expectedStart = expectedEnd; expectedEnd = p; }
+            a = Math.Max(0, a);
+            b = Math.Min(trueLength, b);
+            return true;
+        }
+
+        private static Point3d ToPoint3d(CPoint p, Curve curve)
+        {
+            var z = p.HasZ ? p.Z : curve.StartPoint.Z;
+            return new Point3d(p.X, p.Y, z);
+        }
+
+        private static bool EndsMatch(AcEntity piece, Point3d expectedStart, Point3d expectedEnd, double tolerance)
+        {
+            var c = piece as Curve;
+            if (c == null) return false;
+            try
+            {
+                var s = Flat(c.StartPoint); var e = Flat(c.EndPoint);
+                var es = Flat(expectedStart); var ee = Flat(expectedEnd);
+                return (s.DistanceTo(es) <= tolerance && e.DistanceTo(ee) <= tolerance) ||
+                       (s.DistanceTo(ee) <= tolerance && e.DistanceTo(es) <= tolerance);
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { return false; }
+        }
+
+        private static Point3d Flat(Point3d p) { return new Point3d(p.X, p.Y, 0); }
 
         private static bool IsClosed(Curve curve)
         {
@@ -272,7 +433,7 @@ namespace FieldCodes.Cad.Compare
             finally { pieces.Dispose(); }
         }
 
-        private static AcEntity SampledPolyline(Curve curve, double start, double a, double b, Database db)
+        private static AcEntity SampledPolyline(Curve curve, double start, double a, double b)
         {
             var points = new Point3dCollection();
             var step = Math.Max(0.25, (b - a) / 400.0);
@@ -287,17 +448,15 @@ namespace FieldCodes.Cad.Compare
 
         // ================================================================ restore
 
-        /// <summary>Puts every recorded object back on its original layer and erases the
-        /// split copies, then erases any split copy no record owns. Returns objects restored.</summary>
-        public static int RestoreAll(Database db, Transaction tr, AppliedChangeSet applied, Editor ed, out int orphansErased)
+        /// <summary>Puts every recorded object back exactly, erases the split copies, then
+        /// erases any split copy no record owns and any block twin nothing uses.</summary>
+        public static int RestoreAll(Database db, Transaction tr, AppliedChangeSet applied, Editor ed, out int orphansErased, out int twinsErased)
         {
             var restored = 0;
             if (applied != null)
                 foreach (var change in applied.Changes)
                     if (RestoreOne(db, tr, change, ed)) restored++;
 
-            var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (applied != null) foreach (var c in applied.Changes) foreach (var h in c.SplitHandles) owned.Add(h);
             orphansErased = 0;
             foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == FtfEntityKind.CompareSplit))
             {
@@ -306,6 +465,7 @@ namespace FieldCodes.Cad.Compare
                 entity.Erase();
                 orphansErased++;
             }
+            twinsErased = BlockTwins.Purge(db, tr);
             return restored;
         }
 
@@ -317,16 +477,37 @@ namespace FieldCodes.Cad.Compare
             {
                 if (LayerExists(db, tr, change.OriginalLayer)) entity.Layer = change.OriginalLayer;
                 else if (ed != null) ed.WriteMessage("\n  {0}: original layer {1} no longer exists; left on {2}.", change.Handle, change.OriginalLayer, entity.Layer);
+                if (change.OriginalVisible.HasValue) entity.Visible = change.OriginalVisible.Value;
+
                 var br = entity as BlockReference;
-                if (br != null && change.AttributeLayers != null)
+                if (br != null)
                 {
-                    foreach (ObjectId attId in br.AttributeCollection)
+                    if (change.AttributeLayers != null)
+                        foreach (ObjectId attId in br.AttributeCollection)
+                        {
+                            if (attId.IsErased) continue;
+                            var att = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                            if (att == null) continue;
+                            string layer;
+                            if (change.AttributeLayers.TryGetValue(att.Handle.ToString(), out layer) && LayerExists(db, tr, layer)) att.Layer = layer;
+                        }
+                    if (!string.IsNullOrEmpty(change.OriginalBlockDefinition))
                     {
-                        if (attId.IsErased) continue;
-                        var att = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
-                        if (att == null) continue;
-                        string layer;
-                        if (change.AttributeLayers.TryGetValue(att.Handle.ToString(), out layer) && LayerExists(db, tr, layer)) att.Layer = layer;
+                        var original = ResolveId(db, change.OriginalBlockDefinition);
+                        if (!original.IsNull) br.BlockTableRecord = original;
+                        else if (ed != null) ed.WriteMessage("\n  {0}: its original block definition no longer exists; left on the nonplot twin.", change.Handle);
+                    }
+                }
+
+                var cogo = entity as CogoPoint;
+                if (cogo != null)
+                {
+                    if (change.OriginalLabelVisible.HasValue) cogo.IsLabelVisible = change.OriginalLabelVisible.Value;
+                    if (!string.IsNullOrEmpty(change.OriginalPointStyle))
+                    {
+                        var style = ResolveId(db, change.OriginalPointStyle);
+                        if (!style.IsNull) cogo.StyleId = style;
+                        else if (ed != null) ed.WriteMessage("\n  {0}: its original point style no longer exists; style left as is.", change.Handle);
                     }
                 }
                 ok = true;
@@ -350,11 +531,8 @@ namespace FieldCodes.Cad.Compare
 
         public static AcEntity Resolve(Database db, Transaction tr, string handle, OpenMode mode)
         {
-            if (string.IsNullOrWhiteSpace(handle)) return null;
-            long value;
-            if (!long.TryParse(handle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value)) return null;
-            ObjectId id;
-            if (!db.TryGetObjectId(new Handle(value), out id) || id.IsNull || id.IsErased) return null;
+            var id = ResolveId(db, handle);
+            if (id.IsNull) return null;
             try { return tr.GetObject(id, mode, false, true) as AcEntity; }
             catch (Autodesk.AutoCAD.Runtime.Exception) { return null; }
         }
@@ -369,7 +547,8 @@ namespace FieldCodes.Cad.Compare
 
         // ===================================================================== QC
 
-        /// <summary>Everything the final QC looks at, in one read-only pass.</summary>
+        /// <summary>Everything the final QC looks at, in one read-only pass: the real plot
+        /// state of every object in the results and every split copy.</summary>
         public static QcInput GatherQc(Database db, Transaction tr, CompareProfile profile, ComparisonResult result, ChangePlan plan,
                                        AppliedChangeSet applied, string outputFolder)
         {
@@ -384,13 +563,17 @@ namespace FieldCodes.Cad.Compare
             };
             foreach (var name in profile.NonplotLayers.All) input.Layers[name] = layerState(name);
 
+            Func<string, EntityState> stateOf = handle =>
+            {
+                var entity = Resolve(db, tr, handle, OpenMode.ForRead);
+                if (entity == null) return new EntityState { Handle = handle, Exists = false };
+                var verdict = PlotVisibility.Of(entity, db, tr);
+                if (!input.Layers.ContainsKey(entity.Layer)) input.Layers[entity.Layer] = layerState(entity.Layer);
+                return new EntityState { Handle = handle, Exists = true, Layer = entity.Layer, Plots = verdict.Plots, PlotNote = verdict.Note };
+            };
+
             if (result != null)
-                foreach (var r in result.Results)
-                {
-                    var entity = Resolve(db, tr, r.Handle, OpenMode.ForRead);
-                    input.Entities[r.Handle] = new EntityState { Handle = r.Handle, Exists = entity != null, Layer = entity != null ? entity.Layer : null };
-                    if (entity != null && !input.Layers.ContainsKey(entity.Layer)) input.Layers[entity.Layer] = layerState(entity.Layer);
-                }
+                foreach (var r in result.Results) input.Entities[r.Handle] = stateOf(r.Handle);
 
             var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (applied != null)
@@ -398,8 +581,7 @@ namespace FieldCodes.Cad.Compare
                     foreach (var h in change.SplitHandles)
                     {
                         owned.Add(h);
-                        var copy = Resolve(db, tr, h, OpenMode.ForRead);
-                        input.Entities[h] = new EntityState { Handle = h, Exists = copy != null, Layer = copy != null ? copy.Layer : null };
+                        input.Entities[h] = stateOf(h);
                     }
             foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == FtfEntityKind.CompareSplit))
             {
@@ -423,42 +605,16 @@ namespace FieldCodes.Cad.Compare
                 catch (UnauthorizedAccessException) { input.OutputFolderWritable = false; }
             }
 
-            input.Warnings.AddRange(BlockDefinitionWarnings(db, tr, applied, profile));
-            if (applied != null && applied.Changes.Any(c => c.EntityType == "COGOPOINT"))
-                input.Warnings.Add(applied.Changes.Count(c => c.EntityType == "COGOPOINT") +
-                    " COGO point(s) were moved to a nonplot layer. A point style whose marker or label layer is fixed (not layer 0 / entity layer) still plots: check the styles in use, or set those layers to no-plot.");
-            return input;
-        }
-
-        /// <summary>Blocks moved to nonplot whose definitions draw on their own layers: those
-        /// layers still plot. Reported, since the block cannot be changed here.</summary>
-        private static IEnumerable<string> BlockDefinitionWarnings(Database db, Transaction tr, AppliedChangeSet applied, CompareProfile profile)
-        {
-            var warnings = new List<string>();
-            if (applied == null) return warnings;
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var layers = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-            foreach (var change in applied.Changes.Where(c => c.EntityType == "BLOCKREFERENCE" && c.Action != PlannedAction.None))
+            if (applied != null)
             {
-                var br = Resolve(db, tr, change.Handle, OpenMode.ForRead) as BlockReference;
-                if (br == null) continue;
-                var btr = tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
-                if (btr == null || !seen.Add(btr.Name)) continue;
-                var other = new List<string>();
-                foreach (ObjectId id in btr)
-                {
-                    var inner = tr.GetObject(id, OpenMode.ForRead, false, true) as AcEntity;
-                    if (inner == null || inner is AttributeDefinition) continue;
-                    var layer = inner.Layer;
-                    if (layer == "0" || profile.NonplotLayers.Contains(layer) || other.Contains(layer)) continue;
-                    if (layers.Has(layer) && !((LayerTableRecord)tr.GetObject(layers[layer], OpenMode.ForRead)).IsPlottable) continue;
-                    other.Add(layer);
-                }
-                if (other.Count > 0)
-                    warnings.Add("Block " + btr.Name + " draws on layer(s) " + string.Join(", ", other.ToArray()) +
-                                 " inside its definition; those parts still plot although the insert is nonplot. Redefine the block on layer 0 or set those layers to no-plot.");
+                var approximated = applied.Changes.Count(c => c.SplitApproximated);
+                if (approximated > 0)
+                    input.Warnings.Add(approximated + " split copy(ies) were sampled along the real curve as 3D polylines (closed polylines or Civil 3D figures): check them by eye.");
+                var hidden = applied.Changes.Count(c => c.Method == "Invisible");
+                if (hidden > 0)
+                    input.Warnings.Add(hidden + " dynamic block insert(s) whose definition draws on its own layers were hidden rather than moved; FTFCOMPARERESTORE makes them visible again.");
             }
-            return warnings;
+            return input;
         }
     }
 }

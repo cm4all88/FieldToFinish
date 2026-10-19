@@ -51,6 +51,14 @@ namespace FieldCodes.Compare
         public List<string> CoveredBy { get; set; }
         public double MeanOffset { get; set; }
 
+        /// <summary>The interval's ends as points on our line, so the split can be made at
+        /// the real curve's closest points rather than by station arithmetic.</summary>
+        public CPoint StartPoint { get; set; }
+        public CPoint EndPoint { get; set; }
+        /// <summary>Farthest any sample in the interval sits from the nearest consultant
+        /// line of the same category (for uncovered intervals: how far off we are).</summary>
+        public double MaxDistance { get; set; }
+
         public CoverageInterval() { CoveredBy = new List<string>(); }
 
         [JsonIgnore] public double Length { get { return Math.Max(0, End - Start); } }
@@ -106,6 +114,12 @@ namespace FieldCodes.Compare
         public string NonplotLayer { get; set; }
         /// <summary>Set by the planner: the status after the decision is taken into account.</summary>
         public MatchStatus EffectiveStatus { get; set; }
+
+        /// <summary>Why the last apply refused this change (the object would still plot,
+        /// its plot state could not be determined, a point group overrides its style...).
+        /// The object was left untouched; the plan still wants it, so QC blocks until a
+        /// person decides.</summary>
+        public string ApplyProblem { get; set; }
 
         public FeatureResult()
         {
@@ -550,10 +564,11 @@ namespace FieldCodes.Compare
             {
                 if (merged.Count > 0 && i.Start - merged[merged.Count - 1].End <= 1e-6)
                 {
-                    merged[merged.Count - 1].End = Math.Max(merged[merged.Count - 1].End, i.End);
+                    var last = merged[merged.Count - 1];
+                    if (i.End > last.End) { last.End = i.End; last.EndPoint = i.EndPoint; }
                     continue;
                 }
-                merged.Add(new CoverageInterval { Start = i.Start, End = i.End, Kind = IntervalKind.Uncovered });
+                merged.Add(new CoverageInterval { Start = i.Start, End = i.End, Kind = IntervalKind.Uncovered, StartPoint = i.StartPoint, EndPoint = i.EndPoint, MaxDistance = i.MaxDistance });
             }
             return merged;
         }
@@ -584,6 +599,22 @@ namespace FieldCodes.Compare
         public Dictionary<string, string> AttributeLayers { get; set; }
         /// <summary>True when a split had to be approximated with a 3D polyline (closed or Civil 3D curve).</summary>
         public bool SplitApproximated { get; set; }
+
+        /// <summary>How the object was made nonplot: Layer, LayerAndPointStyle, BlockTwin,
+        /// Invisible. Restore reverses each.</summary>
+        public string Method { get; set; }
+        /// <summary>Entity visibility before the change (Invisible method).</summary>
+        public bool? OriginalVisible { get; set; }
+        /// <summary>Block definition the insert pointed at before it was switched to a nonplot twin (handle).</summary>
+        public string OriginalBlockDefinition { get; set; }
+        public string TwinBlockDefinition { get; set; }
+        /// <summary>COGO point: the point style before the nonplot style was assigned (handle), and label visibility.</summary>
+        public string OriginalPointStyle { get; set; }
+        public bool? OriginalLabelVisible { get; set; }
+        /// <summary>True when the drawing was checked right after the change and the object
+        /// really does not plot. False is never stored: a change that could not be verified
+        /// is reverted instead.</summary>
+        public bool Verified { get; set; }
 
         public AppliedChange() { SplitHandles = new List<string>(); AttributeLayers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); }
     }

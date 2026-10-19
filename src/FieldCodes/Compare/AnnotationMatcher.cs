@@ -86,6 +86,20 @@ namespace FieldCodes.Compare
             foreach (var c in ctx.ConsultantAnnotation.QueryFeatures(Box2.Of(a.Position).Expand(radius)))
                 if (c.Position.DistanceTo(a.Position) <= radius && !theirs.Contains(c)) theirs.Add(c);
 
+            // A consultant label whose text could not be read proves they label this place
+            // and nothing more: ours is neither a duplicate nor missing until a person looks.
+            var opaque = theirs.Where(t => t.Opaque).ToList();
+            theirs = theirs.Where(t => !t.Opaque).ToList();
+            if (opaque.Count > 0 && (ownerResult == null || ownerResult.Status == MatchStatus.Matched || ownerResult.Status == MatchStatus.Partial))
+            {
+                r.Status = MatchStatus.NeedsReview;
+                r.Confidence = 0.4;
+                foreach (var t in opaque) { r.MatchedIds.Add(t.Id); r.MatchedHandles.Add(PointMatcher.HandleOf(t)); }
+                r.Note("the consultant has a " + opaque[0].EntityType + " label here whose text could not be read (" + opaque.Count + "); compare it by eye");
+                if (owner != null && ownerResult != null) { r.Category = ownerResult.Category; r.System = ownerResult.System; }
+                return r;
+            }
+
             if (owner != null && ownerResult != null)
             {
                 r.Category = ownerResult.Category;

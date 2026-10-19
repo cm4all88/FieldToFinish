@@ -173,10 +173,15 @@ namespace FieldCodes.Compare
             foreach (var f in consultant.Features.Concat(survey.Features))
             {
                 if (f.Facts != null) continue;
+                if (f.Opaque) { f.Facts = new List<AnnotationFact>(); continue; }
                 f.Facts = f.Kind == FeatureKind.Annotation
                     ? AnnotationParser.Parse(f.Description, _profile.Annotation)
                     : FactsFromAttributes(f);
             }
+            foreach (var kv in consultant.HiddenCounts)
+                result.Issues.Add(new DatasetIssue { Severity = Severity.Info, Code = "HIDDEN", Message = kv.Value + " consultant object(s) not shown (" + kv.Key + ") were left out: they cannot represent anything." });
+            foreach (var kv in survey.HiddenCounts)
+                result.Issues.Add(new DatasetIssue { Severity = Severity.Info, Code = "HIDDEN", Message = kv.Value + " survey object(s) not shown (" + kv.Key + ") were left out of the comparison." });
 
             // Points, then lines, then annotation (which needs its feature's result).
             var points = survey.Features.Where(f => f.Kind == FeatureKind.Point).ToList();

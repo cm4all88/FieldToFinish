@@ -318,9 +318,9 @@ namespace FieldCodes.Cad.Compare
 
             if (Applied != null && Applied.Changes.Count > 0)
             {
-                int orphans;
-                var restored = CompareLayerManager.RestoreAll(db, tr, Applied, ed, out orphans);
-                ed.WriteMessage("\n  Earlier comparison changes restored first ({0} object(s), {1} split copy(ies) removed) so nothing accumulates.", restored, orphans + Applied.Changes.Sum(c => c.SplitHandles.Count));
+                int orphans, twins;
+                var restored = CompareLayerManager.RestoreAll(db, tr, Applied, ed, out orphans, out twins);
+                ed.WriteMessage("\n  Earlier comparison changes restored first ({0} object(s), {1} split copy(ies), {2} block twin(s) removed) so nothing accumulates.", restored, orphans, twins);
                 Applied = null;
                 SaveApplied(db, tr);
             }
@@ -389,12 +389,22 @@ namespace FieldCodes.Cad.Compare
             var plan = RebuildPlan();
             var rules = RulesOrNull(db);
             int applied, reversed, skipped;
+            var problems = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in Result.Results) r.ApplyProblem = null;
             Applied = CompareLayerManager.Reconcile(db, tr, plan, Result, profile, rules != null ? rules.Version : string.Empty, Applied,
-                                                    settings.Compare.ApplyAutomaticResults, ed, out applied, out reversed, out skipped);
+                                                    settings.Compare.ApplyAutomaticResults, ed, out applied, out reversed, out skipped, problems);
+            foreach (var kv in problems)
+            {
+                var r = Result.Find(kv.Key);
+                if (r != null) { r.ApplyProblem = kv.Value; r.Note("not applied: " + kv.Value); }
+            }
             SaveApplied(db, tr);
             SaveDecisions(db, tr);
-            ed.WriteMessage("\nFTFCOMPAREAPPLY: {0} object(s) moved to nonplot ({1} split), {2} reversed, {3} skipped; {4} awaiting review, {5} keep plotting.",
+            SaveResult(db);
+            ed.WriteMessage("\nFTFCOMPAREAPPLY: {0} object(s) made nonplot and verified ({1} split), {2} reversed, {3} refused; {4} awaiting review, {5} keep plotting.",
                 applied, plan.SplitCount, reversed, skipped, plan.AwaitingReview, plan.KeptPlotting);
+            if (problems.Count > 0)
+                ed.WriteMessage("\n  {0} change(s) were refused because the object would still plot or could not be verified; they are listed in the window and block the final QC until decided.", problems.Count);
             if (!settings.Compare.ApplyAutomaticResults)
                 ed.WriteMessage("\n  Automatic results are not applied (settings): only reviewed decisions moved.");
             LastSummary = CompareReport.SummaryText(Result, plan);
@@ -403,15 +413,15 @@ namespace FieldCodes.Cad.Compare
         public static void RestoreAll(Database db, Transaction tr, Editor ed)
         {
             EnsureLoaded(db, tr);
-            int orphans;
-            var restored = CompareLayerManager.RestoreAll(db, tr, Applied, ed, out orphans);
-            var copies = Applied != null ? Applied.Changes.Sum(c => c.SplitHandles.Count) : 0;
+            int orphans, twins;
+            var restored = CompareLayerManager.RestoreAll(db, tr, Applied, ed, out orphans, out twins);
             Applied = null;
             SaveApplied(db, tr);
-            if (Result != null) foreach (var r in Result.Results) { r.Action = PlannedAction.None; }
+            if (Result != null) foreach (var r in Result.Results) { r.Action = PlannedAction.None; r.ApplyProblem = null; }
             RebuildPlan();
-            ed.WriteMessage("\nFTFCOMPARERESTORE: {0} object(s) back on their original layers; {1} split copy(ies) erased. Decisions are kept.",
-                restored, copies + orphans);
+            SaveResult(db);
+            ed.WriteMessage("\nFTFCOMPARERESTORE: {0} object(s) back exactly as recorded (layer, visibility, block definition, point style, label); {1} split copy(ies) and {2} block twin(s) erased. Decisions are kept.",
+                restored, orphans, twins);
         }
 
         // ================================================================= decide
@@ -488,6 +498,21 @@ namespace FieldCodes.Cad.Compare
             Directory.CreateDirectory(folder);
             var name = Path.GetFileNameWithoutExtension(db.Filename) + (settings.Compare.DeliverySuffix ?? string.Empty) + ".dwg";
             var output = Path.Combine(folder, name);
+
+            // The deliverable is a new file: never the working drawing, never any input.
+            var inputs = new List<string> { db.Filename };
+            if (Source != null && Source.IsFile && !string.IsNullOrEmpty(Source.FilePath)) inputs.Add(Source.FilePath);
+            foreach (var x in CompareDrawingReader.XrefStates(db, tr)) if (!string.IsNullOrEmpty(x.Path)) inputs.Add(x.Path);
+            foreach (var path in inputs)
+            {
+                try
+                {
+                    if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
+                        throw new ConfigException("The deliverable path " + output + " is a source drawing; choose another delivery folder or suffix. Nothing was written.");
+                }
+                catch (ArgumentException) { }
+                catch (NotSupportedException) { }
+            }
             PendingSavePath = output;
 
             var report = Path.Combine(folder, Path.GetFileNameWithoutExtension(db.Filename) + (settings.Compare.DeliverySuffix ?? string.Empty) + CompareReport.Suffix);
