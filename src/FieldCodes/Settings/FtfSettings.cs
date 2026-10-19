@@ -74,6 +74,7 @@ namespace FieldCodes.Settings
         [JsonProperty("easements")] public EasementSettings Easements { get; set; }
         [JsonProperty("exhibits")] public ExhibitSettings Exhibits { get; set; }
         [JsonProperty("cleanup")] public CleanupSettings Cleanup { get; set; }
+        [JsonProperty("compare")] public CompareSettings Compare { get; set; }
 
         public FtfSettings()
         {
@@ -92,6 +93,7 @@ namespace FieldCodes.Settings
             Easements = new EasementSettings();
             Exhibits = new ExhibitSettings();
             Cleanup = new CleanupSettings();
+            Compare = new CompareSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -103,7 +105,7 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Sheets, Dips, Easements, Exhibits, Cleanup
+                    Spots, Sheets, Dips, Easements, Exhibits, Cleanup, Compare
                 };
             }
         }
@@ -322,6 +324,7 @@ namespace FieldCodes.Settings
             if (Easements == null) Easements = new EasementSettings();
             if (Exhibits == null) Exhibits = new ExhibitSettings();
             if (Cleanup == null) Cleanup = new CleanupSettings();
+            if (Compare == null) Compare = new CompareSettings();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();
             if (DrawOrder.MaskableLayers == null) DrawOrder.MaskableLayers = new List<string>();

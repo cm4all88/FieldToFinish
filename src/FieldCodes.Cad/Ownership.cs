@@ -86,7 +86,12 @@ namespace FieldCodes.Cad
         /// <summary>Border or inserted title block.</summary>
         ExhibitBorder = 33,
         /// <summary>Width dimensions drawn on the sheet.</summary>
-        ExhibitDimension = 34
+        ExhibitDimension = 34,
+
+        /// <summary>FTFCOMPARE: the plotting copy of the uncovered portion of a survey line
+        /// whose original was moved to a nonplot layer. PointNumber = the original's handle.
+        /// Restored (erased) by FTFCOMPARERESTORE; FTFCLEAN leaves it alone.</summary>
+        CompareSplit = 35
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

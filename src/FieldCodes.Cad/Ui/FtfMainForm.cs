@@ -1159,6 +1159,27 @@ namespace FieldCodes.Cad.Ui
                 "Writes the field revisit list (missing dips, unresolved pipes...) " +
                 "beside the drawing for the crew.");
 
+            CommandGroup(stack, "Survey comparison (FTFCOMPARE)");
+            CommandRow(stack, "FTFCOMPARE",
+                "Opens the comparison window: choose the consultant source (xrefs or a file) and " +
+                "profile, run, review the exceptions, apply the plotting changes, run final QC, " +
+                "save the ACC deliverable.");
+            CommandRow(stack, "FTFCOMPARERUN",
+                "Runs the comparison from the command line (all survey objects, a selection, or " +
+                "a window) and writes the CSV report beside the drawing.");
+            CommandRow(stack, "FTFCOMPAREAPPLY   /   FTFCOMPARERESTORE",
+                "Moves matched duplicates to the PMX-COMP-NP-* nonplot layers (splitting partly " +
+                "represented lines) -- and puts every object back exactly as it was.");
+            CommandRow(stack, "FTFCOMPAREQC   /   FTFCOMPARESAVE",
+                "The final QC checks, and the deliverable save to the delivery folder, which " +
+                "refuses to write while a blocking check fails.");
+            CommandRow(stack, "FTFCOMPAREBATCH",
+                "Processes a manifest of sites in sequence; sites with unresolved results go to " +
+                "a needs-review folder, never to the approved one.");
+            CommandRow(stack, "FTFCOMPAREPROFILE   /   FTFCOMPARESOURCE   /   FTFCOMPAREAREA",
+                "Choose the comparison profile, the consultant source and the comparison limits " +
+                "for this drawing.");
+
             CommandGroup(stack, "Easements and profiles");
             CommandRow(stack, "STRIPEASEMENT   (or FTFEASEMENT)",
                 "Builds a strip easement: an optional Point of Commencement, its angle points " +

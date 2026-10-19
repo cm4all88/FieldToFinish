@@ -67,3 +67,10 @@ tests/LiveSmoke/seedprod_recover.dwg
 # Checkpoint build artifacts / archives
 checkpoints/**/build-net48/*.dll
 checkpoints/**/source.tar.gz
+
+# FTFCOMPARE smoke-test outputs
+tests/LiveSmoke/seedcompare*
+tests/LiveSmoke/compare-consultant.dwg
+tests/LiveSmoke/compare-out/
+tests/LiveSmoke/*.ftf-compare*.json
+tests/LiveSmoke/*.ftf-compare.csv

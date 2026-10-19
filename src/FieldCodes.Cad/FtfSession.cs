@@ -186,7 +186,9 @@ namespace FieldCodes.Cad
                 catch (ConfigException ex)
                 {
                     LastRunError = ex.Message;
-                    ed.WriteMessage("\n{0}: rules file problem.\n{1}\n", commandName, ex.Message);
+                    // Configuration problems are told plainly: a rules file, a settings file,
+                    // a comparison profile. The message already says which.
+                    ed.WriteMessage("\n{0}: {1}\n", commandName, ex.Message);
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
