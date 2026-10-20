@@ -1,12 +1,48 @@
 # FTFCOMPARE: build, install and test on Civil 3D 2024
 
-Short version: clone the repository, run `deploy\build-install-test.ps1`, read its
-result, then open a copy of one project drawing and run `FTFCOMPARE`.
+Short version, with Civil 3D closed:
+
+```
+git clone https://github.com/cm4all88/FieldToFinish.git C:\dev\FieldToFinish
+cd C:\dev\FieldToFinish
+git checkout claude/kind-hamilton-apylzj
+powershell -ExecutionPolicy Bypass -File deploy\build-install-test.ps1
+```
+
+The script ends with `Smoke test passed` or `FAILED:` and the reason. Then start
+Civil 3D, open a **copy** of one project drawing, and type `FTFCOMPARE` (step 5).
 
 Status: the comparison engine is unit tested (1,051 tests). The Civil 3D side compiles
 against the 2024 API surface but **has not yet run inside Civil 3D**. Nothing below
 reports it as verified until step 4 passes on your machine and step 6 checks out on a
 real drawing.
+
+## Framework compatibility (checked before anything is installed)
+
+Civil 3D 2024 hosts plugins on .NET Framework 4.8; Civil 3D 2025 and later use .NET 8.
+What the build produces, straight from the project files:
+
+| Assembly | Target | Where it is set |
+|---|---|---|
+| `FieldCodes.Cad.dll`, the plugin Civil 3D loads | `net48` (.NET Framework 4.8) | `src\FieldCodes.Cad\FieldCodes.Cad.csproj` |
+| `FieldCodes.dll`, the comparison engine | `netstandard2.0` (loads under .NET Framework 4.8) | `src\FieldCodes\FieldCodes.csproj` |
+| `Newtonsoft.Json.dll` 13.0.3 | ships beside the plugin | same |
+| unit tests | `net8.0`, never loaded by Civil 3D | `tests\FieldCodes.Tests` |
+
+The plugin references AcCoreMgd, AcDbMgd, AcMgd, AdWindows, AecBaseMgd and
+`C3D\AeccDbMgd` from the Civil 3D 2024 install folder (`-p:C3D2024`), each with
+`Private=false`, so no Autodesk DLL is ever copied; the build errors out if they are not
+there. The .NET 8 SDK is only the compiler: `dotnet build` produces .NET Framework 4.8
+output for the plugin, with the framework reference assemblies coming from the
+`Microsoft.NETFramework.ReferenceAssemblies` package, so Visual Studio is not needed.
+The bundle manifest restricts loading to AutoCAD R24.3, which is Civil 3D 2024. There
+are no stub or substitute Autodesk assemblies anywhere in the repository.
+
+The script refuses to install if any of this is off: the `AcDbMgd.dll` in the Civil 3D
+folder must be release 24.x (2025 and later are R25+ and are refused), the .NET Framework
+4.8 runtime must be present, and after the build it reads the target framework out of
+each built DLL and stops on anything but `net48` for the plugin and `netstandard2.0` for
+the engine, or on an Autodesk DLL in the output.
 
 ## 1. What to get from GitHub
 
@@ -23,9 +59,11 @@ scripts find their own paths.) Everything FTFCOMPARE needs is in that branch: th
 solution, `config\compare-profiles\Default.json`, the scripts under `deploy\` and
 `tests\LiveSmoke\`.
 
-Prerequisites on the machine: Civil 3D 2024, the .NET 8 SDK
-(https://dotnet.microsoft.com/download), PowerShell 5.1 or later. The .NET Framework
-4.8 C# compiler used for the smoke harness is part of Windows.
+Prerequisites on the machine: Civil 3D 2024 (it brings the .NET Framework 4.8 runtime),
+the .NET 8 SDK x64 (https://dotnet.microsoft.com/download; the compiler only), and
+PowerShell 5.1 or later, which Windows has. The .NET Framework 4.8 C# compiler used for
+the smoke harness is part of Windows. Git is optional: the branch can be downloaded as
+a ZIP instead.
 
 ## 2. Compile against the installed Civil 3D assemblies
 

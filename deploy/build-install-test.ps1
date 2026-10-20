@@ -5,10 +5,13 @@
 
 .DESCRIPTION
     One script, four steps, each reported as it runs:
-      1. Prerequisites  - Civil 3D 2024 assemblies, the .NET 8 SDK, the .NET Framework C#
-                          compiler (for the smoke harness), the stock Civil 3D template.
+      1. Prerequisites  - Civil 3D 2024 (AutoCAD R24.3) assemblies, the .NET Framework 4.8
+                          runtime, the .NET 8 SDK (compiler only: the plugin targets
+                          .NET Framework 4.8), the .NET Framework C# compiler (for the smoke
+                          harness), the stock Civil 3D template.
       2. Build          - dotnet build FieldToFinish.sln against the installed Autodesk DLLs,
-                          then the unit tests.
+                          then verifies the output (net48 plugin, netstandard2.0 engine, no
+                          Autodesk DLL copied), then the unit tests.
       3. Install        - copies the bundle to %APPDATA%\Autodesk\ApplicationPlugins so the
                           commands load on startup (Civil 3D must be closed).
       4. Smoke test     - seeds a consultant xref and a survey in a fresh drawing, drives
@@ -64,6 +67,14 @@ function Invoke-Native([string]$exe, [string[]]$arguments) {
     return [pscustomobject]@{ Lines = $lines; ExitCode = $LASTEXITCODE }
 }
 
+# The TargetFrameworkAttribute string sits in the assembly as plain text; reading the
+# bytes neither loads the assembly nor locks the file, so a rebuild still works after.
+function Get-TargetFrameworkOf([string]$path) {
+    $text = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($path))
+    $m = [regex]::Match($text, '\.NET(Framework|CoreApp|Standard),Version=v[0-9.]+')
+    if ($m.Success) { return $m.Value } else { return '(no target framework attribute)' }
+}
+
 # ------------------------------------------------------------------ 1. prerequisites
 Step '1. Prerequisites'
 
@@ -81,6 +92,23 @@ if ($missing.Count -gt 0) {
     Fail "Civil 3D 2024 assemblies not found under '$C3D2024'." (@('Missing:') + $missing + @('', 'If Civil 3D 2024 is installed elsewhere, run again with -C3D2024 "<install root>" (the folder that holds acad.exe).'))
 }
 Ok "Civil 3D 2024 assemblies at $C3D2024"
+
+# Civil 3D 2024 is AutoCAD R24.3 on .NET Framework 4.8; 2025 and later are R25+ on
+# .NET 8 and cannot load this plugin. Checked here, before anything is built or copied.
+$acdb = [Diagnostics.FileVersionInfo]::GetVersionInfo("$C3D2024\AcDbMgd.dll")
+$hostVersion = "$($acdb.FileMajorPart).$($acdb.FileMinorPart)"
+if ($acdb.FileMajorPart -ne 24) {
+    Fail "The Autodesk assemblies under '$C3D2024' are release R$hostVersion, not Civil 3D 2024 (R24.3)." @(
+        'This plugin is built for Civil 3D 2024 on .NET Framework 4.8.',
+        'Civil 3D 2025 and later run on .NET 8 and need a different build; 2023 and earlier have a different API surface.',
+        'If 2024 is installed in another folder, run again with -C3D2024 "<that folder>".')
+}
+if ($acdb.FileMinorPart -ne 3) { Warn "AcDbMgd.dll is R$hostVersion; Civil 3D 2024 is R24.3 (2021-2023 are R24.0-R24.2). The build may still work, but it is not the tested host." }
+else { Ok "Host is AutoCAD R$hostVersion (Civil 3D 2024, .NET Framework 4.8)" }
+
+$ndp = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release -ErrorAction SilentlyContinue
+if (-not $ndp -or $ndp.Release -lt 528040) { Fail '.NET Framework 4.8 runtime not found.' @('Civil 3D 2024 itself needs it; install it from https://dotnet.microsoft.com/download/dotnet-framework/net48.') }
+Ok '.NET Framework 4.8 runtime present (the plugin runs on it; the .NET 8 SDK is only the compiler)'
 
 $accore = Join-Path $C3D2024 'accoreconsole.exe'
 $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
@@ -114,6 +142,28 @@ $dll = Join-Path $buildOut 'FieldCodes.Cad.dll'
 if (-not (Test-Path -LiteralPath $dll)) { Fail "Build reported success but $dll is missing." }
 $warnings = @($build.Lines | Where-Object { $_ -match 'warning ' } | Select-Object -Unique)
 Ok "Built $dll ($($warnings.Count) warning(s))"
+
+Step '2a. Verify what was built'
+$cadTfm = Get-TargetFrameworkOf $dll
+if ($cadTfm -ne '.NETFramework,Version=v4.8') { Fail "FieldCodes.Cad.dll targets '$cadTfm'; Civil 3D 2024 needs .NETFramework,Version=v4.8." @('src\FieldCodes.Cad\FieldCodes.Cad.csproj must say <TargetFramework>net48</TargetFramework>.') }
+Ok "FieldCodes.Cad.dll targets $cadTfm (loads in Civil 3D 2024)"
+$coreDll = Join-Path $buildOut 'FieldCodes.dll'
+if (-not (Test-Path -LiteralPath $coreDll)) { Fail "FieldCodes.dll (the comparison engine) is missing from $buildOut." }
+$coreTfm = Get-TargetFrameworkOf $coreDll
+if ($coreTfm -notmatch '^\.NETStandard,Version=v2\.0$' -and $coreTfm -ne '.NETFramework,Version=v4.8') { Fail "FieldCodes.dll targets '$coreTfm', which .NET Framework 4.8 cannot load." @('src\FieldCodes\FieldCodes.csproj must target netstandard2.0 (or net48).') }
+Ok "FieldCodes.dll targets $coreTfm (usable from .NET Framework 4.8)"
+$copiedAutodesk = @(Get-ChildItem $buildOut -File | Where-Object { $_.Name -match '^(Ac|Aecc|Aec)[A-Za-z]*Mgd\.dll$|^AdWindows\.dll$' })
+if ($copiedAutodesk.Count -gt 0) { Fail 'Autodesk assemblies were copied into the build output; they must only be referenced from the Civil 3D folder.' (@($copiedAutodesk | ForEach-Object { $_.Name }) + @('Every Autodesk <Reference> in FieldCodes.Cad.csproj needs <Private>false</Private>.')) }
+Ok "Autodesk assemblies referenced from $C3D2024 only, none copied"
+$json = Join-Path $buildOut 'Newtonsoft.Json.dll'
+if (-not (Test-Path -LiteralPath $json)) { Fail "Newtonsoft.Json.dll is missing from $buildOut (NuGet restore did not run?)." }
+$ours = [Diagnostics.FileVersionInfo]::GetVersionInfo($json)
+$hostJson = Join-Path $C3D2024 'Newtonsoft.Json.dll'
+if (Test-Path -LiteralPath $hostJson) {
+    $theirs = [Diagnostics.FileVersionInfo]::GetVersionInfo($hostJson)
+    if ($theirs.FileMajorPart -ne $ours.FileMajorPart) { Warn "Civil 3D ships Newtonsoft.Json $($theirs.FileVersion); the plugin carries $($ours.FileVersion). Both can load side by side, but if NETLOAD reports a FileLoadException for Newtonsoft.Json, say so." }
+    else { Ok "Newtonsoft.Json $($ours.FileVersion) (Civil 3D ships $($theirs.FileVersion), same major version)" }
+} else { Ok "Newtonsoft.Json $($ours.FileVersion) ships with the plugin" }
 
 if (-not $SkipTests) {
     Step '2b. Unit tests (dotnet test)'

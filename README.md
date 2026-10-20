@@ -635,7 +635,10 @@ See `FTFCOMPARE-SETUP.md` at the repository root: what to pull, how to build aga
 installed Civil 3D 2024 assemblies, install, run the smoke test, run the comparison on a
 project drawing, judge the results, and restore. `deploy\build-install-test.ps1` does
 the build, the unit tests, the install and the smoke test in one run and stops at the
-first failure with the reason.
+first failure with the reason. Framework split: the plugin targets .NET Framework 4.8
+(Civil 3D 2024's runtime), the engine netstandard2.0; the .NET 8 SDK is only the
+compiler, and the script verifies the built output and the host release before
+installing.
 
 ### How it decides
 
