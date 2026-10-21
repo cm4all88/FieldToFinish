@@ -1,11 +1,21 @@
 # FTFCOMPARE: build, install and test on Civil 3D 2024
 
-Short version, with Civil 3D closed:
+Short version, with Civil 3D closed. Into a new folder:
 
 ```
-git clone https://github.com/cm4all88/FieldToFinish.git C:\dev\FieldToFinish
+git clone -b claude/kind-hamilton-apylzj https://github.com/cm4all88/FieldToFinish.git C:\dev\FieldToFinish-compare
+cd C:\dev\FieldToFinish-compare
+powershell -ExecutionPolicy Bypass -File deploy\build-install-test.ps1
+```
+
+Or in a clone you already have (the branch is on GitHub but a clone made earlier has
+not seen it until it fetches):
+
+```
 cd C:\dev\FieldToFinish
+git fetch origin
 git checkout claude/kind-hamilton-apylzj
+git pull origin claude/kind-hamilton-apylzj
 powershell -ExecutionPolicy Bypass -File deploy\build-install-test.ps1
 ```
 
@@ -49,13 +59,15 @@ the engine, or on an Autodesk DLL in the output.
 Repository `cm4all88/FieldToFinish`, branch `claude/kind-hamilton-apylzj`.
 
 ```
-git clone https://github.com/cm4all88/FieldToFinish.git C:\dev\FieldToFinish
-cd C:\dev\FieldToFinish
-git checkout claude/kind-hamilton-apylzj
+git clone -b claude/kind-hamilton-apylzj https://github.com/cm4all88/FieldToFinish.git C:\dev\FieldToFinish-compare
 ```
 
-(Or download the branch as a ZIP from GitHub and extract it; any folder works, the
-scripts find their own paths.) Everything FTFCOMPARE needs is in that branch: the
+If `C:\dev\FieldToFinish` already exists from earlier work, either use the new folder
+above or update that clone with `git fetch origin` followed by
+`git checkout claude/kind-hamilton-apylzj` (a checkout before the fetch fails with
+"pathspec did not match", because the clone does not know the branch yet). Or download
+the branch as a ZIP from GitHub and extract it; any folder works, the scripts find their
+own paths. Everything FTFCOMPARE needs is in that branch: the
 solution, `config\compare-profiles\Default.json`, the scripts under `deploy\` and
 `tests\LiveSmoke\`.
 
