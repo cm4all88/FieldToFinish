@@ -237,7 +237,33 @@ if (-not $SkipSmoke) {
     Copy-Item -LiteralPath $template -Destination $consultantSeed
     $settings = @{ version = '1'; compare = @{ deliveryFolder = $outFolder; deliverySuffix = '-ACC'; writeCsvReport = $true; applyAutomaticResults = $true; decisionsBesideDrawing = $true; activeProfile = 'Default'; consultantSource = 'Xrefs' } } | ConvertTo-Json -Depth 5
     [IO.File]::WriteAllText((Join-Path $work 'ftf-settings.json'), $settings)
+    # Compare the whole drawing. Without an area, the limits are the consultant data's
+    # extent, which here is the xref clip at x = 1150; survey lines crossing that edge go
+    # to review by design, and that would mask the partial-line split this test checks.
+    $profileText = [IO.File]::ReadAllText((Join-Path $repo 'config\compare-profiles\Default.json'))
+    if ($profileText -notmatch '"useConsultantExtentWhenNoBoundary": true') { Fail 'config\compare-profiles\Default.json has no "useConsultantExtentWhenNoBoundary": true to turn off for the smoke test.' }
+    $profileText = $profileText -replace '"useConsultantExtentWhenNoBoundary": true', '"useConsultantExtentWhenNoBoundary": false'
+    [IO.File]::WriteAllText((Join-Path $work 'ftf-compare-profile.json'), $profileText)
 
+    function Show-FirstRun([string]$logPath) {
+        # The first comparison and apply, as the plugin reported them, and the per-object CSV.
+        $all = @(Get-Content -LiteralPath $logPath)
+        $from = -1; $to = -1
+        for ($i = 0; $i -lt $all.Count; $i++) {
+            if ($from -lt 0) { if ($all[$i] -match 'COMPARENOTE: run-1') { $from = $i }; continue }
+            if ($all[$i] -match 'COMPARENOTE: verify-1') { $to = $i; break }
+        }
+        if ($from -ge 0) {
+            if ($to -lt 0) { $to = [Math]::Min($from + 80, $all.Count - 1) }
+            Write-Host '   --- first comparison and apply, from the log ---' -ForegroundColor Yellow
+            $all[$from..$to] | Where-Object { $_.Trim() } | ForEach-Object { Write-Host "   | $_" }
+        }
+        $csv = Join-Path $work 'seedcompare.ftf-compare.csv'
+        if (Test-Path -LiteralPath $csv) {
+            Write-Host '   --- seedcompare.ftf-compare.csv (one row per survey object) ---' -ForegroundColor Yellow
+            Get-Content -LiteralPath $csv | ForEach-Object { Write-Host "   | $_" }
+        }
+    }
     function Show-RunEvidence([string]$logPath) {
         if (Test-Path -LiteralPath $progress) {
             Write-Host '   --- compare-progress.txt (the last line is the last step that ran) ---' -ForegroundColor Yellow
@@ -328,6 +354,7 @@ if (-not $SkipSmoke) {
     if ($crashed) { $problems += "accoreconsole did not exit normally ($exitLine): a command crashed it; compare-progress.txt names the last step that ran." }
     if ($problems.Count -gt 0) {
         Write-Host ''
+        Show-FirstRun $log
         Show-RunEvidence $log
         Fail 'The smoke test did not pass. Nothing in FTFCOMPARE should be used on a project until it does.' $problems
     }

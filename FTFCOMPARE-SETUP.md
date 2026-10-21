@@ -195,8 +195,12 @@ Steps:
    separate file: `FTFCOMPARESOURCE`, choose `File` and pick it. Nothing is attached to
    your drawing in File mode.
 2. Optional: `FTFCOMPAREAREA` to pick the comparison limits (a polygon, or a closed
-   polyline). Without it, the consultant data's own extent plus 10 ft is the limit, and
-   survey beyond it is never called missing.
+   polyline). Without it, the consultant data's own extent plus 10 ft is the limit:
+   survey beyond it is never called missing, and a line of ours that crosses that edge is
+   sent to review rather than cut (the profile's `boundary.outsideLimitsAction`). When
+   the consultant data is clipped or covers less than the survey, set an area, or set
+   `boundary.useConsultantExtentWhenNoBoundary` to false in the profile to compare the
+   whole drawing (the smoke test does the latter).
 3. `FTFCOMPARE`, then **Run comparison**. On the command line, read:
    - the summary counts (matched / missing / partial / discrepancies / need review /
      not evaluated / excluded);
