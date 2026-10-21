@@ -229,33 +229,61 @@ if (-not $SkipSmoke) {
 
     # Deterministic settings for this job: beside-the-drawing settings win over the user's.
     $seed = Join-Path $work 'seedcompare.dwg'
+    $consultant = Join-Path $work 'compare-consultant.dwg'
+    $consultantSeed = Join-Path $work 'consultant-seed.dwg'
     $outFolder = Join-Path $work 'compare-out'
+    $progress = Join-Path $work 'compare-progress.txt'
     Copy-Item -LiteralPath $template -Destination $seed
+    Copy-Item -LiteralPath $template -Destination $consultantSeed
     $settings = @{ version = '1'; compare = @{ deliveryFolder = $outFolder; deliverySuffix = '-ACC'; writeCsvReport = $true; applyAutomaticResults = $true; decisionsBesideDrawing = $true; activeProfile = 'Default'; consultantSource = 'Xrefs' } } | ConvertTo-Json -Depth 5
     [IO.File]::WriteAllText((Join-Path $work 'ftf-settings.json'), $settings)
 
+    function Show-RunEvidence([string]$logPath) {
+        if (Test-Path -LiteralPath $progress) {
+            Write-Host '   --- compare-progress.txt (the last line is the last step that ran) ---' -ForegroundColor Yellow
+            Get-Content -LiteralPath $progress | ForEach-Object { Write-Host "   | $_" }
+        } else { Write-Host '   (no compare-progress.txt: the harness never ran a command)' -ForegroundColor Yellow }
+        Write-Host "   --- last 60 lines of $logPath (send these) ---" -ForegroundColor Yellow
+        Get-Content -LiteralPath $logPath | Where-Object { $_.Trim() } | Select-Object -Last 60 | ForEach-Object { Write-Host "   | $_" }
+    }
+
+    # Run 1: Civil 3D draws and saves the consultant drawing itself.
+    $scr1 = Join-Path $work 'runconsultant.scr'
+    [IO.File]::WriteAllLines($scr1, [string[]]@("NETLOAD `"$harness`"", 'COMPARESEEDCONSULTANT', 'SAVEAS', '2018', "`"$consultant`""), [Text.Encoding]::ASCII)
+    $log1 = Join-Path $work 'consultant_out.log'
+    & (Join-Path $here 'run-accore.ps1') -Drawing $consultantSeed -Script $scr1 -Log $log1 -TimeoutSeconds 180 | Out-Null
+    if (-not (Test-Path -LiteralPath $log1)) { Fail 'accoreconsole produced no log for the consultant drawing.' @("Expected $log1") }
+    $drawn = @(Get-Content -LiteralPath $log1 | Select-String -SimpleMatch 'COMPARESEEDCONSULTANT: drawn').Count -gt 0
+    if (-not $drawn -or -not (Test-Path -LiteralPath $consultant)) {
+        Show-RunEvidence $log1
+        Fail 'Run 1 (the consultant drawing) did not complete in accoreconsole.' @("drawn: $drawn; saved: $(Test-Path -LiteralPath $consultant)", "Log: $log1")
+    }
+    Ok "Consultant drawing written by Civil 3D: $consultant"
+
+    # Run 2: the seed drawing, the plugin, and the checks. A COMPARENOTE before every
+    # plugin command marks progress in a file that survives a crash.
+    function Note([string]$label) { return @('COMPARENOTE', $label) }
     $scr = Join-Path $work 'runcompare.scr'
     $lines = @(
         "NETLOAD `"$plugin`""
         "NETLOAD `"$harness`""
-        'COMPARESEED', 'QSAVE',
-        'FTFCOMPARERUN', 'All',
-        'FTFCOMPAREAPPLY',
-        'COMPAREVERIFY', 'Applied',
-        'FTFCOMPAREQC',
-        'FTFCOMPARERUN', 'All',
-        'FTFCOMPAREAPPLY',
-        'COMPAREVERIFY', 'Applied',
-        'FTFCOMPARERESTORE',
-        'COMPAREVERIFY', 'Restored',
-        'FTFCOMPAREAUDIT',
-        'FTFCOMPAREAPPLY',
-        'COMPAREVERIFY', 'Applied',
-        'FTFCOMPAREDECIDE', 'Unresolved',
-        'FTFCOMPAREAPPLY',
-        'FTFCOMPARESAVE',
-        'SAVEAS', '2018', "`"$(Join-Path $work 'outcompare.dwg')`""
-    )
+        'COMPARESEED', 'QSAVE'
+    ) + (Note 'run-1') + @('FTFCOMPARERUN', 'All') `
+      + (Note 'apply-1') + @('FTFCOMPAREAPPLY') `
+      + (Note 'verify-1') + @('COMPAREVERIFY', 'Applied') `
+      + (Note 'qc-1') + @('FTFCOMPAREQC') `
+      + (Note 'run-2') + @('FTFCOMPARERUN', 'All') `
+      + (Note 'apply-2') + @('FTFCOMPAREAPPLY') `
+      + (Note 'verify-2') + @('COMPAREVERIFY', 'Applied') `
+      + (Note 'restore') + @('FTFCOMPARERESTORE') `
+      + (Note 'verify-restored') + @('COMPAREVERIFY', 'Restored') `
+      + (Note 'audit') + @('FTFCOMPAREAUDIT') `
+      + (Note 'apply-3') + @('FTFCOMPAREAPPLY') `
+      + (Note 'verify-3') + @('COMPAREVERIFY', 'Applied') `
+      + (Note 'decide-unresolved') + @('FTFCOMPAREDECIDE', 'Unresolved') `
+      + (Note 'apply-4') + @('FTFCOMPAREAPPLY') `
+      + (Note 'save') + @('FTFCOMPARESAVE') `
+      + (Note 'saveas') + @('SAVEAS', '2018', "`"$(Join-Path $work 'outcompare.dwg')`"")
     [IO.File]::WriteAllLines($scr, [string[]]$lines, [Text.Encoding]::ASCII)
 
     $log = Join-Path $work 'compare_out.log'
@@ -276,6 +304,7 @@ if (-not $SkipSmoke) {
     $deliverable = Join-Path $outFolder 'seedcompare-ACC.dwg'
     $saved = Test-Path -LiteralPath $deliverable
     $audit = @($logLines | Select-String -SimpleMatch 'CLEAN: nothing from the comparison').Count
+    $exitLine = @($logLines | Select-String '^accoreconsole( exit code:|: TIMEOUT)' | ForEach-Object { $_.Line.Trim() }) | Select-Object -Last 1
 
     Write-Host ''
     Write-Host ("   harness seeded the drawing: {0}" -f $(if ($seeded) { 'yes' } else { 'NO (NETLOAD or COMPARESEED did not run)' }))
@@ -285,6 +314,7 @@ if (-not $SkipSmoke) {
     Write-Host ("   audit clean after restore : {0}" -f $(if ($audit -gt 0) { 'yes' } else { 'no' }))
     Write-Host ("   last final QC             : {0}" -f $(if ($finalQc) { $finalQc } else { 'not run' }))
     Write-Host ("   deliverable written       : {0}" -f $(if ($saved) { $deliverable } else { 'NO' }))
+    Write-Host ("   accoreconsole             : {0}" -f $(if ($exitLine) { $exitLine } else { 'exit code unknown' }))
     Write-Host ("   log                       : {0}" -f $log)
 
     $problems = @()
@@ -294,10 +324,11 @@ if (-not $SkipSmoke) {
     if ($commandErrors.Count -gt 0) { $problems += 'Errors reported by commands:'; $problems += ($commandErrors | Select-Object -First 15) }
     if (-not $saved) { $problems += 'FTFCOMPARESAVE did not write the deliverable (the last final QC failed, or the save command did not run).' }
     if ($audit -eq 0) { $problems += 'FTFCOMPAREAUDIT did not report a clean drawing after FTFCOMPARERESTORE.' }
+    $crashed = $exitLine -and ($exitLine -match 'TIMEOUT' -or ($exitLine -match 'exit code: (-?\d+)$' -and $Matches[1] -ne '0'))
+    if ($crashed) { $problems += "accoreconsole did not exit normally ($exitLine): a command crashed it; compare-progress.txt names the last step that ran." }
     if ($problems.Count -gt 0) {
         Write-Host ''
-        Write-Host '   --- last 60 lines of the accoreconsole log (send these) ---' -ForegroundColor Yellow
-        $logLines | Where-Object { $_.Trim() } | Select-Object -Last 60 | ForEach-Object { Write-Host "   | $_" }
+        Show-RunEvidence $log
         Fail 'The smoke test did not pass. Nothing in FTFCOMPARE should be used on a project until it does.' $problems
     }
 

@@ -2,9 +2,14 @@
 // loaded. Standalone on purpose: it reads layers and FTF XData by hand, so it checks
 // what is really in the drawing rather than what the plugin believes.
 //
-// COMPARESEED    builds a "consultant" xref drawing and a survey drawing beside it:
-//                the survey has curbs, a fence, poles and manholes with labels; the
-//                xref shows some of them, part of one curb, a different rim at one MH.
+// COMPARESEEDCONSULTANT  run 1: draws the consultant's base map in the open drawing,
+//                which the script then saves as compare-consultant.dwg (AutoCAD saves
+//                it; no side database is built in managed code).
+// COMPARESEED    run 2: attaches that file as a clipped xref and draws the survey:
+//                curbs, a fence, poles and manholes with labels; the xref shows some of
+//                them, part of one curb, a different rim at one MH.
+// COMPARENOTE    a progress marker the script drops between commands; every step also
+//                appends to compare-progress.txt, which survives a crash.
 // COMPAREVERIFY  checks every expected plotting state after FTFCOMPARERUN/APPLY:
 //                matched objects on PMX-COMP-NP-*, missing ones untouched, the split
 //                copy present, the nonplot layers not plottable; and after RESTORE,
@@ -48,73 +53,121 @@ namespace FtfCompareTest
 
         // ------------------------------------------------------------------ seed
 
-        /// <summary>Writes compare-consultant.dwg beside the harness, attaches it to the
-        /// open (seed) drawing as an xref, and draws the survey objects.</summary>
+        /// <summary>Crash-proof progress: appended to compare-progress.txt beside the harness
+        /// before each step, so a run that dies without console output still says where.</summary>
+        private static void Progress(string step)
+        {
+            try { File.AppendAllText(Path.Combine(Here(), "compare-progress.txt"), DateTime.Now.ToString("HH:mm:ss") + "  " + step + "\r\n"); }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>COMPARENOTE word: a progress marker the script drops between commands.</summary>
+        [CommandMethod("COMPARENOTE")]
+        public void Note()
+        {
+            Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
+            PromptResult r = ed.GetString("\nNote: ");
+            string text = r.Status == PromptStatus.OK ? r.StringResult : "(none)";
+            Progress("note: " + text);
+            ed.WriteMessage("\nCOMPARENOTE: {0}", text);
+        }
+
+        /// <summary>Run 1, in the drawing the script then saves as compare-consultant.dwg: the
+        /// consultant's base map. AutoCAD itself saves it (SAVEAS in the script); nothing here
+        /// creates a side database or writes a file.</summary>
+        [CommandMethod("COMPARESEEDCONSULTANT")]
+        public void SeedConsultant()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Editor ed = doc.Editor;
+            AcDb.Database db = doc.Database;
+            Progress("consultant: start");
+            using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForWrite);
+                AddLayer(db, tr, "E-CURB"); AddLayer(db, tr, "E-FENCE"); AddLayer(db, tr, "E-PWR"); AddLayer(db, tr, "E-STRM-MH"); AddLayer(db, tr, "E-TEXT");
+                Progress("consultant: layers");
+                // full curb: covers survey curb A entirely; half of curb B
+                AddLine(ms, tr, "E-CURB", 1000, 1000, 1100, 1000);
+                AddLine(ms, tr, "E-CURB", 1000, 1050, 1100, 1050);      // survey B runs to 1200
+                // fence present
+                AddLine(ms, tr, "E-FENCE", 1000, 1100, 1300, 1100);
+                Progress("consultant: lines");
+                // one pole of two
+                AddBlock(db, ms, tr, "POLE", "E-PWR", 1000.4, 1200.3);
+                // a storm manhole, with a rim label that disagrees with ours
+                AddBlock(db, ms, tr, "STMH", "E-STRM-MH", 1050.3, 1200.1);
+                Progress("consultant: blocks");
+                AddText(ms, tr, "E-TEXT", "RIM 121.00", 1052, 1203);
+                Progress("consultant: text");
+                tr.Commit();
+            }
+            db.Insunits = AcDb.UnitsValue.Feet;
+            Progress("consultant: done");
+            ed.WriteMessage("\nCOMPARESEEDCONSULTANT: drawn; the script now saves this drawing as compare-consultant.dwg.");
+        }
+
+        /// <summary>Run 2, in the seed drawing: attaches compare-consultant.dwg (saved by run 1)
+        /// as a clipped xref and draws the survey objects.</summary>
         [CommandMethod("COMPARESEED")]
         public void Seed()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
             Editor ed = doc.Editor;
             AcDb.Database db = doc.Database;
-            CivApp.CivilDocument cdoc = CivApp.CivilApplication.ActiveDocument;
             string consultantPath = Path.Combine(Here(), "compare-consultant.dwg");
-
-            // --- the consultant drawing, as a separate file ------------------------
-            using (AcDb.Database cdb = new AcDb.Database(true, true))
+            Progress("seed: start");
+            if (!File.Exists(consultantPath))
             {
-                using (AcDb.Transaction tr = cdb.TransactionManager.StartTransaction())
-                {
-                    AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(cdb), AcDb.OpenMode.ForWrite);
-                    AddLayer(cdb, tr, "E-CURB"); AddLayer(cdb, tr, "E-FENCE"); AddLayer(cdb, tr, "E-PWR"); AddLayer(cdb, tr, "E-STRM-MH"); AddLayer(cdb, tr, "E-TEXT");
-                    // full curb: covers survey curb A entirely; half of curb B
-                    AddLine(ms, tr, "E-CURB", 1000, 1000, 1100, 1000);
-                    AddLine(ms, tr, "E-CURB", 1000, 1050, 1100, 1050);      // survey B runs to 1200
-                    // fence present
-                    AddLine(ms, tr, "E-FENCE", 1000, 1100, 1300, 1100);
-                    // one pole of two
-                    AddBlock(cdb, ms, tr, "POLE", "E-PWR", 1000.4, 1200.3);
-                    // a storm manhole, with a rim label that disagrees with ours
-                    AddBlock(cdb, ms, tr, "STMH", "E-STRM-MH", 1050.3, 1200.1);
-                    AddText(ms, tr, "E-TEXT", "RIM 121.00", 1052, 1203);
-                    tr.Commit();
-                }
-                cdb.Insunits = AcDb.UnitsValue.Feet;
-                cdb.SaveAs(consultantPath, AcDb.DwgVersion.Current);
+                ed.WriteMessage("\nCOMPARESEED: {0} is missing; run COMPARESEEDCONSULTANT first.", consultantPath);
+                return;
             }
 
             // --- attach it, and draw the survey ------------------------------------
             using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
             {
                 AcDb.ObjectId xrefId = db.AttachXref(consultantPath, "BASE");
+                Progress("seed: xref attached");
                 AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForWrite);
                 AcDb.BlockReference br = new AcDb.BlockReference(new Point3d(0, 0, 0), xrefId);
                 ms.AppendEntity(br);
                 tr.AddNewlyCreatedDBObject(br, true);
+                Progress("seed: xref inserted");
 
                 // Clip the xref to x <= 1150: the fence beyond the clip is NOT shown by the
                 // consultant and must not be suppressed.
                 try { ClipXref(br, tr, 900, 900, 1150, 1400); }
                 catch (System.Exception ex) { ed.WriteMessage("\n  (clip not applied: {0})", ex.Message); }
+                Progress("seed: xref clipped");
 
                 AddLayer(db, tr, "V-SURF-CURB-E"); AddLayer(db, tr, "V-SURF-FENC-E"); AddLayer(db, tr, "V-UTIL-STRM-TEXT"); AddLayer(db, tr, "V-NODE");
                 AddLayer(db, tr, "V-UTIL-STRC"); AddLayer(db, tr, "V-UTIL-STRC-SYM"); AddLayer(db, tr, "V-NODE-MARK");
+                Progress("seed: survey layers");
                 // A survey symbol block whose definition draws on its own layer: the insert
                 // alone going nonplot would leave the circle plotting.
                 AddBlockOnLayer(db, ms, tr, "SYMMH", "V-UTIL-STRC", "V-UTIL-STRC-SYM", 1050, 1200);
+                Progress("seed: survey block");
                 AddLine(ms, tr, "V-SURF-CURB-E", 1000, 1000, 1100, 1000);                 // CURBA: matched
                 AddLine(ms, tr, "V-SURF-CURB-E", 1000, 1050, 1200, 1050);                 // CURBB: partial (1100-1200 missing)
                 for (int i = 0; i < 3; i++) AddLine(ms, tr, "V-SURF-FENC-E", 1000 + i * 100, 1100, 1098 + i * 100, 1100); // fragmented fence: matched
                 AddLine(ms, tr, "V-SURF-CURB-E", 1000, 1300, 1100, 1300);                 // CURBC: missing
+                Progress("seed: survey lines");
                 AddText(ms, tr, "V-UTIL-STRM-TEXT", "RIM 120.50", 1052, 1197);           // conflicts with theirs
                 AddText(ms, tr, "V-UTIL-STRM-TEXT", "IE N 115.20", 1052, 1194);          // they lack it
+                Progress("seed: survey text");
                 tr.Commit();
+                Progress("seed: survey committed");
             }
+
+            CivApp.CivilDocument cdoc = CivApp.CivilApplication.ActiveDocument;
+            Progress("seed: civil document");
             using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
             {
                 AddCogo(cdoc, tr, ed, "PP 1", 1000, 1200, 0, 501);        // matched pole
                 AddCogo(cdoc, tr, ed, "PP 2", 1100, 1200, 0, 502);        // missing pole
                 AddCogo(cdoc, tr, ed, "SDMH 1", 1050, 1200, 120.5, 503);  // matched manhole
                 AddCogo(cdoc, tr, ed, "HH 1", 1150, 1250, 0, 504);        // missing handhole
+                Progress("seed: cogo points");
 
                 // The matched pole gets a point style whose marker layer is FIXED to
                 // V-NODE-MARK: moving the point's layer alone would leave the marker plotting.
@@ -131,9 +184,12 @@ namespace FtfCompareTest
                     }
                 }
                 catch (System.Exception ex) { ed.WriteMessage("\n  (fixed-layer point style not applied: {0})", ex.Message); }
+                Progress("seed: point style");
                 tr.Commit();
+                Progress("seed: points committed");
             }
             db.Insunits = AcDb.UnitsValue.Feet;
+            Progress("seed: done");
             ed.WriteMessage("\nCOMPARESEED: consultant xref {0} attached; survey drawn.", consultantPath);
         }
 
@@ -252,6 +308,7 @@ namespace FtfCompareTest
             PromptResult mode = ed.GetString("\nVerify what [Applied/Restored]: ");
             bool applied = mode.Status == PromptStatus.OK && mode.StringResult.StartsWith("A", StringComparison.OrdinalIgnoreCase);
             _failures = 0;
+            Progress("verify: start " + (applied ? "Applied" : "Restored"));
 
             using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
             {
@@ -337,6 +394,7 @@ namespace FtfCompareTest
 
             string report = Path.Combine(Path.GetDirectoryName(db.Filename), Path.GetFileNameWithoutExtension(db.Filename) + ".ftf-compare.csv");
             Check(ed, File.Exists(report), "CSV report written: " + report);
+            Progress("verify: done, " + _failures + " failure(s)");
             ed.WriteMessage("\nCOMPAREVERIFY: {0} failure(s)\n", _failures);
         }
 

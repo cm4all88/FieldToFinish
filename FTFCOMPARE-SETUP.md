@@ -137,14 +137,16 @@ must be closed for every step of the script. The script:
 2. installs the bundle;
 3. compiles `tests\LiveSmoke\CompareTestHarness.cs` (two standalone commands that read
    the drawing by hand, so they check what is really there, not what the plugin thinks);
-4. copies the stock NCS template to `tests\LiveSmoke\compare\seedcompare.dwg`, writes a
-   settings file beside it so the run does not depend on your personal settings, and
-   generates the accoreconsole script with the real paths;
-5. runs, in accoreconsole with the C3D product: `COMPARESEED` (a consultant drawing
-   attached as a clipped xref, with a curb, half of a second curb, a fence, one pole, a
-   storm manhole with a rim label; and our survey: two curbs, a third curb they lack, a
-   fragmented fence, a symbol block whose definition draws on its own layer, four COGO
-   points, one with a point style that fixes its marker layer, rim and invert labels),
+4. copies the stock NCS template twice into `tests\LiveSmoke\compare\`, writes a
+   settings file beside the seed drawing so the run does not depend on your personal
+   settings, and generates the accoreconsole scripts with the real paths;
+5. run 1, in accoreconsole with the C3D product: `COMPARESEEDCONSULTANT` draws the
+   consultant's base map (a curb, half of a second curb, a fence, one pole, a storm
+   manhole with a rim label) and Civil 3D saves it as `compare-consultant.dwg`;
+   run 2, in the seed drawing: `COMPARESEED` attaches that file as a clipped xref and
+   draws our survey (two curbs, a third curb they lack, a fragmented fence, a symbol
+   block whose definition draws on its own layer, four COGO points, one with a point
+   style that fixes its marker layer, rim and invert labels),
    then `FTFCOMPARERUN`, `FTFCOMPAREAPPLY`, `COMPAREVERIFY Applied`, `FTFCOMPAREQC`,
    `FTFCOMPARERUN` again, `FTFCOMPAREAPPLY`, `COMPAREVERIFY Applied`,
    `FTFCOMPARERESTORE`, `COMPAREVERIFY Restored`, `FTFCOMPAREAUDIT`, `FTFCOMPAREAPPLY`,
@@ -161,7 +163,10 @@ label conflict has not been decided yet. The script knows that; it checks the la
 after `FTFCOMPAREDECIDE Unresolved`, through the deliverable being written.
 
 The result is one line: `Smoke test passed: ...` or `FAILED: ...` with the failing
-checks and the log path (`tests\LiveSmoke\compare\compare_out.log`). What each check
+checks, the log path (`tests\LiveSmoke\compare\compare_out.log`), the log's last lines
+and `compare-progress.txt`, a step-by-step marker file every harness step and every
+plugin command writes before it runs, so a run that dies without output still says
+where (accoreconsole's exit code is on the log's last line). What each check
 proves is in the `COMPAREVERIFY` section of `CompareTestHarness.cs`: matched curb,
 fence and points nonplot; the half-represented curb nonplot with a split copy of the
 rest plotting; the fence beyond the xref clip still plotting; the symbol block pointed
