@@ -123,7 +123,7 @@ namespace FtfCompareTest
                     CivStyles.PointStyleCollection styles = cdoc.Styles.PointStyles;
                     AcDb.ObjectId styleId = styles.Contains("FIXED-MARK") ? styles["FIXED-MARK"] : styles.Add("FIXED-MARK");
                     CivStyles.PointStyle style = (CivStyles.PointStyle)tr.GetObject(styleId, AcDb.OpenMode.ForWrite);
-                    style.GetDisplayStylePlan(Autodesk.Civil.PointDisplayStyleType.Marker).Layer = "V-NODE-MARK";
+                    FtfCompareTest.Shim.PointStyleShim.SetPlanMarkerLayer(style, "V-NODE-MARK");
                     foreach (AcDb.ObjectId pid in cdoc.CogoPoints)
                     {
                         CivDb.CogoPoint p = tr.GetObject(pid, AcDb.OpenMode.ForWrite) as CivDb.CogoPoint;
@@ -357,6 +357,25 @@ namespace FtfCompareTest
             AcDb.DBText t = e as AcDb.DBText;
             if (t != null) return "TEXT " + t.TextString;
             return null;
+        }
+    }
+}
+
+// Same using set as the plugin's CogoPointPlotting.cs, which compiles against the 2024
+// API: the PointDisplayStyleType enum is found through these without naming its
+// namespace (it is not in Autodesk.Civil, as the first harness build found out).
+namespace FtfCompareTest.Shim
+{
+    using Autodesk.Civil;
+    using Autodesk.Civil.ApplicationServices;
+    using Autodesk.Civil.DatabaseServices;
+    using Autodesk.Civil.DatabaseServices.Styles;
+
+    internal static class PointStyleShim
+    {
+        public static void SetPlanMarkerLayer(PointStyle style, string layer)
+        {
+            style.GetDisplayStylePlan(PointDisplayStyleType.Marker).Layer = layer;
         }
     }
 }
