@@ -391,8 +391,8 @@ namespace FieldCodes.Cad.Compare
                 if (filters == null || !filters.Contains("SPATIAL")) return null;
                 var filter = tr.GetObject(filters.GetAt("SPATIAL"), OpenMode.ForRead) as SpatialFilter;
                 if (filter == null) return null;
-                var definition = filter.Definition;
-                if (definition == null || !definition.Enabled) return null;
+                var definition = filter.Definition;   // a struct in the 2024 API: never null
+                if (!definition.Enabled) return null;
 
                 var points = definition.GetPoints();
                 var corners = new List<Point3d>();
@@ -1030,8 +1030,9 @@ namespace FieldCodes.Cad.Compare
             {
                 if (mleader.LeaderCount > 0)
                 {
-                    var lines = mleader.GetLeaderLineIndexes(0);
-                    if (lines.Count > 0) return mleader.GetFirstVertex(lines[0]);
+                    // The 2024 API hands the line indexes back as an untyped collection.
+                    foreach (var line in mleader.GetLeaderLineIndexes(0))
+                        return mleader.GetFirstVertex(Convert.ToInt32(line, CultureInfo.InvariantCulture));
                 }
             }
             catch (Autodesk.AutoCAD.Runtime.Exception) { }
@@ -1096,7 +1097,7 @@ namespace FieldCodes.Cad.Compare
             var pis = new List<double>();
             try
             {
-                var points = fl.GetPoints(FeatureLinePointType.AllPoints);
+                var points = fl.GetPoints(Autodesk.Civil.FeatureLinePointType.AllPoints);
                 foreach (Point3d p in points)
                 {
                     try { pis.Add(fl.GetDistAtPoint(fl.GetClosestPointTo(p, false)) - start); }
