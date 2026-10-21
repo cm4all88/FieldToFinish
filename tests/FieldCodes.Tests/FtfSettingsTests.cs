@@ -3,6 +3,7 @@ using FieldCodes.Settings;
 
 namespace FieldCodes.Tests;
 
+[Collection(ProfileDirectoryCollection.Name)]
 public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
 {
     private readonly RulesFixture _fx;

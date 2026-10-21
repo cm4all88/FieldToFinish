@@ -7,6 +7,7 @@ namespace FieldCodes.Tests;
 /// it. A project file beside the drawing still overrides; a missing profile is
 /// reported rather than silently replaced.
 /// </summary>
+[Collection(ProfileDirectoryCollection.Name)]
 public sealed class DraftingProfileTests : IClassFixture<RulesFixture>
 {
     private readonly RulesFixture _fx;

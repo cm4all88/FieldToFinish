@@ -170,7 +170,17 @@ if (-not $SkipTests) {
     $test = Invoke-Native 'dotnet' @('test', (Join-Path $repo 'tests\FieldCodes.Tests\FieldCodes.Tests.csproj'), '-c', $configuration, '--nologo', '-v', 'minimal')
     $summary = $test.Lines | Where-Object { $_ -match '^(Passed|Failed)!' } | Select-Object -Last 1
     if ($test.ExitCode -ne 0 -or -not $summary -or $summary -notmatch '^Passed!') {
-        $failed = @($test.Lines | Where-Object { $_ -match '\[FAIL\]|error ' } | Select-Object -Unique -First 20)
+        # Each failure block: the "Failed <test>" line, then its message up to the stack trace.
+        $failed = @()
+        for ($i = 0; $i -lt $test.Lines.Count; $i++) {
+            if ($test.Lines[$i] -notmatch '^\s*Failed \S') { continue }
+            $failed += $test.Lines[$i].Trim()
+            for ($j = $i + 1; $j -lt [Math]::Min($i + 15, $test.Lines.Count); $j++) {
+                if ($test.Lines[$j] -match '^\s*Stack Trace:') { break }
+                if ($test.Lines[$j].Trim()) { $failed += '   ' + $test.Lines[$j].Trim() }
+            }
+        }
+        if ($failed.Count -eq 0) { $failed = @($test.Lines | Where-Object { $_ -match '\[FAIL\]|error ' } | Select-Object -Unique -First 20) }
         Fail 'Unit tests failed.' (@("$summary") + $failed)
     }
     Ok $summary.Trim()
