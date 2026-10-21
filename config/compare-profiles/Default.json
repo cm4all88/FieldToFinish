@@ -2335,6 +2335,8 @@
     }
   ],
   "nonplotLayers": {
+    "mode": "Suffix",
+    "suffix": "-NP",
     "point": "PMX-COMP-NP-POINT",
     "line": "PMX-COMP-NP-LINE",
     "block": "PMX-COMP-NP-BLOCK",

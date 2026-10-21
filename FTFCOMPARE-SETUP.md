@@ -22,8 +22,11 @@ powershell -ExecutionPolicy Bypass -File deploy\build-install-test.ps1
 The script ends with `Smoke test passed` or `FAILED:` and the reason. Then start
 Civil 3D, open a **copy** of one project drawing, and type `FTFCOMPARE` (step 5).
 
-Status: the comparison engine is unit tested (1,051 tests). The Civil 3D side compiles
-against the 2024 API surface but **has not yet run inside Civil 3D**. Nothing below
+Status: the comparison engine is unit tested (1,066 tests). The plugin has built against
+the real Civil 3D 2024 API and run the whole smoke sequence headlessly: matched linework,
+the clipped xref, the block twin, every "still plots" case, restore, audit and the
+deliverable passed; the one failure (COGO point numbers read as elevations, which sent
+every point to review) is fixed in the current commit and awaits a re-run. Nothing below
 reports it as verified until step 4 passes on your machine and step 6 checks out on a
 real drawing.
 
@@ -208,6 +211,10 @@ Steps:
      anything of ours beside them is sent to review rather than called missing;
    - any xref the reader could not load or that is hidden (frozen / off / no-plot
      insert layer): the data is then INCOMPLETE and nothing is called missing.
+   Layering: a matched object goes to its own layer's name plus `-NP` (for example
+   `V-UTIL-POWR-POLE-NP`), created no-plot if missing; an existing `-NP` layer is forced
+   no-plot. The profile's `nonplotLayers.mode` = `Fixed` uses the `PMX-COMP-NP-*` set
+   instead.
 4. Map the consultant's layers: `FTFCOMPAREPROFILE`, `SaveAs` with the consultant's
    name, then `Edit` (opens the JSON). Under each category's `"consultant"` block, add
    their layer wildcards and block names; save; run again. The profile is reused for
@@ -245,7 +252,7 @@ Do this on the first real site before trusting it:
    final plotting layer, decision, notes. Sort by Status; read every Discrepancy note.
 4. **Plot preview, the decisive check.** After Apply, PLOT > Preview (or publish to PDF)
    the working drawing, and preview the untouched copy beside it. On the comparison
-   preview: nothing on the `PMX-COMP-NP-*` layers appears; the matched COGO points' markers
+   preview: nothing on the `-NP` layers appears; the matched COGO points' markers
    and labels are gone; the split copies of partial lines appear; every Missing feature
    appears; the consultant's content is unchanged.
 5. **`FTFCOMPAREQC` all PASS**, including DUPLICATES-NONPLOT (every matched duplicate
@@ -269,8 +276,9 @@ point style, label visibility; erases the split copies (and any copy no record o
 erases the nonplot twin block definitions nothing uses. Decisions are kept for the next
 run. The audit then prints what is left; it must say
 `CLEAN: nothing from the comparison is in effect in this drawing`. If it does not, the
-lines above it say what remains (objects still on a `PMX-COMP-NP-*` layer, split copies,
-twins, restyled points); send me those lines.
+lines above it say what remains (the applied record, split copies, twins, restyled
+points; objects on `-NP` layers are listed but may be ones placed there by hand); send me
+those lines.
 
 Because the original survey drawing and the consultant's files are never written,
 the fallback is always to discard the working copy and copy the original again.

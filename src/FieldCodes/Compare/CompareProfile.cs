@@ -198,6 +198,14 @@ namespace FieldCodes.Compare
     /// never one per run, so re-running cannot accumulate layers.</summary>
     public sealed class NonplotLayerNames
     {
+        public const string ModeSuffix = "Suffix";
+        public const string ModeFixed = "Fixed";
+
+        /// <summary>"Suffix" (default): an object goes to its own layer's name plus the suffix
+        /// (V-UTIL-POWR-POLE to V-UTIL-POWR-POLE-NP), created no-plot where missing with the
+        /// source layer's colour. "Fixed": the five named layers below, by kind.</summary>
+        [JsonProperty("mode")] public string Mode { get; set; }
+        [JsonProperty("suffix")] public string Suffix { get; set; }
         [JsonProperty("point")] public string Point { get; set; }
         [JsonProperty("line")] public string Line { get; set; }
         [JsonProperty("block")] public string Block { get; set; }
@@ -208,6 +216,8 @@ namespace FieldCodes.Compare
 
         public NonplotLayerNames()
         {
+            Mode = ModeSuffix;
+            Suffix = "-NP";
             Point = "PMX-COMP-NP-POINT";
             Line = "PMX-COMP-NP-LINE";
             Block = "PMX-COMP-NP-BLOCK";
@@ -218,9 +228,35 @@ namespace FieldCodes.Compare
 
         [JsonIgnore] public IEnumerable<string> All { get { return new[] { Point, Line, Block, Text, Utility }; } }
 
+        [JsonIgnore] public bool UseSuffix { get { return !string.Equals(Mode, ModeFixed, StringComparison.OrdinalIgnoreCase); } }
+
+        /// <summary>The nonplot layer for an object on sourceLayer whose fixed-mode layer
+        /// would be fixedName.</summary>
+        public string For(string sourceLayer, string fixedName)
+        {
+            if (!UseSuffix || string.IsNullOrWhiteSpace(sourceLayer)) return fixedName;
+            if (IsNonplotName(sourceLayer)) return sourceLayer;
+            return sourceLayer + Suffix;
+        }
+
+        /// <summary>One of the five fixed names.</summary>
         public bool Contains(string layer)
         {
             return All.Any(l => string.Equals(l, layer, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>A name the comparison's nonplot scheme would produce: a fixed name, or
+        /// in suffix mode anything ending with the suffix.</summary>
+        public bool IsNonplotName(string layer)
+        {
+            if (string.IsNullOrEmpty(layer)) return false;
+            if (Contains(layer)) return true;
+            return UseSuffix && !string.IsNullOrEmpty(Suffix) && layer.Length > Suffix.Length && layer.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [JsonIgnore] public string Describe
+        {
+            get { return UseSuffix ? "<layer>" + Suffix + " (suffix mode)" : string.Join(", ", All.ToArray()) + " (fixed mode)"; }
         }
     }
 
@@ -413,10 +449,12 @@ namespace FieldCodes.Compare
         /// <summary>The nonplot layer a given survey feature goes to.</summary>
         public string NonplotLayerFor(CompareFeature f, CategoryRule category)
         {
-            if (f.Kind == FeatureKind.Annotation) return NonplotLayers.Text;
-            if (category != null && category.IsUtility) return NonplotLayers.Utility;
-            if (f.Kind == FeatureKind.Line) return NonplotLayers.Line;
-            return !string.IsNullOrEmpty(f.BlockName) ? NonplotLayers.Block : NonplotLayers.Point;
+            string fixedName;
+            if (f.Kind == FeatureKind.Annotation) fixedName = NonplotLayers.Text;
+            else if (category != null && category.IsUtility) fixedName = NonplotLayers.Utility;
+            else if (f.Kind == FeatureKind.Line) fixedName = NonplotLayers.Line;
+            else fixedName = !string.IsNullOrEmpty(f.BlockName) ? NonplotLayers.Block : NonplotLayers.Point;
+            return NonplotLayers.For(f.Layer, fixedName);
         }
 
         // -------------------------------------------------------------- validation
@@ -438,6 +476,14 @@ namespace FieldCodes.Compare
                 if (string.IsNullOrWhiteSpace(layer)) problems.Add("Every nonplot layer needs a name.");
             if (NonplotLayers.All.Distinct(StringComparer.OrdinalIgnoreCase).Count() != 5)
                 problems.Add("Nonplot layer names must be distinct.");
+            if (!string.Equals(NonplotLayers.Mode, NonplotLayerNames.ModeSuffix, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(NonplotLayers.Mode, NonplotLayerNames.ModeFixed, StringComparison.OrdinalIgnoreCase))
+                problems.Add("nonplotLayers.mode must be Suffix or Fixed.");
+            if (NonplotLayers.UseSuffix)
+            {
+                if (string.IsNullOrWhiteSpace(NonplotLayers.Suffix)) problems.Add("nonplotLayers.suffix is needed in Suffix mode (for example -NP).");
+                else if (NonplotLayers.Suffix.IndexOfAny("<>/\\\":;?*|,=`".ToCharArray()) >= 0) problems.Add("nonplotLayers.suffix contains a character AutoCAD does not allow in a layer name.");
+            }
             if (Units.ConsultantUnitsPerFoot.HasValue && Units.ConsultantUnitsPerFoot.Value <= 0)
                 problems.Add("units.consultantUnitsPerFoot must be positive.");
             if (Boundary.Points != null && Boundary.Points.Count > 0 && Boundary.Points.Count < 3)
@@ -470,6 +516,8 @@ namespace FieldCodes.Compare
                 if (string.IsNullOrEmpty(c.Name)) c.Name = c.Key;
             }
             if (NonplotLayers == null) NonplotLayers = new NonplotLayerNames();
+            if (string.IsNullOrEmpty(NonplotLayers.Mode)) NonplotLayers.Mode = NonplotLayerNames.ModeSuffix;
+            if (NonplotLayers.Suffix == null) NonplotLayers.Suffix = "-NP";
             if (Annotation == null) Annotation = new AnnotationRules();
             if (Boundary == null) Boundary = new CompareBoundary();
             if (Units == null) Units = new UnitRules();

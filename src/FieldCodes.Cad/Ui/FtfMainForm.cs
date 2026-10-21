@@ -1168,8 +1168,9 @@ namespace FieldCodes.Cad.Ui
                 "Runs the comparison from the command line (all survey objects, a selection, or " +
                 "a window) and writes the CSV report beside the drawing.");
             CommandRow(stack, "FTFCOMPAREAPPLY   /   FTFCOMPARERESTORE",
-                "Moves matched duplicates to the PMX-COMP-NP-* nonplot layers (splitting partly " +
-                "represented lines) -- and puts every object back exactly as it was.");
+                "Moves matched duplicates to nonplot layers (each object's own layer plus -NP, " +
+                "or the fixed PMX-COMP-NP-* set, per the profile; partly represented lines are " +
+                "split) -- and puts every object back exactly as it was.");
             CommandRow(stack, "FTFCOMPAREQC   /   FTFCOMPARESAVE",
                 "The final QC checks, and the deliverable save to the delivery folder, which " +
                 "refuses to write while a blocking check fails.");

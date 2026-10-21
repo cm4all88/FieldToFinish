@@ -662,8 +662,11 @@ tolerance is shown for review as a possible parallel feature.
 
 ### What changes in the drawing, how it is verified, and how it comes back
 
-- Five nonplot layers, created once and reused: `PMX-COMP-NP-POINT`, `-LINE`, `-BLOCK`,
-  `-TEXT`, `-UTILITY`. Plot is off, colour 8. Names are in the profile.
+- Nonplot layers. Default (`nonplotLayers.mode` = `Suffix`): each object goes to its own
+  layer's name plus `-NP` (`V-UTIL-POWR-POLE` to `V-UTIL-POWR-POLE-NP`), created no-plot
+  with the source layer's colour, linetype and lineweight where missing; an existing
+  `-NP` layer is forced no-plot, thawed and on. Alternative (`Fixed`): five named layers
+  by kind, `PMX-COMP-NP-POINT`, `-LINE`, `-BLOCK`, `-TEXT`, `-UTILITY`, colour 8.
 - Every change is checked the moment it is made with the same resolver the final QC
   uses (`PlotVisibility`: visibility, layer, block content layer by layer with layer 0
   following the insert, attributes, point style and label). An object that would still
@@ -674,12 +677,15 @@ tolerance is shown for review as a possible parallel feature.
 - A COGO point moves to the nonplot layer AND its label is hidden on the point
   (`IsLabelVisible`), because a label style may fix its own layer. If the point style
   fixes the marker's layer (anything but 0), the point gets the comparison's own point
-  style `PMX-COMP-NP` whose marker sits on the nonplot layer. A point whose primary point
+  style `PMX-COMP-NP`, whose marker and label sit on layer 0 (so they follow the point's
+  nonplot layer) in suffix mode, or on the point nonplot layer in fixed mode. A point
+  whose primary point
   group overrides the point style is refused (the group would win): remove the override
   or exclude the point.
 - A block whose definition draws on its own layers is pointed at a nonplot twin
-  definition `PMX-COMP-NP$<name>` (a deep clone with every entity on the nonplot layer,
-  nested blocks twinned too). The shared definition is never edited, so other inserts are
+  definition `PMX-COMP-NP$<name>` (a deep clone with every entity on a nonplot layer: its
+  own layer's `-NP` twin in suffix mode, the block nonplot layer in fixed mode; layer 0
+  stays 0 and follows the insert; nested blocks twinned too). The shared definition is never edited, so other inserts are
   untouched. A dynamic block in that situation is hidden instead (its displayed geometry
   lives in an anonymous definition AutoCAD manages).
 - A partly represented line moves to nonplot INTACT and the uncovered stations are copied

@@ -278,6 +278,13 @@ namespace FieldCodes.Compare
             {
                 if (string.IsNullOrWhiteSpace(kv.Value)) continue;
                 var tag = (kv.Key ?? string.Empty).ToUpperInvariant();
+                // An identifier (point number, structure ID, name) is never a measured
+                // value: a bare "501" must not be read as an elevation the consultant lacks.
+                if (IsIdentifierTag(tag))
+                {
+                    facts.Add(new AnnotationFact { Key = "ID", Text = kv.Value });
+                    continue;
+                }
                 // A tag that names the value is the strongest evidence of what it is.
                 if (_profile.Annotation.RimKeywords.Any(k => tag.Contains(k.ToUpperInvariant())))
                 {
@@ -293,6 +300,15 @@ namespace FieldCodes.Compare
                     if (fact.Key != "TEXT") facts.Add(fact);
             }
             return facts;
+        }
+
+        internal static bool IsIdentifierTag(string tag)
+        {
+            if (string.IsNullOrEmpty(tag)) return false;
+            var t = tag.ToUpperInvariant().Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty).Replace(".", string.Empty);
+            return t == "ID" || t == "NO" || t == "NUM" || t == "NUMBER" || t == "NAME" || t == "HANDLE" || t == "TAG" || t == "PT" || t == "POINT" ||
+                   t.EndsWith("ID", StringComparison.Ordinal) || t.EndsWith("NO", StringComparison.Ordinal) || t.EndsWith("NUM", StringComparison.Ordinal) ||
+                   t.Contains("NUMBER") || t.Contains("NAME") || t.Contains("POINT");
         }
 
         private static double? ParseNumber(string s)

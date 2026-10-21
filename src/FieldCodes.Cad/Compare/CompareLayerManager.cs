@@ -37,40 +37,65 @@ namespace FieldCodes.Cad.Compare
 
         public static void EnsureNonplotLayers(Database db, Transaction tr, CompareProfile profile, Editor ed)
         {
+            EnsureNonplotLayers(db, tr, profile, null, ed);
+        }
+
+        /// <summary>The nonplot layers this plan needs: in fixed mode the five named ones, in
+        /// suffix mode one per source layer the plan moves something from.</summary>
+        public static void EnsureNonplotLayers(Database db, Transaction tr, CompareProfile profile, ChangePlan plan, Editor ed)
+        {
+            var wanted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // nonplot layer -> source layer
+            if (!profile.NonplotLayers.UseSuffix) foreach (var name in profile.NonplotLayers.All) wanted[name] = null;
+            if (plan != null)
+                foreach (var c in plan.Changes)
+                    if (!string.IsNullOrEmpty(c.ToLayer) && !wanted.ContainsKey(c.ToLayer)) wanted[c.ToLayer] = c.FromLayer;
+            foreach (var kv in wanted) EnsureNonplotLayer(db, tr, profile, kv.Key, kv.Value, ed);
+        }
+
+        /// <summary>One nonplot layer: created no-plot (colour, linetype and lineweight from
+        /// the source layer when there is one, else the profile colour), or if it already
+        /// exists, forced no-plot, thawed and on so the objects stay visible for review.</summary>
+        public static void EnsureNonplotLayer(Database db, Transaction tr, CompareProfile profile, string name, string sourceLayer, Editor ed)
+        {
+            if (string.IsNullOrEmpty(name)) return;
             var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-            foreach (var name in profile.NonplotLayers.All)
+            LayerTableRecord record;
+            if (table.Has(name))
             {
-                LayerTableRecord record;
-                if (table.Has(name))
+                record = (LayerTableRecord)tr.GetObject(table[name], OpenMode.ForRead);
+                if (record.IsPlottable)
                 {
-                    record = (LayerTableRecord)tr.GetObject(table[name], OpenMode.ForRead);
-                    if (record.IsPlottable)
-                    {
-                        record.UpgradeOpen();
-                        record.IsPlottable = false;
-                        if (ed != null) ed.WriteMessage("\n  Layer {0} was plottable; set to no-plot.", name);
-                    }
-                    if (record.IsFrozen || record.IsOff)
-                    {
-                        // Nonplot objects stay visible on screen for review.
-                        record.UpgradeOpen();
-                        record.IsFrozen = false;
-                        record.IsOff = false;
-                    }
-                    continue;
+                    record.UpgradeOpen();
+                    record.IsPlottable = false;
+                    if (ed != null) ed.WriteMessage("\n  Layer {0} was plottable; set to no-plot.", name);
                 }
-                table.UpgradeOpen();
-                record = new LayerTableRecord
+                if (record.IsFrozen || record.IsOff)
                 {
-                    Name = name,
-                    IsPlottable = false,
-                    Color = Color.FromColorIndex(ColorMethod.ByAci, profile.NonplotLayers.ColorIndex),
-                    Description = "FTFCOMPARE: survey objects the consultant base map already shows. Does not plot."
-                };
-                table.Add(record);
-                tr.AddNewlyCreatedDBObject(record, true);
-                if (ed != null) ed.WriteMessage("\n  Created nonplot layer {0}.", name);
+                    record.UpgradeOpen();
+                    record.IsFrozen = false;
+                    record.IsOff = false;
+                }
+                return;
             }
+            table.UpgradeOpen();
+            record = new LayerTableRecord
+            {
+                Name = name,
+                IsPlottable = false,
+                Color = Color.FromColorIndex(ColorMethod.ByAci, profile.NonplotLayers.ColorIndex),
+                Description = "FTFCOMPARE: survey objects the consultant base map already shows. Does not plot."
+            };
+            if (!string.IsNullOrEmpty(sourceLayer) && table.Has(sourceLayer))
+            {
+                var source = (LayerTableRecord)tr.GetObject(table[sourceLayer], OpenMode.ForRead);
+                record.Color = source.Color;
+                record.LinetypeObjectId = source.LinetypeObjectId;
+                record.LineWeight = source.LineWeight;
+                record.Description = "FTFCOMPARE: no-plot twin of " + sourceLayer + " for survey objects the consultant base map already shows.";
+            }
+            table.Add(record);
+            tr.AddNewlyCreatedDBObject(record, true);
+            if (ed != null) ed.WriteMessage("\n  Created nonplot layer {0}.", name);
         }
 
         // ================================================================== apply
@@ -113,7 +138,7 @@ namespace FieldCodes.Cad.Compare
                 reversed++;
             }
 
-            EnsureNonplotLayers(db, tr, profile, ed);
+            EnsureNonplotLayers(db, tr, profile, plan, ed);
             var minUncovered = profile.Tolerances.MinUncoveredFeet * (result != null && result.UnitsPerFoot > 0 ? result.UnitsPerFoot : 1.0);
             ObjectId nonplotPointStyle = ObjectId.Null;
 
@@ -220,7 +245,9 @@ namespace FieldCodes.Cad.Compare
                 if (effective.MarkerVisible && PlotVisibility.LayerPlots(db, tr, markerLayer))
                 {
                     // The style fixes the marker's layer: give the point the nonplot style.
-                    if (nonplotPointStyle.IsNull) nonplotPointStyle = CogoPointPlotting.EnsureNonplotStyle(db, tr, profile.NonplotLayers.Point);
+                    // Suffix mode: the style's marker and label sit on layer 0, which follows
+                    // the point's own (now nonplot) layer; fixed mode: on the point nonplot layer.
+                    if (nonplotPointStyle.IsNull) nonplotPointStyle = CogoPointPlotting.EnsureNonplotStyle(db, tr, profile.NonplotLayers.UseSuffix ? "0" : profile.NonplotLayers.Point);
                     cogo.StyleId = nonplotPointStyle;
                     done.Method = "LayerAndPointStyle";
                 }
@@ -251,7 +278,15 @@ namespace FieldCodes.Cad.Compare
                     return null;
                 }
                 done.OriginalBlockDefinition = br.BlockTableRecord.Handle.ToString();
-                var twinId = BlockTwins.Ensure(db, tr, br.BlockTableRecord, profile.NonplotLayers.Block, 0);
+                Func<string, string> twinLayer = layer =>
+                {
+                    if (!profile.NonplotLayers.UseSuffix) return profile.NonplotLayers.Block;
+                    if (string.IsNullOrEmpty(layer) || layer == "0") return "0";   // follows the insert, which is nonplot
+                    var name = profile.NonplotLayers.For(layer, profile.NonplotLayers.Block);
+                    EnsureNonplotLayer(db, tr, profile, name, layer, null);
+                    return name;
+                };
+                var twinId = BlockTwins.Ensure(db, tr, br.BlockTableRecord, twinLayer, 0);
                 done.TwinBlockDefinition = twinId.Handle.ToString();
                 br.BlockTableRecord = twinId;
                 done.Method = "BlockTwin";
@@ -561,7 +596,11 @@ namespace FieldCodes.Cad.Compare
                 var record = (LayerTableRecord)tr.GetObject(layers[name], OpenMode.ForRead);
                 return new LayerState { Name = name, Exists = true, Plottable = record.IsPlottable, Frozen = record.IsFrozen, Off = record.IsOff };
             };
-            foreach (var name in profile.NonplotLayers.All) input.Layers[name] = layerState(name);
+            var nonplotNames = new List<string>();
+            if (!profile.NonplotLayers.UseSuffix) nonplotNames.AddRange(profile.NonplotLayers.All);
+            if (plan != null) nonplotNames.AddRange(plan.Changes.Select(c => c.ToLayer));
+            if (applied != null) nonplotNames.AddRange(applied.Changes.Select(c => c.NonplotLayer));
+            foreach (var name in nonplotNames.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase)) input.Layers[name] = layerState(name);
 
             Func<string, EntityState> stateOf = handle =>
             {

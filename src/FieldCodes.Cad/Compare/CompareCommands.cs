@@ -266,7 +266,7 @@ namespace FieldCodes.Cad.Compare
                         var p = CompareSession.Profile;
                         ed.WriteMessage("\n  Tolerances: point {0} ft, line offset {1} ft, angle {2} deg, gap {3} ft, min uncovered {4} ft, elevation {5} ft, auto-accept {6:0.00}",
                             p.Tolerances.PointFeet, p.Tolerances.LineOffsetFeet, p.Tolerances.AngleDegrees, p.Tolerances.GapFeet, p.Tolerances.MinUncoveredFeet, p.Tolerances.ElevationFeet, p.Tolerances.AutoAcceptConfidence);
-                        ed.WriteMessage("\n  Nonplot layers: {0}", string.Join(", ", p.NonplotLayers.All.ToArray()));
+                        ed.WriteMessage("\n  Nonplot layers: {0}", p.NonplotLayers.Describe);
                         foreach (var c in p.Categories.Where(c => c.Enabled))
                             ed.WriteMessage("\n  {0,-18} {1,-5} {2,-9} survey: {3} | consultant: {4}", c.Key, c.Kind, c.System,
                                 Describe(c.Survey), Describe(c.Consultant));

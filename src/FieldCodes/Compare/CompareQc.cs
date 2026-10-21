@@ -116,8 +116,12 @@ namespace FieldCodes.Compare
 
             // 3. Nonplot layer settings.
             var badLayers = new List<string>();
-            var usedNonplot = result.Results.Where(r => r.Action != PlannedAction.None && !string.IsNullOrEmpty(r.NonplotLayer)).Select(r => r.NonplotLayer).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            foreach (var name in profile.NonplotLayers.All)
+            var usedNonplot = result.Results.Where(r => r.Action != PlannedAction.None && !string.IsNullOrEmpty(r.NonplotLayer)).Select(r => r.NonplotLayer).ToList();
+            if (input.Applied != null) usedNonplot.AddRange(input.Applied.Changes.Where(c => !string.IsNullOrEmpty(c.NonplotLayer)).Select(c => c.NonplotLayer));
+            usedNonplot = usedNonplot.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // Suffix mode has no fixed set: the layers the plan and the record use are checked.
+            var layersToCheck = profile.NonplotLayers.UseSuffix ? usedNonplot.ToList() : profile.NonplotLayers.All.Concat(usedNonplot).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var name in layersToCheck)
             {
                 LayerState state;
                 var used = usedNonplot.Contains(name, StringComparer.OrdinalIgnoreCase);
@@ -220,10 +224,10 @@ namespace FieldCodes.Compare
         {
             if (entity.Plots.HasValue) return entity.Plots;
             if (entity.PlotNote != null) return null;     // resolved, and found undeterminable
-            if (profile.NonplotLayers.Contains(entity.Layer)) return false;
             LayerState layer;
-            if (input.Layers.TryGetValue(entity.Layer ?? string.Empty, out layer))
-                return layer.Exists && layer.Plottable && !layer.Frozen && !layer.Off;
+            if (input.Layers.TryGetValue(entity.Layer ?? string.Empty, out layer) && layer.Exists)
+                return layer.Plottable && !layer.Frozen && !layer.Off;
+            if (profile.NonplotLayers.IsNonplotName(entity.Layer)) return false;
             return true;
         }
 

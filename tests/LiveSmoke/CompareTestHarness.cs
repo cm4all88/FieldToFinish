@@ -293,6 +293,7 @@ namespace FtfCompareTest
             AcDb.ObjectId id = cdoc.CogoPoints.Add(new Point3d(x, y, z), description, false);
             CivDb.CogoPoint p = tr.GetObject(id, AcDb.OpenMode.ForWrite) as CivDb.CogoPoint;
             if (p == null) return;
+            p.Layer = "V-NODE";   // explicit: the template's point layer setting must not decide the test
             try { p.PointNumber = number; } catch (System.Exception ex) { ed.WriteMessage("\n  point number {0}: {1}", number, ex.Message); }
         }
 
@@ -313,7 +314,8 @@ namespace FtfCompareTest
             using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
             {
                 AcDb.LayerTable lt = (AcDb.LayerTable)tr.GetObject(db.LayerTableId, AcDb.OpenMode.ForRead);
-                string[] nonplot = { "PMX-COMP-NP-POINT", "PMX-COMP-NP-LINE", "PMX-COMP-NP-BLOCK", "PMX-COMP-NP-TEXT", "PMX-COMP-NP-UTILITY" };
+                // Suffix layering: every object goes to its own layer's name + "-NP".
+                string[] nonplot = { "V-SURF-CURB-E-NP", "V-SURF-FENC-E-NP", "V-NODE-NP", "V-UTIL-STRC-NP", "V-UTIL-STRC-SYM-NP" };
                 if (applied)
                     foreach (string name in nonplot)
                     {
@@ -324,6 +326,7 @@ namespace FtfCompareTest
                 var byKey = new Dictionary<string, List<string>>();   // "LINE y=1000" -> layers
                 int splits = 0;
                 string symmhDefinition = null;
+                string symmhLayer = null;
                 string pole1Style = null;
                 bool pole1LabelVisible = true;
                 AcDb.BlockTable bt = (AcDb.BlockTable)tr.GetObject(db.BlockTableId, AcDb.OpenMode.ForRead);
@@ -344,7 +347,7 @@ namespace FtfCompareTest
                     if (insert != null)
                     {
                         AcDb.BlockTableRecord def = (AcDb.BlockTableRecord)tr.GetObject(insert.BlockTableRecord, AcDb.OpenMode.ForRead);
-                        if (def.Name == "SYMMH" || def.Name.EndsWith("$SYMMH")) symmhDefinition = def.Name;
+                        if (def.Name == "SYMMH" || def.Name.EndsWith("$SYMMH")) { symmhDefinition = def.Name; symmhLayer = e.Layer; }
                     }
                     CivDb.CogoPoint cogo = e as CivDb.CogoPoint;
                     if (cogo != null && cogo.PointNumber == 501)
@@ -360,19 +363,20 @@ namespace FtfCompareTest
 
                 if (applied)
                 {
-                    Check(ed, Has(byKey, "LINE y=1000", "PMX-COMP-NP-LINE"), "curb A (fully represented) is nonplot");
-                    Check(ed, Has(byKey, "LINE y=1050", "PMX-COMP-NP-LINE"), "curb B original (partly represented) is nonplot");
+                    Check(ed, Has(byKey, "LINE y=1000", "V-SURF-CURB-E-NP"), "curb A (fully represented) is nonplot");
+                    Check(ed, Has(byKey, "LINE y=1050", "V-SURF-CURB-E-NP"), "curb B original (partly represented) is nonplot");
                     Check(ed, splits >= 1, "curb B uncovered portion exists as a split copy (" + splits + ")");
-                    Check(ed, Has(byKey, "LINE y=1100", "PMX-COMP-NP-LINE"), "fence inside the xref clip is nonplot");
+                    Check(ed, Has(byKey, "LINE y=1100", "V-SURF-FENC-E-NP"), "fence inside the xref clip is nonplot");
                     Check(ed, Has(byKey, "LINE y=1100", "V-SURF-FENC-E"), "fence beyond the xref clip (x > 1150) still plots");
                     Check(ed, symmhDefinition != null && symmhDefinition.StartsWith("PMX-COMP-NP$"), "survey block with own-layer geometry points at a nonplot twin (" + symmhDefinition + ")");
+                    Check(ed, symmhLayer == "V-UTIL-STRC-NP", "survey block insert is on V-UTIL-STRC-NP (" + symmhLayer + ")");
                     Check(ed, pole1Style == "PMX-COMP-NP", "pole with a fixed-layer point style got the nonplot point style (" + pole1Style + ")");
                     Check(ed, !pole1LabelVisible, "matched pole's label is hidden");
                     Check(ed, Has(byKey, "LINE y=1300", "V-SURF-CURB-E"), "curb C (missing) still plots");
-                    Check(ed, Has(byKey, "COGO PP 1", "PMX-COMP-NP-UTILITY"), "matched pole is nonplot");
-                    Check(ed, !Has(byKey, "COGO PP 2", "PMX-COMP-NP-UTILITY"), "missing pole still plots");
-                    Check(ed, Has(byKey, "COGO SDMH 1", "PMX-COMP-NP-UTILITY"), "matched manhole is nonplot");
-                    Check(ed, !Has(byKey, "COGO HH 1", "PMX-COMP-NP-UTILITY"), "missing handhole still plots");
+                    Check(ed, Has(byKey, "COGO PP 1", "V-NODE-NP"), "matched pole is nonplot");
+                    Check(ed, Has(byKey, "COGO PP 2", "V-NODE"), "missing pole still plots");
+                    Check(ed, Has(byKey, "COGO SDMH 1", "V-NODE-NP"), "matched manhole is nonplot");
+                    Check(ed, Has(byKey, "COGO HH 1", "V-NODE"), "missing handhole still plots");
                     Check(ed, Has(byKey, "TEXT RIM 120.50", "V-UTIL-STRM-TEXT"), "conflicting rim label still plots (discrepancy, not auto-applied)");
                     Check(ed, Has(byKey, "TEXT IE N 115.20", "V-UTIL-STRM-TEXT"), "invert label they lack still plots");
                 }
@@ -382,8 +386,8 @@ namespace FtfCompareTest
                     Check(ed, Has(byKey, "LINE y=1000", "V-SURF-CURB-E"), "curb A back on V-SURF-CURB-E");
                     Check(ed, Has(byKey, "LINE y=1050", "V-SURF-CURB-E"), "curb B back on V-SURF-CURB-E");
                     Check(ed, Has(byKey, "LINE y=1100", "V-SURF-FENC-E"), "fence back on V-SURF-FENC-E");
-                    Check(ed, !Has(byKey, "COGO PP 1", "PMX-COMP-NP-UTILITY"), "pole back on its layer");
-                    Check(ed, !Has(byKey, "COGO SDMH 1", "PMX-COMP-NP-UTILITY"), "manhole back on its layer");
+                    Check(ed, Has(byKey, "COGO PP 1", "V-NODE"), "pole back on its layer");
+                    Check(ed, Has(byKey, "COGO SDMH 1", "V-NODE"), "manhole back on its layer");
                     Check(ed, symmhDefinition == "SYMMH", "survey block points at its original definition again (" + symmhDefinition + ")");
                     Check(ed, !bt.Has("PMX-COMP-NP$SYMMH"), "nonplot twin definition purged");
                     Check(ed, pole1Style == "FIXED-MARK", "pole's original point style restored (" + pole1Style + ")");

@@ -524,10 +524,12 @@ namespace FieldCodes.Compare
         /// systems, else line / block / point.</summary>
         public static string NonplotLayerFor(FeatureResult r, CategoryRule category, CompareProfile profile)
         {
-            if (r.Kind == FeatureKind.Annotation) return profile.NonplotLayers.Text;
-            if (category != null && category.IsUtility) return profile.NonplotLayers.Utility;
-            if (r.Kind == FeatureKind.Line) return profile.NonplotLayers.Line;
-            return !string.IsNullOrEmpty(r.BlockName) ? profile.NonplotLayers.Block : profile.NonplotLayers.Point;
+            string fixedName;
+            if (r.Kind == FeatureKind.Annotation) fixedName = profile.NonplotLayers.Text;
+            else if (category != null && category.IsUtility) fixedName = profile.NonplotLayers.Utility;
+            else if (r.Kind == FeatureKind.Line) fixedName = profile.NonplotLayers.Line;
+            else fixedName = !string.IsNullOrEmpty(r.BlockName) ? profile.NonplotLayers.Block : profile.NonplotLayers.Point;
+            return profile.NonplotLayers.For(r.SourceLayer, fixedName);
         }
 
         /// <summary>Intervals that stay on the plotting layer: the uncovered ones, plus the

@@ -488,7 +488,7 @@ namespace FieldCodes.Cad.Compare
             var profile = EffectiveProfile() ?? new CompareProfile();
             var layers = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
             var onNonplot = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (var name in profile.NonplotLayers.All) onNonplot[name] = 0;
+            if (!profile.NonplotLayers.UseSuffix) foreach (var name in profile.NonplotLayers.All) onNonplot[name] = 0;
             var splits = 0;
             var styled = 0;
             var hiddenLabels = 0;
@@ -499,7 +499,12 @@ namespace FieldCodes.Cad.Compare
                 if (id.IsErased) continue;
                 var entity = tr.GetObject(id, OpenMode.ForRead, false, true) as Autodesk.AutoCAD.DatabaseServices.Entity;
                 if (entity == null) continue;
-                if (onNonplot.ContainsKey(entity.Layer)) onNonplot[entity.Layer]++;
+                if (profile.NonplotLayers.IsNonplotName(entity.Layer))
+                {
+                    int already;
+                    onNonplot.TryGetValue(entity.Layer, out already);
+                    onNonplot[entity.Layer] = already + 1;
+                }
                 var stamp = Ownership.Read(entity);
                 if (stamp != null && stamp.Kind == FtfEntityKind.CompareSplit) splits++;
                 if (!entity.Visible && Applied != null && Applied.Find(entity.Handle.ToString()) != null) invisible++;
@@ -529,6 +534,7 @@ namespace FieldCodes.Cad.Compare
             ed.WriteMessage("\n  Applied record: {0} change(s){1}", applied, Applied != null ? " from run " + Applied.RunId + " at " + Applied.AppliedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : string.Empty);
             ed.WriteMessage("\n  Review decisions stored: {0}", Decisions != null ? Decisions.Entries.Count : 0);
             ed.WriteMessage("\n  Result on disk: {0}", Result != null ? Result.Results.Count + " feature(s), run " + Result.RunId : "none (run the comparison)");
+            ed.WriteMessage("\n  Nonplot layering: {0}", profile.NonplotLayers.Describe);
             foreach (var kv in onNonplot)
             {
                 var exists = layers.Has(kv.Key);
@@ -539,7 +545,9 @@ namespace FieldCodes.Cad.Compare
             ed.WriteMessage("\n  Nonplot block twins (PMX-COMP-NP$...): {0}", twins);
             ed.WriteMessage("\n  COGO points on the PMX-COMP-NP point style: {0}; with label hidden by the comparison: {1}", styled, hiddenLabels);
             ed.WriteMessage("\n  Objects hidden by the comparison: {0}", invisible);
-            var clean = applied == 0 && splits == 0 && twins == 0 && styled == 0 && onNonplot.Values.Sum() == 0;
+            // Suffix mode: objects on -NP layers may have been put there by hand, so only the
+            // comparison's own record decides; fixed mode: the PMX layers are ours alone.
+            var clean = applied == 0 && splits == 0 && twins == 0 && styled == 0 && (profile.NonplotLayers.UseSuffix || onNonplot.Values.Sum() == 0);
             ed.WriteMessage(clean
                 ? "\n  CLEAN: nothing from the comparison is in effect in this drawing.\n"
                 : "\n  Comparison changes are in effect. FTFCOMPARERESTORE reverses them; FTFCOMPAREQC checks them.\n");

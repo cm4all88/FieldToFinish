@@ -14,6 +14,9 @@ public static class CF
         // everything beyond their bounds "outside limits". Scenarios that need limits
         // set them explicitly.
         p.Boundary.UseConsultantExtentWhenNoBoundary = false;
+        // The fixed PMX-COMP-NP-* names keep the layer expectations in these tests short;
+        // NonplotLayeringTests covers the default suffix mode.
+        p.NonplotLayers.Mode = NonplotLayerNames.ModeFixed;
         return p;
     }
 

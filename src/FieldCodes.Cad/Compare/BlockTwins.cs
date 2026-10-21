@@ -11,8 +11,10 @@ namespace FieldCodes.Cad.Compare
     /// layers keeps plotting those parts wherever its insert sits, and the shared
     /// definition must not be edited (every other insert would change). So the insert is
     /// pointed at a copy of the definition, "PMX-COMP-NP$name", whose every entity sits
-    /// on the comparison nonplot layer; restore points the insert back and erases twins
-    /// nothing references any more. The original definition is never touched.
+    /// on a nonplot layer (its own layer's -NP twin in suffix mode, the block nonplot layer
+    /// in fixed mode; layer 0 stays 0 and follows the insert); restore points the insert
+    /// back and erases twins nothing references any more. The original definition is never
+    /// touched.
     ///
     /// UNTESTED in Civil 3D.
     /// </summary>
@@ -26,7 +28,10 @@ namespace FieldCodes.Cad.Compare
         }
 
         /// <summary>The twin of a definition, created on first use.</summary>
-        public static ObjectId Ensure(Database db, Transaction tr, ObjectId originalId, string nonplotLayer, int depth)
+        /// <param name="layerFor">Maps an entity's layer inside the definition to the layer it
+        /// gets in the twin (a fixed nonplot layer, or the layer's own -NP twin; "0" stays "0"
+        /// and follows the insert).</param>
+        public static ObjectId Ensure(Database db, Transaction tr, ObjectId originalId, Func<string, string> layerFor, int depth)
         {
             var original = (BlockTableRecord)tr.GetObject(originalId, OpenMode.ForRead);
             if (IsTwin(original.Name)) return originalId;
@@ -62,12 +67,13 @@ namespace FieldCodes.Cad.Compare
                 if (id.IsErased) continue;
                 var entity = tr.GetObject(id, OpenMode.ForWrite, false, true) as AcEntity;
                 if (entity == null) continue;
-                entity.Layer = nonplotLayer;
+                var target = layerFor(entity.Layer);
+                if (!string.Equals(target, entity.Layer, StringComparison.OrdinalIgnoreCase)) entity.Layer = target;
                 var nested = entity as BlockReference;
                 if (nested == null) continue;
                 var nestedDef = tr.GetObject(nested.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
                 if (nestedDef != null && PlotVisibility.DrawsOnOwnLayers(nestedDef, tr, 0))
-                    nested.BlockTableRecord = Ensure(db, tr, nested.BlockTableRecord, nonplotLayer, depth + 1);
+                    nested.BlockTableRecord = Ensure(db, tr, nested.BlockTableRecord, layerFor, depth + 1);
             }
             return twinId;
         }
