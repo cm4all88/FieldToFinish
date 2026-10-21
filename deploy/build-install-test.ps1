@@ -267,7 +267,8 @@ if (-not $SkipSmoke) {
     $failLines = @($logLines | Select-String -SimpleMatch '[VERIFY FAIL]' | ForEach-Object { $_.Line.Trim() })
     $verifyRuns = @($logLines | Select-String -SimpleMatch 'COMPAREVERIFY: ').Count
     $verifyClean = @($logLines | Select-String -SimpleMatch 'COMPAREVERIFY: 0 failure').Count
-    $loadProblems = @($logLines | Select-String 'Cannot load assembly|Unknown command|could not be loaded|FileLoadException|FileNotFoundException' | ForEach-Object { $_.Line.Trim() } | Select-Object -Unique)
+    $loadProblems = @($logLines | Select-String 'Cannot load assembly|Unknown command|could not be loaded|Could not load|FileLoadException|FileNotFoundException|BadImageFormatException|TypeLoadException|MissingMethodException|TypeInitializationException' | ForEach-Object { $_.Line.Trim() } | Select-Object -Unique)
+    $seeded = @($logLines | Select-String -SimpleMatch 'COMPARESEED: consultant xref').Count -gt 0
     # Case-sensitive on purpose: the first FTFCOMPAREQC in this sequence is expected to
     # report "Final QC: FAILED" (an undecided discrepancy); that is the tool working.
     $commandErrors = @($logLines | Select-String -CaseSensitive ' failed: |AutoCAD error|NOT changed' | ForEach-Object { $_.Line.Trim() } | Select-Object -Unique)
@@ -277,6 +278,7 @@ if (-not $SkipSmoke) {
     $audit = @($logLines | Select-String -SimpleMatch 'CLEAN: nothing from the comparison').Count
 
     Write-Host ''
+    Write-Host ("   harness seeded the drawing: {0}" -f $(if ($seeded) { 'yes' } else { 'NO (NETLOAD or COMPARESEED did not run)' }))
     Write-Host ("   checks passed             : {0}" -f $pass)
     Write-Host ("   checks failed             : {0}" -f $failLines.Count)
     Write-Host ("   verify runs clean         : {0} of {1} (expected 3 of 3)" -f $verifyClean, $verifyRuns)
@@ -292,7 +294,12 @@ if (-not $SkipSmoke) {
     if ($commandErrors.Count -gt 0) { $problems += 'Errors reported by commands:'; $problems += ($commandErrors | Select-Object -First 15) }
     if (-not $saved) { $problems += 'FTFCOMPARESAVE did not write the deliverable (the last final QC failed, or the save command did not run).' }
     if ($audit -eq 0) { $problems += 'FTFCOMPAREAUDIT did not report a clean drawing after FTFCOMPARERESTORE.' }
-    if ($problems.Count -gt 0) { Fail 'The smoke test did not pass. Nothing in FTFCOMPARE should be used on a project until it does.' $problems }
+    if ($problems.Count -gt 0) {
+        Write-Host ''
+        Write-Host '   --- last 60 lines of the accoreconsole log (send these) ---' -ForegroundColor Yellow
+        $logLines | Where-Object { $_.Trim() } | Select-Object -Last 60 | ForEach-Object { Write-Host "   | $_" }
+        Fail 'The smoke test did not pass. Nothing in FTFCOMPARE should be used on a project until it does.' $problems
+    }
 
     Ok "Smoke test passed: $pass checks, 3 clean verify runs, drawing clean after restore, deliverable written."
 }
