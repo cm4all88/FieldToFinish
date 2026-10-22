@@ -211,6 +211,11 @@ Steps:
      anything of ours beside them is sent to review rather than called missing;
    - any xref the reader could not load or that is hidden (frozen / off / no-plot
      insert layer): the data is then INCOMPLETE and nothing is called missing.
+   Out of tolerance: a counterpart found but more than 0.5 ft away horizontally, or
+   more than 0.5 ft different vertically (their rim may be a block attribute or a label
+   beside the symbol), is a discrepancy. Ours keeps plotting, gets a revision cloud and a
+   note on layer `PMX-COMP-REVIEW`, and is listed in the CSV with the same note. The
+   marks are redrawn on every run and erased by `FTFCOMPARERESTORE`.
    Layering: a matched object goes to its own layer's name plus `-NP` (for example
    `V-UTIL-POWR-POLE-NP`), created no-plot if missing; an existing `-NP` layer is forced
    no-plot. The profile's `nonplotLayers.mode` = `Fixed` uses the `PMX-COMP-NP-*` set
@@ -273,7 +278,8 @@ FTFCOMPAREAUDIT
 
 Restore puts every recorded object back exactly: layer, visibility, block definition,
 point style, label visibility; erases the split copies (and any copy no record owns);
-erases the nonplot twin block definitions nothing uses. Decisions are kept for the next
+erases the nonplot twin block definitions nothing uses; erases the revision clouds and
+notes. Decisions are kept for the next
 run. The audit then prints what is left; it must say
 `CLEAN: nothing from the comparison is in effect in this drawing`. If it does not, the
 lines above it say what remains (the applied record, split copies, twins, restyled

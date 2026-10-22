@@ -127,7 +127,7 @@ namespace FieldCodes.Cad.Compare
                 if (entity == null) continue;
 
                 var stamp = Ownership.Read(entity);
-                if (stamp != null && stamp.Kind == FtfEntityKind.CompareSplit) continue;
+                if (stamp != null && (stamp.Kind == FtfEntityKind.CompareSplit || stamp.Kind == FtfEntityKind.CompareCloud)) continue;
 
                 var br = entity as BlockReference;
                 if (br != null && IsXref(tr, br)) continue;

@@ -85,7 +85,7 @@ namespace FtfCompareTest
             using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
             {
                 AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForWrite);
-                AddLayer(db, tr, "E-CURB"); AddLayer(db, tr, "E-FENCE"); AddLayer(db, tr, "E-PWR"); AddLayer(db, tr, "E-STRM-MH"); AddLayer(db, tr, "E-TEXT");
+                AddLayer(db, tr, "E-CURB"); AddLayer(db, tr, "E-FENCE"); AddLayer(db, tr, "E-PWR"); AddLayer(db, tr, "E-STRM-MH"); AddLayer(db, tr, "E-TEXT"); AddLayer(db, tr, "E-COMM");
                 Progress("consultant: layers");
                 // full curb: covers survey curb A entirely; half of curb B
                 AddLine(ms, tr, "E-CURB", 1000, 1000, 1100, 1000);
@@ -93,8 +93,10 @@ namespace FtfCompareTest
                 // fence present
                 AddLine(ms, tr, "E-FENCE", 1000, 1100, 1300, 1100);
                 Progress("consultant: lines");
-                // one pole of two
-                AddBlock(db, ms, tr, "POLE", "E-PWR", 1000.4, 1200.3);
+                // one pole of two, 0.25 ft from ours (within the 0.5 ft discrepancy tolerance)
+                AddBlock(db, ms, tr, "POLE", "E-PWR", 1000.2, 1200.15);
+                // a handhole 0.95 ft from ours: the same feature, out of tolerance -> discrepancy
+                AddBlock(db, ms, tr, "HH", "E-COMM", 1120.9, 1260.3);
                 // a storm manhole, with a rim label that disagrees with ours
                 AddBlock(db, ms, tr, "STMH", "E-STRM-MH", 1050.3, 1200.1);
                 Progress("consultant: blocks");
@@ -167,6 +169,7 @@ namespace FtfCompareTest
                 AddCogo(cdoc, tr, ed, "PP 2", 1100, 1200, 0, 502);        // missing pole
                 AddCogo(cdoc, tr, ed, "SDMH 1", 1050, 1200, 120.5, 503);  // matched manhole
                 AddCogo(cdoc, tr, ed, "HH 1", 1150, 1250, 0, 504);        // missing handhole
+                AddCogo(cdoc, tr, ed, "HH 2", 1120, 1260, 0, 505);        // handhole 0.95 ft from theirs: discrepancy
                 Progress("seed: cogo points");
 
                 // The matched pole gets a point style whose marker layer is FIXED to
@@ -325,6 +328,7 @@ namespace FtfCompareTest
 
                 var byKey = new Dictionary<string, List<string>>();   // "LINE y=1000" -> layers
                 int splits = 0;
+                int clouds = 0;
                 string symmhDefinition = null;
                 string symmhLayer = null;
                 string pole1Style = null;
@@ -338,9 +342,14 @@ namespace FtfCompareTest
                     AcDb.ResultBuffer xd = e.GetXDataForApplication(FtfApp);
                     if (xd != null)
                     {
-                        // kind 35 = CompareSplit
+                        // kind 35 = CompareSplit, 36 = CompareCloud (revision cloud or its note)
                         foreach (AcDb.TypedValue tv in xd)
-                            if (tv.TypeCode == 1070 && Convert.ToInt16(tv.Value) == 35) splits++;
+                        {
+                            if (tv.TypeCode != 1070) continue;
+                            short kind = Convert.ToInt16(tv.Value);
+                            if (kind == 35) splits++;
+                            if (kind == 36) clouds++;
+                        }
                         xd.Dispose();
                     }
                     AcDb.BlockReference insert = e as AcDb.BlockReference;
@@ -377,12 +386,16 @@ namespace FtfCompareTest
                     Check(ed, Has(byKey, "COGO PP 2", "V-NODE"), "missing pole still plots");
                     Check(ed, Has(byKey, "COGO SDMH 1", "V-NODE-NP"), "matched manhole is nonplot");
                     Check(ed, Has(byKey, "COGO HH 1", "V-NODE"), "missing handhole still plots");
+                    Check(ed, Has(byKey, "COGO HH 2", "V-NODE"), "handhole 0.95 ft from theirs (discrepancy) still plots");
+                    Check(ed, clouds >= 2, "discrepancies are marked with a revision cloud and a note (" + clouds + " mark objects)");
+                    Check(ed, lt.Has("PMX-COMP-REVIEW") && ((AcDb.LayerTableRecord)tr.GetObject(lt["PMX-COMP-REVIEW"], AcDb.OpenMode.ForRead)).IsPlottable, "review layer PMX-COMP-REVIEW exists and plots");
                     Check(ed, Has(byKey, "TEXT RIM 120.50", "V-UTIL-STRM-TEXT"), "conflicting rim label still plots (discrepancy, not auto-applied)");
                     Check(ed, Has(byKey, "TEXT IE N 115.20", "V-UTIL-STRM-TEXT"), "invert label they lack still plots");
                 }
                 else
                 {
                     Check(ed, splits == 0, "no split copies remain");
+                    Check(ed, clouds == 0, "no revision clouds or notes remain");
                     Check(ed, Has(byKey, "LINE y=1000", "V-SURF-CURB-E"), "curb A back on V-SURF-CURB-E");
                     Check(ed, Has(byKey, "LINE y=1050", "V-SURF-CURB-E"), "curb B back on V-SURF-CURB-E");
                     Check(ed, Has(byKey, "LINE y=1100", "V-SURF-FENC-E"), "fence back on V-SURF-FENC-E");

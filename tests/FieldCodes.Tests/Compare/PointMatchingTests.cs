@@ -9,12 +9,12 @@ public sealed class PointMatchingTests
     public void UtilityStructureBlocksMatchAcrossNamingConventions()
     {
         var s = CF.Survey(); s.Add(CF.Cogo("S1", "SDMH 101", 50, 50, 120.5));
-        var c = CF.Consultant(); c.Add(CF.Block("C1", "E-STRM-MH", "STMH", 50.5, 50.2));
+        var c = CF.Consultant(); c.Add(CF.Block("C1", "E-STRM-MH", "STMH", 50.3, 50.2));
         var result = CF.Run(s, c);
         var r = CF.R(result, "S1");
         Assert.Equal("STORM-MH", r.Category);
         Assert.Equal(MatchStatus.Matched, r.Status);
-        Assert.Equal(0.54, r.HorizontalOffset!.Value, 2);
+        Assert.Equal(0.36, r.HorizontalOffset!.Value, 2);
         Assert.Null(r.VerticalDifference);          // their block sits at Z=0: no elevation to compare
         Assert.Equal(PlannedAction.Nonplot, r.Action);
         Assert.Equal("PMX-COMP-NP-UTILITY", r.NonplotLayer);
@@ -79,7 +79,7 @@ public sealed class PointMatchingTests
         var s = CF.Survey();
         s.Add(CF.Cogo("S1", "PP 1234", 300, 300, 0));
         s.Add(CF.Cogo("S2", "PP 1235", 400, 300, 0));
-        var c = CF.Consultant(); c.Add(CF.Block("C1", "E-PWR", "POLE", 300.8, 300.5));
+        var c = CF.Consultant(); c.Add(CF.Block("C1", "E-PWR", "POLE", 300.3, 300.2));   // 0.36 ft: within the 0.5 ft discrepancy tolerance
         var result = CF.Run(s, c);
         Assert.Equal(MatchStatus.Matched, CF.R(result, "S1").Status);
         Assert.Equal(MatchStatus.Missing, CF.R(result, "S2").Status);
@@ -104,6 +104,7 @@ public sealed class PointMatchingTests
     {
         var profile = CF.Profile();
         profile.Category("TREE")!.PointToleranceFeet = 5.0;
+        profile.Category("TREE")!.PointDiscrepancyFeet = 5.0;   // trees are located loosely: anything found within 5 ft is the tree
         profile.Category("MONUMENT")!.PointToleranceFeet = 0.5;
         var s = CF.Survey();
         s.Add(CF.Cogo("T", "CON 18 . 25", 0, 0, 0));

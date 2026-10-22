@@ -51,12 +51,12 @@ public sealed class AnnotationMatchingTests
     {
         var (s, c) = MatchedManhole();
         s.Add(CF.Text("RIM", "V-UTIL-STRM-TEXT", "RIM 120.50", 52, 52));
-        c.Add(CF.Text("CRIM", "E-STRM-TXT", "RIM 121.00", 48, 53));
+        c.Add(CF.Text("CRIM", "E-STRM-TXT", "RIM 121.20", 48, 53));   // 0.7 ft: beyond the 0.5 ft vertical tolerance
         var r = CF.R(CF.Run(s, c), "RIM");
         Assert.Equal(MatchStatus.Discrepancy, r.Status);
         Assert.Equal(PlannedAction.None, r.Action);
-        Assert.Equal(-0.5, r.VerticalDifference!.Value, 2);
-        Assert.Contains(r.Notes, n => n.Contains("RIM=120.5 vs RIM=121"));
+        Assert.Equal(-0.7, r.VerticalDifference!.Value, 2);
+        Assert.Contains(r.Notes, n => n.Contains("RIM=120.5 vs RIM=121.2"));
     }
 
     [Fact]

@@ -91,7 +91,9 @@ namespace FieldCodes.Cad
         /// <summary>FTFCOMPARE: the plotting copy of the uncovered portion of a survey line
         /// whose original was moved to a nonplot layer. PointNumber = the original's handle.
         /// Restored (erased) by FTFCOMPARERESTORE; FTFCLEAN leaves it alone.</summary>
-        CompareSplit = 35
+        CompareSplit = 35,
+        /// <summary>FTFCOMPARE revision cloud or note marking a discrepancy; removed by restore and before each run.</summary>
+        CompareCloud = 36
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

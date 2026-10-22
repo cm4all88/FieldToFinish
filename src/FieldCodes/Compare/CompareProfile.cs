@@ -58,6 +58,10 @@ namespace FieldCodes.Compare
 
         /// <summary>Elevations closer than this agree.</summary>
         [JsonProperty("elevationFeet")] public double ElevationFeet { get; set; }
+        /// <summary>A counterpart found within pointFeet but farther away than this is a
+        /// discrepancy: ours keeps plotting, gets a revision cloud and a note in the drawing,
+        /// and is listed in the report.</summary>
+        [JsonProperty("pointDiscrepancyFeet")] public double PointDiscrepancyFeet { get; set; }
 
         /// <summary>How far from a feature its annotation may sit and still belong to it.</summary>
         [JsonProperty("annotationSearchFeet")] public double AnnotationSearchFeet { get; set; }
@@ -90,7 +94,8 @@ namespace FieldCodes.Compare
             AngleDegrees = 15.0;
             GapFeet = 5.0;
             MinUncoveredFeet = 3.0;
-            ElevationFeet = 0.1;
+            ElevationFeet = 0.5;
+            PointDiscrepancyFeet = 0.5;
             AnnotationSearchFeet = 15.0;
             FullCoverageFraction = 0.97;
             SampleStepFeet = 1.0;
@@ -102,6 +107,8 @@ namespace FieldCodes.Compare
 
         public void Validate(string prefix, ICollection<string> problems)
         {
+            if (PointDiscrepancyFeet <= 0) problems.Add(prefix + "pointDiscrepancyFeet must be positive.");
+            if (PointDiscrepancyFeet > PointFeet) problems.Add(prefix + "pointDiscrepancyFeet cannot exceed pointFeet (the search radius).");
             Check(PointFeet, prefix + "pointFeet must be positive", problems);
             Check(LineOffsetFeet, prefix + "lineOffsetFeet must be positive", problems);
             Check(AngleDegrees, prefix + "angleDegrees must be positive", problems);
@@ -163,6 +170,9 @@ namespace FieldCodes.Compare
         [JsonProperty("enabled")] public bool Enabled { get; set; }
 
         [JsonProperty("pointToleranceFeet")] public double? PointToleranceFeet { get; set; }
+        /// <summary>Beyond this (but within pointToleranceFeet) a counterpart is a discrepancy.
+        /// Unset: the profile's tolerances.pointDiscrepancyFeet, never more than the search radius.</summary>
+        [JsonProperty("pointDiscrepancyFeet")] public double? PointDiscrepancyFeet { get; set; }
         [JsonProperty("lineOffsetToleranceFeet")] public double? LineOffsetToleranceFeet { get; set; }
         [JsonProperty("angleToleranceDegrees")] public double? AngleToleranceDegrees { get; set; }
         [JsonProperty("elevationToleranceFeet")] public double? ElevationToleranceFeet { get; set; }
@@ -206,6 +216,11 @@ namespace FieldCodes.Compare
         /// source layer's colour. "Fixed": the five named layers below, by kind.</summary>
         [JsonProperty("mode")] public string Mode { get; set; }
         [JsonProperty("suffix")] public string Suffix { get; set; }
+        /// <summary>A COGO point whose point style pins the marker to a fixed layer would keep
+        /// plotting after a layer change alone. True: it gets the comparison's own point style
+        /// (marker and label following the point's layer). False: it is left for a person,
+        /// reported as NOT changed with the reason.</summary>
+        [JsonProperty("restyleFixedMarkerPoints")] public bool RestyleFixedMarkerPoints { get; set; }
         [JsonProperty("point")] public string Point { get; set; }
         [JsonProperty("line")] public string Line { get; set; }
         [JsonProperty("block")] public string Block { get; set; }
@@ -218,6 +233,7 @@ namespace FieldCodes.Compare
         {
             Mode = ModeSuffix;
             Suffix = "-NP";
+            RestyleFixedMarkerPoints = true;
             Point = "PMX-COMP-NP-POINT";
             Line = "PMX-COMP-NP-LINE";
             Block = "PMX-COMP-NP-BLOCK";
@@ -358,6 +374,28 @@ namespace FieldCodes.Compare
         }
     }
 
+    /// <summary>How discrepancies are marked in the drawing: a revision cloud around the
+    /// object and a note beside it, on a plotting review layer, removed by restore.</summary>
+    public sealed class ReviewMarks
+    {
+        [JsonProperty("drawClouds")] public bool DrawClouds { get; set; }
+        [JsonProperty("layer")] public string Layer { get; set; }
+        [JsonProperty("colorIndex")] public short ColorIndex { get; set; }
+        /// <summary>Note text height in drawing feet (2 ft reads at 1" = 20' to 40').</summary>
+        [JsonProperty("textHeightFeet")] public double TextHeightFeet { get; set; }
+        /// <summary>Clearance between the object and its cloud, in feet.</summary>
+        [JsonProperty("marginFeet")] public double MarginFeet { get; set; }
+
+        public ReviewMarks()
+        {
+            DrawClouds = true;
+            Layer = "PMX-COMP-REVIEW";
+            ColorIndex = 1;
+            TextHeightFeet = 2.0;
+            MarginFeet = 3.0;
+        }
+    }
+
     public sealed class IgnoreRules
     {
         /// <summary>Survey layers left out of the comparison entirely (never touched).</summary>
@@ -393,6 +431,7 @@ namespace FieldCodes.Compare
         [JsonProperty("tolerances")] public CompareTolerances Tolerances { get; set; }
         [JsonProperty("categories")] public List<CategoryRule> Categories { get; set; }
         [JsonProperty("nonplotLayers")] public NonplotLayerNames NonplotLayers { get; set; }
+        [JsonProperty("review")] public ReviewMarks Review { get; set; }
         [JsonProperty("annotation")] public AnnotationRules Annotation { get; set; }
         [JsonProperty("boundary")] public CompareBoundary Boundary { get; set; }
         [JsonProperty("units")] public UnitRules Units { get; set; }
@@ -415,6 +454,7 @@ namespace FieldCodes.Compare
             Tolerances = new CompareTolerances();
             Categories = new List<CategoryRule>();
             NonplotLayers = new NonplotLayerNames();
+            Review = new ReviewMarks();
             Annotation = new AnnotationRules();
             Boundary = new CompareBoundary();
             Units = new UnitRules();
@@ -433,6 +473,13 @@ namespace FieldCodes.Compare
         }
 
         public double PointTolerance(CategoryRule c) { return c != null && c.PointToleranceFeet.HasValue ? c.PointToleranceFeet.Value : Tolerances.PointFeet; }
+        /// <summary>The horizontal distance beyond which a found counterpart is a discrepancy
+        /// rather than a match; never more than the category's search radius.</summary>
+        public double PointDiscrepancyTolerance(CategoryRule c)
+        {
+            var value = c != null && c.PointDiscrepancyFeet.HasValue ? c.PointDiscrepancyFeet.Value : Tolerances.PointDiscrepancyFeet;
+            return Math.Min(value, PointTolerance(c));
+        }
         public double LineOffsetTolerance(CategoryRule c) { return c != null && c.LineOffsetToleranceFeet.HasValue ? c.LineOffsetToleranceFeet.Value : Tolerances.LineOffsetFeet; }
         public double AngleTolerance(CategoryRule c) { return c != null && c.AngleToleranceDegrees.HasValue ? c.AngleToleranceDegrees.Value : Tolerances.AngleDegrees; }
         public double ElevationTolerance(CategoryRule c) { return c != null && c.ElevationToleranceFeet.HasValue ? c.ElevationToleranceFeet.Value : Tolerances.ElevationFeet; }
@@ -470,6 +517,7 @@ namespace FieldCodes.Compare
                 if (!keys.Add(c.Key)) problems.Add("Category key '" + c.Key + "' is used twice.");
                 if (c.Kind == FeatureKind.Annotation) problems.Add("Category '" + c.Key + "': annotation is compared through its feature, not as a category.");
                 if (c.PointToleranceFeet.HasValue && c.PointToleranceFeet.Value <= 0) problems.Add("Category '" + c.Key + "': pointToleranceFeet must be positive.");
+                if (c.PointDiscrepancyFeet.HasValue && c.PointDiscrepancyFeet.Value <= 0) problems.Add("Category '" + c.Key + "': pointDiscrepancyFeet must be positive.");
                 if (c.LineOffsetToleranceFeet.HasValue && c.LineOffsetToleranceFeet.Value <= 0) problems.Add("Category '" + c.Key + "': lineOffsetToleranceFeet must be positive.");
             }
             foreach (var layer in NonplotLayers.All)
@@ -484,6 +532,7 @@ namespace FieldCodes.Compare
                 if (string.IsNullOrWhiteSpace(NonplotLayers.Suffix)) problems.Add("nonplotLayers.suffix is needed in Suffix mode (for example -NP).");
                 else if (NonplotLayers.Suffix.IndexOfAny("<>/\\\":;?*|,=`".ToCharArray()) >= 0) problems.Add("nonplotLayers.suffix contains a character AutoCAD does not allow in a layer name.");
             }
+            if (Review.DrawClouds && string.IsNullOrWhiteSpace(Review.Layer)) problems.Add("review.layer is needed while review.drawClouds is true.");
             if (Units.ConsultantUnitsPerFoot.HasValue && Units.ConsultantUnitsPerFoot.Value <= 0)
                 problems.Add("units.consultantUnitsPerFoot must be positive.");
             if (Boundary.Points != null && Boundary.Points.Count > 0 && Boundary.Points.Count < 3)
@@ -518,6 +567,10 @@ namespace FieldCodes.Compare
             if (NonplotLayers == null) NonplotLayers = new NonplotLayerNames();
             if (string.IsNullOrEmpty(NonplotLayers.Mode)) NonplotLayers.Mode = NonplotLayerNames.ModeSuffix;
             if (NonplotLayers.Suffix == null) NonplotLayers.Suffix = "-NP";
+            if (Review == null) Review = new ReviewMarks();
+            if (string.IsNullOrEmpty(Review.Layer)) Review.Layer = "PMX-COMP-REVIEW";
+            if (Review.TextHeightFeet <= 0) Review.TextHeightFeet = 2.0;
+            if (Review.MarginFeet <= 0) Review.MarginFeet = 3.0;
             if (Annotation == null) Annotation = new AnnotationRules();
             if (Boundary == null) Boundary = new CompareBoundary();
             if (Units == null) Units = new UnitRules();

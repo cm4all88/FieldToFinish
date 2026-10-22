@@ -349,6 +349,7 @@ namespace FieldCodes.Cad.Compare
             if (reapplied > 0 || stale.Count > 0)
                 ed.WriteMessage("\n  Review decisions re-applied: {0}; set aside because the feature changed: {1}.", reapplied, stale.Count);
             RebuildPlan();
+            CompareReviewMarks.Refresh(db, tr, Result, profile, ed);
             SaveResult(db);
             SaveSource(db, tr);
             SaveDecisions(db, tr);
@@ -415,13 +416,14 @@ namespace FieldCodes.Cad.Compare
             EnsureLoaded(db, tr);
             int orphans, twins;
             var restored = CompareLayerManager.RestoreAll(db, tr, Applied, ed, out orphans, out twins);
+            var clouds = CompareReviewMarks.Clear(db, tr);
             Applied = null;
             SaveApplied(db, tr);
             if (Result != null) foreach (var r in Result.Results) { r.Action = PlannedAction.None; r.ApplyProblem = null; }
             RebuildPlan();
             SaveResult(db);
-            ed.WriteMessage("\nFTFCOMPARERESTORE: {0} object(s) back exactly as recorded (layer, visibility, block definition, point style, label); {1} split copy(ies) and {2} block twin(s) erased. Decisions are kept.",
-                restored, orphans, twins);
+            ed.WriteMessage("\nFTFCOMPARERESTORE: {0} object(s) back exactly as recorded (layer, visibility, block definition, point style, label); {1} split copy(ies), {2} block twin(s) and {3} revision cloud/note(s) erased. Decisions are kept.",
+                restored, orphans, twins, clouds);
         }
 
         // ================================================================= decide
@@ -545,9 +547,11 @@ namespace FieldCodes.Cad.Compare
             ed.WriteMessage("\n  Nonplot block twins (PMX-COMP-NP$...): {0}", twins);
             ed.WriteMessage("\n  COGO points on the PMX-COMP-NP point style: {0}; with label hidden by the comparison: {1}", styled, hiddenLabels);
             ed.WriteMessage("\n  Objects hidden by the comparison: {0}", invisible);
+            var clouds = CompareReviewMarks.Count(db, tr);
+            ed.WriteMessage("\n  Revision clouds and notes marking discrepancies: {0}", clouds);
             // Suffix mode: objects on -NP layers may have been put there by hand, so only the
             // comparison's own record decides; fixed mode: the PMX layers are ours alone.
-            var clean = applied == 0 && splits == 0 && twins == 0 && styled == 0 && (profile.NonplotLayers.UseSuffix || onNonplot.Values.Sum() == 0);
+            var clean = applied == 0 && splits == 0 && twins == 0 && styled == 0 && clouds == 0 && (profile.NonplotLayers.UseSuffix || onNonplot.Values.Sum() == 0);
             ed.WriteMessage(clean
                 ? "\n  CLEAN: nothing from the comparison is in effect in this drawing.\n"
                 : "\n  Comparison changes are in effect. FTFCOMPARERESTORE reverses them; FTFCOMPAREQC checks them.\n");

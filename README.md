@@ -660,6 +660,20 @@ Automatic acceptance needs confidence >= 0.75 (profile `autoAcceptConfidence`): 
 geometry and unconflicted classification. A match whose offset is above 60 % of the
 tolerance is shown for review as a possible parallel feature.
 
+### Discrepancies: clouded in the drawing, listed in the report
+
+A counterpart found within the 2 ft search radius but more than 0.5 ft away
+horizontally (`tolerances.pointDiscrepancyFeet`), or differing by more than 0.5 ft
+vertically (`tolerances.elevationFeet`; their rim can come from a block attribute or a
+label beside the symbol), is a discrepancy: ours keeps plotting, the comparison draws a
+revision cloud around it and a note beside it ("FTFCOMPARE DISCREPANCY <handle>
+(<category>): 0.95 ft from the consultant Handhole, more than the 0.50 ft tolerance")
+on the plotting layer `PMX-COMP-REVIEW` (`review.*` in the profile), and the CSV report
+lists it with the same note. A category can loosen that distance with its own
+`pointDiscrepancyFeet` (trees, say), never beyond its search radius. The marks are
+stamped as the comparison's own, redrawn on every run and erased by
+`FTFCOMPARERESTORE`; the final QC warns that they will plot.
+
 ### What changes in the drawing, how it is verified, and how it comes back
 
 - Nonplot layers. Default (`nonplotLayers.mode` = `Suffix`): each object goes to its own
@@ -678,8 +692,9 @@ tolerance is shown for review as a possible parallel feature.
   (`IsLabelVisible`), because a label style may fix its own layer. If the point style
   fixes the marker's layer (anything but 0), the point gets the comparison's own point
   style `PMX-COMP-NP`, whose marker and label sit on layer 0 (so they follow the point's
-  nonplot layer) in suffix mode, or on the point nonplot layer in fixed mode. A point
-  whose primary point
+  nonplot layer) in suffix mode, or on the point nonplot layer in fixed mode; with
+  `nonplotLayers.restyleFixedMarkerPoints` false nothing is restyled and such a point is
+  reported as NOT changed for a person to handle. A point whose primary point
   group overrides the point style is refused (the group would win): remove the override
   or exclude the point.
 - A block whose definition draws on its own layers is pointed at a nonplot twin

@@ -244,6 +244,8 @@ namespace FieldCodes.Cad.Compare
                 var markerLayer = string.IsNullOrEmpty(effective.MarkerLayer) || effective.MarkerLayer == "0" ? change.ToLayer : effective.MarkerLayer;
                 if (effective.MarkerVisible && PlotVisibility.LayerPlots(db, tr, markerLayer))
                 {
+                    if (!profile.NonplotLayers.RestyleFixedMarkerPoints)
+                        return "its point style pins the marker to layer " + markerLayer + ", which plots; layer-only mode (nonplotLayers.restyleFixedMarkerPoints = false) leaves such points to a person";
                     // The style fixes the marker's layer: give the point the nonplot style.
                     // Suffix mode: the style's marker and label sit on layer 0, which follows
                     // the point's own (now nonplot) layer; fixed mode: on the point nonplot layer.
@@ -644,6 +646,9 @@ namespace FieldCodes.Cad.Compare
                 catch (UnauthorizedAccessException) { input.OutputFolderWritable = false; }
             }
 
+            var clouds = CompareReviewMarks.Count(db, tr);
+            if (clouds > 0)
+                input.Warnings.Add(clouds + " revision cloud/note object(s) on layer " + profile.Review.Layer + " mark discrepancies and will plot; delete them, or run FTFCOMPARERESTORE, if the deliverable should not carry them.");
             if (applied != null)
             {
                 var approximated = applied.Changes.Count(c => c.SplitApproximated);

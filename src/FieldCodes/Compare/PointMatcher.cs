@@ -61,17 +61,27 @@ namespace FieldCodes.Compare
                 if (same.Count > 1)
                     r.Note(string.Format(CultureInfo.InvariantCulture, "{0} consultant {1} within tolerance (nearest used)", same.Count, category != null ? category.Name : s.Class.Category));
 
-                // Elevations compare only when both are real: a block inserted at Z=0
-                // carries no elevation.
-                var dz = ElevationDifference(s, best.Feature);
+                // Beyond the discrepancy tolerance it is the same feature in a different
+                // place: ours keeps plotting, is clouded in the drawing and listed in the report.
+                var discrepancyTol = ctx.Feet(profile.PointDiscrepancyTolerance(category));
+                if (best.Distance > discrepancyTol)
+                {
+                    r.Status = MatchStatus.Discrepancy;
+                    r.Note(string.Format(CultureInfo.InvariantCulture, "{0:0.00} ft from the consultant {1}, more than the {2:0.00} ft tolerance",
+                        best.Distance / ctx.UnitsPerFoot, category != null ? category.Name : s.Class.Category, discrepancyTol / ctx.UnitsPerFoot));
+                }
+
+                // Elevations compare when both are real: a block inserted at Z=0 carries no
+                // elevation of its own, but a rim in its attributes or a label beside it does.
+                var dz = ElevationDifference(s, best.Feature, ctx);
                 if (dz.HasValue)
                 {
                     r.VerticalDifference = dz.Value;
                     if (Math.Abs(dz.Value) > elevTol)
                     {
                         r.Status = MatchStatus.Discrepancy;
-                        r.Note(string.Format(CultureInfo.InvariantCulture, "elevation differs by {0:0.00}: ours {1:0.00}, theirs {2:0.00}",
-                            dz.Value, s.Elevation.Value, best.Feature.Elevation.Value));
+                        r.Note(string.Format(CultureInfo.InvariantCulture, "elevation differs by {0:0.00} ft: ours {1:0.00}, theirs {2:0.00} (tolerance {3:0.00} ft)",
+                            dz.Value, RealElevation(s, ctx).Value, RealElevation(best.Feature, ctx).Value, elevTol / ctx.UnitsPerFoot));
                     }
                 }
 
@@ -147,10 +157,31 @@ namespace FieldCodes.Compare
         /// <summary>Signed difference (ours minus theirs) when both carry a real elevation.</summary>
         internal static double? ElevationDifference(CompareFeature s, CompareFeature c)
         {
-            if (!s.Elevation.HasValue || !c.Elevation.HasValue) return null;
-            if (Math.Abs(s.Elevation.Value) < 0.01 || Math.Abs(c.Elevation.Value) < 0.01) return null;
-            if (double.IsNaN(s.Elevation.Value) || double.IsNaN(c.Elevation.Value)) return null;
-            return s.Elevation.Value - c.Elevation.Value;
+            return ElevationDifference(s, c, null);
+        }
+
+        internal static double? ElevationDifference(CompareFeature s, CompareFeature c, MatchContext ctx)
+        {
+            var ours = RealElevation(s, ctx);
+            var theirs = RealElevation(c, ctx);
+            if (!ours.HasValue || !theirs.HasValue) return null;
+            return ours.Value - theirs.Value;
+        }
+
+        /// <summary>An elevation worth comparing: the feature's own when it is real (not a
+        /// block or point sitting at Z=0), else a RIM or ELEV fact from its attributes or,
+        /// on the consultant side, from the labels associated with it.</summary>
+        internal static double? RealElevation(CompareFeature f, MatchContext ctx)
+        {
+            if (f.Elevation.HasValue && !double.IsNaN(f.Elevation.Value) && Math.Abs(f.Elevation.Value) >= 0.01) return f.Elevation.Value;
+            var facts = new List<AnnotationFact>(f.Facts ?? new List<AnnotationFact>());
+            List<CompareFeature> labels;
+            if (ctx != null && f.Source == CompareSource.Consultant && ctx.ConsultantAnnotationByFeature.TryGetValue(f.Id, out labels))
+                foreach (var l in labels) if (l.Facts != null) facts.AddRange(l.Facts);
+            foreach (var key in new[] { "RIM", "ELEV" })
+                foreach (var fact in facts)
+                    if (fact.Key == key && fact.Number.HasValue) return fact.Number.Value;
+            return null;
         }
 
         private static List<string> MissingValueFacts(CompareFeature s, CompareFeature c, MatchContext ctx)
