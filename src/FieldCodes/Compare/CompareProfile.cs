@@ -396,6 +396,38 @@ namespace FieldCodes.Compare
         }
     }
 
+    /// <summary>How the aerial base map is cut back inside our limits of survey and how the
+    /// seams between it and our linework are checked.</summary>
+    public sealed class TrimRules
+    {
+        /// <summary>Layer wildcards of the closed polylines that mark our limits of survey,
+        /// looked for inside the survey xrefs (or picked in the host drawing).</summary>
+        [JsonProperty("limitsLayers")] public List<string> LimitsLayers { get; set; }
+        /// <summary>How far from a cut to look for our continuing line.</summary>
+        [JsonProperty("seamSearchFeet")] public double SeamSearchFeet { get; set; }
+        /// <summary>Horizontal offset at the seam beyond which it is a discrepancy.</summary>
+        [JsonProperty("seamOffsetFeet")] public double SeamOffsetFeet { get; set; }
+        /// <summary>Elevation difference at the seam beyond which it is a discrepancy.</summary>
+        [JsonProperty("seamElevationFeet")] public double SeamElevationFeet { get; set; }
+        /// <summary>Direction difference beyond which the continuation is doubtful (review).</summary>
+        [JsonProperty("seamAngleDegrees")] public double SeamAngleDegrees { get; set; }
+        /// <summary>An outside remnant shorter than this is not worth its own piece: it goes
+        /// nonplot with the rest of the line and the report says so.</summary>
+        [JsonProperty("minPieceFeet")] public double MinPieceFeet { get; set; }
+        [JsonProperty("drawClouds")] public bool DrawClouds { get; set; }
+
+        public TrimRules()
+        {
+            LimitsLayers = new List<string> { "V-SURV-LIMIT*", "*-LIMITS*", "*LIMIT-OF-SURVEY*", "*SURVEY-LIMIT*", "*SURV-BNDY*" };
+            SeamSearchFeet = 2.0;
+            SeamOffsetFeet = 0.5;
+            SeamElevationFeet = 0.5;
+            SeamAngleDegrees = 20.0;
+            MinPieceFeet = 0.5;
+            DrawClouds = true;
+        }
+    }
+
     public sealed class IgnoreRules
     {
         /// <summary>Survey layers left out of the comparison entirely (never touched).</summary>
@@ -432,6 +464,7 @@ namespace FieldCodes.Compare
         [JsonProperty("categories")] public List<CategoryRule> Categories { get; set; }
         [JsonProperty("nonplotLayers")] public NonplotLayerNames NonplotLayers { get; set; }
         [JsonProperty("review")] public ReviewMarks Review { get; set; }
+        [JsonProperty("trim")] public TrimRules Trim { get; set; }
         [JsonProperty("annotation")] public AnnotationRules Annotation { get; set; }
         [JsonProperty("boundary")] public CompareBoundary Boundary { get; set; }
         [JsonProperty("units")] public UnitRules Units { get; set; }
@@ -455,6 +488,7 @@ namespace FieldCodes.Compare
             Categories = new List<CategoryRule>();
             NonplotLayers = new NonplotLayerNames();
             Review = new ReviewMarks();
+            Trim = new TrimRules();
             Annotation = new AnnotationRules();
             Boundary = new CompareBoundary();
             Units = new UnitRules();
@@ -533,6 +567,8 @@ namespace FieldCodes.Compare
                 else if (NonplotLayers.Suffix.IndexOfAny("<>/\\\":;?*|,=`".ToCharArray()) >= 0) problems.Add("nonplotLayers.suffix contains a character AutoCAD does not allow in a layer name.");
             }
             if (Review.DrawClouds && string.IsNullOrWhiteSpace(Review.Layer)) problems.Add("review.layer is needed while review.drawClouds is true.");
+            if (Trim.SeamOffsetFeet > Trim.SeamSearchFeet) problems.Add("trim.seamOffsetFeet cannot exceed trim.seamSearchFeet (the search radius).");
+            if (Trim.LimitsLayers.Count == 0) problems.Add("trim.limitsLayers needs at least one layer wildcard for the limits of survey.");
             if (Units.ConsultantUnitsPerFoot.HasValue && Units.ConsultantUnitsPerFoot.Value <= 0)
                 problems.Add("units.consultantUnitsPerFoot must be positive.");
             if (Boundary.Points != null && Boundary.Points.Count > 0 && Boundary.Points.Count < 3)
@@ -568,6 +604,13 @@ namespace FieldCodes.Compare
             if (string.IsNullOrEmpty(NonplotLayers.Mode)) NonplotLayers.Mode = NonplotLayerNames.ModeSuffix;
             if (NonplotLayers.Suffix == null) NonplotLayers.Suffix = "-NP";
             if (Review == null) Review = new ReviewMarks();
+            if (Trim == null) Trim = new TrimRules();
+            if (Trim.LimitsLayers == null) Trim.LimitsLayers = new TrimRules().LimitsLayers;
+            if (Trim.SeamSearchFeet <= 0) Trim.SeamSearchFeet = 2.0;
+            if (Trim.SeamOffsetFeet <= 0) Trim.SeamOffsetFeet = 0.5;
+            if (Trim.SeamElevationFeet <= 0) Trim.SeamElevationFeet = 0.5;
+            if (Trim.SeamAngleDegrees <= 0) Trim.SeamAngleDegrees = 20.0;
+            if (Trim.MinPieceFeet < 0) Trim.MinPieceFeet = 0.5;
             if (string.IsNullOrEmpty(Review.Layer)) Review.Layer = "PMX-COMP-REVIEW";
             if (Review.TextHeightFeet <= 0) Review.TextHeightFeet = 2.0;
             if (Review.MarginFeet <= 0) Review.MarginFeet = 3.0;

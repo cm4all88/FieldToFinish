@@ -23,14 +23,46 @@ namespace FieldCodes.Cad.Compare
     {
         public const string Tag = "COMPARE-CLOUD";
 
-        public static int Clear(Database db, Transaction tr)
+        public static int Clear(Database db, Transaction tr) { return ClearKind(db, tr, FtfEntityKind.CompareCloud); }
+        public static int Count(Database db, Transaction tr) { return CountKind(db, tr, FtfEntityKind.CompareCloud); }
+
+        public static int ClearKind(Database db, Transaction tr, FtfEntityKind kind)
         {
-            return Ownership.DeleteOwned(db, tr, st => st.Kind == FtfEntityKind.CompareCloud);
+            return Ownership.DeleteOwned(db, tr, st => st.Kind == kind);
         }
 
-        public static int Count(Database db, Transaction tr)
+        public static int CountKind(Database db, Transaction tr, FtfEntityKind kind)
         {
-            return Ownership.FindOwned(db, tr, st => st.Kind == FtfEntityKind.CompareCloud).Count;
+            return Ownership.FindOwned(db, tr, st => st.Kind == kind).Count;
+        }
+
+        /// <summary>One cloud around a box and a note above it, stamped with the given kind so
+        /// the owner (comparison or trim) can erase its own marks and nothing else's.</summary>
+        public static void Mark(Database db, Transaction tr, double minX, double minY, double maxX, double maxY, string text, string handle,
+                                FtfEntityKind kind, string tag, ReviewMarks review, double upf)
+        {
+            EnsureLayer(db, tr, review);
+            var margin = review.MarginFeet * upf;
+            var ms = CadUtil.ModelSpace(db, tr, OpenMode.ForWrite);
+            var cloud = Cloud(minX, minY, maxX, maxY, Math.Max(1.5 * upf, margin / 2.0));
+            cloud.Layer = review.Layer;
+            ms.AppendEntity(cloud);
+            tr.AddNewlyCreatedDBObject(cloud, true);
+            Ownership.Stamp(cloud, handle, string.Empty, kind, null, tag);
+
+            var height = review.TextHeightFeet * upf;
+            var note = new MText
+            {
+                Contents = text,
+                TextHeight = height,
+                Width = height * 45,
+                Location = new Point3d(minX, maxY + height * 0.5, 0),
+                Attachment = AttachmentPoint.BottomLeft,
+                Layer = review.Layer
+            };
+            ms.AppendEntity(note);
+            tr.AddNewlyCreatedDBObject(note, true);
+            Ownership.Stamp(note, handle, string.Empty, kind, null, tag);
         }
 
         /// <summary>Removes the previous marks and draws one cloud and note per discrepancy.</summary>
@@ -44,7 +76,7 @@ namespace FieldCodes.Cad.Compare
             foreach (var r in result.Results)
             {
                 if (r.Status != MatchStatus.Discrepancy) continue;
-                if (!layerReady) { EnsureLayer(db, tr, profile); layerReady = true; }
+                if (!layerReady) { EnsureLayer(db, tr, profile.Review); layerReady = true; }
                 if (Draw(db, tr, r, profile, upf))
                 {
                     r.Note("revision cloud drawn");
@@ -56,12 +88,12 @@ namespace FieldCodes.Cad.Compare
             return marked;
         }
 
-        private static void EnsureLayer(Database db, Transaction tr, CompareProfile profile)
+        private static void EnsureLayer(Database db, Transaction tr, ReviewMarks review)
         {
             var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-            if (table.Has(profile.Review.Layer))
+            if (table.Has(review.Layer))
             {
-                var existing = (LayerTableRecord)tr.GetObject(table[profile.Review.Layer], OpenMode.ForRead);
+                var existing = (LayerTableRecord)tr.GetObject(table[review.Layer], OpenMode.ForRead);
                 if (existing.IsFrozen || existing.IsOff)
                 {
                     existing.UpgradeOpen();
@@ -73,9 +105,9 @@ namespace FieldCodes.Cad.Compare
             table.UpgradeOpen();
             var record = new LayerTableRecord
             {
-                Name = profile.Review.Layer,
+                Name = review.Layer,
                 IsPlottable = true,
-                Color = Color.FromColorIndex(ColorMethod.ByAci, profile.Review.ColorIndex),
+                Color = Color.FromColorIndex(ColorMethod.ByAci, review.ColorIndex),
                 Description = "FTFCOMPARE: revision clouds and notes marking discrepancies with the consultant base map."
             };
             table.Add(record);

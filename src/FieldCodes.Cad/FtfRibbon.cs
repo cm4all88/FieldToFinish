@@ -105,7 +105,9 @@ namespace FieldCodes.Cad
                     Small("Restore", "FTFCOMPARERESTORE", FtfIcons.Clean),
                     Small("Final QC", "FTFCOMPAREQC", FtfIcons.Check),
                     Small("Save Deliverable", "FTFCOMPARESAVE", FtfIcons.Check),
-                    Small("Batch", "FTFCOMPAREBATCH", FtfIcons.Run)));
+                    Small("Batch", "FTFCOMPAREBATCH", FtfIcons.Run),
+                    Small("Trim Aerial", "FTFTRIM", FtfIcons.Run),
+                    Small("Restore Trim", "FTFTRIMRESTORE", FtfIcons.Clean)));
 
                 tab.Panels.Add(Panel("Review",
                     Large("FTF\nWindow", "FTF",

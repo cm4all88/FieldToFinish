@@ -94,9 +94,17 @@ namespace FieldCodes.Cad.Compare
         public static CompareDataset ReadSurvey(Database db, Transaction tr, CompareProfile profile,
                                                 ICollection<ObjectId> onlyThese, ICompareProgress progress)
         {
+            return ReadSurvey(db, tr, profile, onlyThese, progress, CompareSource.Survey);
+        }
+
+        /// <param name="role">Which side's layer mapping the host drawing's objects are classified
+        /// with: Survey for the comparison, Consultant when the host is the aerial base being trimmed.</param>
+        public static CompareDataset ReadSurvey(Database db, Transaction tr, CompareProfile profile,
+                                                ICollection<ObjectId> onlyThese, ICompareProgress progress, CompareSource role)
+        {
             var dataset = new CompareDataset
             {
-                Source = CompareSource.Survey,
+                Source = role,
                 Name = string.IsNullOrEmpty(db.Filename) ? "(unsaved drawing)" : Path.GetFileName(db.Filename)
             };
             var upf = UnitsPerFootOf(db);
@@ -127,7 +135,8 @@ namespace FieldCodes.Cad.Compare
                 if (entity == null) continue;
 
                 var stamp = Ownership.Read(entity);
-                if (stamp != null && (stamp.Kind == FtfEntityKind.CompareSplit || stamp.Kind == FtfEntityKind.CompareCloud)) continue;
+                if (stamp != null && (stamp.Kind == FtfEntityKind.CompareSplit || stamp.Kind == FtfEntityKind.CompareCloud ||
+                                      stamp.Kind == FtfEntityKind.TrimSplit || stamp.Kind == FtfEntityKind.TrimCloud)) continue;
 
                 var br = entity as BlockReference;
                 if (br != null && IsXref(tr, br)) continue;
@@ -160,8 +169,17 @@ namespace FieldCodes.Cad.Compare
         public static CompareDataset ReadConsultant(Database hostDb, Transaction tr, ConsultantSourceSpec spec, CompareProfile profile,
                                                     double surveyUnitsPerFoot, ICompareProgress progress)
         {
+            return ReadConsultant(hostDb, tr, spec, profile, surveyUnitsPerFoot, progress, CompareSource.Consultant);
+        }
+
+        /// <param name="role">Which side's layer mapping the external content is classified with:
+        /// Consultant for the comparison, Survey when the xrefs are our finished sites being merged
+        /// into the aerial base.</param>
+        public static CompareDataset ReadConsultant(Database hostDb, Transaction tr, ConsultantSourceSpec spec, CompareProfile profile,
+                                                    double surveyUnitsPerFoot, ICompareProgress progress, CompareSource role)
+        {
             spec = spec ?? new ConsultantSourceSpec();
-            var dataset = new CompareDataset { Source = CompareSource.Consultant, UnitsPerFoot = surveyUnitsPerFoot };
+            var dataset = new CompareDataset { Source = role, UnitsPerFoot = surveyUnitsPerFoot };
             var context = new ReadContext
             {
                 Dataset = dataset, Profile = profile, Progress = progress, Transform = Affine2.Identity, OwnerPath = string.Empty,
@@ -214,6 +232,150 @@ namespace FieldCodes.Cad.Compare
             }
             context.Finish();
             return dataset;
+        }
+
+        // ---------------------------------------------------------------- footprints
+
+        /// <summary>Closed polylines on the limits-of-survey layers: inside the survey xrefs
+        /// (or file), transformed by their insert, and in the host's own model space. Read
+        /// regardless of plot state, since limits usually sit on a no-plot layer.</summary>
+        public static List<Footprint> ReadFootprints(Database hostDb, Transaction tr, ConsultantSourceSpec spec, IList<string> limitsLayers)
+        {
+            var list = new List<Footprint>();
+            spec = spec ?? new ConsultantSourceSpec();
+            if (spec.IsFile)
+            {
+                if (!string.IsNullOrWhiteSpace(spec.FilePath) && File.Exists(spec.FilePath))
+                {
+                    using (var side = new Database(false, true))
+                    {
+                        side.ReadDwgFile(Path.GetFullPath(spec.FilePath), FileShare.Read, true, string.Empty);
+                        side.CloseInput(true);
+                        ScanFootprints(side, Affine2.Identity, Path.GetFileNameWithoutExtension(spec.FilePath), limitsLayers, list);
+                    }
+                }
+            }
+            else
+            {
+                var wanted = spec.XrefNames != null && spec.XrefNames.Count > 0 ? new HashSet<string>(spec.XrefNames, StringComparer.OrdinalIgnoreCase) : null;
+                var ms = CadUtil.ModelSpace(hostDb, tr, OpenMode.ForRead);
+                foreach (ObjectId id in ms)
+                {
+                    if (id.IsErased) continue;
+                    var br = tr.GetObject(id, OpenMode.ForRead, false, true) as BlockReference;
+                    if (br == null) continue;
+                    var btr = tr.GetObject(br.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+                    if (btr == null || !btr.IsFromExternalReference) continue;
+                    if (wanted != null && !wanted.Contains(btr.Name)) continue;
+                    if (btr.XrefStatus != XrefStatus.Resolved) continue;
+                    Database xdb = null;
+                    try { xdb = btr.GetXrefDatabase(false); } catch (Autodesk.AutoCAD.Runtime.Exception) { xdb = null; }
+                    if (xdb == null) continue;
+                    ScanFootprints(xdb, FromMatrix(br.BlockTransform), btr.Name, limitsLayers, list);
+                }
+            }
+            // The host's own closed polylines on a limits layer count too (copied in by hand).
+            var host = CadUtil.ModelSpace(hostDb, tr, OpenMode.ForRead);
+            foreach (ObjectId id in host)
+            {
+                if (id.IsErased) continue;
+                var entity = tr.GetObject(id, OpenMode.ForRead, false, true) as AcEntity;
+                if (entity == null || entity is BlockReference) continue;
+                if (!Wildcard.MatchesAny(limitsLayers, entity.Layer)) continue;
+                var fp = FootprintFrom(entity, Affine2.Identity, "host");
+                if (fp != null) list.Add(fp);
+            }
+            return list;
+        }
+
+        private static void ScanFootprints(Database db, Affine2 transform, string source, IList<string> limitsLayers, List<Footprint> list)
+        {
+            using (var xtr = db.TransactionManager.StartOpenCloseTransaction())
+            {
+                var ms = (BlockTableRecord)xtr.GetObject(SymbolUtilityServices.GetBlockModelSpaceId(db), OpenMode.ForRead);
+                foreach (ObjectId id in ms)
+                {
+                    if (id.IsErased) continue;
+                    var entity = xtr.GetObject(id, OpenMode.ForRead, false, true) as AcEntity;
+                    if (entity == null || !Wildcard.MatchesAny(limitsLayers, entity.Layer)) continue;
+                    var fp = FootprintFrom(entity, transform, source);
+                    if (fp != null) list.Add(fp);
+                }
+            }
+        }
+
+        /// <summary>Footprints from entities picked in the host drawing.</summary>
+        public static List<Footprint> FootprintsFromEntities(Database db, Transaction tr, IEnumerable<ObjectId> ids)
+        {
+            var list = new List<Footprint>();
+            foreach (var id in ids)
+            {
+                if (id.IsErased) continue;
+                var entity = tr.GetObject(id, OpenMode.ForRead, false, true) as AcEntity;
+                if (entity == null) continue;
+                var fp = FootprintFrom(entity, Affine2.Identity, "picked");
+                if (fp != null) list.Add(fp);
+            }
+            return list;
+        }
+
+        /// <summary>A closed polyline (or one whose ends meet) as a polygon; arcs chorded.</summary>
+        internal static Footprint FootprintFrom(AcEntity entity, Affine2 transform, string source)
+        {
+            var points = new List<CPoint>();
+            var pl = entity as AcPolyline;
+            if (pl != null)
+            {
+                var count = pl.NumberOfVertices;
+                if (count < 3) return null;
+                var flip = pl.Normal.Z < 0;
+                var segments = pl.Closed ? count : count - 1;
+                for (var i = 0; i < segments; i++)
+                {
+                    var a = ToPoint(pl.GetPoint3dAt(i));
+                    var b = ToPoint(pl.GetPoint3dAt((i + 1) % count));
+                    var bulge = pl.GetBulgeAt(i);
+                    if (flip) bulge = -bulge;
+                    var chords = Geometry2.ChordBulge(a, b, bulge, 0.05);
+                    for (var k = points.Count == 0 ? 0 : 1; k < chords.Count; k++) points.Add(transform.Apply(chords[k]));
+                }
+            }
+            else
+            {
+                var p3 = entity as Polyline3d;
+                var p2 = entity as Polyline2d;
+                if (p3 == null && p2 == null) return null;
+                var curve = (Curve)entity;
+                var n = Math.Max(3, (int)Math.Ceiling(curve.GetDistanceAtParameter(curve.EndParam) / 1.0));
+                for (var i = 0; i <= n; i++)
+                {
+                    var param = curve.StartParam + (curve.EndParam - curve.StartParam) * i / n;
+                    points.Add(transform.Apply(ToPoint(curve.GetPointAtParameter(param))));
+                }
+            }
+            // Drop a repeated closing vertex; a polygon is implicitly closed.
+            if (points.Count >= 2)
+            {
+                var first = points[0];
+                var last = points[points.Count - 1];
+                if (Math.Abs(first.X - last.X) < 0.01 && Math.Abs(first.Y - last.Y) < 0.01) points.RemoveAt(points.Count - 1);
+            }
+            if (points.Count < 3) return null;
+            var closed = pl != null ? pl.Closed : true;
+            if (!closed)
+            {
+                // An open polyline whose ends sit within 1 ft is taken as the limits (closed by its chord).
+                var a = points[0];
+                var b = points[points.Count - 1];
+                if (Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y)) > 1.0) return null;
+            }
+            return new Footprint
+            {
+                Id = source + ":" + entity.Handle,
+                Source = source,
+                Layer = entity.Layer,
+                Polygon = points.Select(q => new CPoint(q.X, q.Y)).ToList()
+            };
         }
 
         private static Affine2 FileTransform(CompareProfile profile, double? fileUpf, double surveyUpf, CompareDataset dataset)

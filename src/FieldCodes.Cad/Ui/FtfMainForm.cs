@@ -1181,6 +1181,15 @@ namespace FieldCodes.Cad.Ui
                 "Choose the comparison profile, the consultant source and the comparison limits " +
                 "for this drawing.");
 
+            CommandGroup(stack, "Aerial base trim for the ACC merge (FTFTRIM)");
+            CommandRow(stack, "FTFTRIM",
+                "In the aerial base drawing with our finished site(s) attached as xrefs: inside our " +
+                "limits of survey the aerial goes to its -NP layers, a line crossing the limit is cut " +
+                "there with the outside part kept plotting, and every seam is checked against our " +
+                "line -- clouded and noted when it is off, listed in the CSV reports.");
+            CommandRow(stack, "FTFTRIMRESTORE",
+                "Puts every aerial object back exactly, erases the outside pieces and the seam marks.");
+
             CommandGroup(stack, "Easements and profiles");
             CommandRow(stack, "STRIPEASEMENT   (or FTFEASEMENT)",
                 "Builds a strip easement: an optional Point of Commencement, its angle points " +

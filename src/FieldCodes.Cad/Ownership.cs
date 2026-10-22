@@ -93,7 +93,11 @@ namespace FieldCodes.Cad
         /// Restored (erased) by FTFCOMPARERESTORE; FTFCLEAN leaves it alone.</summary>
         CompareSplit = 35,
         /// <summary>FTFCOMPARE revision cloud or note marking a discrepancy; removed by restore and before each run.</summary>
-        CompareCloud = 36
+        CompareCloud = 36,
+        /// <summary>FTFTRIM: the outside piece of an aerial line cut at our limits of survey, copied back plotting.</summary>
+        TrimSplit = 37,
+        /// <summary>FTFTRIM: revision cloud or note marking a seam that needs attention.</summary>
+        TrimCloud = 38
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

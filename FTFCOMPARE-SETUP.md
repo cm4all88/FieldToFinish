@@ -165,6 +165,14 @@ reports `Final QC: FAILED` with a `[FAIL] DISCREPANCIES` line, because the seede
 label conflict has not been decided yet. The script knows that; it checks the last QC,
 after `FTFCOMPAREDECIDE Unresolved`, through the deliverable being written.
 
+After the comparison passes, the script runs the FTFTRIM scenario the same way: a
+site drawing with its limits of survey on a no-plot layer, attached to an aerial host;
+`FTFTRIM`, `TRIMVERIFY Applied`, `FTFTRIMRESTORE`, `TRIMVERIFY Restored`, `FTFTRIM`
+again. It checks that the aerial inside the limits is on `-NP` layers, that the two
+crossing curbs are cut at the limits with their outside parts plotting, that the
+off-by-0.9-ft seams are clouded while the aligned ones are not, that our xref is
+untouched, and that restore removes everything.
+
 The result is one line: `Smoke test passed: ...` or `FAILED: ...` with the failing
 checks, the log path (`tests\LiveSmoke\compare\compare_out.log`), the log's last lines
 and `compare-progress.txt`, a step-by-step marker file every harness step and every
@@ -268,6 +276,28 @@ Do this on the first real site before trusting it:
 
 If any of these is wrong, do not deliver; restore (step 7), save the CSV and the log,
 and send me the handle(s) and what you saw.
+
+## 7a. Trim the aerial base for the ACC merge (FTFTRIM)
+
+Open a copy of the aerial base drawing from ACC. Attach each finished site drawing as an
+xref (or have one file ready). Make sure each site drawing has its limits of survey as a
+closed polyline on a limits layer (`V-SURV-LIMITS` or anything matching
+`trim.limitsLayers` in the profile); plot state does not matter. Then:
+
+```
+FTFTRIM
+  Our survey comes from [Xrefs/File] <Xrefs>:   Enter
+  Limits of survey [Layer/Select] <Layer>:      Enter   (or Select, and pick the polylines)
+```
+
+It reports the counts: aerial objects inside (now on their `-NP` layers), split at the
+edge (outside part plotting), not trimmed (hatches, dimensions: check by hand), and the
+seams: aligned, discrepancies, no continuation, for review. Every seam that is not
+aligned has a cloud and a note at the cut; `<name>.ftf-seams.csv` lists them all with
+offset, elevation difference and direction, `<name>.ftf-trim.csv` lists every trimmed
+object. Nothing of ours is changed; fix the aerial to ours by hand where a seam is off.
+`FTFTRIMRESTORE` puts the aerial back exactly and removes the pieces and marks; running
+`FTFTRIM` again restores first.
 
 ## 7. Restore the drawing if something is wrong
 

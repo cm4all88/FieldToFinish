@@ -360,6 +360,63 @@ if (-not $SkipSmoke) {
     }
 
     Ok "Smoke test passed: $pass checks, 3 clean verify runs, drawing clean after restore, deliverable written."
+
+    # ---- FTFTRIM: our site attached to an aerial host, trimmed inside our limits, seams checked.
+    Step '4b. Smoke test: FTFTRIM (aerial base trimmed inside our limits of survey)'
+    $trimSurveySeed = Join-Path $work 'trim-survey-seed.dwg'
+    $trimSurvey = Join-Path $work 'trim-survey.dwg'
+    $trimHost = Join-Path $work 'trimhost.dwg'
+    Copy-Item -LiteralPath $template -Destination $trimSurveySeed
+    Copy-Item -LiteralPath $template -Destination $trimHost
+    $scrA = Join-Path $work 'runtrimsurvey.scr'
+    [IO.File]::WriteAllLines($scrA, [string[]]@("NETLOAD `"$harness`"", 'TRIMSEEDSURVEY', 'SAVEAS', '2018', "`"$trimSurvey`""), [Text.Encoding]::ASCII)
+    $logA = Join-Path $work 'trimsurvey_out.log'
+    & (Join-Path $here 'run-accore.ps1') -Drawing $trimSurveySeed -Script $scrA -Log $logA -TimeoutSeconds 180 | Out-Null
+    if (-not (Test-Path -LiteralPath $trimSurvey)) { Show-RunEvidence $logA; Fail 'The trim survey drawing was not written by Civil 3D.' @("Log: $logA") }
+    Ok "Survey drawing for the trim written by Civil 3D: $trimSurvey"
+
+    $scrB = Join-Path $work 'runtrim.scr'
+    $trimLines = @(
+        "NETLOAD `"$plugin`""
+        "NETLOAD `"$harness`""
+        'TRIMSEED', 'QSAVE'
+    ) + (Note 'trim-run-1') + @('FTFTRIM', 'Xrefs', 'Layer') `
+      + (Note 'trim-verify-1') + @('TRIMVERIFY', 'Applied') `
+      + (Note 'trim-restore') + @('FTFTRIMRESTORE') `
+      + (Note 'trim-verify-restored') + @('TRIMVERIFY', 'Restored') `
+      + (Note 'trim-run-2') + @('FTFTRIM', 'Xrefs', 'Layer') `
+      + (Note 'trim-verify-2') + @('TRIMVERIFY', 'Applied') `
+      + (Note 'trim-saveas') + @('SAVEAS', '2018', "`"$(Join-Path $work 'outtrim.dwg')`"")
+    [IO.File]::WriteAllLines($scrB, [string[]]$trimLines, [Text.Encoding]::ASCII)
+    $logB = Join-Path $work 'trim_out.log'
+    & (Join-Path $here 'run-accore.ps1') -Drawing $trimHost -Script $scrB -Log $logB -TimeoutSeconds $SmokeTimeoutSeconds | Out-Null
+    if (-not (Test-Path -LiteralPath $logB)) { Fail 'accoreconsole produced no log for the trim run.' @("Expected $logB") }
+    $trimLog = @(Get-Content $logB)
+    $trimPass = @($trimLog | Select-String -SimpleMatch '[VERIFY PASS]').Count
+    $trimFails = @($trimLog | Select-String -SimpleMatch '[VERIFY FAIL]' | ForEach-Object { $_.Line.Trim() })
+    $trimRuns = @($trimLog | Select-String -SimpleMatch 'TRIMVERIFY: ').Count
+    $trimClean = @($trimLog | Select-String -SimpleMatch 'TRIMVERIFY: 0 failure').Count
+    $trimErrors = @($trimLog | Select-String -CaseSensitive ' failed: |AutoCAD error|NOT changed' | ForEach-Object { $_.Line.Trim() } | Select-Object -Unique)
+    $trimLoad = @($trimLog | Select-String 'Unknown command|Could not load|FileLoadException|FileNotFoundException|TypeLoadException|MissingMethodException' | ForEach-Object { $_.Line.Trim() } | Select-Object -Unique)
+    $trimExit = @($trimLog | Select-String '^accoreconsole( exit code:|: TIMEOUT)' | ForEach-Object { $_.Line.Trim() }) | Select-Object -Last 1
+    Write-Host ''
+    Write-Host ("   trim checks passed        : {0}" -f $trimPass)
+    Write-Host ("   trim checks failed        : {0}" -f $trimFails.Count)
+    Write-Host ("   trim verify runs clean    : {0} of {1} (expected 3 of 3)" -f $trimClean, $trimRuns)
+    Write-Host ("   accoreconsole             : {0}" -f $(if ($trimExit) { $trimExit } else { 'exit code unknown' }))
+    Write-Host ("   log                       : {0}" -f $logB)
+    $trimProblems = @()
+    if ($trimLoad.Count -gt 0) { $trimProblems += 'The plugin or harness did not load:'; $trimProblems += $trimLoad }
+    if ($trimRuns -lt 3) { $trimProblems += "Only $trimRuns trim verify run(s) completed; a command stopped the script." }
+    if ($trimFails.Count -gt 0) { $trimProblems += 'Failed trim checks:'; $trimProblems += $trimFails }
+    if ($trimErrors.Count -gt 0) { $trimProblems += 'Errors reported by commands:'; $trimProblems += ($trimErrors | Select-Object -First 15) }
+    if ($trimExit -and ($trimExit -match 'TIMEOUT' -or ($trimExit -match 'exit code: (-?\d+)$' -and $Matches[1] -ne '0'))) { $trimProblems += "accoreconsole did not exit normally ($trimExit)." }
+    if ($trimProblems.Count -gt 0) {
+        Write-Host ''
+        Show-RunEvidence $logB
+        Fail 'The FTFTRIM smoke test did not pass. The comparison part passed; FTFTRIM should not be used on a project until this does.' $trimProblems
+    }
+    Ok "FTFTRIM smoke test passed: $trimPass checks, 3 clean verify runs."
 }
 
 Write-Host ''

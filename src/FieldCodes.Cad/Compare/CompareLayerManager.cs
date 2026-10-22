@@ -108,7 +108,8 @@ namespace FieldCodes.Cad.Compare
         /// </summary>
         public static AppliedChangeSet Reconcile(Database db, Transaction tr, ChangePlan plan, ComparisonResult result, CompareProfile profile,
                                                  string rulesVersion, AppliedChangeSet existing, bool includeAutomatic, Editor ed,
-                                                 out int applied, out int reversed, out int skipped, IDictionary<string, string> problems)
+                                                 out int applied, out int reversed, out int skipped, IDictionary<string, string> problems,
+                                                 FtfEntityKind splitKind = FtfEntityKind.CompareSplit)
         {
             applied = reversed = skipped = 0;
             problems = problems ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -179,7 +180,7 @@ namespace FieldCodes.Cad.Compare
                     {
                         var feature = result != null ? result.Find(change.Handle) : null;
                         bool approximated;
-                        var copies = SplitCopies(db, tr, entity, change, feature, minUncovered, rulesVersion, out approximated, out problem);
+                        var copies = SplitCopies(db, tr, entity, change, feature, minUncovered, rulesVersion, splitKind, out approximated, out problem);
                         if (problem == null && copies.Count == 0 && change.KeepIntervals.Count > 0)
                             problem = "the uncovered portion could not be copied";
                         if (problem == null)
@@ -312,7 +313,7 @@ namespace FieldCodes.Cad.Compare
         /// piece is checked against the expected end points before it is kept.
         /// </summary>
         private static List<string> SplitCopies(Database db, Transaction tr, AcEntity entity, PlannedChange change, FeatureResult feature,
-                                                double minUncovered, string rulesVersion, out bool approximated, out string problem)
+                                                double minUncovered, string rulesVersion, FtfEntityKind splitKind, out bool approximated, out string problem)
         {
             approximated = false;
             problem = null;
@@ -375,7 +376,7 @@ namespace FieldCodes.Cad.Compare
                 try { copy.Transparency = entity.Transparency; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
                 copy.Visible = true;
                 CadUtil.AddToModelSpace(db, tr, copy);
-                Ownership.Stamp(copy, change.Handle, rulesVersion ?? string.Empty, FtfEntityKind.CompareSplit, null, CompareTag);
+                Ownership.Stamp(copy, change.Handle, rulesVersion ?? string.Empty, splitKind, null, splitKind == FtfEntityKind.TrimSplit ? "TRIM" : CompareTag);
                 handles.Add(copy.Handle.ToString());
             }
             return handles;
@@ -489,13 +490,21 @@ namespace FieldCodes.Cad.Compare
         /// erases any split copy no record owns and any block twin nothing uses.</summary>
         public static int RestoreAll(Database db, Transaction tr, AppliedChangeSet applied, Editor ed, out int orphansErased, out int twinsErased)
         {
+            return RestoreAll(db, tr, applied, ed, out orphansErased, out twinsErased, FtfEntityKind.CompareSplit);
+        }
+
+        /// <summary>Puts every recorded object back and erases every split copy of the given
+        /// kind (the comparison's and the trim's copies are stamped apart so each restore
+        /// takes only its own).</summary>
+        public static int RestoreAll(Database db, Transaction tr, AppliedChangeSet applied, Editor ed, out int orphansErased, out int twinsErased, FtfEntityKind splitKind)
+        {
             var restored = 0;
             if (applied != null)
                 foreach (var change in applied.Changes)
                     if (RestoreOne(db, tr, change, ed)) restored++;
 
             orphansErased = 0;
-            foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == FtfEntityKind.CompareSplit))
+            foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == splitKind))
             {
                 var entity = tr.GetObject(pair.Key, OpenMode.ForWrite, false, true) as AcEntity;
                 if (entity == null) continue;

@@ -2404,6 +2404,21 @@
     "textHeightFeet": 2.0,
     "marginFeet": 3.0
   },
+  "trim": {
+    "limitsLayers": [
+      "V-SURV-LIMIT*",
+      "*-LIMITS*",
+      "*LIMIT-OF-SURVEY*",
+      "*SURVEY-LIMIT*",
+      "*SURV-BNDY*"
+    ],
+    "seamSearchFeet": 2.0,
+    "seamOffsetFeet": 0.5,
+    "seamElevationFeet": 0.5,
+    "seamAngleDegrees": 20.0,
+    "minPieceFeet": 0.5,
+    "drawClouds": true
+  },
   "annotation": {
     "rimKeywords": [
       "RIM",

@@ -10,6 +10,9 @@
 //                them, part of one curb, a different rim at one MH.
 // COMPARENOTE    a progress marker the script drops between commands; every step also
 //                appends to compare-progress.txt, which survives a crash.
+// TRIMSEEDSURVEY / TRIMSEED / TRIMVERIFY  the FTFTRIM scenario: our site (with its limits
+//                of survey) attached to an aerial host; the aerial is trimmed inside the
+//                limits, the seams checked, and everything restored.
 // COMPAREVERIFY  checks every expected plotting state after FTFCOMPARERUN/APPLY:
 //                matched objects on PMX-COMP-NP-*, missing ones untouched, the split
 //                copy present, the nonplot layers not plottable; and after RESTORE,
@@ -194,6 +197,164 @@ namespace FtfCompareTest
             db.Insunits = AcDb.UnitsValue.Feet;
             Progress("seed: done");
             ed.WriteMessage("\nCOMPARESEED: consultant xref {0} attached; survey drawn.", consultantPath);
+        }
+
+        // ------------------------------------------------------------------ trim
+
+        /// <summary>Run A for the trim: our finished site, saved by the script as trim-survey.dwg.
+        /// A curb that continues the aerial curb 0.2 ft off (aligned seams), a curb 0.9 ft off the
+        /// second aerial curb (discrepancy seams), and the limits of survey on V-SURV-LIMITS.</summary>
+        [CommandMethod("TRIMSEEDSURVEY")]
+        public void SeedTrimSurvey()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Editor ed = doc.Editor;
+            AcDb.Database db = doc.Database;
+            Progress("trim survey: start");
+            using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForWrite);
+                AddLayer(db, tr, "V-SURF-CURB-E"); AddLayer(db, tr, "V-SURV-LIMITS");
+                AddLine(ms, tr, "V-SURF-CURB-E", 950, 1000.2, 1150, 1000.2);
+                AddLine(ms, tr, "V-SURF-CURB-E", 950, 1050.9, 1150, 1050.9);
+                AcDb.Polyline limits = new AcDb.Polyline();
+                limits.AddVertexAt(0, new Point2d(950, 950), 0, 0, 0);
+                limits.AddVertexAt(1, new Point2d(1150, 950), 0, 0, 0);
+                limits.AddVertexAt(2, new Point2d(1150, 1150), 0, 0, 0);
+                limits.AddVertexAt(3, new Point2d(950, 1150), 0, 0, 0);
+                limits.Closed = true;
+                limits.Layer = "V-SURV-LIMITS";
+                ms.AppendEntity(limits);
+                tr.AddNewlyCreatedDBObject(limits, true);
+                AcDb.LayerTableRecord lim = (AcDb.LayerTableRecord)tr.GetObject(((AcDb.LayerTable)tr.GetObject(db.LayerTableId, AcDb.OpenMode.ForRead))["V-SURV-LIMITS"], AcDb.OpenMode.ForWrite);
+                lim.IsPlottable = false;   // limits usually sit on a no-plot layer; they must still be found
+                tr.Commit();
+            }
+            db.Insunits = AcDb.UnitsValue.Feet;
+            Progress("trim survey: done");
+            ed.WriteMessage("\nTRIMSEEDSURVEY: drawn; the script now saves this drawing as trim-survey.dwg.");
+        }
+
+        /// <summary>Run B for the trim, in the aerial host: aerial curbs crossing the limits, one
+        /// inside, one outside, a pole and a label inside, and trim-survey.dwg attached as SITE1.</summary>
+        [CommandMethod("TRIMSEED")]
+        public void SeedTrim()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Editor ed = doc.Editor;
+            AcDb.Database db = doc.Database;
+            string surveyPath = Path.Combine(Here(), "trim-survey.dwg");
+            Progress("trim seed: start");
+            if (!File.Exists(surveyPath))
+            {
+                ed.WriteMessage("\nTRIMSEED: {0} is missing; run TRIMSEEDSURVEY first.", surveyPath);
+                return;
+            }
+            using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForWrite);
+                AddLayer(db, tr, "E-CURB"); AddLayer(db, tr, "E-PWR"); AddLayer(db, tr, "E-TEXT");
+                AddLine(ms, tr, "E-CURB", 900, 1000, 1200, 1000);     // crosses: aligned seams (ours 0.2 ft off)
+                AddLine(ms, tr, "E-CURB", 900, 1050, 1200, 1050);     // crosses: discrepancy seams (ours 0.9 ft off)
+                AddLine(ms, tr, "E-CURB", 1000, 1100, 1100, 1100);    // entirely inside
+                AddLine(ms, tr, "E-CURB", 1000, 1300, 1100, 1300);    // entirely outside
+                AddBlock(db, ms, tr, "POLE", "E-PWR", 1000, 1120);    // inside
+                AddText(ms, tr, "E-TEXT", "RIM 121.00", 1050, 1130); // inside
+                Progress("trim seed: aerial drawn");
+                AcDb.ObjectId xrefId = db.AttachXref(surveyPath, "SITE1");
+                AcDb.BlockReference br = new AcDb.BlockReference(new Point3d(0, 0, 0), xrefId);
+                ms.AppendEntity(br);
+                tr.AddNewlyCreatedDBObject(br, true);
+                Progress("trim seed: survey xref attached");
+                tr.Commit();
+            }
+            db.Insunits = AcDb.UnitsValue.Feet;
+            Progress("trim seed: done");
+            ed.WriteMessage("\nTRIMSEED: aerial drawn; survey xref {0} attached.", surveyPath);
+        }
+
+        /// <summary>TRIMVERIFY Applied|Restored</summary>
+        [CommandMethod("TRIMVERIFY")]
+        public void VerifyTrim()
+        {
+            Document doc = Application.DocumentManager.MdiActiveDocument;
+            Editor ed = doc.Editor;
+            AcDb.Database db = doc.Database;
+            PromptResult mode = ed.GetString("\nVerify what [Applied/Restored]: ");
+            bool applied = mode.Status == PromptStatus.OK && mode.StringResult.StartsWith("A", StringComparison.OrdinalIgnoreCase);
+            _failures = 0;
+            Progress("trim verify: start " + (applied ? "Applied" : "Restored"));
+
+            using (AcDb.Transaction tr = db.TransactionManager.StartTransaction())
+            {
+                AcDb.LayerTable lt = (AcDb.LayerTable)tr.GetObject(db.LayerTableId, AcDb.OpenMode.ForRead);
+                var byKey = new Dictionary<string, List<string>>();
+                int pieces = 0, clouds = 0;
+                string poleLayer = null, textLayer = null, xrefLayer = null;
+                AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForRead);
+                foreach (AcDb.ObjectId id in ms)
+                {
+                    AcDb.Entity e = tr.GetObject(id, AcDb.OpenMode.ForRead) as AcDb.Entity;
+                    if (e == null) continue;
+                    AcDb.ResultBuffer xd = e.GetXDataForApplication(FtfApp);
+                    bool owned = false;
+                    if (xd != null)
+                    {
+                        foreach (AcDb.TypedValue tv in xd)
+                        {
+                            if (tv.TypeCode != 1070) continue;
+                            short kind = Convert.ToInt16(tv.Value);
+                            if (kind == 37) { pieces++; owned = true; }
+                            if (kind == 38) { clouds++; owned = true; }
+                        }
+                        xd.Dispose();
+                    }
+                    AcDb.BlockReference insert = e as AcDb.BlockReference;
+                    if (insert != null)
+                    {
+                        AcDb.BlockTableRecord def = (AcDb.BlockTableRecord)tr.GetObject(insert.BlockTableRecord, AcDb.OpenMode.ForRead);
+                        if (def.IsFromExternalReference) xrefLayer = e.Layer;
+                        else if (def.Name == "POLE" || def.Name.EndsWith("$POLE")) poleLayer = e.Layer;
+                        continue;
+                    }
+                    AcDb.DBText t = e as AcDb.DBText;
+                    if (t != null && t.TextString == "RIM 121.00") { textLayer = e.Layer; continue; }
+                    AcDb.Line l = e as AcDb.Line;
+                    if (l != null && !owned && Math.Abs(l.StartPoint.Y - l.EndPoint.Y) < 0.01)
+                    {
+                        string key = "LINE y=" + ((int)Math.Round(l.StartPoint.Y));
+                        if (!byKey.ContainsKey(key)) byKey[key] = new List<string>();
+                        byKey[key].Add(e.Layer);
+                    }
+                }
+
+                if (applied)
+                {
+                    Check(ed, lt.Has("E-CURB-NP") && !((AcDb.LayerTableRecord)tr.GetObject(lt["E-CURB-NP"], AcDb.OpenMode.ForRead)).IsPlottable, "E-CURB-NP exists and does not plot");
+                    Check(ed, Has(byKey, "LINE y=1000", "E-CURB-NP"), "aerial curb crossing the limits (aligned) is nonplot");
+                    Check(ed, Has(byKey, "LINE y=1050", "E-CURB-NP"), "aerial curb crossing the limits (off by 0.9 ft) is nonplot");
+                    Check(ed, Has(byKey, "LINE y=1100", "E-CURB-NP"), "aerial curb inside the limits is nonplot");
+                    Check(ed, Has(byKey, "LINE y=1300", "E-CURB"), "aerial curb outside the limits is untouched");
+                    Check(ed, pieces == 4, "the outside parts of the two crossing curbs exist as plotting pieces (" + pieces + ", expected 4)");
+                    Check(ed, poleLayer == "E-PWR-NP", "aerial pole inside the limits is nonplot (" + poleLayer + ")");
+                    Check(ed, textLayer == "E-TEXT-NP", "aerial label inside the limits is nonplot (" + textLayer + ")");
+                    Check(ed, clouds == 4, "the two off seams are clouded and noted (" + clouds + " mark objects, expected 4)");
+                    Check(ed, xrefLayer != null && !xrefLayer.EndsWith("-NP"), "our survey xref insert is untouched (" + xrefLayer + ")");
+                    Check(ed, File.Exists(Path.Combine(Path.GetDirectoryName(db.Filename), Path.GetFileNameWithoutExtension(db.Filename) + ".ftf-seams.csv")), "seam report written");
+                    Check(ed, File.Exists(Path.Combine(Path.GetDirectoryName(db.Filename), Path.GetFileNameWithoutExtension(db.Filename) + ".ftf-trim.csv")), "trim report written");
+                }
+                else
+                {
+                    Check(ed, Has(byKey, "LINE y=1000", "E-CURB") && Has(byKey, "LINE y=1050", "E-CURB") && Has(byKey, "LINE y=1100", "E-CURB"), "aerial curbs back on E-CURB");
+                    Check(ed, pieces == 0, "no outside pieces remain");
+                    Check(ed, clouds == 0, "no seam marks remain");
+                    Check(ed, poleLayer == "E-PWR", "aerial pole back on E-PWR (" + poleLayer + ")");
+                    Check(ed, textLayer == "E-TEXT", "aerial label back on E-TEXT (" + textLayer + ")");
+                }
+                tr.Commit();
+            }
+            Progress("trim verify: done, " + _failures + " failure(s)");
+            ed.WriteMessage("\nTRIMVERIFY: {0} failure(s)\n", _failures);
         }
 
         private static void ClipXref(AcDb.BlockReference br, AcDb.Transaction tr, double x1, double y1, double x2, double y2)

@@ -744,6 +744,38 @@ PREVIOUS-RUNS (no split copies from an earlier run), XREFS (all resolve), OUTPUT
 (delivery folder writable). Non-blocking warnings list sampled split copies and hidden
 dynamic blocks.
 
+### FTFTRIM: trim the aerial base inside our limits and flag the seams
+
+For the ACC merge the base drawing on the site is aerial; our finished survey replaces it
+inside each site's limits of survey. In the aerial drawing (a working copy), attach the
+finished site drawing(s) as xrefs (or point at one file), then `FTFTRIM`:
+
+- Our limits of survey are the closed polylines on a limits layer (`trim.limitsLayers`,
+  `V-SURV-LIMIT*` and the like) found inside the survey xrefs, transformed by their
+  insert, or in the aerial drawing itself; or pick them (`Select`). Read regardless of
+  plot state, since limits usually sit on a no-plot layer.
+- Inside a footprint every aerial object goes to its own layer plus `-NP` (same rule and
+  record as the comparison). An aerial line crossing the limit is cut exactly at the
+  edge: the original goes nonplot intact and the outside part is copied back plotting
+  (`GetSplitCurves`, verified against the expected end points). An outside remnant
+  shorter than `trim.minPieceFeet` goes nonplot with the rest and the report says so.
+  Hatches, dimensions and unreadable objects inside a footprint are not trimmed and are
+  listed as "check by hand". Nothing is erased.
+- At every cut the seam is checked: our line of the same feature type within
+  `trim.seamSearchFeet` (2 ft), its offset at the cut, the elevation difference when
+  both sides carry real elevations, and the direction. Beyond 0.5 ft horizontally or
+  vertically it is a discrepancy; no continuation, an unknown feature type on either
+  side or a direction difference above 20 degrees sends it to review. Every seam that is
+  not aligned gets a revision cloud and a note on the review layer; every seam is listed
+  in `<name>.ftf-seams.csv`, every trimmed object in `<name>.ftf-trim.csv`.
+- `FTFTRIMRESTORE` puts every aerial object back exactly, erases the outside pieces and
+  the marks. Running `FTFTRIM` again restores first, so nothing accumulates. Our survey
+  is never written: the fix for a bad seam is to adjust the aerial to ours, by hand for
+  now (an assisted "move the aerial end to our end" pass is the next step).
+
+The trim's split copies and marks are stamped apart from the comparison's, so each
+tool's restore takes only its own.
+
 ### Verified and not verified
 
 Verified here (`dotnet test`: 1,051 tests, 1,047 passing on the Linux build machine
