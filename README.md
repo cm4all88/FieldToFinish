@@ -522,8 +522,11 @@ What it will not do, by design: it draws only straight sides between monuments
 a corner radius treats the picked monument as the point of intersection. Where a
 square dimension would land beyond the join of two offset lines (the inside of
 a turn) it is skipped and reported instead of being forced. The geometry and
-wording are in `FieldCodes.Row` and unit tested (`RightOfWayTests`); the command
-and popup are CAD glue and are **not yet run in Civil 3D**.
+wording are in `FieldCodes.Row` and unit tested (`RightOfWayTests`).
+
+**Verified headless (2026-10-24, accoreconsole against the stock NCS template):**
+`tests\LiveSmoke\run-rowlots.ps1` drives all three modes and `FTFLOTS` — see
+[Platted blocks](#platted-blocks-ftflots) below for what it checks.
 
 ## Platted blocks: FTFLOTS
 
@@ -557,8 +560,42 @@ the shipped defaults are zero, not an ordinance.
 
 Not done: lines other than straight sides for the block (rounded corners excepted), a front that
 bends at an angle point (divide it as separate fronts), cul-de-sac or flag lots, and corner sight
-triangles. The geometry and wording are in `FieldCodes.Lots` and unit tested (`LotTests`); the command
-and popup are CAD glue and are **not yet run in Civil 3D**.
+triangles. The geometry and wording are in `FieldCodes.Lots` and unit tested (`LotTests`).
+
+## Verified headless: FTFROW and FTFLOTS
+
+**2026-10-24, accoreconsole against the stock NCS template.**
+`tests\LiveSmoke\run-rowlots.ps1` seeds the office layers and the monument and corner survey
+points, then drives both commands through everything described above and checks what is
+actually stamped in the drawing:
+
+- **the refusal first.** One configured layer is renamed out of the drawing and `FTFROW`
+  refuses before it asks anything — *layer "V-SURV-MONU-E" (set for monument symbols) is not
+  in this drawing. FTF never creates office layers from a configured name.*
+- **Run** — three monuments along one frontage, 60' to the right, the last an offset monument
+  5.00' at N45E. The line through the corners landed on the monument-line layer, the opposite
+  right-of-way line 60' south of it on the Right of Way type's layer, the centerline 30' south
+  of that on the centerline layer, `60' R/W` dimensions with ticks at both ends only (the
+  *Ends* policy), `FND MON IN CASE` / `SET REBAR AND CAP` notes, and the offset monument's
+  cross, tie to its corner and `5.00' OFFSET N 45°00'00" E TO CORNER`.
+- **Block** — a 200x100 block, 60' and 40' frontages, two plain sides, one 25' rounded corner.
+  The arc came out tangent (centre 25' in from the corner both ways, `R=25.00' L=39.27'
+  Δ=90°00'00" CH=N 45°00'00" E 35.36'`) with the two sides shortened to 175' and 75'.
+- **Intersection** — a 100' ring of crossings, one given as 99.5' record width, which reported
+  *the monuments are 100.00' apart across the road but the record right of way is 99.5'*.
+- **FTFLOTS** — the same block as four 50' x 80' lots with a 20' rear alley: lot lines square
+  to the front, the shared lines labelled with bearing and distance and the block's own
+  boundary with its distance only, setback and easement envelopes per lot, `LOT n` / `4,000 SF`,
+  drainage arrows (lot 3 overridden to the rear), `20' ALLEY`, `BLOCK A`, and the plat notes
+  written from the numbers used.
+- **ownership.** `FTFCLEAN` left all 156 objects alone; `FTFDRAFTCLEAN` Annotation removed all
+  77 annotation entities and touched none of the 79 lines.
+
+The log is `tests\LiveSmoke\rowlots\rowlots_out.log` and the drawing `outrowlots.dwg`.
+`accoreconsole` has no window, so there the popups ask their questions on the command line
+instead — the same questions in the same order, parsed as strictly, which is what the script
+answers. Still needing interactive Civil 3D: the two popups themselves and the Right of Way
+and Platted Blocks settings pages (WinForms, never shown headless), and pick UX with osnaps.
 
 ## Configuration ownership
 

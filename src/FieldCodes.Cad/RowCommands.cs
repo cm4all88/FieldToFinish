@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using FieldCodes.Drafting;
 using FieldCodes.Easements;
 using FieldCodes.Linework;
 using FieldCodes.Row;
@@ -30,11 +31,15 @@ namespace FieldCodes.Cad
     /// DraftAnnotation, left alone by FTFCLEAN, managed by FTFDRAFTCLEAN. Layers are looked
     /// up, never created from a configured name.
     ///
-    /// UNTESTED against a drawing. Written to the same patterns as FTFDRAWLINE and
-    /// STRIPEASEMENT, but not built against Civil 3D; see the implementation report.
+    /// Run headless against a drawing by tests\LiveSmoke\run-rowlots.ps1: all three modes, the
+    /// missing-layer refusal, and FTFCLEAN/FTFDRAFTCLEAN ownership. The popup itself has still
+    /// never been shown -- accoreconsole has no window, so there the same questions are asked on
+    /// the command line (see AskOnCommandLine).
     /// </summary>
     public sealed class RowCommands
     {
+        private const string Row = "FTFROW";
+
         /// <summary>The standard resolved against the open drawing before anything is drawn.</summary>
         private sealed class Standard
         {
@@ -99,7 +104,10 @@ namespace FieldCodes.Cad
                     }
                 }
 
-                if (!ShowForm(job, std.Row)) { ed.WriteMessage("\nFTFROW: cancelled -- nothing drawn.\n"); return; }
+                var filled = EasementInspectCommands.Headless()
+                    ? AskOnCommandLine(ed, job)
+                    : ShowForm(job, std.Row);
+                if (!filled) { ed.WriteMessage("\nFTFROW: cancelled -- nothing drawn.\n"); return; }
 
                 var plan = RowBuilder.Build(job);
                 if (!plan.Ok)
@@ -185,6 +193,155 @@ namespace FieldCodes.Cad
         {
             using (var form = new Ui.RowForm(job, settings))
                 return AcadApp.ShowModalDialog(form) == System.Windows.Forms.DialogResult.OK;
+        }
+
+        // ------------------------------------------------ the popup, on the command line
+
+        /// <summary>
+        /// What <see cref="Ui.RowForm"/> asks, asked on the command line instead: accoreconsole
+        /// has no window to show. The same questions in the same order, parsed as strictly, so a
+        /// headless run and a drafter's run build the same job out of the same answers.
+        /// </summary>
+        private static bool AskOnCommandLine(Editor ed, RowJob job)
+        {
+            if (!job.IsRing && !AskRun(ed, job)) return false;
+
+            var centerline = EasementCommands.Keyword(ed, "\nDraw the road centerline [Yes/No] <" + DraftPrompts.YesNo(job.DrawCenterline) + ">: ",
+                                                      DraftPrompts.YesNo(job.DrawCenterline), "Yes", "No");
+            if (centerline == null) return false;
+            job.DrawCenterline = centerline == "Yes";
+
+            if (job.Mode != RowMode.Intersection)
+            {
+                var every = EasementCommands.Keyword(ed, "\nDimension the width at every monument [Yes/No] <" + DraftPrompts.YesNo(job.EveryMonumentDimension) + ">: ",
+                                                     DraftPrompts.YesNo(job.EveryMonumentDimension), "Yes", "No");
+                if (every == null) return false;
+                job.EveryMonumentDimension = every == "Yes";
+            }
+
+            if (!AskMonuments(ed, job)) return false;
+            return !job.IsRing || AskFaces(ed, job);
+        }
+
+        /// <summary>A run's road: what it is called, what the monuments sit on, how wide it is and
+        /// which side of the picked line it is on.</summary>
+        private static bool AskRun(Editor ed, RowJob job)
+        {
+            var road = DraftPrompts.Text(ed, Row, "Road name", job.RoadName);
+            if (road == null) return false;
+            job.RoadName = road;
+
+            var reference = EasementCommands.Keyword(ed, "\nThe monuments are on the [RowLine/Centerline] <RowLine>: ",
+                                                     "RowLine", "RowLine", "Centerline");
+            if (reference == null) return false;
+            job.Reference = reference == "Centerline" ? RowReference.Centerline : RowReference.RowLine;
+
+            double value;
+            if (job.Reference == RowReference.Centerline)
+            {
+                if (!DraftPrompts.Feet(ed, Row, "Right of way left of the centerline (ft)", job.CenterlineLeftFeet, true, out value)) return false;
+                job.CenterlineLeftFeet = value;
+                if (!DraftPrompts.Feet(ed, Row, "Right of way right of the centerline (ft)", job.CenterlineRightFeet, true, out value)) return false;
+                job.CenterlineRightFeet = value;
+                return true;
+            }
+
+            if (!DraftPrompts.Feet(ed, Row, "Right-of-way width (ft)", job.WidthFeet, true, out value)) return false;
+            job.WidthFeet = value;
+
+            var side = EasementCommands.Keyword(ed, "\nThe road is to the [Left/Right] looking along the picks <Right>: ",
+                                                "Right", "Left", "Right");
+            if (side == null) return false;
+            job.RoadSide = side == "Left" ? RowRoadSide.Left : RowRoadSide.Right;
+            return true;
+        }
+
+        /// <summary>What each picked monument is: found or set, its description, and whether it is
+        /// an offset monument -- with, for a block, the radius of the corner it marks.</summary>
+        private static bool AskMonuments(Editor ed, RowJob job)
+        {
+            var lastDescription = string.Empty;
+            for (var i = 0; i < job.Monuments.Count; i++)
+            {
+                var m = job.Monuments[i];
+                var name = "Monument " + PointLabel(m, i);
+
+                var kind = EasementCommands.Keyword(ed, "\n" + name + " is [Found/Set] <Found>: ", "Found", "Found", "Set");
+                if (kind == null) return false;
+                m.Kind = kind == "Set" ? MonumentKind.Set : MonumentKind.Found;
+
+                var description = DraftPrompts.Text(ed, Row, name + ": description",
+                                          string.IsNullOrEmpty(m.Description) ? lastDescription : m.Description);
+                if (description == null) return false;
+                m.Description = description;
+                if (description.Length > 0) lastDescription = description;
+
+                var offset = EasementCommands.Keyword(ed, "\n" + name + ": is it offset from the corner [Yes/No] <No>: ", "No", "Yes", "No");
+                if (offset == null) return false;
+                m.IsOffset = offset == "Yes";
+                if (m.IsOffset)
+                {
+                    double distance;
+                    if (!DraftPrompts.Feet(ed, Row, name + ": distance to the corner (ft)", m.OffsetFeet, true, out distance)) return false;
+                    m.OffsetFeet = distance;
+
+                    double azimuth;
+                    if (!DraftPrompts.Direction(ed, Row, name + ": direction from the monument TO the corner", out azimuth)) return false;
+                    m.OffsetAzimuthDegrees = azimuth;
+                }
+                else
+                {
+                    m.OffsetFeet = 0;
+                    m.OffsetAzimuthDegrees = 0;
+                }
+
+                if (job.Mode != RowMode.Block) continue;
+                while (job.CornerRadiiFeet.Count <= i) job.CornerRadiiFeet.Add(0.0);
+                double radius;
+                if (!DraftPrompts.Feet(ed, Row, name + ": corner radius (ft, 0 is a sharp corner)", job.CornerRadiiFeet[i], false, out radius)) return false;
+                job.CornerRadiiFeet[i] = radius;
+            }
+            return true;
+        }
+
+        /// <summary>What each side of a ring is: a frontage, a line across a road, or neither.</summary>
+        private static bool AskFaces(Editor ed, RowJob job)
+        {
+            var n = job.Monuments.Count;
+            while (job.Faces.Count < n) job.Faces.Add(RowFace.Plain());
+            for (var i = 0; i < n; i++)
+            {
+                var face = job.Faces[i];
+                var label = "Side " + PointLabel(job.Monuments[i], i) + " to " + PointLabel(job.Monuments[(i + 1) % n], (i + 1) % n);
+                var current = face.Kind.ToString();
+
+                var kind = EasementCommands.Keyword(ed, "\n" + label + " is a [Frontage/Cross/Plain] <" + current + ">: ",
+                                                    current, "Frontage", "Cross", "Plain");
+                if (kind == null) return false;
+                face.Kind = (RowFaceKind)Enum.Parse(typeof(RowFaceKind), kind);
+                if (face.Kind == RowFaceKind.Plain)
+                {
+                    face.RoadName = string.Empty;
+                    face.WidthFeet = 0;
+                    continue;
+                }
+
+                var road = DraftPrompts.Text(ed, Row, label + ": road name", face.RoadName);
+                if (road == null) return false;
+                face.RoadName = road;
+
+                double width;
+                if (!DraftPrompts.Feet(ed, Row, label + ": right-of-way width (ft)", face.WidthFeet, face.Kind == RowFaceKind.Frontage, out width)) return false;
+                face.WidthFeet = width;
+            }
+            return true;
+        }
+
+        private static string PointLabel(RowMonument m, int index)
+        {
+            return string.IsNullOrWhiteSpace(m.PointNumber)
+                ? (index + 1).ToString(CultureInfo.InvariantCulture)
+                : m.PointNumber;
         }
 
         // ------------------------------------------------------------- standard

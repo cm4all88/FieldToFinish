@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using FieldCodes.Easements;
 using FieldCodes.Linework;
@@ -25,12 +27,106 @@ namespace FieldCodes.Cad
     }
 
     /// <summary>
+    /// The questions FTFROW and FTFLOTS ask on the command line when there is no window to show
+    /// them in -- accoreconsole, where the live-smoke harness drives them. Each is the same
+    /// question the popup asks, parsed as strictly: a bad answer is reported and refused, never
+    /// guessed at, and Enter keeps what is already there.
+    /// </summary>
+    internal static class DraftPrompts
+    {
+        public static string YesNo(bool value)
+        {
+            return value ? "Yes" : "No";
+        }
+
+        /// <summary>A line of words. Null when cancelled; <paramref name="current"/> on Enter.</summary>
+        public static string Text(Editor ed, string command, string message, string current)
+        {
+            var answer = ed.GetString(new PromptStringOptions("\n" + message +
+                (string.IsNullOrWhiteSpace(current) ? string.Empty : " <" + current + ">") + ": ") { AllowSpaces = true });
+            if (answer.Status == PromptStatus.Cancel) return null;
+            return answer.Status == PromptStatus.OK && !string.IsNullOrWhiteSpace(answer.StringResult)
+                ? answer.StringResult.Trim()
+                : current ?? string.Empty;
+        }
+
+        /// <summary>A distance in feet. Enter keeps what is there; for something the plan cannot do
+        /// without, an Enter over nothing is refused rather than guessed at.</summary>
+        public static bool Feet(Editor ed, string command, string message, double current, bool mustBePositive, out double value)
+        {
+            value = current;
+            var shown = current > 0 || !mustBePositive
+                ? " <" + current.ToString("0.##", CultureInfo.InvariantCulture) + ">"
+                : string.Empty;
+            var answer = ed.GetDouble(new PromptDoubleOptions("\n" + message + shown + ": ")
+            {
+                AllowNegative = false,
+                AllowZero = !mustBePositive,
+                AllowNone = true
+            });
+
+            if (answer.Status == PromptStatus.None)
+            {
+                if (!mustBePositive || current > 0) return true;
+                ed.WriteMessage("\n{0}: {1} is needed.", command, message);
+                return false;
+            }
+            if (answer.Status != PromptStatus.OK) return false;
+            value = answer.Value;
+            return true;
+        }
+
+        /// <summary>A whole number, at or above <paramref name="minimum"/>.</summary>
+        public static bool Count(Editor ed, string command, string message, int current, int minimum, out int value)
+        {
+            value = current;
+            var answer = ed.GetInteger(new PromptIntegerOptions("\n" + message + " <" + current.ToString(CultureInfo.InvariantCulture) + ">: ")
+            {
+                AllowNegative = false,
+                AllowZero = minimum <= 0,
+                AllowNone = true
+            });
+
+            if (answer.Status == PromptStatus.None) return current >= minimum;
+            if (answer.Status != PromptStatus.OK) return false;
+            if (answer.Value < minimum)
+            {
+                ed.WriteMessage("\n{0}: {1} must be at least {2}.", command, message, minimum);
+                return false;
+            }
+            value = answer.Value;
+            return true;
+        }
+
+        /// <summary>A bearing (N45.2536E) or an azimuth (135.0000), D.MMSS as everywhere else in FTF.</summary>
+        public static bool Direction(Editor ed, string command, string message, out double azimuthDegrees)
+        {
+            azimuthDegrees = 0;
+            var answer = ed.GetString(new PromptStringOptions("\n" + message + " (N45.2536E or 135.0000): ") { AllowSpaces = false });
+            if (answer.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(answer.StringResult)) return false;
+
+            var typed = answer.StringResult.Trim();
+            var parsed = char.IsLetter(typed[0])
+                ? FieldCodes.Drafting.SurveyDirection.ParseBearing(typed)
+                : FieldCodes.Drafting.SurveyDirection.ParseAzimuth(typed);
+            if (!parsed.Ok)
+            {
+                ed.WriteMessage("\n{0}: {1}", command, parsed.Error);
+                return false;
+            }
+            azimuthDegrees = parsed.Value;
+            return true;
+        }
+    }
+
+    /// <summary>
     /// The few drawing operations FTFROW and FTFLOTS share: a line or arc from a course, a
     /// segment, centred or left-set text, and the bearing/distance/curve text beside a course.
     /// Everything is stamped DraftLine or DraftAnnotation, so FTFCLEAN leaves it alone and
     /// FTFDRAFTCLEAN manages it. Each returns how many entities it added.
     ///
-    /// UNTESTED against a drawing; written to the same patterns as FTFDRAWLINE.
+    /// Run against a drawing by tests\LiveSmoke\run-rowlots.ps1, which reads back every line,
+    /// arc, circle, outline and text these produce.
     /// </summary>
     internal static class DraftPrimitives
     {

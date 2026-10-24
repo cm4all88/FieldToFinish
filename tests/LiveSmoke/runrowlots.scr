@@ -1,0 +1,145 @@
+NETLOAD "C:\dev\FieldToFinish\src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll"
+NETLOAD "C:\dev\FieldToFinish\tests\LiveSmoke\RowLotsTestHarness.dll"
+OSNAPCOORD
+1
+ROWSEED
+ZOOM
+E
+ROWHIDE
+FTFROW
+ROWSHOW
+FTFROW
+Run
+5000,5000
+5100,5000
+5200,5000
+
+MAIN STREET
+RowLine
+60
+Right
+Yes
+No
+Found
+MON IN CASE
+No
+Found
+
+No
+Set
+REBAR AND CAP
+Yes
+5
+N45.0000E
+ROWVERIFY
+FTFROW
+Block
+6000,5000
+6200,5000
+6200,5100
+6000,5100
+
+No
+No
+Found
+MON IN CASE
+No
+0
+Found
+
+No
+25
+Found
+
+No
+0
+Found
+
+No
+0
+Frontage
+MAIN STREET
+60
+Frontage
+OAK AVENUE
+40
+Plain
+Plain
+ROWVERIFY
+FTFROW
+Intersection
+7000,5000
+7100,5000
+7100,5100
+7000,5100
+
+No
+Found
+MON IN CASE
+No
+Found
+
+No
+Found
+
+No
+Found
+
+No
+Cross
+MAIN STREET
+100
+Cross
+OAK AVENUE
+100
+Cross
+MAIN STREET
+99.5
+Cross
+OAK AVENUE
+100
+ROWVERIFY
+FTFLOTS
+8000,5000
+8200,5000
+8200,5100
+8000,5100
+
+A
+1
+1
+4
+0
+
+0
+Refuse
+No
+Rear
+20
+0
+Front
+2
+3=Rear
+25
+5
+15
+20
+10
+0
+5
+4000
+45
+0
+0
+0
+0
+ROWVERIFY
+ROWTALLY
+FTFCLEAN
+ROWTALLY
+FTFDRAFTCLEAN
+Annotation
+ROWTALLY
+SAVEAS
+2018
+"C:\dev\FieldToFinish\tests\LiveSmoke\rowlots\outrowlots.dwg"

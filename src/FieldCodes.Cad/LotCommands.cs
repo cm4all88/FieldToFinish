@@ -27,11 +27,15 @@ namespace FieldCodes.Cad
     /// stamped DraftLine and DraftAnnotation, managed by FTFDRAFTCLEAN. Layers are looked up, never
     /// created from a configured name.
     ///
-    /// UNTESTED against a drawing. Written to the same patterns as FTFROW, but not built against
-    /// Civil 3D; see the implementation report.
+    /// Run headless against a drawing by tests\LiveSmoke\run-rowlots.ps1: a block divided into
+    /// four lots with a rear alley, setbacks, easements, drainage and the checks. The popup itself
+    /// has still never been shown -- accoreconsole has no window, so there the same questions are
+    /// asked on the command line (see AskOnCommandLine).
     /// </summary>
     public sealed class LotCommands
     {
+        private const string Lots = "FTFLOTS";
+
         private sealed class Standard
         {
             public LotSettings Lots;
@@ -73,7 +77,10 @@ namespace FieldCodes.Cad
                 var labels = new List<string>();
                 if (!PickBlock(db, tr, ed, job, labels)) { ed.WriteMessage("\nFTFLOTS: cancelled -- nothing drawn.\n"); return; }
 
-                if (!ShowForm(job, std.Lots, labels)) { ed.WriteMessage("\nFTFLOTS: cancelled -- nothing drawn.\n"); return; }
+                var filled = EasementInspectCommands.Headless()
+                    ? AskOnCommandLine(ed, job, std.Lots, labels)
+                    : ShowForm(job, std.Lots, labels);
+                if (!filled) { ed.WriteMessage("\nFTFLOTS: cancelled -- nothing drawn.\n"); return; }
 
                 var plan = LotBuilder.Build(job);
                 if (!plan.Ok)
@@ -170,6 +177,236 @@ namespace FieldCodes.Cad
         {
             using (var form = new Ui.LotForm(job, settings, labels))
                 return AcadApp.ShowModalDialog(form) == System.Windows.Forms.DialogResult.OK;
+        }
+
+        // ------------------------------------------------ the popup, on the command line
+
+        /// <summary>
+        /// What <see cref="Ui.LotForm"/> asks, asked on the command line instead: accoreconsole has
+        /// no window to show. The same questions in the same order with the same defaults, so a
+        /// headless run and a drafter's run divide the block the same way.
+        /// </summary>
+        private static bool AskOnCommandLine(Editor ed, LotJob job, LotSettings settings, IList<string> labels)
+        {
+            var name = DraftPrompts.Text(ed, Lots, "Block name or letter", job.BlockName);
+            if (name == null) return false;
+            job.BlockName = name;
+
+            int first;
+            if (!DraftPrompts.Count(ed, Lots, "First lot number", job.FirstLotNumber, 1, out first)) return false;
+            job.FirstLotNumber = first;
+
+            ed.WriteMessage("\nThe block's sides, each from one corner to the next:");
+            for (var i = 0; i < job.Corners.Count; i++)
+                ed.WriteMessage("\n  Side {0}: {1} to {2}, {3:0.00}'", i + 1, labels[i], labels[(i + 1) % job.Corners.Count],
+                                SideFeet(job, i));
+
+            job.RowA = AskRow(ed, job, settings, "The first row", 0);
+            if (job.RowA == null) return false;
+
+            job.RowB = null;
+            var second = EasementCommands.Keyword(ed, "\nA second row of lots on another side [Yes/No] <No>: ", "No", "Yes", "No");
+            if (second == null) return false;
+            if (second == "Yes")
+            {
+                job.RowB = AskRow(ed, job, settings, "The second row", Math.Min(2, job.Corners.Count - 1));
+                if (job.RowB == null) return false;
+            }
+
+            if (!AskAlley(ed, job, settings)) return false;
+            if (!AskDrainage(ed, job, settings)) return false;
+            if (!AskOffsets(ed, job, settings)) return false;
+            return AskRadii(ed, job, labels);
+        }
+
+        private static double SideFeet(LotJob job, int side)
+        {
+            var n = job.Corners.Count;
+            return job.Corners[side].DistanceTo(job.Corners[(side + 1) % n]) / job.UnitsPerFoot;
+        }
+
+        /// <summary>One row of lots: the side it fronts, how many and how wide, how deep, and what
+        /// happens when the frontages do not add up to the side. Null when cancelled.</summary>
+        private static LotRow AskRow(Editor ed, LotJob job, LotSettings settings, string what, int defaultSide)
+        {
+            int side;
+            if (!DraftPrompts.Count(ed, Lots, what + ": lots front which side (1-" + job.Corners.Count + ")",
+                                    defaultSide + 1, 1, out side)) return null;
+            if (side > job.Corners.Count)
+            {
+                ed.WriteMessage("\nFTFLOTS: this block has {0} sides.", job.Corners.Count);
+                return null;
+            }
+
+            var row = new LotRow { FrontSide = side - 1 };
+            var frontage = SideFeet(job, row.FrontSide);
+
+            int count;
+            if (!DraftPrompts.Count(ed, Lots, what + ": how many lots", 4, 1, out count)) return null;
+
+            double extra;
+            if (!DraftPrompts.Feet(ed, Lots, what + ": extra frontage on the corner lots (ft)", 0.0, false, out extra)) return null;
+
+            var equal = LotRow.EqualWidths(frontage, count, extra);
+            ed.WriteMessage("\n  Dividing {0:0.00}' into {1} lot(s): {2}", frontage, count,
+                            string.Join(", ", equal.Select(w => w.ToString("0.##", CultureInfo.InvariantCulture)).ToArray()));
+
+            var typed = DraftPrompts.Text(ed, Lots, what + ": frontages, comma separated, or Enter for that division", string.Empty);
+            if (typed == null) return null;
+            if (typed.Length > 0)
+            {
+                var widths = new List<double>();
+                foreach (var part in typed.Split(',', ' '))
+                {
+                    if (part.Trim().Length == 0) continue;
+                    double w;
+                    if (!double.TryParse(part.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out w) || !(w > 0))
+                    {
+                        ed.WriteMessage("\nFTFLOTS: \"{0}\" is not a frontage.", part.Trim());
+                        return null;
+                    }
+                    widths.Add(w);
+                }
+                if (widths.Count == 0)
+                {
+                    ed.WriteMessage("\nFTFLOTS: {0} has no lots.", what);
+                    return null;
+                }
+                row.WidthsFeet.AddRange(widths);
+            }
+            else row.WidthsFeet.AddRange(equal);
+
+            double depth;
+            if (!DraftPrompts.Feet(ed, Lots, what + ": lot depth (ft, 0 runs them to the back)", 0.0, false, out depth)) return null;
+            row.DepthFeet = depth;
+
+            var close = EasementCommands.Keyword(ed, "\n" + what + ": if the frontages miss the side [Refuse/FirstLot/LastLot] <Refuse>: ",
+                                                 "Refuse", "Refuse", "FirstLot", "LastLot");
+            if (close == null) return null;
+            row.Close = close == "FirstLot" ? LotWidthClose.FirstLot : close == "LastLot" ? LotWidthClose.LastLot : LotWidthClose.Refuse;
+            return row;
+        }
+
+        private static bool AskAlley(Editor ed, LotJob job, LotSettings settings)
+        {
+            var alley = EasementCommands.Keyword(ed, "\nAlley [None/Rear/MidBlock] <None>: ", "None", "None", "Rear", "MidBlock");
+            if (alley == null) return false;
+            job.Alley = alley == "Rear" ? LotAlleyMode.Rear : alley == "MidBlock" ? LotAlleyMode.MidBlock : LotAlleyMode.None;
+            if (job.Alley == LotAlleyMode.None)
+            {
+                job.AlleyWidthFeet = 0;
+                return true;
+            }
+
+            double width;
+            if (!DraftPrompts.Feet(ed, Lots, "Alley width (ft)", settings.DefaultAlleyWidthFeet, true, out width)) return false;
+            job.AlleyWidthFeet = width;
+
+            if (job.Alley != LotAlleyMode.Rear) return true;
+            int back;
+            if (!DraftPrompts.Count(ed, Lots, "The alley runs along which side (0 is the one furthest from the front)", 0, 0, out back)) return false;
+            if (back > job.Corners.Count)
+            {
+                ed.WriteMessage("\nFTFLOTS: this block has {0} sides.", job.Corners.Count);
+                return false;
+            }
+            job.BackSide = back - 1;
+            return true;
+        }
+
+        /// <summary>Where the lots drain, for the block and then for any lot that differs.</summary>
+        private static bool AskDrainage(Editor ed, LotJob job, LotSettings settings)
+        {
+            var drain = EasementCommands.Keyword(ed, "\nEvery lot drains [Front/Rear/Left/Right/Both/None] <Front>: ",
+                                                 "Front", "Front", "Rear", "Left", "Right", "Both", "None");
+            if (drain == null) return false;
+            job.DefaultDrain = Drain(drain);
+
+            double slope;
+            if (!DraftPrompts.Feet(ed, Lots, "Slope (%)", settings.DefaultSlopePercent, false, out slope)) return false;
+            job.SlopePercent = slope;
+
+            job.DrainOverrides.Clear();
+            var typed = DraftPrompts.Text(ed, Lots, "Lots that drain differently, e.g. 3=Rear 5=None, or Enter for none", string.Empty);
+            if (typed == null) return false;
+            foreach (var part in typed.Split(',', ' '))
+            {
+                if (part.Trim().Length == 0) continue;
+                var halves = part.Split('=');
+                int number;
+                if (halves.Length != 2 || !int.TryParse(halves[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
+                {
+                    ed.WriteMessage("\nFTFLOTS: \"{0}\" is not a lot number and a direction.", part.Trim());
+                    return false;
+                }
+                var where = halves[1].Trim();
+                if (!DrainNames.Any(n => string.Equals(n, where, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ed.WriteMessage("\nFTFLOTS: \"{0}\" is not one of {1}.", where, string.Join(", ", DrainNames));
+                    return false;
+                }
+                job.DrainOverrides[number] = Drain(where);
+            }
+            return true;
+        }
+
+        private static readonly string[] DrainNames = { "Front", "Rear", "Left", "Right", "Both", "None" };
+
+        private static LotDrain Drain(string keyword)
+        {
+            switch ((keyword ?? string.Empty).Trim().ToUpperInvariant())
+            {
+                case "REAR": return LotDrain.ToRear;
+                case "LEFT": return LotDrain.ToLeft;
+                case "RIGHT": return LotDrain.ToRight;
+                case "BOTH": return LotDrain.FrontAndRear;
+                case "NONE": return LotDrain.None;
+                default: return LotDrain.ToFront;
+            }
+        }
+
+        /// <summary>The setbacks, easements and the minimums each lot is checked against. A zero
+        /// draws nothing for that one, exactly as the popup's hint says.</summary>
+        private static bool AskOffsets(Editor ed, LotJob job, LotSettings settings)
+        {
+            var fields = new[]
+            {
+                Offset("Front setback (ft)", settings.DefaultFrontSetbackFeet, v => job.FrontSetbackFeet = v),
+                Offset("Side setback (ft)", settings.DefaultSideSetbackFeet, v => job.SideSetbackFeet = v),
+                Offset("Corner lot street-side setback (ft)", settings.DefaultCornerSideSetbackFeet, v => job.CornerSideSetbackFeet = v),
+                Offset("Rear setback (ft)", settings.DefaultRearSetbackFeet, v => job.RearSetbackFeet = v),
+                Offset("Front utility easement (ft)", settings.DefaultFrontEasementFeet, v => job.FrontEasementFeet = v),
+                Offset("Side utility easement (ft)", settings.DefaultSideEasementFeet, v => job.SideEasementFeet = v),
+                Offset("Rear utility easement (ft)", settings.DefaultRearEasementFeet, v => job.RearEasementFeet = v),
+                Offset("Minimum lot area (sq ft)", settings.MinimumLotAreaSqFt, v => job.MinLotAreaSqFt = v),
+                Offset("Minimum frontage (ft)", settings.MinimumLotWidthFeet, v => job.MinLotWidthFeet = v)
+            };
+
+            foreach (var field in fields)
+            {
+                double value;
+                if (!DraftPrompts.Feet(ed, Lots, field.Key, field.Value.Key, false, out value)) return false;
+                field.Value.Value(value);
+            }
+            return true;
+        }
+
+        private static KeyValuePair<string, KeyValuePair<double, Action<double>>> Offset(string caption, double start, Action<double> set)
+        {
+            return new KeyValuePair<string, KeyValuePair<double, Action<double>>>(
+                caption, new KeyValuePair<double, Action<double>>(start, set));
+        }
+
+        private static bool AskRadii(Editor ed, LotJob job, IList<string> labels)
+        {
+            job.CornerRadiiFeet.Clear();
+            for (var i = 0; i < job.Corners.Count; i++)
+            {
+                double radius;
+                if (!DraftPrompts.Feet(ed, Lots, "Radius at block corner " + labels[i] + " (ft, 0 is a sharp corner)", 0.0, false, out radius)) return false;
+                job.CornerRadiiFeet.Add(radius);
+            }
+            return true;
         }
 
         // ------------------------------------------------------------- standard
