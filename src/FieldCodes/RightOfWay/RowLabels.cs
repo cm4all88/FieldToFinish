@@ -35,18 +35,18 @@ namespace FieldCodes.Row
             }
 
             foreach (var dimension in plan.Dimensions)
-                dimension.Text = Fit(Dimension(dimension.IsCross && dimension.RecordFeet > 0 ? dimension.RecordFeet : dimension.MeasuredFeet, settings), settings);
+                dimension.Text = Fit(Dimension(dimension.IsCross && dimension.RecordFeet > 0 ? dimension.RecordFeet : dimension.MeasuredFeet, settings), settings, degreeSymbol);
 
             foreach (var mark in plan.Monuments)
             {
                 mark.Text.Clear();
-                mark.Text.Add(Fit(Monument(mark.Monument, settings), settings));
+                mark.Text.Add(Fit(Monument(mark.Monument, settings), settings, degreeSymbol));
                 if (mark.Monument.IsOffset)
-                    mark.Text.Add(Fit(OffsetNote(mark.Monument, settings, type, degreeSymbol), settings));
+                    mark.Text.Add(Fit(OffsetNote(mark.Monument, settings, type, degreeSymbol), settings, degreeSymbol));
             }
 
             foreach (var label in plan.RoadLabels)
-                label.Text = Fit(RoadName(label.RoadName, settings), settings);
+                label.Text = Fit(RoadName(label.RoadName, settings), settings, degreeSymbol);
         }
 
         // ---------------------------------------------------------------- courses
@@ -155,9 +155,20 @@ namespace FieldCodes.Row
             return text.Trim();
         }
 
-        private static string Fit(string text, RightOfWaySettings settings)
+        /// <summary>
+        /// Capitals when the office wants them -- the usual plat convention -- but never over the
+        /// degree token. That token is a control code, not a word: AutoCAD renders %%D the same as
+        /// %%d, but every reader that turns it back into a degree sign (the exhibit curve table,
+        /// the inspector, the label-width check) matches "%%d" ordinally and would miss %%D.
+        /// Restoring the symbol as it was given is a no-op for a caller that passes "°".
+        /// </summary>
+        private static string Fit(string text, RightOfWaySettings settings, string degreeSymbol)
         {
-            return settings.UpperCase ? text.ToUpperInvariant() : text;
+            if (!settings.UpperCase) return text;
+            var upper = text.ToUpperInvariant();
+            return string.IsNullOrEmpty(degreeSymbol)
+                ? upper
+                : upper.Replace(degreeSymbol.ToUpperInvariant(), degreeSymbol);
         }
     }
 }

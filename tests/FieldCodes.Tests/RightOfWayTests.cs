@@ -469,6 +469,30 @@ public class RightOfWayTests
         Assert.Equal("5.00' OFFSET N 45°00'00\" E TO CORNER", plan.Monuments[0].Text[1]);
     }
 
+    /// <summary>
+    /// The CAD layer passes "%%d", not "°", and the office wants its notes in capitals. The
+    /// capitals must not reach the control code: AutoCAD draws %%D the same, but everything that
+    /// reads the token back -- the exhibit curve table, the inspector, the label-width check --
+    /// matches "%%d" ordinally and would show a literal %%D instead of a degree sign.
+    /// </summary>
+    [Fact]
+    public void UpperCasingANoteLeavesTheDegreeControlCodeLowercase()
+    {
+        var offset = Mon(0, 0, "7", MonumentKind.Set, "iron rod");
+        offset.IsOffset = true;
+        offset.OffsetFeet = 5;
+        offset.OffsetAzimuthDegrees = 45;
+        var plan = RowBuilder.Build(Run(RowRoadSide.Right, 60, offset, Mon(100, 0)));
+        RowLabels.Apply(plan, new RightOfWaySettings(), new DraftingLineType(), 1.0, "%%d");
+
+        var note = plan.Monuments[0].Text[1];
+        Assert.Equal("5.00' OFFSET N 45%%d00'00\" E TO CORNER", note);
+        Assert.DoesNotContain("%%D", note);
+        // The rest of the note is still capitals -- the token is the only exception.
+        Assert.Contains("OFFSET", note);
+        Assert.Equal("SET IRON ROD", plan.Monuments[0].Text[0]);
+    }
+
     [Fact]
     public void TheOfficeCanSetItsOwnWordingAndCase()
     {

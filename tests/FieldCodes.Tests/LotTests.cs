@@ -488,6 +488,26 @@ public class LotTests
         Assert.Equal("50.00'", edge.Text.Single());
     }
 
+    /// <summary>
+    /// Every lot line's bearing goes through the office's capitals, and the CAD layer passes
+    /// "%%d" rather than "°". The capitals must not reach the control code -- see the same test
+    /// on RightOfWayTests for why a literal %%D matters.
+    /// </summary>
+    [Fact]
+    public void UpperCasingALotLineLeavesTheDegreeControlCodeLowercase()
+    {
+        var job = Block();
+        var plan = Plan(job);
+        LotLabels.Apply(plan, job, new LotSettings(), new DraftingLineType(), new DraftingLineType(), 1.0, "%%d");
+
+        var inner = plan.Lines.First(l => l.Kind == LotLineKind.Lot).Text.Single();
+        Assert.Contains("%%d", inner);
+        Assert.DoesNotContain("%%D", inner);
+        Assert.All(plan.Lines, l => Assert.All(l.Text, t => Assert.DoesNotContain("%%D", t)));
+        // The wording around it is still capitals.
+        Assert.Equal("BLOCK A", plan.Title);
+    }
+
     [Fact]
     public void ThePlatNotesStateTheSetbacksAndEasementsThatWereUsed()
     {

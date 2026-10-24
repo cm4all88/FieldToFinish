@@ -41,7 +41,7 @@ namespace FieldCodes.Lots
                     distance.Stacked = false;
                     style = distance;
                 }
-                foreach (var text in RowLabels.Course(line.Data, style, upf, degreeSymbol)) line.Text.Add(Fit(text, settings));
+                foreach (var text in RowLabels.Course(line.Data, style, upf, degreeSymbol)) line.Text.Add(Fit(text, settings, degreeSymbol));
             }
 
             foreach (var lot in plan.Lots)
@@ -51,26 +51,26 @@ namespace FieldCodes.Lots
                 {
                     { "num", lot.Number }, { "block", (job.BlockName ?? string.Empty).Trim() }
                 });
-                if (number.Length > 0) lot.Text.Add(Fit(number, settings));
+                if (number.Length > 0) lot.Text.Add(Fit(number, settings, degreeSymbol));
                 if (!string.IsNullOrWhiteSpace(settings.LotAreaFormat))
-                    lot.Text.Add(Fit(Tokens(settings.LotAreaFormat, new Dictionary<string, string> { { "sf", lot.AreaSqFt.ToString("#,##0", CultureInfo.InvariantCulture) } }), settings));
+                    lot.Text.Add(Fit(Tokens(settings.LotAreaFormat, new Dictionary<string, string> { { "sf", lot.AreaSqFt.ToString("#,##0", CultureInfo.InvariantCulture) } }), settings, degreeSymbol));
                 if (!string.IsNullOrWhiteSpace(settings.LotAcresFormat))
-                    lot.Text.Add(Fit(Tokens(settings.LotAcresFormat, new Dictionary<string, string> { { "ac", (lot.AreaSqFt / 43560.0).ToString("0.000", CultureInfo.InvariantCulture) } }), settings));
+                    lot.Text.Add(Fit(Tokens(settings.LotAcresFormat, new Dictionary<string, string> { { "ac", (lot.AreaSqFt / 43560.0).ToString("0.000", CultureInfo.InvariantCulture) } }), settings, degreeSymbol));
 
                 foreach (var arrow in lot.Drains)
                     arrow.Text = string.IsNullOrWhiteSpace(settings.DrainFormat)
                         ? string.Empty
-                        : Fit(Tokens(settings.DrainFormat, new Dictionary<string, string> { { "pct", Feet(arrow.Percent) } }), settings);
+                        : Fit(Tokens(settings.DrainFormat, new Dictionary<string, string> { { "pct", Feet(arrow.Percent) } }), settings, degreeSymbol);
             }
 
             if (plan.Alley != null)
                 plan.Alley.Text = string.IsNullOrWhiteSpace(settings.AlleyFormat)
                     ? string.Empty
-                    : Fit(Tokens(settings.AlleyFormat, new Dictionary<string, string> { { "width", Feet(plan.Alley.WidthFeet) } }), settings);
+                    : Fit(Tokens(settings.AlleyFormat, new Dictionary<string, string> { { "width", Feet(plan.Alley.WidthFeet) } }), settings, degreeSymbol);
 
             plan.Title = string.IsNullOrWhiteSpace(job.BlockName) || string.IsNullOrWhiteSpace(settings.BlockTitleFormat)
                 ? string.Empty
-                : Fit(Tokens(settings.BlockTitleFormat, new Dictionary<string, string> { { "block", job.BlockName.Trim() } }), settings);
+                : Fit(Tokens(settings.BlockTitleFormat, new Dictionary<string, string> { { "block", job.BlockName.Trim() } }), settings, degreeSymbol);
 
             plan.GeneralNotes.Clear();
             var setbacks = new List<string>();
@@ -78,13 +78,13 @@ namespace FieldCodes.Lots
             Add(setbacks, "SIDE", job.SideSetbackFeet);
             Add(setbacks, "CORNER SIDE", job.CornerSideSetbackFeet);
             Add(setbacks, "REAR", job.RearSetbackFeet);
-            if (setbacks.Count > 0) plan.GeneralNotes.Add(Fit(Join(settings.SetbackNotePrefix, setbacks), settings));
+            if (setbacks.Count > 0) plan.GeneralNotes.Add(Fit(Join(settings.SetbackNotePrefix, setbacks), settings, degreeSymbol));
 
             var easements = new List<string>();
             Add(easements, "FRONT", job.FrontEasementFeet);
             Add(easements, "SIDE", job.SideEasementFeet);
             Add(easements, "REAR", job.RearEasementFeet);
-            if (easements.Count > 0) plan.GeneralNotes.Add(Fit(Join(settings.EasementNotePrefix, easements), settings));
+            if (easements.Count > 0) plan.GeneralNotes.Add(Fit(Join(settings.EasementNotePrefix, easements), settings, degreeSymbol));
         }
 
         private static void Add(IList<string> items, string name, double feet)
@@ -110,9 +110,18 @@ namespace FieldCodes.Lots
             return text.Trim();
         }
 
-        private static string Fit(string text, LotSettings settings)
+        /// <summary>
+        /// Capitals when the office wants them, but never over the degree token -- see the same
+        /// note on RowLabels.Fit. A lot line's bearing goes through here, so this is the label
+        /// that would otherwise carry %%D.
+        /// </summary>
+        private static string Fit(string text, LotSettings settings, string degreeSymbol)
         {
-            return settings.UpperCase ? text.ToUpperInvariant() : text;
+            if (!settings.UpperCase) return text;
+            var upper = text.ToUpperInvariant();
+            return string.IsNullOrEmpty(degreeSymbol)
+                ? upper
+                : upper.Replace(degreeSymbol.ToUpperInvariant(), degreeSymbol);
         }
     }
 }
