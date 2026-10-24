@@ -190,7 +190,8 @@ namespace FieldCodes.Row
         /// A radius that does not fit between its neighbours is dropped, with a warning,
         /// and the corner stays sharp.
         /// </summary>
-        public static List<RingPiece> RoundRing(IList<P2> corners, IList<double> radii, ICollection<string> warnings)
+        public static List<RingPiece> RoundRing(IList<P2> corners, IList<double> radii, ICollection<string> warnings,
+                                                string cornerWord = "monuments")
         {
             var n = corners.Count;
             var dirs = new P2[n];
@@ -221,7 +222,7 @@ namespace FieldCodes.Row
             {
                 var j = (i + 1) % n;
                 if (tangent[i] + tangent[j] <= lengths[i] + 1e-6) continue;
-                warnings.Add("The corner radii at monuments " + (i + 1) + " and " + (j + 1) +
+                warnings.Add("The corner radii at " + cornerWord + " " + (i + 1) + " and " + (j + 1) +
                              " do not fit on the side between them; those corners are left sharp.");
                 tangent[i] = 0;
                 tangent[j] = 0;

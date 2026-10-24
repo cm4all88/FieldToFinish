@@ -308,6 +308,7 @@ turn the symbol off in the point style.
 | `FTFBLOCKS` | Lists the drawing's blocks and checks them against the rules | n/a |
 | `FTFDRAWLINE` | Drafts cadastral / record lines with bearing/distance annotation — the separate drafting world, see below | n/a |
 | `FTFDRAFTCLEAN` | Cleanup for the drafted world: annotation by default, geometry only on explicit confirmation | n/a |
+| `FTFLOTS` | Divides a platted block into lots: lot lines with bearings/distances, alley, setbacks, easements, numbers and areas, drainage arrows (see below) | n/a |
 | `FTFROW` | Right of way from picked monuments: lines, opposite line, centerline, width dimensions, monument notes — runs, blocks, intersections (see below) | n/a |
 
 ## Line labelling: the primary workflow is interactive
@@ -522,6 +523,41 @@ a corner radius treats the picked monument as the point of intersection. Where a
 square dimension would land beyond the join of two offset lines (the inside of
 a turn) it is skipped and reported instead of being forced. The geometry and
 wording are in `FieldCodes.Row` and unit tested (`RightOfWayTests`); the command
+and popup are CAD glue and are **not yet run in Civil 3D**.
+
+## Platted blocks: FTFLOTS
+
+`FTFLOTS` divides a block into lots. Pick the block's corners (survey points snap; or pick a closed
+polyline of straight sides), then the popup asks for what a plat needs:
+
+- **which side the lots front**, how many lots and how wide each is. Frontages must add up to that
+  side; if they miss it you choose whether the first or last lot takes the difference or the tool
+  refuses. A corner-lot allowance prefills wider end lots;
+- **depth** -- blank runs the lots to the back of the block; a number leaves the rest undivided
+  and says how much;
+- **an alley** -- none, along the back (behind one row), or between two rows. A second row of lots
+  can front another side, numbered on round the block;
+- **where each lot drains** -- toward the front, rear, left, right, both ways (a ridge) or no arrow,
+  for the whole block with any lot overridden, and the slope. Left and right are as seen standing on
+  the front line looking into the lot;
+- **building setbacks and utility easements** -- front, side, corner-lot street side and rear,
+  drawn as an envelope inside each lot, with the plat notes written from the numbers used;
+- **minimum lot area and frontage**, flagged lot by lot; and rounded block corners.
+
+Lot lines are cut **square to the front**. Each lot is the block cut by half-planes, so a skewed or
+trapezoidal block ends its end lots on the block's own sides and the lot areas still add up to the
+block (a check that is run and reported). A line two lots share is one line, labelled with bearing and
+distance; a line on the block's own boundary carries its distance only, because the right-of-way
+drawing (`FTFROW`) already owns that boundary's bearings and is not drawn again unless the setting asks.
+
+Configured at **FTF Settings > Platted Blocks**: lot lines and the alley take the layer and annotation
+of Drafting Lines types (Lot Line, Right of Way); the setback, easement, lot-text, drainage and notes
+layers are set there and never created from a name. The numbers the popup starts from are the office's;
+the shipped defaults are zero, not an ordinance.
+
+Not done: lines other than straight sides for the block (rounded corners excepted), a front that
+bends at an angle point (divide it as separate fronts), cul-de-sac or flag lots, and corner sight
+triangles. The geometry and wording are in `FieldCodes.Lots` and unit tested (`LotTests`); the command
 and popup are CAD glue and are **not yet run in Civil 3D**.
 
 ## Configuration ownership

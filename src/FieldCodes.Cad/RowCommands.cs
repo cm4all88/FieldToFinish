@@ -311,22 +311,19 @@ namespace FieldCodes.Cad
 
         private static ObjectId FindLayer(Database db, Transaction tr, string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return ObjectId.Null;
-            var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-            var trimmed = name.Trim();
-            return table.Has(trimmed) ? table[trimmed] : ObjectId.Null;
+            return DraftPrimitives.FindLayer(db, tr, name);
         }
 
         // --------------------------------------------------------------- drawing
 
-        private static Point3d Pt(P2 p)
-        {
-            return new Point3d(p.X, p.Y, 0.0);
-        }
-
         private static int Draw(Database db, Transaction tr, Standard std, RowPlan plan)
         {
             Ownership.EnsureRegApp(db, tr);
+            var c = new DraftContext
+            {
+                Db = db, Tr = tr, Version = std.Version, Source = "ROW",
+                TextStyle = std.TextStyle, TextHeight = std.TextHeight, TextOffset = std.TextOffset
+            };
             var count = 0;
 
             foreach (var line in plan.Lines)
@@ -339,129 +336,26 @@ namespace FieldCodes.Cad
                     default: layer = std.RowLayer; break;
                 }
 
-                count += AddCourse(db, tr, std, line.Course, layer, line.Role == RowLayerRole.RowLine);
-                if (line.Text.Count > 0) count += AnnotateCourse(db, tr, std, line);
+                count += DraftPrimitives.DrawCourse(c, line.Course, layer, line.Role == RowLayerRole.RowLine ? std.Linetype : string.Empty);
+                count += DraftPrimitives.Annotate(c, line.Course, line.Text, std.AnnotationLayer, std.Type.Placement);
             }
 
-            foreach (var dimension in plan.Dimensions) count += DrawDimension(db, tr, std, dimension);
-            foreach (var mark in plan.Monuments) count += DrawMonument(db, tr, std, mark);
+            foreach (var dimension in plan.Dimensions) count += DrawDimension(c, std, dimension);
+            foreach (var mark in plan.Monuments) count += DrawMonument(c, std, mark);
             foreach (var label in plan.RoadLabels)
             {
                 var rotation = LineLabelPlanner.NormalizeReadable(Math.Atan2(label.Along.Y, label.Along.X));
-                count += AddText(db, tr, std, label.Text, Pt(label.At), rotation, std.RoadNameLayer);
+                count += DraftPrimitives.DrawText(c, label.Text, DraftPrimitives.Pt(label.At), rotation, std.RoadNameLayer);
             }
-            return count;
-        }
-
-        private static int AddCourse(Database db, Transaction tr, Standard std, Course course, ObjectId layer, bool useLinetype)
-        {
-            AcEntity entity;
-            if (course.Kind == CourseKind.Line)
-                entity = new Line(Pt(course.Start), Pt(course.End));
-            else
-            {
-                var start = course.CounterClockwise ? course.StartAngle : course.EndAngle;
-                var end = course.CounterClockwise ? course.EndAngle : course.StartAngle;
-                entity = new Arc(Pt(course.Center), Vector3d.ZAxis, course.Radius, start, end);
-            }
-
-            using (entity)
-            {
-                entity.SetDatabaseDefaults(db);
-                entity.LayerId = layer;
-                if (useLinetype && std.Linetype.Length > 0) entity.Linetype = std.Linetype;
-                CadUtil.AddToModelSpace(db, tr, entity);
-                Ownership.Stamp(entity, "ROW", std.Version, FtfEntityKind.DraftLine, null);
-            }
-            return 1;
-        }
-
-        private static int AddSegment(Database db, Transaction tr, Standard std, Point3d a, Point3d b, ObjectId layer)
-        {
-            using (var line = new Line(a, b))
-            {
-                line.SetDatabaseDefaults(db);
-                line.LayerId = layer;
-                CadUtil.AddToModelSpace(db, tr, line);
-                Ownership.Stamp(line, "ROW", std.Version, FtfEntityKind.DraftLine, null);
-            }
-            return 1;
-        }
-
-        private static int AddText(Database db, Transaction tr, Standard std, string content, Point3d position, double rotation, ObjectId layer)
-        {
-            if (string.IsNullOrWhiteSpace(content)) return 0;
-            using (var text = new DBText())
-            {
-                text.SetDatabaseDefaults(db);
-                if (!std.TextStyle.IsNull) text.TextStyleId = std.TextStyle;
-                text.TextString = content;
-                text.Height = std.TextHeight;
-                text.Rotation = rotation;
-                text.HorizontalMode = TextHorizontalMode.TextCenter;
-                text.VerticalMode = TextVerticalMode.TextVerticalMid;
-                text.AlignmentPoint = position;
-                text.LayerId = layer;
-                CadUtil.AddToModelSpace(db, tr, text);
-                Ownership.Stamp(text, "ROW", std.Version, FtfEntityKind.DraftAnnotation, position);
-            }
-            return 1;
-        }
-
-        /// <summary>Bearing and distance beside a line, curve data beside an arc. Never upside down;
-        /// the reported direction comes from the geometry and does not change when the text flips.</summary>
-        private static int AnnotateCourse(Database db, Transaction tr, Standard std, RowLine line)
-        {
-            var course = line.Course;
-            var count = 0;
-            var gap = std.TextOffset + std.TextHeight / 2.0;
-            var step = std.TextHeight * 1.3;
-
-            if (course.Kind == CourseKind.Arc)
-            {
-                var sweep = course.Sweep;
-                var middle = course.CounterClockwise ? course.StartAngle + sweep / 2.0 : course.StartAngle - sweep / 2.0;
-                var radial = new Vector3d(Math.Cos(middle), Math.Sin(middle), 0.0);
-                var onArc = new Point3d(course.Center.X + course.Radius * Math.Cos(middle), course.Center.Y + course.Radius * Math.Sin(middle), 0.0);
-                var tangent = course.CounterClockwise ? middle + Math.PI / 2.0 : middle - Math.PI / 2.0;
-                var rotation = LineLabelPlanner.NormalizeReadable(tangent);
-                for (var i = 0; i < line.Text.Count; i++)
-                    count += AddText(db, tr, std, line.Text[i], onArc + radial * (gap + i * step), rotation, std.AnnotationLayer);
-                return count;
-            }
-
-            var mid = new Point3d((course.Start.X + course.End.X) / 2.0, (course.Start.Y + course.End.Y) / 2.0, 0.0);
-            var readable = LineLabelPlanner.NormalizeReadable(Math.Atan2(course.End.Y - course.Start.Y, course.End.X - course.Start.X));
-            var up = new Vector3d(-Math.Sin(readable), Math.Cos(readable), 0.0);
-
-            if (line.Text.Count == 1)
-            {
-                var placement = (std.Type.Placement ?? "Above").Trim().Replace(" ", string.Empty);
-                Point3d position;
-                if (string.Equals(placement, "Below", StringComparison.OrdinalIgnoreCase)) position = mid - up * gap;
-                else if (string.Equals(placement, "OnLine", StringComparison.OrdinalIgnoreCase)) position = mid;
-                else position = mid + up * gap;
-                return AddText(db, tr, std, line.Text[0], position, readable, std.AnnotationLayer);
-            }
-
-            if (line.Text.Count == 2)
-            {
-                count += AddText(db, tr, std, line.Text[0], mid + up * gap, readable, std.AnnotationLayer);
-                count += AddText(db, tr, std, line.Text[1], mid - up * gap, readable, std.AnnotationLayer);
-                return count;
-            }
-
-            for (var i = 0; i < line.Text.Count; i++)
-                count += AddText(db, tr, std, line.Text[i], mid - up * (gap + i * step), readable, std.AnnotationLayer);
             return count;
         }
 
         /// <summary>A right-of-way width: a line square across with a tick at each end and the
         /// text beside it. A line across a road is already drawn as a course, so only its text is.</summary>
-        private static int DrawDimension(Database db, Transaction tr, Standard std, RowDimension dimension)
+        private static int DrawDimension(DraftContext c, Standard std, RowDimension dimension)
         {
-            var from = Pt(dimension.From);
-            var to = Pt(dimension.To);
+            var from = DraftPrimitives.Pt(dimension.From);
+            var to = DraftPrimitives.Pt(dimension.To);
             var direction = to - from;
             if (direction.Length < 1e-9) return 0;
 
@@ -474,49 +368,41 @@ namespace FieldCodes.Cad
 
             if (!dimension.IsCross)
             {
-                count += AddSegment(db, tr, std, from, to, std.DimensionLayer);
+                count += DraftPrimitives.DrawSegment(c, from, to, std.DimensionLayer);
                 var across = direction.GetNormal().RotateBy(Math.PI / 2.0, Vector3d.ZAxis) * (std.TextHeight * 0.6);
-                count += AddSegment(db, tr, std, from - across, from + across, std.DimensionLayer);
-                count += AddSegment(db, tr, std, to - across, to + across, std.DimensionLayer);
+                count += DraftPrimitives.DrawSegment(c, from - across, from + across, std.DimensionLayer);
+                count += DraftPrimitives.DrawSegment(c, to - across, to + across, std.DimensionLayer);
             }
 
             // Across a road the bearing and distance sit above the line; the width goes below it.
             var position = dimension.IsCross ? mid - up * gap : mid + up * gap;
-            count += AddText(db, tr, std, dimension.Text, position, readable, std.DimensionLayer);
+            count += DraftPrimitives.DrawText(c, dimension.Text, position, readable, std.DimensionLayer);
             return count;
         }
 
         /// <summary>The symbol where the monument is (a circle; a set monument also gets a cross),
         /// its note on the side away from the road, and for an offset monument a tie to the corner.</summary>
-        private static int DrawMonument(Database db, Transaction tr, Standard std, RowMonumentMark mark)
+        private static int DrawMonument(DraftContext c, Standard std, RowMonumentMark mark)
         {
             var count = 0;
-            var centre = Pt(mark.Location);
-
-            using (var circle = new Circle(centre, Vector3d.ZAxis, std.SymbolRadius))
-            {
-                circle.SetDatabaseDefaults(db);
-                circle.LayerId = std.MonumentLayer;
-                CadUtil.AddToModelSpace(db, tr, circle);
-                Ownership.Stamp(circle, "ROW", std.Version, FtfEntityKind.DraftLine, null);
-                count++;
-            }
+            var centre = DraftPrimitives.Pt(mark.Location);
+            count += DraftPrimitives.DrawCircle(c, centre, std.SymbolRadius, std.MonumentLayer);
 
             if (mark.Monument.Kind == MonumentKind.Set)
             {
                 var r = std.SymbolRadius;
-                count += AddSegment(db, tr, std, new Point3d(centre.X - r, centre.Y, 0), new Point3d(centre.X + r, centre.Y, 0), std.MonumentLayer);
-                count += AddSegment(db, tr, std, new Point3d(centre.X, centre.Y - r, 0), new Point3d(centre.X, centre.Y + r, 0), std.MonumentLayer);
+                count += DraftPrimitives.DrawSegment(c, new Point3d(centre.X - r, centre.Y, 0), new Point3d(centre.X + r, centre.Y, 0), std.MonumentLayer);
+                count += DraftPrimitives.DrawSegment(c, new Point3d(centre.X, centre.Y - r, 0), new Point3d(centre.X, centre.Y + r, 0), std.MonumentLayer);
             }
 
             if (mark.Monument.IsOffset)
-                count += AddSegment(db, tr, std, centre, Pt(mark.Corner), std.MonumentLayer);
+                count += DraftPrimitives.DrawSegment(c, centre, DraftPrimitives.Pt(mark.Corner), std.MonumentLayer);
 
             var rotation = LineLabelPlanner.NormalizeReadable(Math.Atan2(mark.AlongDirection.Y, mark.AlongDirection.X));
             var outward = new Vector3d(mark.NoteDirection.X, mark.NoteDirection.Y, 0.0);
             var first = std.SymbolRadius + std.TextOffset + std.TextHeight / 2.0;
             for (var i = 0; i < mark.Text.Count; i++)
-                count += AddText(db, tr, std, mark.Text[i], centre + outward * (first + i * std.TextHeight * 1.3), rotation, std.MonumentTextLayer);
+                count += DraftPrimitives.DrawText(c, mark.Text[i], centre + outward * (first + i * std.TextHeight * 1.3), rotation, std.MonumentTextLayer);
             return count;
         }
     }
