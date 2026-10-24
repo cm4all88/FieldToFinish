@@ -31,6 +31,8 @@ namespace FieldCodes.Settings
         /// right-of-way lines use.</summary>
         [JsonProperty("lineTypeName")] public string LineTypeName { get; set; }
 
+        /// <summary>The line through the picked monuments when they are not on the road centerline.</summary>
+        [JsonProperty("monumentLineLayer")] public string MonumentLineLayer { get; set; }
         [JsonProperty("centerlineLayer")] public string CenterlineLayer { get; set; }
         [JsonProperty("monumentLayer")] public string MonumentLayer { get; set; }
         [JsonProperty("monumentTextLayer")] public string MonumentTextLayer { get; set; }
@@ -82,6 +84,7 @@ namespace FieldCodes.Settings
         public void RestoreDefaults()
         {
             LineTypeName = "Right of Way";
+            MonumentLineLayer = string.Empty;
             CenterlineLayer = string.Empty;
             MonumentLayer = string.Empty;
             MonumentTextLayer = string.Empty;

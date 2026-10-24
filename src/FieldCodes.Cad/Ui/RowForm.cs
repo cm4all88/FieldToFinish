@@ -40,7 +40,7 @@ namespace FieldCodes.Cad.Ui
         private DataGridView _sides;
         private Label _errors;
 
-        private const string OnRowLine = "On the right-of-way line";
+        private const string OnRowLine = "On a monument line (not the centerline)";
         private const string OnCenterline = "On the road centerline";
         private const string RoadLeft = "Road is to the LEFT";
         private const string RoadRight = "Road is to the RIGHT";

@@ -87,11 +87,11 @@ public class RightOfWayTests
     }
 
     [Fact]
-    public void ThePickedLineIsDrawnOnTheRightOfWayRoleAndLabelled()
+    public void ThePickedLineIsTheMonumentLineNotTheRightOfWayAndIsLabelled()
     {
         var plan = RowBuilder.Build(Run(RowRoadSide.Right, 60, Mon(0, 0), Mon(100, 0)));
         var picked = Of(plan, RowLineSource.Picked).Single();
-        Assert.Equal(RowLayerRole.RowLine, picked.Role);
+        Assert.Equal(RowLayerRole.MonumentLine, picked.Role);
         Assert.True(picked.Annotate);
         Assert.Equal(90.0, picked.Data.AzimuthDegrees, 6);
         Assert.Equal(100.0, picked.Data.Length, 6);

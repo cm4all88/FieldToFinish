@@ -14,6 +14,7 @@ namespace FieldCodes.Cad.Setup
     internal sealed class RightOfWayPage : SetupPage
     {
         private TextBox _lineType;
+        private ComboBox _monumentLine;
         private ComboBox _centerline;
         private ComboBox _monument;
         private ComboBox _monumentText;
@@ -52,7 +53,7 @@ namespace FieldCodes.Cad.Setup
                  "linetype and bearing/distance format of the Drafting Lines type named here, " +
                  "so a line drawn by FTFROW and one drawn by FTFDRAWLINE always agree.");
             _lineType = TextRow("Drafting Lines type", "The name of a type under Drafting Lines, normally Right of Way.", 200);
-            _picked = CheckRow("Draw the line between the picked monuments", null);
+            _picked = CheckRow("Draw the line through the picked monuments", null);
             _labelOpposite = CheckRow("Label the opposite right-of-way line", null);
             _drawCenter = CheckRow("Draw the road centerline", null);
             _labelCenter = CheckRow("Label the centerline", null);
@@ -63,7 +64,8 @@ namespace FieldCodes.Cad.Setup
                  "Text layers left blank use the right-of-way line's annotation layer.");
             var layers = new List<object> { string.Empty };
             foreach (var name in Context.Drawing.Layers) layers.Add(name);
-            _centerline = ComboRow("Centerline", layers, null);
+            _monumentLine = ComboRow("Monument line (the line through the picked monuments)", layers, null);
+            _centerline = ComboRow("Road centerline", layers, null);
             _monument = ComboRow("Monument symbols, offset ties and dimensions", layers, null);
             _dimension = ComboRow("Right-of-way dimensions", layers, null);
             _monumentText = ComboRow("Monument notes", layers, null);
@@ -97,6 +99,7 @@ namespace FieldCodes.Cad.Setup
             _labelOpposite.Checked = s.LabelOppositeLine;
             _drawCenter.Checked = s.DrawCenterline;
             _labelCenter.Checked = s.LabelCenterline;
+            ComboHelp.SelectOrAdd(_monumentLine, s.MonumentLineLayer, true);
             ComboHelp.SelectOrAdd(_centerline, s.CenterlineLayer, true);
             ComboHelp.SelectOrAdd(_monument, s.MonumentLayer, true);
             ComboHelp.SelectOrAdd(_dimension, s.DimensionLayer, true);
@@ -125,6 +128,7 @@ namespace FieldCodes.Cad.Setup
             s.LabelOppositeLine = _labelOpposite.Checked;
             s.DrawCenterline = _drawCenter.Checked;
             s.LabelCenterline = _labelCenter.Checked;
+            s.MonumentLineLayer = Convert.ToString(_monumentLine.SelectedItem) ?? string.Empty;
             s.CenterlineLayer = Convert.ToString(_centerline.SelectedItem) ?? string.Empty;
             s.MonumentLayer = Convert.ToString(_monument.SelectedItem) ?? string.Empty;
             s.DimensionLayer = Convert.ToString(_dimension.SelectedItem) ?? string.Empty;

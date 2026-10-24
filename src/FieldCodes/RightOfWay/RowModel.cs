@@ -23,7 +23,7 @@ namespace FieldCodes.Row
     /// width. Plain: a line with no road (the back of a block against another tract).</summary>
     public enum RowFaceKind { Frontage, Cross, Plain }
 
-    public enum RowLayerRole { RowLine, Centerline, CrossLine }
+    public enum RowLayerRole { RowLine, Centerline, CrossLine, MonumentLine }
 
     /// <summary>One picked monument. <see cref="Location"/> is where the monument is; the
     /// right-of-way corner it marks is <see cref="Corner"/>, which differs when the

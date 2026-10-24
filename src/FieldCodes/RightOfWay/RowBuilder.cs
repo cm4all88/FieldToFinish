@@ -135,7 +135,7 @@ namespace FieldCodes.Row
             {
                 var width = job.WidthFeet * upf;
                 var opposite = RowGeometry.OffsetChain(corners, false, Repeat(sign * width, courses), warnings, "Right of way");
-                AddPicked(job, plan, corners, false, Enumerable.Repeat(road, courses).ToList(), null);
+                AddPicked(job, plan, corners, false, Enumerable.Repeat(road, courses).ToList(), RowLayerRole.MonumentLine);
                 AddOffset(plan, opposite, RowLayerRole.RowLine, RowLineSource.Opposite, job.LabelOppositeLine, i => road);
 
                 if (job.DrawCenterline)
@@ -306,7 +306,7 @@ namespace FieldCodes.Row
         private static void AddPicked(RowJob job, RowPlan plan, IList<P2> corners, bool closed,
                                       IList<string> roads, RowLayerRole? role)
         {
-            if (!role.HasValue && !job.DrawPickedLine) return;
+            if (role == RowLayerRole.MonumentLine && !job.DrawPickedLine) return;
             var courses = closed ? corners.Count : corners.Count - 1;
             for (var i = 0; i < courses; i++)
             {
@@ -314,7 +314,7 @@ namespace FieldCodes.Row
                 plan.Lines.Add(new RowLine
                 {
                     Role = role ?? RowLayerRole.RowLine,
-                    Source = role.HasValue ? RowLineSource.Centerline : RowLineSource.Picked,
+                    Source = role == RowLayerRole.Centerline ? RowLineSource.Centerline : RowLineSource.Picked,
                     Course = course, FaceIndex = i, RoadName = roads[i],
                     Data = EasementAnnotation.Describe(course),
                     Annotate = true

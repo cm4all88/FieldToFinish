@@ -44,6 +44,7 @@ namespace FieldCodes.Cad
             public string RowLayerName;
             public string Linetype;
             public ObjectId CenterlineLayer;
+            public ObjectId MonumentLineLayer;
             public ObjectId MonumentLayer;
             public ObjectId DimensionLayer;
             public ObjectId AnnotationLayer;
@@ -283,6 +284,11 @@ namespace FieldCodes.Cad
         /// popup can change; checked once the plan says whether it is.</summary>
         private static bool ResolveRoleLayers(Database db, Transaction tr, Editor ed, Standard std, RowPlan plan)
         {
+            if (plan.Lines.Any(l => l.Role == RowLayerRole.MonumentLine))
+            {
+                std.MonumentLineLayer = RequireLayer(db, tr, ed, std.Row.MonumentLineLayer, "the line through the monuments");
+                if (std.MonumentLineLayer.IsNull) return false;
+            }
             if (plan.Lines.All(l => l.Role != RowLayerRole.Centerline)) return true;
             std.CenterlineLayer = RequireLayer(db, tr, ed, std.Row.CenterlineLayer, "the road centerline");
             return !std.CenterlineLayer.IsNull;
@@ -332,6 +338,7 @@ namespace FieldCodes.Cad
                 switch (line.Role)
                 {
                     case RowLayerRole.Centerline: layer = std.CenterlineLayer; break;
+                    case RowLayerRole.MonumentLine: layer = std.MonumentLineLayer; break;
                     case RowLayerRole.CrossLine: layer = std.DimensionLayer; break;
                     default: layer = std.RowLayer; break;
                 }
