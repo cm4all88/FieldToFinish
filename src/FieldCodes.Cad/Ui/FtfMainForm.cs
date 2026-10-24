@@ -1127,6 +1127,10 @@ namespace FieldCodes.Cad.Ui
                 "touches labels placed with FTFLABELLINE.");
             CommandRow(stack, "FTFDRAWLINE / FTFDRAFTCLEAN",
                 "Draft cadastral lines by bearing and distance, and remove them.");
+            CommandRow(stack, "FTFROW",
+                "Pick monuments, give the road and its right-of-way width: draws the right-of-way " +
+                "lines with bearings and distances, the opposite line and centerline, the width " +
+                "dimensions and the monument notes. Runs, blocks and intersections.");
 
             CommandGroup(stack, "Sheet production");
             CommandRow(stack, "FTFSHEETPLAN",

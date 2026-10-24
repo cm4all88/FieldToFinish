@@ -72,6 +72,7 @@ namespace FieldCodes.Settings
         [JsonProperty("sheets")] public SheetSettings Sheets { get; set; }
         [JsonProperty("dips")] public UtilitySettings Dips { get; set; }
         [JsonProperty("easements")] public EasementSettings Easements { get; set; }
+        [JsonProperty("rightOfWay")] public RightOfWaySettings RightOfWay { get; set; }
         [JsonProperty("exhibits")] public ExhibitSettings Exhibits { get; set; }
         [JsonProperty("cleanup")] public CleanupSettings Cleanup { get; set; }
 
@@ -90,6 +91,7 @@ namespace FieldCodes.Settings
             Sheets = new SheetSettings();
             Dips = new UtilitySettings();
             Easements = new EasementSettings();
+            RightOfWay = new RightOfWaySettings();
             Exhibits = new ExhibitSettings();
             Cleanup = new CleanupSettings();
         }
@@ -103,7 +105,7 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Sheets, Dips, Easements, Exhibits, Cleanup
+                    Spots, Sheets, Dips, Easements, RightOfWay, Exhibits, Cleanup
                 };
             }
         }
@@ -320,6 +322,7 @@ namespace FieldCodes.Settings
             if (Sheets == null) Sheets = new SheetSettings();
             if (Dips == null) Dips = new UtilitySettings();
             if (Easements == null) Easements = new EasementSettings();
+            if (RightOfWay == null) RightOfWay = new RightOfWaySettings();
             if (Exhibits == null) Exhibits = new ExhibitSettings();
             if (Cleanup == null) Cleanup = new CleanupSettings();
 

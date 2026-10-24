@@ -308,6 +308,7 @@ turn the symbol off in the point style.
 | `FTFBLOCKS` | Lists the drawing's blocks and checks them against the rules | n/a |
 | `FTFDRAWLINE` | Drafts cadastral / record lines with bearing/distance annotation — the separate drafting world, see below | n/a |
 | `FTFDRAFTCLEAN` | Cleanup for the drafted world: annotation by default, geometry only on explicit confirmation | n/a |
+| `FTFROW` | Right of way from picked monuments: lines, opposite line, centerline, width dimensions, monument notes — runs, blocks, intersections (see below) | n/a |
 
 ## Line labelling: the primary workflow is interactive
 
@@ -482,6 +483,46 @@ non-tangent curves (refused unless the inputs uniquely define the curve), then
 curve annotation standards and optionally a curve table. Milestone 1 is straight
 courses: Pick Endpoint, Bearing+Distance, Azimuth+Distance, COGO point start/end,
 continuous entry, computed annotation, undo.
+
+## Right of way from monuments: FTFROW
+
+`FTFROW` is drafted in the same world as `FTFDRAWLINE` (its output is stamped
+`DraftLine` / `DraftAnnotation`, so `FTFCLEAN` leaves it alone and `FTFDRAFTCLEAN`
+manages it) but it works from picked **monuments** instead of typed courses. Pick
+the monuments (survey points snap), fill in the popup, and it draws:
+
+- the right-of-way line between the monuments, with bearing and distance;
+- the **opposite right-of-way line** and the **centerline**, offset to the road
+  side and drawn on their own layers;
+- the right-of-way **width**, square across, labelled in the office wording;
+- each monument's **note** (found / set) and, for an **offset monument**, the
+  monument where it actually sits, a tie to the corner it marks, and the offset
+  note ("5.00' OFFSET N 45°00'00" E TO CORNER" -- direction from the monument TO the corner).
+
+Three modes:
+
+| Mode | You pick | Each side is |
+|---|---|---|
+| **Run** | the monuments along one road frontage | offset by the road's width to the side the road is on, or to both sides when the monuments are on the centerline |
+| **Block** | the corner monuments around a platted block, in order | a frontage (offset outward by *its own* road's width), a line across a road, or plain (no road). A corner can take a radius: a tangent arc with R, L, Δ and chord |
+| **Intersection** | the corner monuments around the intersection | a line across a road. The distance between the monuments is checked against the record right-of-way width and a miss is reported |
+
+Where it is configured: **FTF Settings > Right of Way**. The right-of-way *lines*
+take the layer, linetype and bearing/distance format of the Drafting Lines type
+named there, so a line from `FTFROW` and one from `FTFDRAWLINE` cannot disagree.
+Centerline, monument, dimension, monument-note and road-name layers are set on the
+page; a layer that is unset or missing from the drawing is refused with an
+explanation, never created. Note wording ("FND {desc}", "{width}' R/W", the
+offset note) is the office's to set; the shipped defaults are common platting
+practice, not any one office's standard.
+
+What it will not do, by design: it draws only straight sides between monuments
+(a curved right-of-way frontage is two monuments and a chord for now), and
+a corner radius treats the picked monument as the point of intersection. Where a
+square dimension would land beyond the join of two offset lines (the inside of
+a turn) it is skipped and reported instead of being forced. The geometry and
+wording are in `FieldCodes.Row` and unit tested (`RightOfWayTests`); the command
+and popup are CAD glue and are **not yet run in Civil 3D**.
 
 ## Configuration ownership
 

@@ -75,6 +75,7 @@ namespace FieldCodes.Cad.Ui
             AddGroup("PRODUCTION");
             AddSection("Storm & Sewer Dips", new DipsPage());
             AddSection("Strip Easements", new EasementsPage());
+            AddSection("Right of Way", new RightOfWayPage());
             AddSection("Easement Exhibits", new ExhibitsPage());
 
             AddGroup("MAINTENANCE");
