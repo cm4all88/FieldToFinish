@@ -594,8 +594,39 @@ actually stamped in the drawing:
 The log is `tests\LiveSmoke\rowlots\rowlots_out.log` and the drawing `outrowlots.dwg`.
 `accoreconsole` has no window, so there the popups ask their questions on the command line
 instead — the same questions in the same order, parsed as strictly, which is what the script
-answers. Still needing interactive Civil 3D: the two popups themselves and the Right of Way
-and Platted Blocks settings pages (WinForms, never shown headless), and pick UX with osnaps.
+answers.
+
+## Verified in Civil 3D: the FTFROW and FTFLOTS windows
+
+**2026-10-24, full Civil 3D 2024, unattended.**
+Because the headless run bypasses both popups, `Ui\RowForm.cs`, `Ui\LotForm.cs` and the two
+settings pages had never been constructed. `tests\LiveSmoke\rowlots-ui\run-rowlots-ui.ps1`
+runs them: it stages the harness in the trusted bundle folder, launches Civil 3D on a seeded
+drawing, and drives the real windows through their own controls — 99 checks, all passing.
+
+- **the Right of Way window** in all three modes: the monument grid carries the survey points
+  the picks snapped to; choosing "on the centerline" swaps the width field out for the two
+  offsets and back; a block shows the sides grid with the distance between each pair of picks
+  and offers a corner radius, an intersection offers none and starts its sides as crossings.
+- **it refuses on screen.** A width of "sixty" keeps the window open and says *The
+  right-of-way width is not a number.*; Cancel draws nothing.
+- **the Platted Block window**: 200' divides four ways to 50' each, the second row of lots
+  appears and goes again with its box, and a per-lot drainage override reaches the drawing.
+- **each window's work matches the headless run exactly** — 29, 35, 24 and 68 objects on the
+  same layers, with the same wording.
+- **both settings pages** build, fill themselves, offer only layers that are really in the
+  drawing (46 of them, from the template), save back what they show, and report a text height
+  of zero rather than taking it.
+- **layout at 100%, 125% and 150% text**, off-screen copies of both windows checked for
+  clipped controls.
+
+The log is `tests\LiveSmoke\rowlots-ui\rowlots-ui.log`, with a screenshot of each window
+beside it. Known and left alone: the Platted Block window's row of lot fields runs wider than
+the window (1479px of content in 979px), so the body scrolls sideways to reach the lot depth
+and the close-the-frontages choice. Every field is reachable; the row is set to wrap and does
+not, because an AutoSize flow panel grows instead of folding.
+
+Still needing a person: pick UX with osnaps, and the settings sections other than these two.
 
 ## Configuration ownership
 

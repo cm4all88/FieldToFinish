@@ -19,6 +19,10 @@ namespace FieldCodes.Cad.Ui
     ///
     /// The window reads and writes a <see cref="RowJob"/>; it does no geometry. Everything
     /// typed is parsed strictly and a bad entry is reported, never guessed at.
+    ///
+    /// Driven in Civil 3D by tests\LiveSmoke\rowlots-ui\run-rowlots-ui.ps1: all three modes,
+    /// the reference swap, the grids, a refused entry and Cancel, and the layout at 100%,
+    /// 125% and 150% text.
     /// </summary>
     internal sealed class RowForm : Form
     {
@@ -73,7 +77,14 @@ namespace FieldCodes.Cad.Ui
                     : "Each side of the ring crosses a road. Its right-of-way width is checked against the distance between the monuments.";
             var header = new Panel { Dock = DockStyle.Top, BackColor = DipBuilderForm.Surface, Padding = new Padding(20, 12, 20, 10) };
             var heading = new Label { AutoSize = true, Text = title, Font = DipBuilderForm.F(15f, true), ForeColor = DipBuilderForm.Ink };
-            var sub = new Label { AutoSize = true, ForeColor = DipBuilderForm.Muted, Margin = new Padding(1, 4, 0, 0), Text = guide };
+            // The guide folds inside the window rather than running off its edge: at large
+            // display text a one-line sentence wants more width than the window has, and the
+            // header's height is measured from this label, so an unbounded one clips itself.
+            var sub = new Label
+            {
+                AutoSize = true, ForeColor = DipBuilderForm.Muted, Margin = new Padding(1, 4, 0, 0),
+                MaximumSize = new Size(ClientSize.Width - 40, 0), Text = guide
+            };
             var headerText = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
             headerText.Controls.Add(heading);
             headerText.Controls.Add(sub);

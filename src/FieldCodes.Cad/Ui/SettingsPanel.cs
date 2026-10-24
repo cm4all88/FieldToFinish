@@ -18,7 +18,10 @@ namespace FieldCodes.Cad.Ui
     /// class only replaces the window they used to live in. One configuration
     /// system, one place to see it.
     ///
-    /// UNTESTED: never shown in AutoCAD.
+    /// Shown in Civil 3D by tests\LiveSmoke\rowlots-ui\run-rowlots-ui.ps1, which navigates to
+    /// the Right of Way and Platted Blocks sections and checks each page builds, fills itself,
+    /// offers only layers that are in the drawing and saves back what it shows. The other
+    /// sections' pages are still only reached by hand.
     /// </summary>
     internal sealed class SettingsPanel : Panel
     {

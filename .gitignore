@@ -59,6 +59,9 @@ secrets.json
 tests/LiveSmoke/out*.dwg
 tests/LiveSmoke/*.log.raw
 tests/LiveSmoke/rowlots/out*.dwg
+tests/LiveSmoke/rowlots-ui/*.png
+tests/LiveSmoke/rowlots-ui/rowlots-ui-test.dwg
+tests/LiveSmoke/rowlots-ui/run-rowlots-ui.scr
 tests/LiveSmoke/rowlots/seedrowlots.dwg
 tests/LiveSmoke/rowlots/*.log.raw
 tests/LiveSmoke/trace.txt
