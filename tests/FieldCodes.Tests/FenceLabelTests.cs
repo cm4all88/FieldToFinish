@@ -91,4 +91,44 @@ public sealed class FenceLabelTests : IClassFixture<RulesFixture>
         Assert.Equal(new[] { "3 label(s) on 3 line(s)." }, report.Lines(10.0));
         Assert.Equal(0, report.Unlabelled);
     }
+
+    // ----------------------------------------------------------------- lettered linetypes
+
+    [Theory]
+    [InlineData("WATER", new[] { "W", "W" }, "WATER (W)")]
+    [InlineData("UTIL", new[] { "G", "W" }, "UTIL (G/W)")]
+    [InlineData("FENCELINE2", new[] { "symbol" }, "FENCELINE2 (symbol)")]
+    [InlineData("FENCE", new[] { "" }, "FENCE (symbol)")]
+    public void ALinetypeIsDescribedByWhatItDraws(string name, string[] marks, string described)
+    {
+        Assert.True(LinetypeMarks.IsMarked(marks));
+        Assert.Equal(described, LinetypeMarks.Describe(name, marks));
+    }
+
+    [Fact]
+    public void APlainDashPatternHasNoMarks()
+    {
+        Assert.False(LinetypeMarks.IsMarked(new string[0]));
+        Assert.False(LinetypeMarks.IsMarked(null));
+    }
+
+    [Fact]
+    public void LinesLeftToTheLegendAreReportedByLinetypeAndAreNotCountedAsFailures()
+    {
+        var report = new LineLabelPassReport { LabelsPlaced = 2, FeaturesLabelled = 2 };
+        for (var i = 0; i < 3; i++) report.ToLegend("WATER", new[] { "W" });
+        report.ToLegend("POWER", new[] { "P" });
+
+        Assert.Equal(4, report.LeftToLegend);
+        Assert.Equal(0, report.Unlabelled);
+        Assert.Contains("Left to the legend: 4 line(s) whose linetype draws its own letter or symbol -- WATER (W) 3, POWER (P) 1.", report.Lines(10.0));
+    }
+
+    [Fact]
+    public void LeavingLetteredLinetypesToTheLegendIsOnByDefault()
+    {
+        Assert.True(new FieldCodes.Settings.LineLabelSettings().LeaveMarkedLinetypesToLegend);
+        var old = Newtonsoft.Json.JsonConvert.DeserializeObject<FieldCodes.Settings.LineLabelSettings>(@"{ ""drawMask"": false }")!;
+        Assert.True(old.LeaveMarkedLinetypesToLegend);
+    }
 }

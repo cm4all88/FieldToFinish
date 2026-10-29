@@ -167,6 +167,7 @@ namespace FieldCodes.Cad
                 // the side offset from it -- is the surveyor's, and the pass leaves it be.
                 var manual = ManualLabelPositions(db, tr);
                 var manualReach = sideOffset + textHeight * 1.5;
+                var linetypeCache = new Dictionary<ObjectId, LinetypeLook>();
 
                 var ms = CadUtil.ModelSpace(db, tr, OpenMode.ForRead);
 
@@ -201,6 +202,25 @@ namespace FieldCodes.Cad
                     if (labelText == null) { report.NotLabelled(candidates, entity.Layer); continue; }
 
                     if (HasManualLabel(curve, candidates, manual, manualReach)) { report.AlreadyByHand++; continue; }
+
+                    // A linetype that draws its own letter or symbol (water ---W---, power
+                    // ---P---) names the line, and the legend explains it: no text label.
+                    // A gate along it still gets its GATE label -- the legend cannot show that.
+                    if (ls.LeaveMarkedLinetypesToLegend)
+                    {
+                        var look = LinetypeOf(db, tr, entity, linetypeCache);
+                        if (look.Marks.Count > 0)
+                        {
+                            var gateLayer = LabelLayerResolver.Resolve(entity.Layer, candidates,
+                                layerCatalog, ls.DefaultLabelLayer).Layer;
+                            report.GateLabels += PlaceSpanLabels(db, tr, null, curve, cfg.SpanMarkers, ls,
+                                                                 textHeight, styleId, CadUtil.EnsureLayer(db, tr, gateLayer),
+                                                                 gateLayer, candidates[0].Code, cfg.Version,
+                                                                 noteIndex, null);
+                            report.ToLegend(look.Name, look.Marks);
+                            continue;
+                        }
+                    }
 
                     // The side comes from the source coding's own modifier ("ASPH
                     // LEFT") -- read from the figure name, or from TrimbleName XData
@@ -455,6 +475,13 @@ namespace FieldCodes.Cad
                 return false;
             }
 
+            // Placed as asked, with a word: the automatic pass leaves lines like this to the legend.
+            var linetype = LinetypeOf(db, tr, entity, null);
+            if (linetype.Marks.Count > 0)
+                ed.WriteMessage("\nIts linetype {0} draws its own letter or symbol; the automatic " +
+                                "pass leaves lines like this to the legend. Placing the label you asked for.",
+                                LinetypeMarks.Describe(linetype.Name, linetype.Marks));
+
             var featureName = string.Join(" / ", candidates
                 .Select(c => string.IsNullOrEmpty(c.Name) ? c.Code : c.Name)
                 .Distinct().ToArray());
@@ -620,6 +647,72 @@ namespace FieldCodes.Cad
             }
 
             ed.WriteMessage("\n{0}: {1} label(s) placed.\n", commandName, placedCount);
+        }
+
+        /// <summary>A line's effective linetype and the letters or symbols it draws.</summary>
+        private sealed class LinetypeLook
+        {
+            public string Name;
+            public IList<string> Marks = new List<string>();
+        }
+
+        /// <summary>
+        /// The linetype a line is drawn with -- its own, or its layer's when it is ByLayer --
+        /// and the text and shape elements of that linetype's definition: "W" for water
+        /// ---W---, "symbol" for a shape such as a fence's x. Nothing for a plain dash pattern.
+        /// A survey figure styled with a lettered linetype of its own (rather than by layer) is
+        /// not seen here.
+        /// </summary>
+        private static LinetypeLook LinetypeOf(Database db, Transaction tr, AcEntity entity,
+                                               Dictionary<ObjectId, LinetypeLook> cache)
+        {
+            var none = new LinetypeLook();
+            ObjectId id;
+            try
+            {
+                id = entity.LinetypeId;
+                if (id.IsNull || id == db.ByLayerLinetype)
+                {
+                    var layer = tr.GetObject(entity.LayerId, OpenMode.ForRead) as LayerTableRecord;
+                    id = layer != null ? layer.LinetypeObjectId : ObjectId.Null;
+                }
+                else if (id == db.ByBlockLinetype)
+                {
+                    return none;   // in model space ByBlock draws continuous
+                }
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+                return none;
+            }
+            if (id.IsNull) return none;
+
+            LinetypeLook look;
+            if (cache != null && cache.TryGetValue(id, out look)) return look;
+
+            look = new LinetypeLook();
+            try
+            {
+                var record = tr.GetObject(id, OpenMode.ForRead) as LinetypeTableRecord;
+                if (record != null)
+                {
+                    look.Name = record.Name;
+                    for (var i = 0; i < record.NumDashes; i++)
+                    {
+                        // A text or shape element carries the style it is drawn with; a plain
+                        // dash or gap carries none.
+                        if (record.ShapeStyleAt(i).IsNull) continue;
+                        var text = record.TextAt(i);
+                        look.Marks.Add(string.IsNullOrWhiteSpace(text) ? LinetypeMarks.Symbol : text.Trim());
+                    }
+                }
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+                look = new LinetypeLook();
+            }
+            if (cache != null) cache[id] = look;
+            return look;
         }
 
         /// <summary>Where every hand-placed line label sits, keyed by the feature code it was

@@ -411,6 +411,18 @@ Everything** button (`FTFLABELALL`) labels the drawing in one go:
 2. Every point (`FTFLABELS`), steering around the line labels just placed.
 3. Draw order (`FTFORDER`).
 
+**Lettered and symbol linetypes are left to the legend.** A line whose linetype
+draws its own letter or symbol -- water `---W---`, power `---P---`, a fence's x's --
+already says what it is, so the line pass gives it no text label. FTF reads this from
+the linetype's definition (its text and shape elements), from the line's own linetype
+or its layer's when ByLayer, never from the name. Gate labels along such a line are
+still placed, `FTFLABELLINE` still labels one you click (with a note), and the summary
+lists them by linetype (`Left to the legend: WATER (W) 12, POWER (P) 4`). Turn it off
+under Settings > Line Labels. A survey figure whose style gives it a lettered linetype
+of its own, rather than by layer, is not seen. `FTFLEGEND` itself lists only the line
+features configured in `rules.json`, so an unconfigured water or power line is in the
+office legend, not FTF's.
+
 Labels placed with `FTFLABELLINE`, or moved by hand, are kept. Running it again
 after more linework arrives replaces only its own labels. It ends by listing every
 identified line it could not label, grouped: a feature with no wording configured

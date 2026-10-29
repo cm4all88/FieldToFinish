@@ -445,6 +445,7 @@ namespace FieldCodes.Cad.Setup
         private TextBox _endClearance;
         private CheckBox _mask;
         private TextBox _drivewayFormat;
+        private CheckBox _legendLinetypes;
 
         public override string Title { get { return "Line Labels"; } }
         public override string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
@@ -500,6 +501,14 @@ namespace FieldCodes.Cad.Setup
             _mask = CheckRow("Draw a mask under each label",
                 "The mask rotates with the text.");
 
+            _legendLinetypes = CheckRow("Leave lettered and symbol linetypes to the legend",
+                "A line whose linetype draws its own letter or symbol -- water ---W---, " +
+                "power ---P---, a fence's x's -- already says what it is, and the legend " +
+                "explains it, so the automatic pass and Label Everything give it no text " +
+                "label. Read from the linetype's definition (its own, or its layer's when " +
+                "ByLayer). Gate labels on such a line are still placed, and FTFLABELLINE " +
+                "still labels one you click.");
+
             Heading("Driveways (FTFLABELDRIVEWAY)");
             _drivewayFormat = TextRow("Driveway wording",
                 "Pick a driveway's two edges as for FTFLABELBETWEEN. {type} is the first " +
@@ -534,6 +543,7 @@ namespace FieldCodes.Cad.Setup
             _repeatInterval.Text = Fmt(s.LineLabels.RepeatIntervalFeet);
             _endClearance.Text = Fmt(s.LineLabels.EndClearanceFeet);
             _drivewayFormat.Text = s.LineLabels.DrivewayFormat;
+            _legendLinetypes.Checked = s.LineLabels.LeaveMarkedLinetypesToLegend;
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
@@ -573,6 +583,8 @@ namespace FieldCodes.Cad.Setup
             ReadDouble(_endClearance, "Line labels: end clearance", v => v >= 0,
                        "cannot be negative", problems, ref clearance);
             s.LineLabels.EndClearanceFeet = clearance;
+
+            s.LineLabels.LeaveMarkedLinetypesToLegend = _legendLinetypes.Checked;
 
             var driveway = (_drivewayFormat.Text ?? string.Empty).Trim();
             if (driveway.Length > 0 && driveway.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)

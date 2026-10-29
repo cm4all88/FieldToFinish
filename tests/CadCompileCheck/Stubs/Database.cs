@@ -247,6 +247,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public bool TryGetObjectId(Handle handle, out ObjectId id) { id = ObjectId.Null; return false; }
         public ObjectId GetObjectId(bool createIfNotFound, Handle handle, int reserved) { return ObjectId.Null; }
         public ObjectId ByLayerLinetype { get; }
+        public ObjectId ByBlockLinetype { get; }
         public ObjectId ContinuousLinetype { get; }
         public double Ltscale { get; set; }
         public double Textsize { get; set; }
@@ -696,7 +697,19 @@ namespace Autodesk.AutoCAD.DatabaseServices
     }
 
     public sealed class LinetypeTable : SymbolTable { }
-    public sealed class LinetypeTableRecord : SymbolTableRecord { public string Comments { get; set; } public double PatternLength { get; } public int NumDashes { get; } }
+    public sealed class LinetypeTableRecord : SymbolTableRecord
+    {
+        public string Comments { get; set; }
+        public double PatternLength { get; }
+        public int NumDashes { get; }
+        public double DashLengthAt(int index) { return 0; }
+        public ObjectId ShapeStyleAt(int index) { return ObjectId.Null; }
+        public int ShapeNumberAt(int index) { return 0; }
+        public string TextAt(int index) { return string.Empty; }
+        public double ShapeScaleAt(int index) { return 1; }
+        public double ShapeRotationAt(int index) { return 0; }
+        public Vector2d ShapeOffsetAt(int index) { return new Vector2d(); }
+    }
     public sealed class RegAppTable : SymbolTable { }
     public sealed class RegAppTableRecord : SymbolTableRecord { }
     public sealed class DimStyleTable : SymbolTable { }

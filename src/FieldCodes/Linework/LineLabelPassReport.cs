@@ -14,6 +14,7 @@ namespace FieldCodes.Linework
     {
         private readonly Dictionary<string, int> _notConfigured = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _ambiguous = new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _legend = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         public int LabelsPlaced { get; set; }
         public int FeaturesLabelled { get; set; }
@@ -23,6 +24,18 @@ namespace FieldCodes.Linework
         /// <summary>Lines that already carry a label placed by hand (FTFLABELLINE): left alone,
         /// so a re-run never puts a second label beside the surveyor's.</summary>
         public int AlreadyByHand { get; set; }
+
+        /// <summary>Lines whose linetype draws its own letter or symbol: named by the legend,
+        /// so given no text label (their gate labels are still placed).</summary>
+        public int LeftToLegend
+        {
+            get { return _legend.Values.Sum(); }
+        }
+
+        public void ToLegend(string linetypeName, IEnumerable<string> marks)
+        {
+            Count(_legend, LinetypeMarks.Describe(linetypeName, marks));
+        }
 
         /// <summary>Lines identified but left unlabelled, all reasons together.</summary>
         public int Unlabelled
@@ -67,6 +80,11 @@ namespace FieldCodes.Linework
                     LabelsPlaced, FeaturesLabelled,
                     GateLabels > 0 ? ", " + GateLabels.ToString(CultureInfo.InvariantCulture) + " gate/span label(s)" : string.Empty)
             };
+            if (_legend.Count > 0)
+                lines.Add(string.Format(CultureInfo.InvariantCulture,
+                    "Left to the legend: {0} line(s) whose linetype draws its own letter or symbol -- {1}.",
+                    LeftToLegend, string.Join(", ", _legend.OrderByDescending(k => k.Value).ThenBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                        .Select(k => k.Key + " " + k.Value.ToString(CultureInfo.InvariantCulture)).ToArray())));
             if (AlreadyByHand > 0)
                 lines.Add(string.Format(CultureInfo.InvariantCulture, "{0} line(s) already labelled by hand (FTFLABELLINE) were left as they are.", AlreadyByHand));
             if (TooShort > 0)

@@ -368,6 +368,12 @@ namespace FieldCodes.Settings
         [JsonProperty("drivewayFormat")]
         public string DrivewayFormat { get; set; }
 
+        /// <summary>A line whose linetype draws its own letter or symbol (water ---W---,
+        /// power ---P---) is named by the legend: the automatic pass gives it no text
+        /// label. Gate labels on it are still placed.</summary>
+        [JsonProperty("leaveMarkedLinetypesToLegend")]
+        public bool LeaveMarkedLinetypesToLegend { get; set; }
+
         public LineLabelSettings() { RestoreDefaults(); }
 
         public void RestoreDefaults()
@@ -388,6 +394,7 @@ namespace FieldCodes.Settings
             SideOffsetFeet = 1.0;
             DrawMask = true;
             DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
+            LeaveMarkedLinetypesToLegend = true;
         }
 
         public void Validate(ICollection<string> problems)
