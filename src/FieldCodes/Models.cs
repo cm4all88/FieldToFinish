@@ -75,6 +75,7 @@ namespace FieldCodes
             Modifiers = new List<ResolvedModifier>();
             Stems = new List<double>();
             Diagnostics = new List<Diagnostic>();
+            LabelLines = new List<string>();
             BlockScale = 1.0;
             StemCount = 1;
             Leader = LeaderMode.Auto;
@@ -149,7 +150,26 @@ namespace FieldCodes
         public double BlockScale { get; set; }
         public string DripLayer { get; set; }
         public bool DripUnify { get; set; }
+        /// <summary>
+        /// The label as MText contents: the lines joined with \P. Use
+        /// <see cref="LabelDisplay"/> anywhere the text is shown outside the drawing.
+        /// </summary>
         public string LabelText { get; set; }
+
+        /// <summary>The label's lines, top to bottom. One entry for a one-line label.</summary>
+        public IList<string> LabelLines { get; private set; }
+
+        /// <summary>The label on one line for tables, reports and previews: the lines
+        /// joined with " / ".</summary>
+        public string LabelDisplay
+        {
+            get
+            {
+                if (LabelLines.Count > 0) return string.Join(" / ", LabelLines.ToArray());
+                return LabelText;
+            }
+        }
+
         public string LabelLayer { get; set; }
         public LeaderMode Leader { get; set; }
         public string TagPrefix { get; set; }

@@ -17,11 +17,14 @@ warnings-as-errors and documentation settings as `src/FieldCodes.Cad`.
 
 ## Scope
 
-The five FTFRECORD files and the plugin helpers they lean on:
+The FTFRECORD files, the line labelling, driveway and bench commands, two setup pages, and
+the plugin helpers they lean on:
 
 | Compiled from source | Stubbed (`Stubs/Internal.cs`) |
 |---|---|
 | RecordCommands, RecordDrafter, RecordDocumentReader, Ui/RecordReviewForm, Setup/RecordSurveyPage | `EasementInspectCommands` (three members), `EasementCommands.Extract`, `InspectRow`, the `DipBuilderForm` palette, `ThemePreference` |
+| LineworkCommands (FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFLABELSTAIRS), BenchCommands (FTFBENCH), FtfLineworkService, MaskSync | |
+| Setup/Pages, Setup/PointFeaturesPage | |
 | Ownership, DrawingStore, CadUtil, FtfSession, TextMask, Setup/DrawingResources, Setup/SetupPage | |
 
 `Stubs/Geometry.cs` and `Stubs/Database.cs` follow the real AcDbMgd / AcMgd / AeccDbMgd

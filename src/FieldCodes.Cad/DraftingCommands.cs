@@ -173,12 +173,12 @@ namespace FieldCodes.Cad
                 if (lines == 0 && annotation == 0)
                 {
                     ed.WriteMessage("\nFTFDRAFTCLEAN: nothing drafted by FTFDRAWLINE " +
-                                    "is in this drawing.\n");
+                                    "or FTFBENCH is in this drawing.\n");
                     return;
                 }
 
                 ed.WriteMessage("\nFTFDRAFTCLEAN: {0} drafted line(s), {1} annotation " +
-                                "entities (FTFDRAWLINE).", lines, annotation);
+                                "entities (FTFDRAWLINE, FTFBENCH).", lines, annotation);
 
                 var options = new PromptKeywordOptions("\nRemove")
                 {

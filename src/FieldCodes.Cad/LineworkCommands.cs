@@ -501,6 +501,27 @@ namespace FieldCodes.Cad
         [CommandMethod("FTFB", CommandFlags.Modal)]
         public void FtfLabelBetween()
         {
+            RunBetween("FTFLABELBETWEEN", false);
+        }
+
+        /// <summary>
+        /// FTFLABELBETWEEN for a driveway: pick its two edges exactly the same way, and the
+        /// label is the first edge's surface type read from its layer with DWY after it --
+        /// an edge on V-SURF-ASPH-E labels "ASPH DWY", on V-SURF-CONC-E "CONC DWY". The
+        /// wording is Settings > Line Labels > Driveway wording ("{type} DWY"); W switches
+        /// to the spelled-out word when the feature has one (ASPHALT DWY). The label layer
+        /// is the same one FTFLABELBETWEEN would use. Works on any surface layer, configured
+        /// line feature or not.
+        /// </summary>
+        [CommandMethod("FTFLABELDRIVEWAY", CommandFlags.Modal)]
+        [CommandMethod("FTFDWY", CommandFlags.Modal)]
+        public void FtfLabelDriveway()
+        {
+            RunBetween("FTFLABELDRIVEWAY", true);
+        }
+
+        private static void RunBetween(string commandName, bool driveway)
+        {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
@@ -543,13 +564,13 @@ namespace FieldCodes.Cad
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
                     if (PlaceOneBetweenLabel(doc, tr, first, second, catalog, ls,
-                                             cfg.Version))
+                                             cfg.Version, driveway))
                         placedCount++;
                     tr.Commit();
                 }
             }
 
-            ed.WriteMessage("\nFTFLABELBETWEEN: {0} label(s) placed.\n", placedCount);
+            ed.WriteMessage("\n{0}: {1} label(s) placed.\n", commandName, placedCount);
         }
 
         private static ObjectId PickEdge(Editor ed, string message)
@@ -562,7 +583,7 @@ namespace FieldCodes.Cad
         private static bool PlaceOneBetweenLabel(
             Autodesk.AutoCAD.ApplicationServices.Document doc, Transaction tr,
             ObjectId firstId, ObjectId secondId, LineworkCatalog catalog,
-            FieldCodes.Settings.LineLabelSettings ls, string rulesVersion)
+            FieldCodes.Settings.LineLabelSettings ls, string rulesVersion, bool driveway)
         {
             var ed = doc.Editor;
             var db = doc.Database;
@@ -586,34 +607,59 @@ namespace FieldCodes.Cad
             // driveway between an asphalt edge and a curb labels as the asphalt.
             string how;
             var candidates = StagedCandidates(db, tr, curveA, catalog, out how);
-            if (candidates == null)
+            IList<string> wordings;
+            if (driveway)
             {
-                ed.WriteMessage(
-                    "\nThe first edge is not a configured line feature (layer " +
-                    "\"{0}\"). Pick the feature's own edge first -- nothing was " +
-                    "placed.", curveA.Layer);
-                return false;
+                // A driveway is labelled by its surface type, read from the first edge's
+                // layer; the edge need not be a configured feature.
+                wordings = FieldCodes.Linework.DrivewayWording.Choices(curveA.Layer, candidates, ls.DrivewayFormat);
+                if (wordings.Count == 0)
+                {
+                    ed.WriteMessage(
+                        "\nNo surface type can be read from the first edge's layer \"{0}\" " +
+                        "(expected a name like V-SURF-ASPH-E). Nothing was placed.", curveA.Layer);
+                    return false;
+                }
+                if (candidates == null)
+                {
+                    candidates = new List<LineFeatureRule>();
+                    how = "layer name";
+                }
             }
-
-            // Between two edges the label names the SURFACE -- ASPHALT, not EDGE OF
-            // PAVEMENT -- from the feature's configured between-wordings.
-            var wordings = LineworkCatalog.BetweenChoices(candidates);
-            if (wordings.Count == 0)
+            else
             {
-                ed.WriteMessage(
-                    "\nIdentified, but no labelling standard is configured for " +
-                    "{0}. Nothing was placed.", candidates[0].Code);
-                return false;
+                if (candidates == null)
+                {
+                    ed.WriteMessage(
+                        "\nThe first edge is not a configured line feature (layer " +
+                        "\"{0}\"). Pick the feature's own edge first -- nothing was " +
+                        "placed.", curveA.Layer);
+                    return false;
+                }
+
+                // Between two edges the label names the SURFACE -- ASPHALT, not EDGE OF
+                // PAVEMENT -- from the feature's configured between-wordings.
+                wordings = LineworkCatalog.BetweenChoices(candidates);
+                if (wordings.Count == 0)
+                {
+                    ed.WriteMessage(
+                        "\nIdentified, but no labelling standard is configured for " +
+                        "{0}. Nothing was placed.", candidates[0].Code);
+                    return false;
+                }
             }
             var labelText = wordings[0];
+            var sourceCode = candidates.Count > 0 ? candidates[0].Code : "DWY";
 
             var layerCatalog = FtfLineworkService.LayerNames(db, tr);
             var resolution = LabelLayerResolver.Resolve(curveA.Layer, candidates,
                                                         layerCatalog, ls.DefaultLabelLayer);
 
-            var featureName = string.Join(" / ", candidates
-                .Select(c => string.IsNullOrEmpty(c.Name) ? c.Code : c.Name)
-                .Distinct().ToArray());
+            var featureName = candidates.Count > 0
+                ? string.Join(" / ", candidates
+                    .Select(c => string.IsNullOrEmpty(c.Name) ? c.Code : c.Name)
+                    .Distinct().ToArray())
+                : curveA.Layer;
             ed.WriteMessage("\nFeature: {0} (first edge, by {1})", featureName, how);
             ed.WriteMessage("\nBetween: {0} and {1}", curveA.Layer, curveB.Layer);
             ed.WriteMessage("\nLabel layer: {0}", resolution.Describe());
@@ -653,7 +699,7 @@ namespace FieldCodes.Cad
 
                 PlaceLineLabel(db, tr, jig.Plan, jig.CurrentWording, textHeight,
                                styleId, layerId, resolution.Layer, ls.DrawMask,
-                               candidates[0].Code, rulesVersion, ManualLineLabelMark);
+                               sourceCode, rulesVersion, ManualLineLabelMark);
 
                 ed.WriteMessage("\nPlaced \"{0}\" on layer {1}, centred between the " +
                                 "edges.", jig.CurrentWording, resolution.Layer);

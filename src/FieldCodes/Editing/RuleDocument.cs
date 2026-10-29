@@ -262,6 +262,22 @@ namespace FieldCodes.Editing
                 foreach (var f in derivedFields) valid.Add(f);
                 foreach (var g in modifierGroups) valid.Add(g);
 
+                if (rule.Notes != null)
+                {
+                    // The note groups are fields too, and {notes} is all of them in order.
+                    foreach (var g in rule.Notes.GroupNames()) valid.Add(g);
+                    valid.Add("notes");
+                    if (!groups.Contains("mods"))
+                        problems.Add(where + "has notes but its pattern has no (?<mods>...) group, so no note is ever read.");
+
+                    foreach (var term in rule.Notes.Terms.Where(t => t != null && t.Regex != null))
+                    {
+                        var termGroups = new HashSet<string>(term.Regex.GetGroupNames().Where(NotNumeric), StringComparer.OrdinalIgnoreCase);
+                        termGroups.Add("token");
+                        CheckPlaceholders(where + "note '" + term.Match + "' wording", term.Text, termGroups, problems);
+                    }
+                }
+
                 if (rule.Label != null)
                 {
                     CheckPlaceholders(where + "label", rule.Label.Format, valid, problems);

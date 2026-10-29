@@ -62,6 +62,8 @@ namespace FieldCodes.Cad
                     Large("Stairs", "FTFLABELSTAIRS",
                         "Select the stair lines; the step count places itself. FTFS for short.",
                         FtfIcons.Stairs),
+                    Small("Driveway", "FTFLABELDRIVEWAY", FtfIcons.Between),
+                    Small("Bench", "FTFBENCH", FtfIcons.Bench),
                     Small("Spot Shots", "FTFSPOT", FtfIcons.Spot)));
 
                 tab.Panels.Add(Panel("Finish",
@@ -300,6 +302,17 @@ namespace FieldCodes.Cad
                 dc.DrawLine(GrayPen(2.5), new Point(4, 6), new Point(28, 6));
                 dc.DrawLine(GrayPen(2.5), new Point(4, 26), new Point(28, 26));
                 LabelBox(dc, 10, 12.5);
+            });
+        }
+
+        /// <summary>A bench: its outline, with the two end shots at the middles of its ends.</summary>
+        public static ImageSource Bench(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawRectangle(null, GrayPen(2.5), new Rect(4, 11, 24, 10));
+                dc.DrawEllipse(Blue, null, new Point(4, 16), 2.5, 2.5);
+                dc.DrawEllipse(Blue, null, new Point(28, 16), 2.5, 2.5);
             });
         }
 

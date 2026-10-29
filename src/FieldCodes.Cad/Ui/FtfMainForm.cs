@@ -1086,6 +1086,16 @@ namespace FieldCodes.Cad.Ui
                 "Label the space between two edges -- a driveway between its " +
                 "edge-of-asphalt lines. Pick both edges; the label rides the " +
                 "midline; click to place.");
+            CommandRow(stack, "FTFLABELDRIVEWAY   (or FTFDWY)",
+                "Label a driveway: pick its two edges as for FTFLABELBETWEEN. The " +
+                "label is the first edge's surface type, read from its layer, with " +
+                "DWY after it -- ASPH DWY off V-SURF-ASPH-E. W switches to the " +
+                "spelled-out word where the feature has one (ASPHALT DWY).");
+            CommandRow(stack, "FTFBENCH",
+                "Draw a bench from its two end shots: pick the points (or the line " +
+                "between them). The depth comes from the notes (D1.5, 1.5D, DEPTH " +
+                "18IN) or is asked for; the outline is offset half the depth each " +
+                "side with the ends closed, labelled with its size, BENCH 3'x1.5'.");
             CommandRow(stack, "FTFLABELSTAIRS   (or FTFS)",
                 "Label a staircase: select the stair lines (each tread edge is one " +
                 "line) and the step-count label places itself centred in them.");
@@ -1146,7 +1156,8 @@ namespace FieldCodes.Cad.Ui
                 "The optional bulk line-label pass. Off by default in Settings; never " +
                 "touches labels placed with FTFLABELLINE.");
             CommandRow(stack, "FTFDRAWLINE / FTFDRAFTCLEAN",
-                "Draft cadastral lines by bearing and distance, and remove them.");
+                "Draft cadastral lines by bearing and distance, and remove them. " +
+                "FTFDRAFTCLEAN also manages benches drawn with FTFBENCH.");
 
             CommandGroup(stack, "Sheet production");
             CommandRow(stack, "FTFSHEETPLAN",

@@ -105,6 +105,10 @@ namespace FieldCodes
         [JsonProperty("modifiers")]
         public List<ModifierRule> Modifiers { get; set; }
 
+        /// <summary>FTFBENCH: the outline and size label drawn from a bench's two end shots.</summary>
+        [JsonProperty("bench")]
+        public BenchRule Bench { get; set; }
+
         public RulesConfig()
         {
             UnitsPerFoot = 1.0;
@@ -125,6 +129,7 @@ namespace FieldCodes
             SpanMarkers = new List<SpanMarkerRule>();
             StairsLabelFormat = "{count} STEPS";
             ControlCodes = new List<string>();
+            Bench = new BenchRule();
         }
 
         public static RulesConfig Load(string path)
@@ -183,6 +188,14 @@ namespace FieldCodes
             if (Codes.Count == 0)
                 problems.Add("No code rules defined.");
 
+            if (Bench == null) Bench = new BenchRule();
+            if (string.IsNullOrWhiteSpace(Bench.Layer))
+                problems.Add("bench: 'layer' is required (the layer the bench outline is drawn on).");
+            if (string.IsNullOrWhiteSpace(Bench.LabelFormat))
+                problems.Add("bench: 'labelFormat' is required.");
+            else if (string.IsNullOrWhiteSpace(Bench.LabelLayer))
+                problems.Add("bench: a label needs a 'labelLayer'.");
+
             // labelPlacement is not validated here any more. It is seed data for a
             // first-time migration into ftf-settings.json, and MigrateFrom already
             // ignores values that make no sense. A stale seed must not stop the
@@ -229,6 +242,8 @@ namespace FieldCodes
                 {
                     problems.Add(string.Format("Code rule '{0}' has an invalid regex: {1}", c.Id, ex.Message));
                 }
+
+                CompileNotes(c, problems);
             }
 
             var dupIds = Codes.GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase)
@@ -268,6 +283,49 @@ namespace FieldCodes
             if (problems.Count > 0)
                 throw new ConfigException("Rules file is invalid:" + Environment.NewLine +
                                           string.Join(Environment.NewLine, problems.ToArray()));
+        }
+
+        /// <summary>
+        /// A notes vocabulary is compiled with the rule: each term is anchored to the start
+        /// of the remaining words and must end on a word boundary, so "TEL" never reads the
+        /// front of "TELCO" and a term cannot stop half way through a word.
+        /// </summary>
+        private static void CompileNotes(CodeRule c, List<string> problems)
+        {
+            var notes = c.Notes;
+            if (notes == null) return;
+            if (notes.Terms == null) notes.Terms = new List<NoteTerm>();
+            if (notes.Groups == null) notes.Groups = new Dictionary<string, NoteGroupRule>(StringComparer.OrdinalIgnoreCase);
+            if (notes.Order == null) notes.Order = new List<string>();
+            if (string.IsNullOrWhiteSpace(notes.UnknownGroup) && notes.Unknown != UnknownNoteMode.Refuse)
+                problems.Add(string.Format("Code rule '{0}': notes keep unknown words but name no 'unknownGroup' to keep them in.", c.Id));
+
+            for (var i = 0; i < notes.Terms.Count; i++)
+            {
+                var term = notes.Terms[i];
+                var where = string.Format("Code rule '{0}' notes term {1}", c.Id, i + 1);
+                if (term == null || string.IsNullOrWhiteSpace(term.Match))
+                {
+                    problems.Add(where + " has no 'match'.");
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(term.Group))
+                    problems.Add(where + " ('" + term.Match + "') names no 'group'.");
+                try
+                {
+                    term.Regex = new Regex(@"^(?:" + term.Match + @")(?=\s|$)",
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                    if (term.Regex.IsMatch(string.Empty))
+                    {
+                        problems.Add(where + " ('" + term.Match + "') matches nothing at all, so it would read every word.");
+                        term.Regex = null;
+                    }
+                }
+                catch (ArgumentException ex)
+                {
+                    problems.Add(where + " has an invalid regex: " + ex.Message);
+                }
+            }
         }
     }
 
@@ -313,6 +371,34 @@ namespace FieldCodes
 
     /// <summary>One span marker: the token shot in the field ("GATE") and what the
     /// label between the marked pair says.</summary>
+    /// <summary>
+    /// FTFBENCH. A crew shoots a bench as two points, one at the middle of each end, and
+    /// notes its depth (and often its height). The outline is the line between the shots
+    /// offset half the depth to each side, ends closed; the label gives its size.
+    /// </summary>
+    public sealed class BenchRule
+    {
+        /// <summary>Codes a bench end is shot with. Used to say when a picked point is
+        /// coded as something else; a picked point is never refused for its code.</summary>
+        [JsonProperty("codes")] public List<string> Codes { get; set; }
+
+        [JsonProperty("layer")] public string Layer { get; set; }
+        [JsonProperty("labelLayer")] public string LabelLayer { get; set; }
+
+        /// <summary>{length} (between the end shots), {depth} and {height} in feet, with an
+        /// optional number format: "BENCH {length:0.#}'x{depth:0.#}'". [ ] and \P work as
+        /// in point labels.</summary>
+        [JsonProperty("labelFormat")] public string LabelFormat { get; set; }
+
+        public BenchRule()
+        {
+            Codes = new List<string> { "BENCH", "BNCH", "BENCHL" };
+            Layer = "V-SITE-FURN-E";
+            LabelLayer = "V-SITE-TEXT";
+            LabelFormat = "BENCH {length:0.#}'x{depth:0.#}'";
+        }
+    }
+
     public sealed class SpanMarkerRule
     {
         [JsonProperty("token")] public string Token { get; set; }
@@ -452,6 +538,14 @@ namespace FieldCodes
         [JsonProperty("tagPrefix")] public string TagPrefix { get; set; }
         [JsonProperty("validate")] public List<RangeCheck> Validate { get; set; }
 
+        /// <summary>
+        /// The words a crew writes after the code ("PP 1234 PSE XFMR TEL"), read into
+        /// named groups the label can place in a fixed order. Absent means the old,
+        /// strict behaviour: every trailing word must be a modifier or the point is an
+        /// error. See <see cref="NotesRule"/>.
+        /// </summary>
+        [JsonProperty("notes")] public NotesRule Notes { get; set; }
+
         [JsonIgnore] public Regex Regex { get; set; }
 
         public CodeRule()
@@ -492,8 +586,121 @@ namespace FieldCodes
         public DripRule() { Unify = true; }
     }
 
+    /// <summary>What a rule does with a note word that is in none of its terms.</summary>
+    public enum UnknownNoteMode
+    {
+        /// <summary>Labelled as written, in the unknown group; an Info diagnostic only.</summary>
+        Keep,
+        /// <summary>Labelled as written, and the point is flagged (Warning) so the office sees
+        /// the word and can add it to the vocabulary.</summary>
+        Flag,
+        /// <summary>The point is an error and is not drawn, as for an unknown modifier.</summary>
+        Refuse
+    }
+
+    /// <summary>How the values of one note group are put in order.</summary>
+    public enum NoteGroupOrder
+    {
+        /// <summary>In the order the terms are listed, whatever order the crew wrote them in:
+        /// "XFMR TEL" and "TEL XFMR" label the same.</summary>
+        Vocabulary,
+        /// <summary>In the order they were written: sign wording such as NO PARKING ANYTIME.</summary>
+        AsShot
+    }
+
+    /// <summary>
+    /// A feature's field-note vocabulary. The words after the code are read left to right;
+    /// at each word the rule's own terms are tried first (a term may span several words,
+    /// "DEAD END", and capture values, "SPEED 25"), then the global modifiers (DEAD, REM,
+    /// PROT), and whatever is left is handled by <see cref="Unknown"/>. Each value lands in
+    /// its term's group; the label format names the groups ({owner}, {attach}) in the order
+    /// it wants them read, so the order the crew typed the notes in never changes the label.
+    /// </summary>
+    public sealed class NotesRule
+    {
+        [JsonProperty("unknown")]
+        [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public UnknownNoteMode Unknown { get; set; }
+
+        /// <summary>Group that unknown words are kept in. Read as written (AsShot) unless
+        /// <see cref="Groups"/> says otherwise.</summary>
+        [JsonProperty("unknownGroup")] public string UnknownGroup { get; set; }
+
+        [JsonProperty("terms")] public List<NoteTerm> Terms { get; set; }
+
+        /// <summary>Per-group ordering and joiner. A group not listed reads in vocabulary
+        /// order, joined by ", ".</summary>
+        [JsonProperty("groups")] public Dictionary<string, NoteGroupRule> Groups { get; set; }
+
+        /// <summary>Group order for the {notes} placeholder. Absent: the order the groups
+        /// first appear in the terms, the unknown group last.</summary>
+        [JsonProperty("order")] public List<string> Order { get; set; }
+
+        public NotesRule()
+        {
+            Unknown = UnknownNoteMode.Flag;
+            UnknownGroup = "other";
+            Terms = new List<NoteTerm>();
+            Groups = new Dictionary<string, NoteGroupRule>(StringComparer.OrdinalIgnoreCase);
+            Order = new List<string>();
+        }
+
+        /// <summary>Every group a label may name: the terms' groups, the unknown group, in
+        /// reading order for {notes}.</summary>
+        public IList<string> GroupNames()
+        {
+            var names = new List<string>();
+            foreach (var g in Order ?? new List<string>())
+                if (!string.IsNullOrWhiteSpace(g) && !names.Contains(g, StringComparer.OrdinalIgnoreCase)) names.Add(g);
+            foreach (var t in Terms ?? new List<NoteTerm>())
+                if (t != null && !string.IsNullOrWhiteSpace(t.Group) && !names.Contains(t.Group, StringComparer.OrdinalIgnoreCase)) names.Add(t.Group);
+            if (!string.IsNullOrWhiteSpace(UnknownGroup) && !names.Contains(UnknownGroup, StringComparer.OrdinalIgnoreCase)) names.Add(UnknownGroup);
+            return names;
+        }
+
+        public NoteGroupRule GroupRule(string name)
+        {
+            NoteGroupRule rule;
+            if (name != null && Groups != null && Groups.TryGetValue(name, out rule) && rule != null) return rule;
+            return null;
+        }
+    }
+
+    /// <summary>One entry of a notes vocabulary: the words a crew writes, the wording the
+    /// label uses, and the group it belongs to.</summary>
+    public sealed class NoteTerm
+    {
+        /// <summary>Regex over whole words, case-insensitive: "XFMR|TRANS", "NO\s+PARK(?:ING)?",
+        /// "SPEED\s+(?&lt;mph&gt;[0-9]+)". It must end on a word boundary; it may span words.</summary>
+        [JsonProperty("match")] public string Match { get; set; }
+
+        /// <summary>The label wording. May use the term's own named groups ({mph}) and
+        /// {token} (the words as written). Absent: the words as written.</summary>
+        [JsonProperty("text")] public string Text { get; set; }
+
+        [JsonProperty("group")] public string Group { get; set; }
+
+        [JsonIgnore] public Regex Regex { get; set; }
+    }
+
+    public sealed class NoteGroupRule
+    {
+        [JsonProperty("order")]
+        [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public NoteGroupOrder? Order { get; set; }
+
+        [JsonProperty("joiner")] public string Joiner { get; set; }
+    }
+
     public sealed class LabelRule
     {
+        /// <summary>
+        /// The label template. {name} placeholders take the pattern's named groups, the
+        /// derived fields and, for a rule with notes, the note groups. Two additions for
+        /// labels built from notes: text in [square brackets] is kept only when a
+        /// placeholder inside it has a value ("POLE[ {number}]"), and \P starts a new line;
+        /// a line left with nothing on it is dropped. Brackets are literal when doubled.
+        /// </summary>
         [JsonProperty("format")] public string Format { get; set; }
 
         /// <summary>

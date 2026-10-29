@@ -148,7 +148,7 @@ namespace FieldCodes
 
             ResolveSpecies(p, rule);
             ResolveStems(p, rule);
-            ResolveModifiers(p, normalized);
+            ResolveModifiers(p, rule);
             ResolveDrip(p, rule);
             ResolveRotation(p, rule);
             ResolveDrawing(p, rule);
@@ -264,66 +264,198 @@ namespace FieldCodes
             }
         }
 
-        private void ResolveModifiers(ParsedPoint p, string normalized)
+        private void ResolveModifiers(ParsedPoint p, CodeRule rule)
         {
             var modsText = Get(p.Fields, "mods");
             if (string.IsNullOrEmpty(modsText)) return;
 
             var tokens = modsText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var token in tokens)
+            var notes = rule.Notes;
+            var values = new List<NoteValue>();
+
+            var i = 0;
+            while (i < tokens.Length)
             {
+                // The rule's own vocabulary first: it may span words ("DEAD END" on a sign
+                // is wording, not the DEAD modifier) and it is the more specific reading.
+                if (notes != null)
+                {
+                    var consumed = ReadTerm(notes, tokens, i, values);
+                    if (consumed > 0) { i += consumed; continue; }
+                }
+
+                var token = tokens[i];
                 var hit = _cfg.Modifiers.FirstOrDefault(m => m.Regex.IsMatch(token));
-                if (hit == null)
+                if (hit != null)
+                {
+                    ApplyModifier(p, hit, token);
+                    i++;
+                    continue;
+                }
+
+                if (notes == null)
                 {
                     // Never silently drop an unrecognised modifier. A token like
                     // DEAD-PROTECTED that the parser ignores is how a tree ends up
                     // on the wrong plan sheet.
                     p.Add(Severity.Error, "MODIFIER",
                         string.Format("Unrecognised modifier token '{0}'.", token));
+                    i++;
                     continue;
                 }
 
-                var m2 = hit.Regex.Match(token);
-                var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                CaptureGroups(m2, hit.Regex, fields);
-
-                foreach (var kv in fields)
-                    p.Fields[kv.Key] = kv.Value;
-
-                p.Modifiers.Add(new ResolvedModifier(hit.Id, token, hit.Priority, fields));
-
-                if (hit.Flag)
-                    p.Add(Severity.Warning, "FLAG",
-                        string.Format("Modifier '{0}' is flagged for review.", hit.Id));
-
-                if (!string.IsNullOrEmpty(hit.StemCountFrom))
+                // A note word in no term. Kept as written (and said so), or refused --
+                // never dropped without a word.
+                switch (notes.Unknown)
                 {
-                    var cs = Get(fields, hit.StemCountFrom);
-                    int count;
-                    if (int.TryParse(cs, NumberStyles.Integer, CultureInfo.InvariantCulture, out count))
-                    {
-                        p.StemCount = count;
-                        if (count < 2)
-                            p.Add(Severity.Warning, "CLUSTER",
-                                string.Format("Cluster count of {0} on a cluster modifier is probably a typo.", count));
-                        if (p.Stems.Count > 1 && p.Stems.Count != count)
-                            p.Add(Severity.Warning, "CLUSTER",
-                                string.Format("Cluster count is {0} but {1} stem diameters were recorded.",
-                                    count, p.Stems.Count));
-                    }
-                    else
-                    {
-                        p.Add(Severity.Error, "CLUSTER",
-                            string.Format("Cluster count '{0}' is not an integer.", cs));
-                    }
+                    case UnknownNoteMode.Refuse:
+                        p.Add(Severity.Error, "NOTE",
+                            string.Format("'{0}' is not in the {1} notes vocabulary.", token, rule.Id));
+                        break;
+                    case UnknownNoteMode.Flag:
+                        p.Add(Severity.Warning, "NOTE",
+                            string.Format("'{0}' is not in the {1} notes vocabulary; labelled as written. Add it to the vocabulary to word it.", token, rule.Id));
+                        values.Add(new NoteValue(notes.UnknownGroup, token.ToUpperInvariant(), int.MaxValue, i));
+                        break;
+                    default:
+                        p.Add(Severity.Info, "NOTE",
+                            string.Format("'{0}' labelled as written.", token));
+                        values.Add(new NoteValue(notes.UnknownGroup, token.ToUpperInvariant(), int.MaxValue, i));
+                        break;
                 }
+                i++;
             }
+
+            if (notes != null) FillNoteGroups(p, notes, values);
 
             // Apply order is by priority so that reordering tokens in the field note
             // cannot change the resulting label.
             var ordered = p.Modifiers.OrderBy(m => m.Priority).ThenBy(m => m.Id).ToList();
             p.Modifiers.Clear();
             foreach (var m in ordered) p.Modifiers.Add(m);
+        }
+
+        private void ApplyModifier(ParsedPoint p, ModifierRule hit, string token)
+        {
+            var m2 = hit.Regex.Match(token);
+            var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            CaptureGroups(m2, hit.Regex, fields);
+
+            foreach (var kv in fields)
+                p.Fields[kv.Key] = kv.Value;
+
+            p.Modifiers.Add(new ResolvedModifier(hit.Id, token, hit.Priority, fields));
+
+            if (hit.Flag)
+                p.Add(Severity.Warning, "FLAG",
+                    string.Format("Modifier '{0}' is flagged for review.", hit.Id));
+
+            if (!string.IsNullOrEmpty(hit.StemCountFrom))
+            {
+                var cs = Get(fields, hit.StemCountFrom);
+                int count;
+                if (int.TryParse(cs, NumberStyles.Integer, CultureInfo.InvariantCulture, out count))
+                {
+                    p.StemCount = count;
+                    if (count < 2)
+                        p.Add(Severity.Warning, "CLUSTER",
+                            string.Format("Cluster count of {0} on a cluster modifier is probably a typo.", count));
+                    if (p.Stems.Count > 1 && p.Stems.Count != count)
+                        p.Add(Severity.Warning, "CLUSTER",
+                            string.Format("Cluster count is {0} but {1} stem diameters were recorded.",
+                                count, p.Stems.Count));
+                }
+                else
+                {
+                    p.Add(Severity.Error, "CLUSTER",
+                        string.Format("Cluster count '{0}' is not an integer.", cs));
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ notes
+
+        /// <summary>One note word (or phrase) read into a group.</summary>
+        private sealed class NoteValue
+        {
+            public readonly string Group;
+            public readonly string Text;
+            public readonly int TermIndex;
+            public readonly int TokenIndex;
+
+            public NoteValue(string group, string text, int termIndex, int tokenIndex)
+            {
+                Group = group; Text = text; TermIndex = termIndex; TokenIndex = tokenIndex;
+            }
+        }
+
+        /// <summary>
+        /// Tries the terms, in the order they are listed, at word <paramref name="start"/>.
+        /// Returns how many words the first matching term took, 0 when none matched.
+        /// </summary>
+        private static int ReadTerm(NotesRule notes, string[] tokens, int start, List<NoteValue> values)
+        {
+            var rest = string.Join(" ", tokens, start, tokens.Length - start);
+            for (var t = 0; t < notes.Terms.Count; t++)
+            {
+                var term = notes.Terms[t];
+                if (term == null || term.Regex == null) continue;
+                var m = term.Regex.Match(rest);
+                if (!m.Success || m.Length == 0) continue;
+
+                var words = m.Value.Trim();
+                var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                CaptureGroups(m, term.Regex, fields);
+                fields["token"] = words.ToUpperInvariant();
+                var text = string.IsNullOrWhiteSpace(term.Text)
+                    ? words.ToUpperInvariant()
+                    : Expand(term.Text, fields).Trim();
+                if (text.Length > 0) values.Add(new NoteValue(term.Group, text, t, start));
+                return words.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Puts each group's values in its reading order (the vocabulary's, or as written)
+        /// and stores the joined text as a field the label can name. A field the pattern
+        /// already captured under the same name keeps its value first.
+        /// </summary>
+        private static void FillNoteGroups(ParsedPoint p, NotesRule notes, List<NoteValue> values)
+        {
+            var groupTexts = new List<string>();
+            foreach (var group in notes.GroupNames())
+            {
+                var rule = notes.GroupRule(group);
+                var order = rule != null && rule.Order.HasValue
+                    ? rule.Order.Value
+                    : (string.Equals(group, notes.UnknownGroup, StringComparison.OrdinalIgnoreCase)
+                        ? NoteGroupOrder.AsShot : NoteGroupOrder.Vocabulary);
+                var joiner = rule != null && rule.Joiner != null
+                    ? rule.Joiner
+                    : (order == NoteGroupOrder.AsShot ? " " : ", ");
+
+                var mine = values.Where(v => string.Equals(v.Group, group, StringComparison.OrdinalIgnoreCase));
+                mine = order == NoteGroupOrder.AsShot
+                    ? mine.OrderBy(v => v.TokenIndex)
+                    : mine.OrderBy(v => v.TermIndex).ThenBy(v => v.TokenIndex);
+
+                var texts = new List<string>();
+                foreach (var v in mine)
+                    if (!texts.Contains(v.Text, StringComparer.OrdinalIgnoreCase)) texts.Add(v.Text);
+                if (texts.Count == 0) continue;
+
+                var joined = string.Join(joiner, texts.ToArray());
+                string captured;
+                if (p.Fields.TryGetValue(group, out captured) && !string.IsNullOrWhiteSpace(captured) &&
+                    !texts.Contains(captured, StringComparer.OrdinalIgnoreCase))
+                    joined = captured + joiner + joined;
+                p.Fields[group] = joined;
+                groupTexts.Add(joined);
+            }
+
+            if (groupTexts.Count > 0 && !p.Fields.ContainsKey("notes"))
+                p.Fields["notes"] = string.Join(" ", groupTexts.ToArray());
         }
 
         private void ResolveDrip(ParsedPoint p, CodeRule rule)
@@ -395,12 +527,12 @@ namespace FieldCodes
                 var mr = _cfg.Modifiers.First(x => x.Id == m.Id);
                 if (!string.IsNullOrEmpty(mr.Block)) block = mr.Block;
                 if (!string.IsNullOrEmpty(mr.LabelFormat)) label = mr.LabelFormat;
-                if (!string.IsNullOrEmpty(mr.LabelSuffix)) label = (label ?? string.Empty) + mr.LabelSuffix;
+                if (!string.IsNullOrEmpty(mr.LabelSuffix)) label = AppendToFirstLine(label, mr.LabelSuffix);
                 if (!string.IsNullOrEmpty(mr.LayerSuffix)) suffix += mr.LayerSuffix;
             }
 
             p.BlockName = Expand(block, p.Fields);
-            p.LabelText = Expand(label, p.Fields);
+            ComposeLabel(p, label);
             p.BlockLayer = Append(Expand(blockLayer, p.Fields), suffix);
             p.LabelLayer = Append(Expand(labelLayer, p.Fields), suffix);
             p.DripLayer = Append(Expand(dripLayer, p.Fields), suffix);
@@ -434,6 +566,115 @@ namespace FieldCodes
                     }
                 }
             }
+        }
+
+        // ------------------------------------------------------------------ label text
+
+        private const string MTextLineBreak = "\\P";
+
+        /// <summary>
+        /// The template's first line gets the modifier's suffix: "(DEAD)" belongs beside
+        /// "POLE 1234", not at the bottom of a three-line label.
+        /// </summary>
+        private static string AppendToFirstLine(string label, string suffix)
+        {
+            if (string.IsNullOrEmpty(label)) return (label ?? string.Empty) + suffix;
+            var breakAt = FirstBreak(label);
+            return breakAt < 0 ? label + suffix : label.Insert(breakAt, suffix);
+        }
+
+        private static int FirstBreak(string template)
+        {
+            var mtext = template.IndexOf(MTextLineBreak, StringComparison.Ordinal);
+            var newline = template.IndexOf('\n');
+            if (mtext < 0) return newline;
+            if (newline < 0) return mtext;
+            return Math.Min(mtext, newline);
+        }
+
+        /// <summary>
+        /// Builds the label. A plain one-line template expands exactly as it always has.
+        /// A template with [optional parts] or line breaks (\P) is expanded line by line:
+        /// optional parts with no value vanish, spaces collapse, and an empty line is
+        /// dropped -- so a pole with no attachments has no "W/" line at all.
+        /// </summary>
+        private static void ComposeLabel(ParsedPoint p, string template)
+        {
+            p.LabelLines.Clear();
+            if (template == null) { p.LabelText = null; return; }
+
+            if (template.IndexOf('[') < 0 && FirstBreak(template) < 0)
+            {
+                p.LabelText = Expand(template, p.Fields);
+                if (!string.IsNullOrEmpty(p.LabelText)) p.LabelLines.Add(p.LabelText);
+                return;
+            }
+
+            foreach (var line in ComposeLines(template, p.Fields))
+                p.LabelLines.Add(line);
+            p.LabelText = string.Join(MTextLineBreak, p.LabelLines.ToArray());
+        }
+
+        /// <summary>
+        /// The label lines a template produces from the fields. Public so the setup window
+        /// and the bench and driveway commands use the same rules for their own templates.
+        /// </summary>
+        public static IList<string> ComposeLines(string template, IDictionary<string, string> fields)
+        {
+            var lines = new List<string>();
+            if (string.IsNullOrEmpty(template)) return lines;
+            var normalized = template.Replace("\r\n", "\n").Replace(MTextLineBreak, "\n");
+            foreach (var raw in normalized.Split('\n'))
+            {
+                var line = Expand(ResolveOptional(raw, fields), fields);
+                line = Regex.Replace(line, " {2,}", " ").Trim();
+                if (line.Length > 0) lines.Add(line);
+            }
+            return lines;
+        }
+
+        /// <summary>Keeps a [bracketed] part only when a placeholder inside it has a value;
+        /// a part with no placeholder is kept as written. [[ and ]] are literal brackets.</summary>
+        private static string ResolveOptional(string line, IDictionary<string, string> fields)
+        {
+            if (line.IndexOf('[') < 0 && line.IndexOf(']') < 0) return line;
+            var sb = new System.Text.StringBuilder(line.Length);
+            var i = 0;
+            while (i < line.Length)
+            {
+                var c = line[i];
+                if ((c == '[' || c == ']') && i + 1 < line.Length && line[i + 1] == c)
+                {
+                    sb.Append(c);
+                    i += 2;
+                    continue;
+                }
+                if (c == '[')
+                {
+                    var close = line.IndexOf(']', i + 1);
+                    if (close < 0) { sb.Append(line.Substring(i)); break; }
+                    var inner = line.Substring(i + 1, close - i - 1);
+                    if (SegmentHasValue(inner, fields)) sb.Append(inner);
+                    i = close + 1;
+                    continue;
+                }
+                sb.Append(c);
+                i++;
+            }
+            return sb.ToString();
+        }
+
+        private static bool SegmentHasValue(string segment, IDictionary<string, string> fields)
+        {
+            var any = false;
+            foreach (Match m in Placeholder.Matches(segment))
+            {
+                any = true;
+                string value;
+                if (fields.TryGetValue(m.Groups["name"].Value, out value) && !string.IsNullOrWhiteSpace(value))
+                    return true;
+            }
+            return !any;
         }
 
         private static string Append(string layer, string suffix)

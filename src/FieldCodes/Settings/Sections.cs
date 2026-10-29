@@ -316,7 +316,7 @@ namespace FieldCodes.Settings
     public sealed class LineLabelSettings : ISettingsSection
     {
         public string Title { get { return "Line Labels"; } }
-        public string AffectedCommands { get { return "FTFLINELABELS"; } }
+        public string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
 
         /// <summary>Master switch for the linework labelling stage.</summary>
         [JsonProperty("enabled")]
@@ -363,6 +363,11 @@ namespace FieldCodes.Settings
         [JsonProperty("drawMask")]
         public bool DrawMask { get; set; }
 
+        /// <summary>FTFLABELDRIVEWAY's wording. {type} is the first edge's surface type read
+        /// from its layer (V-SURF-ASPH-E gives ASPH): "{type} DWY" labels "ASPH DWY".</summary>
+        [JsonProperty("drivewayFormat")]
+        public string DrivewayFormat { get; set; }
+
         public LineLabelSettings() { RestoreDefaults(); }
 
         public void RestoreDefaults()
@@ -382,6 +387,7 @@ namespace FieldCodes.Settings
             DefaultPlacement = "OnLine";
             SideOffsetFeet = 1.0;
             DrawMask = true;
+            DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
         }
 
         public void Validate(ICollection<string> problems)
@@ -398,6 +404,10 @@ namespace FieldCodes.Settings
                 problems.Add("Line labels: a default label layer is required.");
             Require.NotNegative(SideOffsetFeet,
                 "Line labels: side offset cannot be negative.", problems);
+            if (string.IsNullOrWhiteSpace(DrivewayFormat))
+                DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
+            else if (DrivewayFormat.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)
+                problems.Add("Line labels: the driveway wording must contain {type} (the surface type read from the edge's layer), e.g. \"{type} DWY\".");
         }
     }
 

@@ -444,9 +444,10 @@ namespace FieldCodes.Cad.Setup
         private TextBox _minLength;
         private TextBox _endClearance;
         private CheckBox _mask;
+        private TextBox _drivewayFormat;
 
         public override string Title { get { return "Line Labels"; } }
-        public override string AffectedCommands { get { return "FTFLINELABELS"; } }
+        public override string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
 
         protected override void BuildBody()
         {
@@ -497,6 +498,12 @@ namespace FieldCodes.Cad.Setup
             _mask = CheckRow("Draw a mask under each label",
                 "The mask rotates with the text.");
 
+            Heading("Driveways (FTFLABELDRIVEWAY)");
+            _drivewayFormat = TextRow("Driveway wording",
+                "Pick a driveway's two edges as for FTFLABELBETWEEN. {type} is the first " +
+                "edge's surface type read from its layer: V-SURF-ASPH-E gives ASPH, so " +
+                "\"{type} DWY\" labels ASPH DWY. Must contain {type}.", 160);
+
             Heading("Automatic pass spacing (survey feet)");
             Note("These three only shape the automatic pass. With FTFLABELLINE you " +
                  "decide where every label goes, so none of them apply there.");
@@ -524,6 +531,7 @@ namespace FieldCodes.Cad.Setup
             _minLength.Text = Fmt(s.LineLabels.MinLengthFeet);
             _repeatInterval.Text = Fmt(s.LineLabels.RepeatIntervalFeet);
             _endClearance.Text = Fmt(s.LineLabels.EndClearanceFeet);
+            _drivewayFormat.Text = s.LineLabels.DrivewayFormat;
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
@@ -563,6 +571,12 @@ namespace FieldCodes.Cad.Setup
             ReadDouble(_endClearance, "Line labels: end clearance", v => v >= 0,
                        "cannot be negative", problems, ref clearance);
             s.LineLabels.EndClearanceFeet = clearance;
+
+            var driveway = (_drivewayFormat.Text ?? string.Empty).Trim();
+            if (driveway.Length > 0 && driveway.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)
+                problems.Add("Line labels: the driveway wording must contain {type}, e.g. \"{type} DWY\".");
+            else
+                s.LineLabels.DrivewayFormat = driveway.Length > 0 ? driveway : FieldCodes.Linework.DrivewayWording.DefaultFormat;
         }
 
         public override void RestoreDefaults(FtfSettings s)
@@ -1233,7 +1247,7 @@ namespace FieldCodes.Cad.Setup
                         .First(d => d.Severity == Severity.Error).Message;
                 else
                     _testResult.Text = string.Format("OK - label \"{0}\"{1}",
-                        parsed.LabelText,
+                        parsed.LabelDisplay,
                         parsed.DripRadius.HasValue
                             ? ", drip radius " + Fmt(parsed.DripRadius.Value)
                             : string.Empty);

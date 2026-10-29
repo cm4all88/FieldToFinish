@@ -318,11 +318,22 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public void Draw() { }
         public bool IsPlanar { get; }
         public DBObjectCollection GetOffsetCurves(double offset) { return new DBObjectCollection(); }
+        public HyperLinkCollection Hyperlinks { get; } = new HyperLinkCollection();
         public void IntersectWith(Entity other, Intersect type, Point3dCollection points, IntPtr a, IntPtr b) { }
         public void IntersectWith(Entity other, Intersect type, Plane plane, Point3dCollection points, IntPtr a, IntPtr b) { }
     }
 
     public enum Intersect { OnBothOperands = 0, ExtendThis = 1, ExtendArgument = 2, ExtendBoth = 3 }
+
+    public sealed class HyperLink { public string Name { get; set; } public string Description { get; set; } public string SubLocation { get; set; } }
+    public sealed class HyperLinkCollection : IEnumerable
+    {
+        private readonly List<HyperLink> _links = new List<HyperLink>();
+        public int Count { get { return _links.Count; } }
+        public HyperLink this[int i] { get { return _links[i]; } }
+        public void Add(HyperLink link) { _links.Add(link); }
+        public IEnumerator GetEnumerator() { return _links.GetEnumerator(); }
+    }
 
     public sealed class DBObjectCollection : IEnumerable<DBObject>, IDisposable
     {
@@ -1250,7 +1261,11 @@ namespace Autodesk.AutoCAD.EditorInput
         public void SwitchToModelSpace() { }
         public void SwitchToPaperSpace() { }
         public int ActiveViewportId { get { return 0; } }
+        public PromptResult Drag(Jig jig) { return new PromptResult(); }
+        public PromptResult Drag(Jig jig, PromptDragOptions options) { return new PromptResult(); }
     }
+
+    public sealed class PromptDragOptions : PromptOptions { public PromptDragOptions(string message) : base(message) { } }
 
     public sealed class ViewTableRecord : IDisposable
     {
@@ -1464,7 +1479,7 @@ namespace Autodesk.Civil.DatabaseServices
         IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
     }
 
-    public class FeatureLine : Entity
+    public class FeatureLine : Curve
     {
         public int PointsCount { get; }
         public double Length2D { get; }
@@ -1482,4 +1497,71 @@ namespace Autodesk.Civil.DatabaseServices
     public class Alignment : Entity { public string Name { get; set; } public double Length { get; } public double StartingStation { get; } public double EndingStation { get; } public ObjectId StyleId { get; set; } }
     public class Parcel : Entity { public string Name { get; set; } public double Area { get; } public double Perimeter { get; } }
     public class TinSurface : Entity { public string Name { get; set; } public double FindElevationAtXY(double x, double y) { return 0; } }
+}
+
+namespace Autodesk.AutoCAD.EditorInput
+{
+    using Autodesk.AutoCAD.DatabaseServices;
+    using Autodesk.AutoCAD.Geometry;
+
+    // Jigs, as AcMgd declares them.
+    public enum SamplerStatus { OK = 0, NoChange = 1, Cancel = 2 }
+
+    [System.Flags]
+    public enum UserInputControls
+    {
+        Accept3dCoordinates = 0x80, NoZeroResponseAccepted = 0x2, NoNegativeResponseAccepted = 0x4,
+        DoNotUpdateLastPoint = 0x8, NullResponseAccepted = 0x20, GovernedByOrthoMode = 0x200,
+        UseBasePointElevation = 0x1000, DoNotEchoCancelForCtrlC = 0x4000, NoDwgLimitsChecking = 0x10000,
+        AcceptMouseUpAsPoint = 0x80000, AnyBlankTerminatesInput = 0x40000, InitialBlankTerminatesInput = 0x200000
+    }
+
+    public abstract class JigPromptOptions : PromptOptions
+    {
+        protected JigPromptOptions(string message) : base(message) { }
+        public UserInputControls UserInputControls { get; set; }
+        public CursorType Cursor { get; set; }
+    }
+
+    public enum CursorType { NotSpecified = 0, NoSpecialCursor = -1, Crosshair = 1, RectangularCursor = 2, RubberBand = 3 }
+
+    public sealed class JigPromptPointOptions : JigPromptOptions
+    {
+        public JigPromptPointOptions() : base(string.Empty) { }
+        public JigPromptPointOptions(string message) : base(message) { }
+        public JigPromptPointOptions(string messageAndKeywords, string globalKeywords) : base(messageAndKeywords) { }
+        public bool UseBasePoint { get; set; }
+        public Point3d BasePoint { get; set; }
+    }
+
+    public sealed class JigPrompts
+    {
+        public PromptPointResult AcquirePoint(JigPromptPointOptions options) { return new PromptPointResult(); }
+        public PromptPointResult AcquirePoint(string message) { return new PromptPointResult(); }
+        public PromptDoubleResult AcquireDistance(string message) { return new PromptDoubleResult(); }
+        public PromptDoubleResult AcquireAngle(string message) { return new PromptDoubleResult(); }
+    }
+
+    public abstract class Jig
+    {
+        protected abstract SamplerStatus Sampler(JigPrompts prompts);
+    }
+
+    public abstract class EntityJig : Jig
+    {
+        protected EntityJig(Entity entity) { Entity = entity; }
+        protected Entity Entity { get; }
+        protected abstract bool Update();
+        public Entity GetEntity() { return Entity; }
+    }
+
+    public abstract class DrawJig : Jig
+    {
+        protected abstract bool WorldDraw(Autodesk.AutoCAD.GraphicsInterface.WorldDraw draw);
+    }
+}
+
+namespace Autodesk.AutoCAD.GraphicsInterface
+{
+    public abstract class WorldDraw { }
 }

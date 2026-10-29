@@ -206,7 +206,7 @@ namespace FieldCodes.Review
 
             if (!string.IsNullOrEmpty(p.LabelText))
             {
-                actions.Add("Label \"" + p.LabelText + "\"");
+                actions.Add("Label \"" + p.LabelDisplay + "\"");
                 if (p.Leader == LeaderMode.Always) actions.Add("Leader");
                 else if (p.Leader == LeaderMode.Auto) actions.Add("Leader if needed");
             }
@@ -245,7 +245,7 @@ namespace FieldCodes.Review
                         p.Modifiers.Select(m => m.Id).ToArray()));
 
                 if (!string.IsNullOrEmpty(p.LabelText))
-                    lines.Add("Label: \"" + p.LabelText + "\" on " + p.LabelLayer +
+                    lines.Add("Label: \"" + p.LabelDisplay + "\" on " + p.LabelLayer +
                               "  (leader " + p.Leader + ")");
 
                 if (p.RotationDegrees.HasValue)
