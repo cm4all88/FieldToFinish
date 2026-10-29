@@ -23,7 +23,7 @@ the plugin helpers they lean on:
 | Compiled from source | Stubbed (`Stubs/Internal.cs`) |
 |---|---|
 | RecordCommands, RecordDrafter, RecordDocumentReader, Ui/RecordReviewForm, Setup/RecordSurveyPage | `EasementInspectCommands` (three members), `EasementCommands.Extract`, `InspectRow`, the `DipBuilderForm` palette, `ThemePreference` |
-| LineworkCommands (FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFLABELSTAIRS), BenchCommands (FTFBENCH), FtfLineworkService, MaskSync | |
+| LineworkCommands (FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFLABELSTAIRS, FTFLINELABELS), BenchCommands (FTFBENCH), LabelAllCommand (FTFLABELALL), LabelCommands (FTFLABELS), DrawOrderCommands (FTFORDER), FtfLineworkService, MaskSync | |
 | Setup/Pages, Setup/PointFeaturesPage | |
 | Ownership, DrawingStore, CadUtil, FtfSession, TextMask, Setup/DrawingResources, Setup/SetupPage | |
 

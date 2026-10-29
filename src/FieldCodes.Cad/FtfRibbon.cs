@@ -53,6 +53,9 @@ namespace FieldCodes.Cad
                 var tab = new RibbonTab { Title = "FTF", Id = TabId };
 
                 tab.Panels.Add(Panel("Label",
+                    Large("Label\nEverything", "FTFLABELALL",
+                        "After the points and linework come in: labels every recognised line and every point, then draw order. Hand-placed labels are kept.",
+                        FtfIcons.Labels),
                     Large("Label\nLine", "FTFLABELLINE",
                         "Click a line, slide the preview, click to place. FTFL for short.",
                         FtfIcons.LabelLine),

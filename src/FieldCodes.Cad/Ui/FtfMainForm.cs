@@ -1078,6 +1078,12 @@ namespace FieldCodes.Cad.Ui
             CommandGroup(stack, "Daily workflow");
             CommandRow(stack, "FTF",
                 "Opens this window. Never processes anything on its own.");
+            CommandRow(stack, "FTFLABELALL",
+                "Label everything once the points and linework are in: every " +
+                "recognised line (with gate labels between marked shots), then " +
+                "every point, then draw order. Labels you placed or moved by hand " +
+                "are kept; run it again after more linework arrives. Lists any line " +
+                "it could not label and why.");
             CommandRow(stack, "FTFLABELLINE   (or FTFL)",
                 "Label a line: click it, slide the live preview along it, click to " +
                 "place. The cursor picks the spot and the side; text, layer, offset " +

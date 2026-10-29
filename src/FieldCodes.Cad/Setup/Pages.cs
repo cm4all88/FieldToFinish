@@ -463,7 +463,9 @@ namespace FieldCodes.Cad.Setup
                 "Labels every recognised line in one go: one label at the midpoint of " +
                 "short features, repeated labels on long ones. Off by default because " +
                 "line annotation is usually a judgement call -- FTFLABELLINE works " +
-                "either way, and labels placed with it are never touched by this pass.");
+                "either way, and labels placed with it are never touched by this pass. " +
+                "This switch is for FTFRUN; the Label Everything button (FTFLABELALL) " +
+                "always labels the lines, because that is what it was pressed for.");
 
             Heading("Text");
             var styles = new List<object> { "(drawing's current style)" };

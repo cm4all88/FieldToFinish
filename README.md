@@ -308,6 +308,7 @@ turn the symbol off in the point style.
 | `FTFBLOCKS` | Lists the drawing's blocks and checks them against the rules | n/a |
 | `FTFDRAWLINE` | Drafts cadastral / record lines with bearing/distance annotation — the separate drafting world, see below | n/a |
 | `FTFDRAFTCLEAN` | Cleanup for the drafted world: annotation by default, geometry only on explicit confirmation | n/a |
+| `FTFLABELALL` | Label Everything: every recognised line (gates included), every point, then draw order; lists what it could not label | yes |
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
 | `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
@@ -395,6 +396,34 @@ so the edge need not be a configured line feature. `W` switches to the spelled-o
 word where the feature has one (`ASPHALT DWY` for an EP edge). The wording is
 Settings > Line Labels > Driveway wording (`{type} DWY`); the label layer is the one
 `FTFLABELBETWEEN` would use.
+
+## Label Everything: FTFLABELALL
+
+Once the points are imported and Civil 3D has built the linework, the **Label
+Everything** button (`FTFLABELALL`) labels the drawing in one go:
+
+1. Every recognised line, by the whole-drawing line pass. It runs even when the
+   automatic pass is off in Settings > Line Labels; that switch only governs
+   `FTFRUN`. A line is identified by figure name, then TrimbleName XData, then the
+   notes of the survey points it was drawn through, then its layer, the same order
+   `FTFLABELLINE` uses. Two shots noted with a span marker (`FGP`) along a line get
+   a `GATE` label between them.
+2. Every point (`FTFLABELS`), steering around the line labels just placed.
+3. Draw order (`FTFORDER`).
+
+Labels placed with `FTFLABELLINE`, or moved by hand, are kept. Running it again
+after more linework arrives replaces only its own labels. It ends by listing every
+identified line it could not label, grouped: a feature with no wording configured
+(`GRL Guardrail: no label configured (4 lines)`), or a layer two features share and
+nothing on the line tells apart (`V-SURF-FENC-E: could be FNC (FENCE) or FHW (HOG
+WIRE FENCE)`). Label those with `FTFLABELLINE`, which asks which it is.
+
+**Fences.** Only chain link (`FCK`) used to have a wording, so every other fence
+was refused. The shipped rules now label `FNC` FENCE, `FHW` HOG WIRE FENCE, `FBD`
+WOOD FENCE, `FRL` RAIL FENCE and `FBW` BARBED WIRE FENCE; confirm the wordings
+against the office standard. `FNC`/`FHW` share `V-SURF-FENC-E` and `FBD`/`FRL` share
+`V-SURF-FENC-WOOD-E`: a survey figure names itself (`FNC3`), a plain polyline is
+named by its shots' notes, and only when neither says does `FTFLABELLINE` ask.
 
 ## Line labelling: the primary workflow is interactive
 

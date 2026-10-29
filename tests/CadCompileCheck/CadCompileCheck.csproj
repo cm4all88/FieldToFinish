@@ -28,6 +28,9 @@
     <Compile Include="..\..\src\FieldCodes.Cad\LineworkCommands.cs" Link="LineworkCommands.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\FtfLineworkService.cs" Link="FtfLineworkService.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\MaskSync.cs" Link="MaskSync.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\LabelAllCommand.cs" Link="LabelAllCommand.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\LabelCommands.cs" Link="LabelCommands.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\DrawOrderCommands.cs" Link="DrawOrderCommands.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\Setup\Pages.cs" Link="Setup\Pages.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\Setup\PointFeaturesPage.cs" Link="Setup\PointFeaturesPage.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\RecordDrafter.cs" Link="RecordDrafter.cs" />

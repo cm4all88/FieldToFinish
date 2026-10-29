@@ -336,6 +336,22 @@ namespace FieldCodes.Linework
         }
 
         /// <summary>
+        /// The features to ask about when the candidates are all labelled but their labels
+        /// differ -- FNC (FENCE) and FHW (HOG WIRE FENCE) share V-SURF-FENC-E, so a plain
+        /// polyline on it could be either. The person names it; FTF never picks. Empty when
+        /// there is nothing to ask: one candidate, a unanimous label, or a candidate with
+        /// no label at all (that is a missing standard, not a choice).
+        /// </summary>
+        public static IList<LineFeatureRule> DisagreeingChoices(IList<LineFeatureRule> candidates)
+        {
+            var none = new List<LineFeatureRule>();
+            if (candidates == null || candidates.Count < 2) return none;
+            if (candidates.Any(c => c == null || !c.Enabled || string.IsNullOrWhiteSpace(c.Label))) return none;
+            if (UnanimousLabel(candidates) != null) return none;
+            return candidates.ToList();
+        }
+
+        /// <summary>
         /// Every wording the surveyor may place for these candidates: the agreed
         /// label first, then the configured alternates ("EOP"), deduplicated. Empty
         /// when no unanimous label exists -- alternates never rescue a disagreement.

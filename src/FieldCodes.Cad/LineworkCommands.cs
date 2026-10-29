@@ -34,6 +34,9 @@ namespace FieldCodes.Cad
         /// </summary>
         internal const string ManualLineLabelMark = "manual";
 
+        /// <summary>The last bulk pass's report, for FTFLABELALL's summary.</summary>
+        internal static LineLabelPassReport LastReport { get; private set; }
+
         [CommandMethod("FTFLINES", CommandFlags.Modal)]
         public void FtfLines()
         {
@@ -91,13 +94,24 @@ namespace FieldCodes.Cad
         [CommandMethod("FTFLINELABELS", CommandFlags.Modal)]
         public void FtfLineLabels()
         {
+            RunLineLabels(false);
+        }
+
+        /// <summary>
+        /// The whole-drawing line label pass. <paramref name="force"/> runs it even when the
+        /// automatic pass is off in Settings > Line Labels: FTFLABELALL is an explicit
+        /// request to label everything, the setting only governs FTFRUN.
+        /// </summary>
+        internal void RunLineLabels(bool force)
+        {
+            LastReport = null;
             FtfSession.Run("FTFLINELABELS", (db, tr, ed) =>
             {
                 var cfg = FtfSession.Rules(db);
                 var settings = FtfSession.SettingsFor(db, cfg);
                 var ls = settings.LineLabels;
 
-                if (!ls.Enabled)
+                if (!ls.Enabled && !force)
                 {
                     ed.WriteMessage("\nFTFLINELABELS: line labelling is turned off in " +
                                     "settings.\n");
@@ -142,10 +156,17 @@ namespace FieldCodes.Cad
                 var sideOffset = ls.SideOffsetFeet * unitsPerFoot;
                 var layerCatalog = FtfLineworkService.LayerNames(db, tr);
 
-                var featuresLabelled = 0;
-                var labelsPlaced = 0;
-                var skippedShort = 0;
-                var notConfigured = 0;
+                var report = new LineLabelPassReport();
+
+                // Every survey point's note, indexed once: the same evidence FTFLABELLINE
+                // reads, so a fence polyline on the layer FNC and FHW share is named by the
+                // shots it was drawn through.
+                var noteIndex = BuildNoteIndex(db, tr);
+
+                // Labels placed by hand, by feature code. A line carrying one -- on it, or at
+                // the side offset from it -- is the surveyor's, and the pass leaves it be.
+                var manual = ManualLabelPositions(db, tr);
+                var manualReach = sideOffset + textHeight * 1.5;
 
                 var ms = CadUtil.ModelSpace(db, tr, OpenMode.ForRead);
 
@@ -172,12 +193,14 @@ namespace FieldCodes.Cad
                     }
 
                     var trimbleName = FtfLineworkService.TrimbleNameOf(entity);
-                    var candidates = catalog.Candidates(figureName, trimbleName,
-                                                        entity.Layer);
-                    if (candidates.Count == 0) continue;
+                    string how;
+                    var candidates = StagedCandidates(db, tr, curve, catalog, out how, noteIndex);
+                    if (candidates == null || candidates.Count == 0) continue;
 
                     var labelText = LineworkCatalog.UnanimousLabel(candidates);
-                    if (labelText == null) { notConfigured++; continue; }
+                    if (labelText == null) { report.NotLabelled(candidates, entity.Layer); continue; }
+
+                    if (HasManualLabel(curve, candidates, manual, manualReach)) { report.AlreadyByHand++; continue; }
 
                     // The side comes from the source coding's own modifier ("ASPH
                     // LEFT") -- read from the figure name, or from TrimbleName XData
@@ -202,7 +225,7 @@ namespace FieldCodes.Cad
                     };
 
                     var path = new CurvePath(curve);
-                    if (path.Length < options.MinLength) { skippedShort++; continue; }
+                    if (path.Length < options.MinLength) { report.TooShort++; continue; }
 
                     // One resolver for the bulk pass, the interactive command and the
                     // review preview: rule's explicit layer, else the office-standard
@@ -217,18 +240,24 @@ namespace FieldCodes.Cad
                         PlaceLineLabel(db, tr, plan, labelText, textHeight, styleId,
                                        layerId, layer, ls.DrawMask, candidates[0].Code,
                                        cfg.Version);
-                        labelsPlaced++;
+                        report.LabelsPlaced++;
                     }
 
-                    if (planned.Count > 0) featuresLabelled++;
+                    if (planned.Count > 0) report.FeaturesLabelled++;
+
+                    // Gates: two shots noted with a span marker (FGP) along the line get a
+                    // GATE label between them, as FTFLABELLINE places. Stamped as this pass's
+                    // own output, so the next run regenerates rather than duplicates them.
+                    report.GateLabels += PlaceSpanLabels(db, tr, null, curve, cfg.SpanMarkers, ls,
+                                                         textHeight, styleId, layerId, layer,
+                                                         candidates[0].Code, cfg.Version,
+                                                         noteIndex, null);
                 }
 
-                ed.WriteMessage(
-                    "\nFTFLINELABELS: {0} label(s) on {1} feature(s); {2} skipped as " +
-                    "shorter than {3:0.#} ft; {4} identified feature(s) have no " +
-                    "labelling standard configured.\n",
-                    labelsPlaced, featuresLabelled, skippedShort, ls.MinLengthFeet,
-                    notConfigured);
+                foreach (var line in report.Lines(ls.MinLengthFeet))
+                    ed.WriteMessage("\nFTFLINELABELS: " + line);
+                ed.WriteMessage("\n");
+                LastReport = report;
 
                 // Rebuild every mask around its label's actual position -- a moved
                 // manual label's mask follows it.
@@ -396,13 +425,33 @@ namespace FieldCodes.Cad
             var labelText = LineworkCatalog.UnanimousLabel(candidates);
             if (labelText == null)
             {
+                // A layer two features share (FNC and FHW on V-SURF-FENC-E), both labelled
+                // but differently, and nothing else to tell them apart: ask. The person
+                // decides; FTF still never chooses.
+                var choices = LineworkCatalog.DisagreeingChoices(candidates);
+                if (choices.Count > 0)
+                {
+                    var chosen = AskWhichFeature(ed, entity.Layer, how, choices);
+                    if (chosen == null)
+                    {
+                        ed.WriteMessage("\nNothing was placed.");
+                        return false;
+                    }
+                    candidates = new List<LineFeatureRule> { chosen };
+                    labelText = chosen.Label;
+                    how = "your choice";
+                }
+            }
+            if (labelText == null)
+            {
                 var descriptions = string.Join(", ", candidates
                     .Select(c => c.Code + (string.IsNullOrEmpty(c.Label)
                         ? " (no label configured)" : " -> \"" + c.Label + "\""))
                     .ToArray());
                 ed.WriteMessage(
                     "\nIdentified, but no single labelling standard applies: {0}. " +
-                    "FTF will not choose silently -- nothing was placed.", descriptions);
+                    "FTF will not choose silently -- nothing was placed. Give the feature " +
+                    "a label in rules.json (lineFeatures) to label it.", descriptions);
                 return false;
             }
 
@@ -571,6 +620,77 @@ namespace FieldCodes.Cad
             }
 
             ed.WriteMessage("\n{0}: {1} label(s) placed.\n", commandName, placedCount);
+        }
+
+        /// <summary>Where every hand-placed line label sits, keyed by the feature code it was
+        /// stamped with.</summary>
+        private static Dictionary<string, List<Point3d>> ManualLabelPositions(Database db, Transaction tr)
+        {
+            var byCode = new Dictionary<string, List<Point3d>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == FtfEntityKind.LineLabel &&
+                                                             string.Equals(s.TagText, ManualLineLabelMark, StringComparison.Ordinal)))
+            {
+                var entity = tr.GetObject(pair.Key, OpenMode.ForRead, false, true) as AcEntity;
+                if (entity == null || string.IsNullOrEmpty(pair.Value.PointNumber)) continue;
+                List<Point3d> list;
+                if (!byCode.TryGetValue(pair.Value.PointNumber, out list))
+                {
+                    list = new List<Point3d>();
+                    byCode[pair.Value.PointNumber] = list;
+                }
+                list.Add(CadUtil.Flatten(CadUtil.PositionOf(entity)));
+            }
+            return byCode;
+        }
+
+        /// <summary>True when a hand-placed label of one of these features sits within reach
+        /// of the line, measured in plan (a sloping 3D polyline is measured straight down).</summary>
+        private static bool HasManualLabel(Curve curve, IList<LineFeatureRule> candidates,
+                                           Dictionary<string, List<Point3d>> manual, double reach)
+        {
+            if (manual.Count == 0) return false;
+            foreach (var candidate in candidates)
+            {
+                List<Point3d> positions;
+                if (candidate == null || !manual.TryGetValue(candidate.Code, out positions)) continue;
+                foreach (var p in positions)
+                {
+                    Point3d closest;
+                    try { closest = curve.GetClosestPointTo(p, Vector3d.ZAxis, false); }
+                    catch (Autodesk.AutoCAD.Runtime.Exception)
+                    {
+                        try { closest = curve.GetClosestPointTo(p, false); }
+                        catch (Autodesk.AutoCAD.Runtime.Exception) { continue; }
+                    }
+                    var dx = closest.X - p.X;
+                    var dy = closest.Y - p.Y;
+                    if (Math.Sqrt(dx * dx + dy * dy) <= reach) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Asks which of several features sharing a layer this line is. Null when
+        /// the person cancels.</summary>
+        private static LineFeatureRule AskWhichFeature(Editor ed, string layer, string how,
+                                                       IList<LineFeatureRule> choices)
+        {
+            ed.WriteMessage("\nThis line's {0} ({1}) is used by more than one feature:", how ?? "layer", layer);
+            foreach (var c in choices)
+                ed.WriteMessage("\n  {0}  {1} -> \"{2}\"", c.Code,
+                    string.IsNullOrEmpty(c.Name) ? c.Code : c.Name, c.Label);
+
+            // Keywords are the feature codes: letters and digits, no spaces.
+            var codes = choices.Select(c => c.Code.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var options = new PromptKeywordOptions(
+                "\nWhich is it? [" + string.Join("/", codes.ToArray()) + "] <cancel>: ",
+                string.Join(" ", codes.ToArray()))
+            {
+                AllowNone = true
+            };
+            var answer = ed.GetKeywords(options);
+            if (answer.Status != PromptStatus.OK || string.IsNullOrEmpty(answer.StringResult)) return null;
+            return choices.FirstOrDefault(c => string.Equals(c.Code.Trim(), answer.StringResult, StringComparison.OrdinalIgnoreCase));
         }
 
         private static ObjectId PickEdge(Editor ed, string message)
@@ -827,7 +947,7 @@ namespace FieldCodes.Cad
         /// identifies the line. Shared by the between-edges command.</summary>
         private static IList<LineFeatureRule> StagedCandidates(
             Database db, Transaction tr, Curve curve, LineworkCatalog catalog,
-            out string how)
+            out string how, Dictionary<string, List<string>> noteIndex = null)
         {
             string figureName = null;
             var figure = curve as Autodesk.Civil.DatabaseServices.SurveyFigure;
@@ -849,7 +969,7 @@ namespace FieldCodes.Cad
             var byTrimble = catalog.FindByTrimbleName(trimbleName);
             if (byTrimble.Count > 0) { how = "Trimble name"; return byTrimble; }
 
-            var notes = PointNotes.Consensus(NotesAtVertices(db, tr, curve), catalog);
+            var notes = PointNotes.Consensus(NotesAtVertices(db, tr, curve, noteIndex), catalog);
             if (notes.Features.Count > 0) { how = "point notes"; return notes.Features; }
 
             var byLayer = catalog.FindByLayer(curve.Layer);
@@ -963,11 +1083,12 @@ namespace FieldCodes.Cad
         /// is evidence, proximity would be guessing. Read-only throughout.
         /// </summary>
         private static IList<string> NotesAtVertices(Database db, Transaction tr,
-                                                     Curve curve)
+                                                     Curve curve,
+                                                     Dictionary<string, List<string>> index = null)
         {
             var notes = new List<string>();
 
-            var byBucket = BuildNoteIndex(db, tr);
+            var byBucket = index ?? BuildNoteIndex(db, tr);
             if (byBucket.Count == 0) return notes;
 
             foreach (var vertex in VerticesOf(curve))
@@ -1014,11 +1135,13 @@ namespace FieldCodes.Cad
                                            FieldCodes.Settings.LineLabelSettings ls,
                                            double textHeight, ObjectId styleId,
                                            ObjectId layerId, string layerName,
-                                           string sourceCode, string rulesVersion)
+                                           string sourceCode, string rulesVersion,
+                                           Dictionary<string, List<string>> noteIndex = null,
+                                           string mark = ManualLineLabelMark)
         {
             if (markers == null || markers.Count == 0) return 0;
 
-            var index = BuildNoteIndex(db, tr);
+            var index = noteIndex ?? BuildNoteIndex(db, tr);
             if (index.Count == 0) return 0;
 
             var placedTotal = 0;
@@ -1062,11 +1185,11 @@ namespace FieldCodes.Cad
 
                     PlaceLineLabel(db, tr, plan, label, textHeight, styleId, layerId,
                                    layerName, ls.DrawMask, sourceCode, rulesVersion,
-                                   ManualLineLabelMark);
+                                   mark);
                     placedTotal++;
                 }
 
-                if (spans.Count > 0 || leftover)
+                if (ed != null && (spans.Count > 0 || leftover))
                     ed.WriteMessage("\n{0} {1} label(s) placed between marked points{2}.",
                         spans.Count, marker.Token,
                         leftover ? " -- one marked point had no partner and was " +
