@@ -507,7 +507,8 @@ namespace FieldCodes.Cad.Setup
                 "explains it, so the automatic pass and Label Everything give it no text " +
                 "label. Read from the linetype's definition (its own, or its layer's when " +
                 "ByLayer). Gate labels on such a line are still placed, and FTFLABELLINE " +
-                "still labels one you click.");
+                "still labels one you click. Features marked alwaysLabel in rules.json " +
+                "(every fence) are labelled anyway.");
 
             Heading("Driveways (FTFLABELDRIVEWAY)");
             _drivewayFormat = TextRow("Driveway wording",

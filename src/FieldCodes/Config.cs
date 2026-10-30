@@ -485,6 +485,13 @@ namespace FieldCodes
         /// <summary>Absent means enabled, so no existing file changes behaviour.</summary>
         [JsonProperty("enabled")] public bool Enabled { get; set; }
 
+        /// <summary>
+        /// Label this feature even when its linetype draws its own letter or symbol. Such
+        /// lines are normally left to the legend (water ---W---); a fence is labelled
+        /// whether or not its linetype draws x's.
+        /// </summary>
+        [JsonProperty("alwaysLabel")] public bool AlwaysLabel { get; set; }
+
         public LineFeatureRule()
         {
             Enabled = true;

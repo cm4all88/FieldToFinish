@@ -206,7 +206,7 @@ namespace FieldCodes.Cad
                     // A linetype that draws its own letter or symbol (water ---W---, power
                     // ---P---) names the line, and the legend explains it: no text label.
                     // A gate along it still gets its GATE label -- the legend cannot show that.
-                    if (ls.LeaveMarkedLinetypesToLegend)
+                    if (ls.LeaveMarkedLinetypesToLegend && !LineworkCatalog.LabelsOverMarkedLinetype(candidates))
                     {
                         var look = LinetypeOf(db, tr, entity, linetypeCache);
                         if (look.Marks.Count > 0)
@@ -477,7 +477,7 @@ namespace FieldCodes.Cad
 
             // Placed as asked, with a word: the automatic pass leaves lines like this to the legend.
             var linetype = LinetypeOf(db, tr, entity, null);
-            if (linetype.Marks.Count > 0)
+            if (linetype.Marks.Count > 0 && !LineworkCatalog.LabelsOverMarkedLinetype(candidates))
                 ed.WriteMessage("\nIts linetype {0} draws its own letter or symbol; the automatic " +
                                 "pass leaves lines like this to the legend. Placing the label you asked for.",
                                 LinetypeMarks.Describe(linetype.Name, linetype.Marks));

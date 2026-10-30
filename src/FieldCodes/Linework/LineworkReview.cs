@@ -336,6 +336,15 @@ namespace FieldCodes.Linework
         }
 
         /// <summary>
+        /// True when these features are labelled even on a linetype that draws its own letter
+        /// or symbol: every candidate is marked alwaysLabel (fences).
+        /// </summary>
+        public static bool LabelsOverMarkedLinetype(IList<LineFeatureRule> candidates)
+        {
+            return candidates != null && candidates.Count > 0 && candidates.All(c => c != null && c.AlwaysLabel);
+        }
+
+        /// <summary>
         /// The features to ask about when the candidates are all labelled but their labels
         /// differ -- FNC (FENCE) and FHW (HOG WIRE FENCE) share V-SURF-FENC-E, so a plain
         /// polyline on it could be either. The person names it; FTF never picks. Empty when

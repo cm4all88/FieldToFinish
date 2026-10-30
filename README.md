@@ -418,7 +418,9 @@ the linetype's definition (its text and shape elements), from the line's own lin
 or its layer's when ByLayer, never from the name. Gate labels along such a line are
 still placed, `FTFLABELLINE` still labels one you click (with a note), and the summary
 lists them by linetype (`Left to the legend: WATER (W) 12, POWER (P) 4`). Turn it off
-under Settings > Line Labels. A survey figure whose style gives it a lettered linetype
+under Settings > Line Labels. **Fences are the exception:** every fence code carries
+`"alwaysLabel": true` in `rules.json`, so a fence is labelled whether or not its
+linetype draws x's. Any other line feature can be given the same flag. A survey figure whose style gives it a lettered linetype
 of its own, rather than by layer, is not seen. `FTFLEGEND` itself lists only the line
 features configured in `rules.json`, so an unconfigured water or power line is in the
 office legend, not FTF's.

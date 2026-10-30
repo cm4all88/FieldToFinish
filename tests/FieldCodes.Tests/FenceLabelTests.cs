@@ -131,4 +131,30 @@ public sealed class FenceLabelTests : IClassFixture<RulesFixture>
         var old = Newtonsoft.Json.JsonConvert.DeserializeObject<FieldCodes.Settings.LineLabelSettings>(@"{ ""drawMask"": false }")!;
         Assert.True(old.LeaveMarkedLinetypesToLegend);
     }
+
+    [Theory]
+    [InlineData("FNC1")]
+    [InlineData("FHW1")]
+    [InlineData("FBD1")]
+    [InlineData("FRL1")]
+    [InlineData("FBW1")]
+    [InlineData("FCK1")]
+    public void FencesAreLabelledEvenOnALinetypeThatDrawsXs(string figureName)
+    {
+        Assert.True(LineworkCatalog.LabelsOverMarkedLinetype(_catalog.Candidates(figureName, null)));
+    }
+
+    [Fact]
+    public void OtherFeaturesOnALetteredLinetypeAreStillLeftToTheLegend()
+    {
+        Assert.False(LineworkCatalog.LabelsOverMarkedLinetype(_catalog.Candidates("SDTD1", null)));
+        Assert.False(LineworkCatalog.LabelsOverMarkedLinetype(_catalog.Candidates(null, "V-SURF-CURB-E")));
+        Assert.False(LineworkCatalog.LabelsOverMarkedLinetype(new List<LineFeatureRule>()));
+        // Every candidate must say so: one fence among other features does not carry the rest.
+        Assert.False(LineworkCatalog.LabelsOverMarkedLinetype(new List<LineFeatureRule>
+        {
+            new LineFeatureRule { Code = "FNC", AlwaysLabel = true },
+            new LineFeatureRule { Code = "X" }
+        }));
+    }
 }
