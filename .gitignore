@@ -67,3 +67,8 @@ tests/LiveSmoke/seedprod_recover.dwg
 # Checkpoint build artifacts / archives
 checkpoints/**/build-net48/*.dll
 checkpoints/**/source.tar.gz
+
+# Live-smoke outputs (FTFCONTOUR)
+tests/LiveSmoke/seedcontour.dwg
+tests/LiveSmoke/outcontour.dwg
+tests/LiveSmoke/ContourTestHarness.dll

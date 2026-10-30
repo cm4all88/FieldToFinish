@@ -1109,6 +1109,12 @@ namespace FieldCodes.Cad.Ui
                 "Spot elevations off the surface: click, click, click. An X at " +
                 "each spot, the elevation beside it at the office angle, and " +
                 "close-together spots never overlap.");
+            CommandRow(stack, "FTFCONTOUR",
+                "Contour polylines at an exact elevation off a TIN surface: pick the " +
+                "surface, type 12.6 (or 12.6, 13, 13.5, or 10 to 14 by 0.5). Every " +
+                "piece where the surface crosses it, at exactly that elevation, on the " +
+                "contour layer. B clips to a closed boundary, L adds elevation labels. " +
+                "The surface is only read -- never rebuilt or edited.");
             CommandRow(stack, "FTFRUN",
                 "The whole pipeline in one go -- the same thing as Process Drawing.");
 

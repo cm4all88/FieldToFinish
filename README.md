@@ -311,6 +311,7 @@ turn the symbol off in the point style.
 | `FTFLABELALL` | Label Everything: every recognised line (gates included), every point, then draw order; lists what it could not label | yes |
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
+| `FTFCONTOUR` | Contour polylines at exact elevations off a TIN surface (one, a list, or a run), optionally clipped to a boundary and labelled; the surface is only read | yes (replaces its own at the same surface and elevation) |
 | `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
 | `FTFRECORDCHECK` | Drawing versus the record; flags only | yes |
 | `FTFRECORDLABEL` | Places or refreshes the record labels | yes |
@@ -438,6 +439,88 @@ WOOD FENCE, `FRL` RAIL FENCE and `FBW` BARBED WIRE FENCE; confirm the wordings
 against the office standard. `FNC`/`FHW` share `V-SURF-FENC-E` and `FBD`/`FRL` share
 `V-SURF-FENC-WOOD-E`: a survey figure names itself (`FNC3`), a plain polyline is
 named by its shots' notes, and only when neither says does `FTFLABELLINE` ask.
+
+## Contours at an exact elevation: FTFCONTOUR
+
+`FTFCONTOUR` draws the contour at any elevation you name, straight off an existing TIN
+surface, without touching the surface:
+
+```
+Command: FTFCONTOUR
+Select a TIN surface or [Name] <EG>:            (click it, Enter for the last one, N to pick by name)
+Elevation(s) on "EG" in feet -- 12.6, or 12.6, 13, 13.5, or 10 to 14 by 0.5 [Boundary=none / Labels=off]: 12.60
+FTFCONTOUR: surface "EG" (1,234 points, 2,401 triangles, elevations 10.12 to 18.4).
+  12.60  3 contours (1 closed, 2 open), 412.37 ft, 386 vertices.
+  Accuracy: 12 vertices read back from the surface; all on their contour elevation (largest difference 0.0000 ft).
+  Surface untouched: definition, triangles, elevation range, style and build state read the same before and after.
+  3 contour polylines on layer V-TOPO-CONT-E. One U undoes the lot.
+```
+
+- **Elevations.** One (`12.6`), a list separated by commas, semicolons or spaces
+  (`12.6, 13.0, 13.5`), or a run (`10 to 14 by 0.5`, which counts in decimal so it lands
+  on 14 exactly). Each value is the exact double its text names -- `12.60` is drawn at
+  12.6, never rounded to a display precision -- in drawing units (the prompt says which).
+  The same value typed twice (`13, 13.0`) is drawn once. Anything unreadable is refused
+  and asked again; nothing is drawn from a half-understood list.
+- **What is drawn.** Every piece where the surface crosses the elevation: disconnected
+  pieces, open pieces that run off the surface or into a hidden area, and closed loops
+  around hills and hollows, each its own lightweight polyline with **Elevation** set to
+  the value typed, on the contour layer (colour, linetype and lineweight ByLayer).
+- **Where it comes from.** Civil 3D's own extraction,
+  `TinSurface.ExtractContoursAt(double elevation)` (the `ITerrainSurface` member; the
+  no-smoothing overload), which intersects the built TIN at that elevation -- the
+  surface's actual intersection, not a position interpolated between the contours its
+  style displays. Civil 3D adds its result to the drawing as polylines; FTF reads each
+  one exactly (vertices, bulges, closure), erases it, and draws its own in its place. If
+  that call fails, FTF traces the same intersection from the surface's visible triangles
+  (`GetTriangles(false)`) and says so.
+- **The surface is only read.** It is opened for read for the whole command, so AutoCAD
+  itself would refuse any change. Nothing is added to its definition; no triangle,
+  breakline, boundary, point, style or contour interval is touched; it is **never
+  rebuilt**. An out-of-date surface is reported and contoured as last built -- rebuild it
+  yourself first if its definition changed. (Regenerating the display, `REGEN`, is not a
+  rebuild and is never needed.) Its point and triangle counts, elevation range and mean,
+  style and out-of-date flag are read before and after; if anything differs, the whole
+  command is rolled back and says why.
+- **Elevations with no contour** are reported, not errors: below the lowest point, above
+  the highest (with the surface's own figure), touching only at a single point, crossed
+  only inside a hidden area, or crossed only outside the boundary.
+- **Boundary (`B`).** Pick a closed polyline (arcs followed to 0.0001) or a circle; the
+  contours are cut exactly where they cross it -- the cut points lie on the original
+  contour segments, so clipping changes where a contour stops, never where it runs.
+  `B` then `N` goes back to the whole surface.
+- **Labels (`L`).** Elevation text centred on the contour, along it and never upside
+  down, one per piece or one per *label spacing* along long pieces, slid off sharp
+  bends, with a mask so the contour breaks for the text. The text is the elevation as
+  typed (or to a fixed number of decimals, in settings). Pieces too short to carry the
+  text are left bare.
+- **No duplicates.** Each contour is stamped with the surface and exact elevation. Running
+  it again at the same elevation on the same surface replaces FTF's earlier contours and
+  labels; with a boundary, only inside it (an earlier contour that crosses the boundary
+  is trimmed back to its outside part, so old and new meet without overlapping).
+  Contours at other elevations, from other surfaces, or drawn by hand are never touched.
+  `FTFCLEAN` leaves contours alone; erase them like any polyline.
+- **Undo.** Everything is one transaction in one command: one `U` removes it all.
+- **Several surfaces.** Click the one you want, or `N` lists every TIN surface by
+  name (useful when its style hides it). The last one used is the default.
+
+Settings > Contours: contour layer (`V-TOPO-CONT-E`) and label layer
+(`V-TOPO-CONT-TEXT-E`), both through the project's layer mappings like the production
+layers; labels on by default or not; label height (0.08 plotted), spacing (6" plotted,
+0 = one per piece), decimals (-1 = as typed); masks; and the read-back accuracy check.
+
+**What still needs Civil 3D to confirm** (none of this has run in the product yet): that
+`ExtractContoursAt` behaves as documented on the office's surfaces -- that it adds
+lightweight polylines to model space which open and erase within the command's
+transaction, and returns them unsmoothed; that `GetGeneralProperties`,
+`GetTinProperties`, `IsOutOfDate` and `StyleId` read the same before and after (the
+"Surface untouched" line); that `GetTriangles(false)` and `TinSurfaceVertex.Location`
+exist as used by the fallback; that a data-shortcut (reference) surface can be
+contoured; that one `U` removes a multi-elevation run; and the labels, masks and layer
+prompts on a real drawing. The elevation parsing, the tracer, clipping, label spacing,
+the before/after comparison and the report are unit tested
+(`tests/FieldCodes.Tests/ContourTests.cs`), and a source guard fails the build's tests
+if the command ever calls a surface-editing API.
 
 ## Line labelling: the primary workflow is interactive
 

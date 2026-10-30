@@ -67,7 +67,8 @@ namespace FieldCodes.Cad
                         FtfIcons.Stairs),
                     Small("Driveway", "FTFLABELDRIVEWAY", FtfIcons.Between),
                     Small("Bench", "FTFBENCH", FtfIcons.Bench),
-                    Small("Spot Shots", "FTFSPOT", FtfIcons.Spot)));
+                    Small("Spot Shots", "FTFSPOT", FtfIcons.Spot),
+                    Small("Contour", "FTFCONTOUR", FtfIcons.Contour)));
 
                 tab.Panels.Add(Panel("Finish",
                     Large("Process\nDrawing", "FTFRUN",
@@ -511,6 +512,17 @@ namespace FieldCodes.Cad
                 dc.PushTransform(new RotateTransform(-45, 21, 12));
                 dc.DrawRectangle(Gray, null, new Rect(14, 9, 14, 6));
                 dc.Pop();
+            });
+        }
+
+        /// <summary>Contours: two nested level lines over a hill, one picked out.</summary>
+        public static ImageSource Contour(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawEllipse(null, GrayPen(2.0), new Point(16, 17), 13, 10);
+                dc.DrawEllipse(null, BluePen(2.6), new Point(16, 17), 8, 5.5);
+                dc.DrawEllipse(Gray, null, new Point(16, 17), 2, 2);
             });
         }
 

@@ -105,7 +105,18 @@ namespace FieldCodes.Cad
         /// <summary>The line/curve table for tagged courses.</summary>
         RecordTable = 40,
         /// <summary>Lot, tract and area text inside a figure.</summary>
-        RecordText = 41
+        RecordText = 41,
+
+        // Contours extracted from a surface (FTFCONTOUR). Deliberate drafting: FTFCLEAN leaves
+        // them alone. PointNumber = surface handle @ exact elevation, TagText = the elevation as
+        // typed, so a re-run at the same elevation replaces its own earlier contours.
+
+        /// <summary>A contour polyline at one exact elevation.</summary>
+        Contour = 42,
+        /// <summary>The elevation label on a contour.</summary>
+        ContourLabel = 43,
+        /// <summary>The wipeout under a contour label.</summary>
+        ContourMask = 44
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

@@ -1509,7 +1509,64 @@ namespace Autodesk.Civil.DatabaseServices
 
     public class Alignment : Entity { public string Name { get; set; } public double Length { get; } public double StartingStation { get; } public double EndingStation { get; } public ObjectId StyleId { get; set; } }
     public class Parcel : Entity { public string Name { get; set; } public double Area { get; } public double Perimeter { get; } }
-    public class TinSurface : Entity { public string Name { get; set; } public double FindElevationAtXY(double x, double y) { return 0; } }
+    // Surfaces, as AeccDbMgd declares the members FTFSPOT and FTFCONTOUR use. Surface derives
+    // from Civil's own Entity in the real assembly; here it sits straight on AutoCAD's.
+    public abstract class Surface : Entity
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public ObjectId StyleId { get; set; }
+        public string StyleName { get; set; }
+        public bool IsOutOfDate { get; }
+        public GeneralSurfaceProperties GetGeneralProperties() { return new GeneralSurfaceProperties(); }
+        public void Rebuild() { }
+    }
+
+    public sealed class GeneralSurfaceProperties
+    {
+        public int NumberOfPoints { get; }
+        public double MinimumElevation { get; }
+        public double MaximumElevation { get; }
+        public double MeanElevation { get; }
+    }
+
+    public enum ContourSmoothingType { AddVertices = 1, SplineCurve = 2 }
+
+    public class TinSurface : Surface
+    {
+        public static ObjectId Create(Database database, string surfaceName) { return ObjectId.Null; }
+        public void AddVertices(Point3dCollection locations) { }
+        public double FindElevationAtXY(double x, double y) { return 0; }
+        /// <summary>ITerrainSurface.ExtractContoursAt: polylines at one elevation, added to the drawing.</summary>
+        public ObjectIdCollection ExtractContoursAt(double elevation) { return new ObjectIdCollection(); }
+        public ObjectIdCollection ExtractContoursAt(double elevation, ContourSmoothingType smoothingType, int smoothingFactor) { return new ObjectIdCollection(); }
+        public TinSurfaceProperties GetTinProperties() { return new TinSurfaceProperties(); }
+        public TinSurfaceTriangleCollection GetTriangles(bool includeInvisible) { return new TinSurfaceTriangleCollection(); }
+        public TinSurfaceTriangleCollection Triangles { get { return new TinSurfaceTriangleCollection(); } }
+    }
+
+    public sealed class TinSurfaceProperties
+    {
+        public int NumberOfTriangles { get; }
+        public double MinimumTriangleArea { get; }
+        public double MaximumTriangleArea { get; }
+    }
+
+    public sealed class TinSurfaceVertex { public Point3d Location { get; } }
+
+    public sealed class TinSurfaceTriangle
+    {
+        public TinSurfaceVertex Vertex1 { get; }
+        public TinSurfaceVertex Vertex2 { get; }
+        public TinSurfaceVertex Vertex3 { get; }
+    }
+
+    public sealed class TinSurfaceTriangleCollection : IEnumerable<TinSurfaceTriangle>
+    {
+        public int Count { get; }
+        public IEnumerator<TinSurfaceTriangle> GetEnumerator() { yield break; }
+        IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
+    }
 }
 
 namespace Autodesk.AutoCAD.EditorInput

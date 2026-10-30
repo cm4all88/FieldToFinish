@@ -25,6 +25,8 @@
     <Compile Include="Stubs/*.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\RecordCommands.cs" Link="RecordCommands.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\BenchCommands.cs" Link="BenchCommands.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\ContourCommands.cs" Link="ContourCommands.cs" />
+    <Compile Include="..\..\src\FieldCodes.Cad\ProductionLayers.cs" Link="ProductionLayers.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\LineworkCommands.cs" Link="LineworkCommands.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\FtfLineworkService.cs" Link="FtfLineworkService.cs" />
     <Compile Include="..\..\src\FieldCodes.Cad\MaskSync.cs" Link="MaskSync.cs" />

@@ -1036,6 +1036,89 @@ namespace FieldCodes.Cad.Setup
         }
     }
 
+    // ------------------------------------------------------------------ contours
+
+    internal sealed class ContoursPage : SetupPage
+    {
+        private ComboBox _layer;
+        private ComboBox _labelLayer;
+        private CheckBox _labelByDefault;
+        private TextBox _height;
+        private TextBox _spacing;
+        private TextBox _decimals;
+        private CheckBox _mask;
+        private CheckBox _check;
+
+        public override string Title { get { return "Contours"; } }
+        public override string AffectedCommands { get { return "FTFCONTOUR"; } }
+
+        protected override void BuildBody()
+        {
+            Heading("Contours from a surface");
+            Note("FTFCONTOUR: pick a TIN surface, type an elevation (or several), get contour " +
+                 "polylines at exactly that elevation. The surface is only read -- never " +
+                 "rebuilt, never edited, its style and contour intervals left alone.");
+
+            var layers = new List<object>();
+            foreach (var name in Context.Drawing.Layers) layers.Add(name);
+            _layer = ComboRow("Contour layer", layers, "Project layer mappings apply, as for production layers.");
+            _labelLayer = ComboRow("Label layer", layers, null);
+
+            Heading("Elevation labels");
+            _labelByDefault = CheckRow("Label contours unless switched off at the prompt (L)", null);
+            _height = TextRow("Label height (plotted)", "0.08 is Leroy 80.");
+            _spacing = TextRow("Label spacing (plotted)", "Along long contours; 0 = one label per contour.");
+            _decimals = TextRow("Label decimals", "-1 writes the elevation exactly as typed (12.60 stays 12.60).");
+            _mask = CheckRow("Mask under labels so the contour breaks for the text", null);
+
+            Heading("Checking");
+            _check = CheckRow("Read contour vertices back off the surface and report the largest difference", null);
+        }
+
+        public override void LoadFrom(FtfSettings s)
+        {
+            ComboHelp.SelectOrAdd(_layer, s.Contours.Layer, false);
+            ComboHelp.SelectOrAdd(_labelLayer, s.Contours.LabelLayer, false);
+            _labelByDefault.Checked = s.Contours.LabelByDefault;
+            _height.Text = Fmt(s.Contours.LabelTextPlotted);
+            _spacing.Text = Fmt(s.Contours.LabelSpacingPlotted);
+            _decimals.Text = s.Contours.LabelDecimals.ToString(CultureInfo.InvariantCulture);
+            _mask.Checked = s.Contours.MaskLabels;
+            _check.Checked = s.Contours.CheckAgainstSurface;
+        }
+
+        public override void SaveTo(FtfSettings s, ICollection<string> problems)
+        {
+            s.Contours.Layer = Convert.ToString(_layer.SelectedItem) ?? string.Empty;
+            s.Contours.LabelLayer = Convert.ToString(_labelLayer.SelectedItem) ?? string.Empty;
+            s.Contours.LabelByDefault = _labelByDefault.Checked;
+
+            var height = s.Contours.LabelTextPlotted;
+            ReadDouble(_height, "Contours: label height", v => v > 0,
+                       "must be greater than zero", problems, ref height);
+            s.Contours.LabelTextPlotted = height;
+
+            var spacing = s.Contours.LabelSpacingPlotted;
+            ReadDouble(_spacing, "Contours: label spacing", v => v >= 0,
+                       "cannot be negative", problems, ref spacing);
+            s.Contours.LabelSpacingPlotted = spacing;
+
+            var decimals = s.Contours.LabelDecimals;
+            ReadInt(_decimals, "Contours: label decimals", v => v >= -1 && v <= 6,
+                    "must be -1 (as typed) or 0 to 6", problems, ref decimals);
+            s.Contours.LabelDecimals = decimals;
+
+            s.Contours.MaskLabels = _mask.Checked;
+            s.Contours.CheckAgainstSurface = _check.Checked;
+        }
+
+        public override void RestoreDefaults(FtfSettings s)
+        {
+            s.Contours.RestoreDefaults();
+            LoadFrom(s);
+        }
+    }
+
     // -------------------------------------------------------------------- sheets
 
     internal sealed class SheetsPage : SetupPage

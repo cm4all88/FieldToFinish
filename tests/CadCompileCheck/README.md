@@ -17,18 +17,21 @@ warnings-as-errors and documentation settings as `src/FieldCodes.Cad`.
 
 ## Scope
 
-The FTFRECORD files, the line labelling, driveway and bench commands, two setup pages, and
-the plugin helpers they lean on:
+The FTFRECORD files, the line labelling, driveway, bench and contour commands, two setup pages,
+and the plugin helpers they lean on:
 
 | Compiled from source | Stubbed (`Stubs/Internal.cs`) |
 |---|---|
 | RecordCommands, RecordDrafter, RecordDocumentReader, Ui/RecordReviewForm, Setup/RecordSurveyPage | `EasementInspectCommands` (three members), `EasementCommands.Extract`, `InspectRow`, the `DipBuilderForm` palette, `ThemePreference` |
 | LineworkCommands (FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFLABELSTAIRS, FTFLINELABELS), BenchCommands (FTFBENCH), LabelAllCommand (FTFLABELALL), LabelCommands (FTFLABELS), DrawOrderCommands (FTFORDER), FtfLineworkService, MaskSync | |
+| ContourCommands (FTFCONTOUR), ProductionLayers | |
 | Setup/Pages, Setup/PointFeaturesPage | |
 | Ownership, DrawingStore, CadUtil, FtfSession, TextMask, Setup/DrawingResources, Setup/SetupPage | |
 
 `Stubs/Geometry.cs` and `Stubs/Database.cs` follow the real AcDbMgd / AcMgd / AeccDbMgd
-signatures; `Stubs/WinRt.cs` follows the Windows 10 SDK contracts. When the plugin starts
+signatures (the surface members -- `TinSurface.ExtractContoursAt`, `GetGeneralProperties`,
+`GetTinProperties`, `GetTriangles`, `IsOutOfDate` -- as the Civil 3D API reference documents
+them); `Stubs/WinRt.cs` follows the Windows 10 SDK contracts. When the plugin starts
 using a member the stubs lack, the build says so: add the member with the real signature
 (check the Autodesk docs, do not guess) rather than changing the plugin to fit the stub.
 

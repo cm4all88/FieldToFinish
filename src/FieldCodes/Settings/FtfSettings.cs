@@ -69,6 +69,7 @@ namespace FieldCodes.Settings
         [JsonProperty("tags")] public TagSettings Tags { get; set; }
         [JsonProperty("drawOrder")] public DrawOrderSettings DrawOrder { get; set; }
         [JsonProperty("spots")] public SpotSettings Spots { get; set; }
+        [JsonProperty("contours")] public ContourSettings Contours { get; set; }
         [JsonProperty("sheets")] public SheetSettings Sheets { get; set; }
         [JsonProperty("dips")] public UtilitySettings Dips { get; set; }
         [JsonProperty("easements")] public EasementSettings Easements { get; set; }
@@ -88,6 +89,7 @@ namespace FieldCodes.Settings
             Tags = new TagSettings();
             DrawOrder = new DrawOrderSettings();
             Spots = new SpotSettings();
+            Contours = new ContourSettings();
             Sheets = new SheetSettings();
             Dips = new UtilitySettings();
             Easements = new EasementSettings();
@@ -105,7 +107,7 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Sheets, Dips, Easements, Exhibits, RecordSurvey, Cleanup
+                    Spots, Contours, Sheets, Dips, Easements, Exhibits, RecordSurvey, Cleanup
                 };
             }
         }
@@ -319,6 +321,7 @@ namespace FieldCodes.Settings
             if (Tags == null) Tags = new TagSettings();
             if (DrawOrder == null) DrawOrder = new DrawOrderSettings();
             if (Spots == null) Spots = new SpotSettings();
+            if (Contours == null) Contours = new ContourSettings();
             if (Sheets == null) Sheets = new SheetSettings();
             if (Dips == null) Dips = new UtilitySettings();
             if (Easements == null) Easements = new EasementSettings();
