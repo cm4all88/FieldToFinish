@@ -11,6 +11,9 @@ namespace FieldCodes.Tests;
 /// </summary>
 public sealed class RuleEditingTests
 {
+    /// <summary>The pole's shipped label format: the notes vocabulary's groups, read in order.</summary>
+    internal const string ShippedPoleFormat = "POLE[ {number}][ {owner}][ {material}][ {height}]\\P[W/ {attach}]\\P[{other}]";
+
     private static readonly string RulesPath =
         Path.Combine(AppContext.BaseDirectory, "rules.json");
 
@@ -32,7 +35,7 @@ public sealed class RuleEditingTests
 
         Assert.Equal("pole", pole.Id);
         Assert.True(pole.Enabled);
-        Assert.Equal("POLE {number}", pole.LabelFormat);
+        Assert.Equal(ShippedPoleFormat, pole.LabelFormat);
         Assert.Equal("V-UTIL-POWR-TEXT", pole.LabelLayer);
         Assert.Equal("P", pole.TagPrefix);
         Assert.Equal("None", pole.RotationSummary);
@@ -80,7 +83,7 @@ public sealed class RuleEditingTests
 
         // The one intended change...
         Assert.Contains("UTILITY POLE {number}", rendered);
-        Assert.DoesNotContain("\"POLE {number}\"", rendered);
+        Assert.DoesNotContain("\"POLE[ {number}][ {owner}]", rendered);
 
         // ...and nothing else. Comments, other rules, tree grammar all intact.
         Assert.Contains("//sn-sign", rendered);
@@ -289,7 +292,7 @@ public sealed class RuleEditingTests
         doc.Save(path);
 
         Assert.True(File.Exists(path + RuleDocument.OriginalBackupSuffix));
-        Assert.Contains("POLE {number}",
+        Assert.Contains("\"POLE[ {number}][ {owner}]",
             File.ReadAllText(path + RuleDocument.OriginalBackupSuffix));
         Assert.Contains("UTILITY POLE", File.ReadAllText(path));
         Assert.False(File.Exists(path + ".tmp"));
@@ -343,7 +346,7 @@ public sealed class RuleEditingTests
 
         Assert.Equal(before, File.ReadAllText(path));
         var fresh = RuleDocument.Load(path).GetEditable("pole");
-        Assert.Equal("POLE {number}", fresh.LabelFormat);
+        Assert.Equal(ShippedPoleFormat, fresh.LabelFormat);
     }
 
     [Fact]

@@ -197,7 +197,8 @@ public sealed class LineLabelPlannerTests : IClassFixture<RulesFixture>
         // Guardrail is identified but has no labelling standard configured yet.
         Assert.Null(LineworkCatalog.UnanimousLabel(catalog.Candidates("GRL1", null)));
 
-        // FNC and FHW share a layer and neither has a label: null, never a guess.
+        // FNC and FHW share a layer and are labelled differently (FENCE, HOG WIRE FENCE):
+        // null, never a guess. FTFLABELLINE asks which it is; the bulk pass reports it.
         Assert.Null(LineworkCatalog.UnanimousLabel(catalog.Candidates(null, "V-SURF-FENC-E")));
     }
 

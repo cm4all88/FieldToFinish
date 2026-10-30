@@ -109,7 +109,7 @@ public sealed class PointFeatureEditingTests
         // Fields were changed in the UI but never applied; Cancel re-reads the
         // document, which still holds the original values.
         var reloaded = doc.GetEditable("pole");
-        Assert.Equal("POLE {number}", reloaded.LabelFormat);
+        Assert.Equal(RuleEditingTests.ShippedPoleFormat, reloaded.LabelFormat);
         Assert.Equal("P", reloaded.TagPrefix);
         Assert.True(reloaded.Enabled);
     }
@@ -151,7 +151,7 @@ public sealed class PointFeatureEditingTests
 
         // Factory byte-for-byte untouched; office carries the edit AND the comments.
         var factory = File.ReadAllText(Path.Combine(_plugin, "rules.json"));
-        Assert.Contains("\"POLE {number}\"", factory);
+        Assert.Contains("\"POLE[ {number}][ {owner}]", factory);
         var office = File.ReadAllText(after.ActivePath);
         Assert.Contains("MY POLE", office);
         Assert.Contains("//point-features", office);
@@ -175,7 +175,7 @@ public sealed class PointFeatureEditingTests
         // The edit stayed with the job; office was never created, factory untouched.
         Assert.Contains("JOB POLE", File.ReadAllText(Path.Combine(_drawing, "rules.json")));
         Assert.False(File.Exists(Path.Combine(_office, "rules.json")));
-        Assert.Contains("\"POLE {number}\"",
+        Assert.Contains("\"POLE[ {number}][ {owner}]",
             File.ReadAllText(Path.Combine(_plugin, "rules.json")));
         Assert.Equal(RulesSource.Drawing, Resolve().Source);
     }

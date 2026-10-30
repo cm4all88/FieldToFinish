@@ -132,7 +132,17 @@ namespace FieldCodes.Cad.Setup
             // -------------------------- label finishing ---------------------------
 
             Heading("Label finishing");
-            _labelFormat = TextRow("Label text", "Text with {placeholders} from the pattern.", 240);
+            _labelFormat = TextRow("Label text",
+                "One label line per row, read top to bottom. {placeholders} come from the " +
+                "pattern and, for a feature with a notes vocabulary, from its note groups " +
+                "({owner}, {attach}). Text in [square brackets] shows only when a placeholder " +
+                "inside it has a value, and a row left empty is dropped -- so a pole with no " +
+                "attachments has no \"W/\" line. Try a description below to see the result.", 300);
+            // One row per label line; stored with \P, AutoCAD's line break, between them.
+            _labelFormat.Multiline = true;
+            _labelFormat.AcceptsReturn = true;
+            _labelFormat.ScrollBars = ScrollBars.Vertical;
+            _labelFormat.Height = 64;
             _labelLayer = ComboRow("Label layer", LayerChoices(), null);
             _leader = ComboRow("Leader", new object[] { "Auto", "Always", "Never" },
                 "Auto draws a leader only when the label cannot sit next to the point.");
@@ -357,7 +367,7 @@ namespace FieldCodes.Cad.Setup
 
             _description.Text = rule.Description;
             _enabled.Checked = rule.Enabled;
-            _labelFormat.Text = rule.LabelFormat;
+            _labelFormat.Text = (rule.LabelFormat ?? string.Empty).Replace("\\P", Environment.NewLine);
             ComboHelp.SelectOrAdd(_labelLayer, rule.LabelLayer, false);
             _leader.SelectedItem = rule.Leader;
             if (_leader.SelectedIndex < 0) _leader.SelectedIndex = 0;
@@ -395,7 +405,11 @@ namespace FieldCodes.Cad.Setup
             var edit = _document.GetEditable(id);
             edit.Enabled = _enabled.Checked;
             edit.Description = (_description.Text ?? string.Empty).Trim();
-            edit.LabelFormat = (_labelFormat.Text ?? string.Empty).Trim();
+            edit.LabelFormat = string.Join("\\P", (_labelFormat.Text ?? string.Empty)
+                .Replace("\r\n", "\n").Split('\n')
+                .Select(line => line.TrimEnd())
+                .Where(line => line.Length > 0)
+                .ToArray());
             edit.LabelLayer = _labelLayer.SelectedItem != null
                 ? Convert.ToString(_labelLayer.SelectedItem) : string.Empty;
             edit.Leader = _leader.SelectedItem != null

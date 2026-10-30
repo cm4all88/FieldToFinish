@@ -444,9 +444,11 @@ namespace FieldCodes.Cad.Setup
         private TextBox _minLength;
         private TextBox _endClearance;
         private CheckBox _mask;
+        private TextBox _drivewayFormat;
+        private CheckBox _legendLinetypes;
 
         public override string Title { get { return "Line Labels"; } }
-        public override string AffectedCommands { get { return "FTFLINELABELS"; } }
+        public override string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
 
         protected override void BuildBody()
         {
@@ -462,7 +464,9 @@ namespace FieldCodes.Cad.Setup
                 "Labels every recognised line in one go: one label at the midpoint of " +
                 "short features, repeated labels on long ones. Off by default because " +
                 "line annotation is usually a judgement call -- FTFLABELLINE works " +
-                "either way, and labels placed with it are never touched by this pass.");
+                "either way, and labels placed with it are never touched by this pass. " +
+                "This switch is for FTFRUN; the Label Everything button (FTFLABELALL) " +
+                "always labels the lines, because that is what it was pressed for.");
 
             Heading("Text");
             var styles = new List<object> { "(drawing's current style)" };
@@ -497,6 +501,21 @@ namespace FieldCodes.Cad.Setup
             _mask = CheckRow("Draw a mask under each label",
                 "The mask rotates with the text.");
 
+            _legendLinetypes = CheckRow("Leave lettered and symbol linetypes to the legend",
+                "A line whose linetype draws its own letter or symbol -- water ---W---, " +
+                "power ---P---, a fence's x's -- already says what it is, and the legend " +
+                "explains it, so the automatic pass and Label Everything give it no text " +
+                "label. Read from the linetype's definition (its own, or its layer's when " +
+                "ByLayer). Gate labels on such a line are still placed, and FTFLABELLINE " +
+                "still labels one you click. Features marked alwaysLabel in rules.json " +
+                "(every fence) are labelled anyway.");
+
+            Heading("Driveways (FTFLABELDRIVEWAY)");
+            _drivewayFormat = TextRow("Driveway wording",
+                "Pick a driveway's two edges as for FTFLABELBETWEEN. {type} is the first " +
+                "edge's surface type read from its layer: V-SURF-ASPH-E gives ASPH, so " +
+                "\"{type} DWY\" labels ASPH DWY. Must contain {type}.", 160);
+
             Heading("Automatic pass spacing (survey feet)");
             Note("These three only shape the automatic pass. With FTFLABELLINE you " +
                  "decide where every label goes, so none of them apply there.");
@@ -524,6 +543,8 @@ namespace FieldCodes.Cad.Setup
             _minLength.Text = Fmt(s.LineLabels.MinLengthFeet);
             _repeatInterval.Text = Fmt(s.LineLabels.RepeatIntervalFeet);
             _endClearance.Text = Fmt(s.LineLabels.EndClearanceFeet);
+            _drivewayFormat.Text = s.LineLabels.DrivewayFormat;
+            _legendLinetypes.Checked = s.LineLabels.LeaveMarkedLinetypesToLegend;
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
@@ -563,6 +584,14 @@ namespace FieldCodes.Cad.Setup
             ReadDouble(_endClearance, "Line labels: end clearance", v => v >= 0,
                        "cannot be negative", problems, ref clearance);
             s.LineLabels.EndClearanceFeet = clearance;
+
+            s.LineLabels.LeaveMarkedLinetypesToLegend = _legendLinetypes.Checked;
+
+            var driveway = (_drivewayFormat.Text ?? string.Empty).Trim();
+            if (driveway.Length > 0 && driveway.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)
+                problems.Add("Line labels: the driveway wording must contain {type}, e.g. \"{type} DWY\".");
+            else
+                s.LineLabels.DrivewayFormat = driveway.Length > 0 ? driveway : FieldCodes.Linework.DrivewayWording.DefaultFormat;
         }
 
         public override void RestoreDefaults(FtfSettings s)
@@ -1007,6 +1036,89 @@ namespace FieldCodes.Cad.Setup
         }
     }
 
+    // ------------------------------------------------------------------ contours
+
+    internal sealed class ContoursPage : SetupPage
+    {
+        private ComboBox _layer;
+        private ComboBox _labelLayer;
+        private CheckBox _labelByDefault;
+        private TextBox _height;
+        private TextBox _spacing;
+        private TextBox _decimals;
+        private CheckBox _mask;
+        private CheckBox _check;
+
+        public override string Title { get { return "Contours"; } }
+        public override string AffectedCommands { get { return "FTFCONTOUR"; } }
+
+        protected override void BuildBody()
+        {
+            Heading("Contours from a surface");
+            Note("FTFCONTOUR: pick a TIN surface, type an elevation (or several), get contour " +
+                 "polylines at exactly that elevation. The surface is only read -- never " +
+                 "rebuilt, never edited, its style and contour intervals left alone.");
+
+            var layers = new List<object>();
+            foreach (var name in Context.Drawing.Layers) layers.Add(name);
+            _layer = ComboRow("Contour layer", layers, "Project layer mappings apply, as for production layers.");
+            _labelLayer = ComboRow("Label layer", layers, null);
+
+            Heading("Elevation labels");
+            _labelByDefault = CheckRow("Label contours unless switched off at the prompt (L)", null);
+            _height = TextRow("Label height (plotted)", "0.08 is Leroy 80.");
+            _spacing = TextRow("Label spacing (plotted)", "Along long contours; 0 = one label per contour.");
+            _decimals = TextRow("Label decimals", "-1 writes the elevation exactly as typed (12.60 stays 12.60).");
+            _mask = CheckRow("Mask under labels so the contour breaks for the text", null);
+
+            Heading("Checking");
+            _check = CheckRow("Read contour vertices back off the surface and report the largest difference", null);
+        }
+
+        public override void LoadFrom(FtfSettings s)
+        {
+            ComboHelp.SelectOrAdd(_layer, s.Contours.Layer, false);
+            ComboHelp.SelectOrAdd(_labelLayer, s.Contours.LabelLayer, false);
+            _labelByDefault.Checked = s.Contours.LabelByDefault;
+            _height.Text = Fmt(s.Contours.LabelTextPlotted);
+            _spacing.Text = Fmt(s.Contours.LabelSpacingPlotted);
+            _decimals.Text = s.Contours.LabelDecimals.ToString(CultureInfo.InvariantCulture);
+            _mask.Checked = s.Contours.MaskLabels;
+            _check.Checked = s.Contours.CheckAgainstSurface;
+        }
+
+        public override void SaveTo(FtfSettings s, ICollection<string> problems)
+        {
+            s.Contours.Layer = Convert.ToString(_layer.SelectedItem) ?? string.Empty;
+            s.Contours.LabelLayer = Convert.ToString(_labelLayer.SelectedItem) ?? string.Empty;
+            s.Contours.LabelByDefault = _labelByDefault.Checked;
+
+            var height = s.Contours.LabelTextPlotted;
+            ReadDouble(_height, "Contours: label height", v => v > 0,
+                       "must be greater than zero", problems, ref height);
+            s.Contours.LabelTextPlotted = height;
+
+            var spacing = s.Contours.LabelSpacingPlotted;
+            ReadDouble(_spacing, "Contours: label spacing", v => v >= 0,
+                       "cannot be negative", problems, ref spacing);
+            s.Contours.LabelSpacingPlotted = spacing;
+
+            var decimals = s.Contours.LabelDecimals;
+            ReadInt(_decimals, "Contours: label decimals", v => v >= -1 && v <= 6,
+                    "must be -1 (as typed) or 0 to 6", problems, ref decimals);
+            s.Contours.LabelDecimals = decimals;
+
+            s.Contours.MaskLabels = _mask.Checked;
+            s.Contours.CheckAgainstSurface = _check.Checked;
+        }
+
+        public override void RestoreDefaults(FtfSettings s)
+        {
+            s.Contours.RestoreDefaults();
+            LoadFrom(s);
+        }
+    }
+
     // -------------------------------------------------------------------- sheets
 
     internal sealed class SheetsPage : SetupPage
@@ -1233,7 +1345,7 @@ namespace FieldCodes.Cad.Setup
                         .First(d => d.Severity == Severity.Error).Message;
                 else
                     _testResult.Text = string.Format("OK - label \"{0}\"{1}",
-                        parsed.LabelText,
+                        parsed.LabelDisplay,
                         parsed.DripRadius.HasValue
                             ? ", drip radius " + Fmt(parsed.DripRadius.Value)
                             : string.Empty);

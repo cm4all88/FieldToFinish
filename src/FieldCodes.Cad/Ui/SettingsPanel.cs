@@ -67,6 +67,7 @@ namespace FieldCodes.Cad.Ui
             AddSection("Point Labels", new LabelsPage());
             AddSection("Line Labels", new LineLabelsPage());
             AddSection("Spot Shots", new SpotsPage());
+            AddSection("Contours", new ContoursPage());
             AddSection("Tags", new TagsPage());
             AddSection("Schedule", new TablesPage());
 

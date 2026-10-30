@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -316,7 +317,7 @@ namespace FieldCodes.Settings
     public sealed class LineLabelSettings : ISettingsSection
     {
         public string Title { get { return "Line Labels"; } }
-        public string AffectedCommands { get { return "FTFLINELABELS"; } }
+        public string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
 
         /// <summary>Master switch for the linework labelling stage.</summary>
         [JsonProperty("enabled")]
@@ -372,6 +373,17 @@ namespace FieldCodes.Settings
         [JsonProperty("drawMask")]
         public bool DrawMask { get; set; }
 
+        /// <summary>FTFLABELDRIVEWAY's wording. {type} is the first edge's surface type read
+        /// from its layer (V-SURF-ASPH-E gives ASPH): "{type} DWY" labels "ASPH DWY".</summary>
+        [JsonProperty("drivewayFormat")]
+        public string DrivewayFormat { get; set; }
+
+        /// <summary>A line whose linetype draws its own letter or symbol (water ---W---,
+        /// power ---P---) is named by the legend: the automatic pass gives it no text
+        /// label. Gate labels on it are still placed.</summary>
+        [JsonProperty("leaveMarkedLinetypesToLegend")]
+        public bool LeaveMarkedLinetypesToLegend { get; set; }
+
         public LineLabelSettings() { RestoreDefaults(); }
 
         public void RestoreDefaults()
@@ -393,6 +405,8 @@ namespace FieldCodes.Settings
             DefaultPlacement = "OnLine";
             SideOffsetFeet = 1.0;
             DrawMask = true;
+            DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
+            LeaveMarkedLinetypesToLegend = true;
         }
 
         public void Validate(ICollection<string> problems)
@@ -409,6 +423,10 @@ namespace FieldCodes.Settings
                 problems.Add("Line labels: a default label layer is required.");
             Require.NotNegative(SideOffsetFeet,
                 "Line labels: side offset cannot be negative.", problems);
+            if (string.IsNullOrWhiteSpace(DrivewayFormat))
+                DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
+            else if (DrivewayFormat.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)
+                problems.Add("Line labels: the driveway wording must contain {type} (the surface type read from the edge's layer), e.g. \"{type} DWY\".");
         }
     }
 
@@ -554,6 +572,92 @@ namespace FieldCodes.Settings
                 problems.Add("Spot shots: a marker layer is required.");
             if (string.IsNullOrWhiteSpace(TextLayer))
                 problems.Add("Spot shots: a text layer is required.");
+        }
+    }
+
+    // ---------------------------------------------------------------- contours
+
+    /// <summary>
+    /// FTFCONTOUR: contour polylines at exact elevations, extracted from a TIN surface.
+    /// The surface itself is never changed; these settings only shape what is drawn.
+    /// </summary>
+    public sealed class ContourSettings : ISettingsSection
+    {
+        public string Title { get { return "Contours"; } }
+        public string AffectedCommands { get { return "FTFCONTOUR"; } }
+
+        /// <summary>Layer for the contour polylines. Goes through the project's layer
+        /// mappings like the other production layers.</summary>
+        [JsonProperty("layer")]
+        public string Layer { get; set; }
+
+        /// <summary>Layer for the elevation labels and their masks.</summary>
+        [JsonProperty("labelLayer")]
+        public string LabelLayer { get; set; }
+
+        /// <summary>Whether FTFCONTOUR labels the contours unless told otherwise at the prompt.</summary>
+        [JsonProperty("labelByDefault")]
+        public bool LabelByDefault { get; set; }
+
+        /// <summary>Label text height as plotted.</summary>
+        [JsonProperty("labelTextPlotted")]
+        public double LabelTextPlotted { get; set; }
+
+        /// <summary>Plotted distance between labels along a long contour; 0 puts one label on
+        /// each contour piece.</summary>
+        [JsonProperty("labelSpacingPlotted")]
+        public double LabelSpacingPlotted { get; set; }
+
+        /// <summary>Decimal places on the labels; -1 writes the elevation exactly as typed.</summary>
+        [JsonProperty("labelDecimals")]
+        public int LabelDecimals { get; set; }
+
+        /// <summary>A wipeout under each label so the contour breaks for the text.</summary>
+        [JsonProperty("maskLabels")]
+        public bool MaskLabels { get; set; }
+
+        /// <summary>Reads contour vertices back off the surface after drawing and reports the
+        /// largest difference -- a read-only check of the result.</summary>
+        [JsonProperty("checkAgainstSurface")]
+        public bool CheckAgainstSurface { get; set; }
+
+        public ContourSettings() { RestoreDefaults(); }
+
+        public void RestoreDefaults()
+        {
+            Layer = "V-TOPO-CONT-E";
+            LabelLayer = "V-TOPO-CONT-TEXT-E";
+            LabelByDefault = false;
+            LabelTextPlotted = 0.08;
+            LabelSpacingPlotted = 6.0;
+            LabelDecimals = -1;
+            MaskLabels = true;
+            CheckAgainstSurface = true;
+        }
+
+        /// <summary>The label text for an elevation: as typed, or to the configured decimals.</summary>
+        public string LabelText(double value, string typed)
+        {
+            if (LabelDecimals < 0)
+                return string.IsNullOrEmpty(typed)
+                    ? value.ToString("R", CultureInfo.InvariantCulture)
+                    : typed;
+            return value.ToString("F" + Math.Min(6, LabelDecimals).ToString(CultureInfo.InvariantCulture),
+                                  CultureInfo.InvariantCulture);
+        }
+
+        public void Validate(ICollection<string> problems)
+        {
+            if (string.IsNullOrWhiteSpace(Layer))
+                problems.Add("Contours: a contour layer is required.");
+            if (string.IsNullOrWhiteSpace(LabelLayer))
+                problems.Add("Contours: a label layer is required.");
+            Require.Positive(LabelTextPlotted,
+                "Contours: label text height must be greater than zero.", problems);
+            Require.NotNegative(LabelSpacingPlotted,
+                "Contours: label spacing cannot be negative (0 = one label per contour).", problems);
+            if (LabelDecimals < -1 || LabelDecimals > 6)
+                problems.Add("Contours: label decimals must be -1 (as typed) or 0 to 6.");
         }
     }
 

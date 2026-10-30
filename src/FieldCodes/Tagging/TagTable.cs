@@ -163,7 +163,7 @@ namespace FieldCodes.Tagging
                         : string.Empty;
 
                 case TagTableColumn.Label:
-                    return point.LabelText ?? string.Empty;
+                    return point.LabelDisplay ?? string.Empty;
 
                 default:
                     return Notes(point);

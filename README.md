@@ -366,6 +366,10 @@ turn the symbol off in the point style.
 | `FTFBLOCKS` | Lists the drawing's blocks and checks them against the rules | n/a |
 | `FTFDRAWLINE` | Drafts cadastral / record lines with bearing/distance annotation — the separate drafting world, see below | n/a |
 | `FTFDRAFTCLEAN` | Cleanup for the drafted world: annotation by default, geometry only on explicit confirmation | n/a |
+| `FTFLABELALL` | Label Everything: every recognised line (gates included), every point, then draw order; lists what it could not label | yes |
+| `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
+| `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
+| `FTFCONTOUR` | Contour polylines at exact elevations off a TIN surface (one, a list, or a run), optionally clipped to a boundary and labelled; the surface is only read | yes (replaces its own at the same surface and elevation) |
 | `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
 | `FTFRECORDCHECK` | Drawing versus the record; flags only | yes |
 | `FTFRECORDLABEL` | Places or refreshes the record labels | yes |
@@ -375,6 +379,210 @@ turn the symbol off in the point style.
 | `FTFCOMPARERUN` / `FTFCOMPAREAPPLY` / `FTFCOMPARERESTORE` / `FTFCOMPAREQC` / `FTFCOMPARESAVE` / `FTFCOMPAREBATCH` | The same workflow from the command line, step by step | yes |
 | `FTFLOTS` | Divides a platted block into lots: lot lines with bearings/distances, alley, setbacks, easements, numbers and areas, drainage arrows (see below) | n/a |
 | `FTFROW` | Right of way from picked monuments: lines, opposite line, centerline, width dimensions, monument notes — runs, blocks, intersections (see below) | n/a |
+
+## Labels from field notes: poles and signs
+
+A crew rarely shoots a pole as just `PP 1234`. It is `PP 1234 PSE XFMR TEL CATV`,
+or the same words in another order. A rule can carry a **notes vocabulary**
+(`notes` in `rules.json`): each term turns what the crew writes into the label's
+wording and puts it in a named group, and the label format reads the groups in a
+fixed order. The order the notes were typed in never changes the label.
+
+```
+PP 1234 PSE XFMR TEL CATV      POLE 1234 PSE
+PP CATV PSE TEL 1234 XFMR      W/ XFMR, TEL, CATV        (the same label)
+PP 45FT WD 1234 SL             POLE 1234 WOOD 45'
+                               W/ LUMINAIRE
+PP 1234 XFMR DEAD              POLE 1234 (DEAD)
+                               W/ XFMR                    (modifiers still compose)
+SN 135 SPD 25 MPH WP           SPEED LIMIT 25 SIGN (WOOD POST)
+SN 90 NO PARKING ANYTIME       NO PARKING ANYTIME SIGN
+SN 270 DEAD END                DEAD END SIGN              (wording, not the DEAD modifier)
+```
+
+- **Terms** are regexes over whole words, tried in the order listed. A term may
+  span words (`NO\s+PARK(?:ING)?`) and capture values for its wording
+  (`SPEED\s+(?<mph>[0-9]+)` → `SPEED LIMIT {mph}`). The rule's own terms are read
+  before the global modifiers, so DEAD/REM/PROT still work on a pole while a
+  sign's DEAD END stays wording.
+- **Reading order.** Within a group, values read in the vocabulary's order
+  (`Vocabulary`, the default) or as written (`AsShot`, for sign wording); the
+  group's `joiner` goes between them. `{notes}` is every group in order.
+- **Unknown words are never dropped.** `Flag` (the pole) labels them as written on
+  the last line and lists the point in the exception report so the word can be
+  added to the vocabulary; `Keep` (the sign, whose wording is free text) labels
+  them quietly; `Refuse` makes the point an error, as an unknown modifier is.
+- **The format reads top to bottom.** Text in `[square brackets]` appears only when a
+  placeholder inside it has a value, `\P` starts a new line, and a line left empty
+  is dropped, so a pole with no attachments has no `W/` line. A modifier's suffix
+  goes on the first line. A plain one-line format expands exactly as before.
+  FTFSETUP > Point Features shows the format one line per row, and its test box
+  shows the label any description would get.
+
+The shipped pole and `SN` sign vocabularies are a **starter set** (owners, poles'
+material and height, transformer, TEL, CATV, fiber, luminaire, guy; NO PARKING,
+SPEED LIMIT, YIELD, DEAD END, ONE WAY, posts). Confirm them against the office
+code sheet and extend them in `rules.json`. Any other rule (light poles, junction
+boxes) takes a vocabulary the same way, with no code change.
+
+## Benches: FTFBENCH
+
+A bench is shot as two points, one at the middle of each end, with its depth (and
+often its height) in the notes. `FTFBENCH` takes the two points, or the two-point
+line Civil 3D drew through them, and draws the outline: the shot-to-shot line
+offset half the depth to each side, ends closed, on `bench.layer`. The label says
+its size, `BENCH 3'x1.5'` (`bench.labelFormat`; `{length}`, `{depth}`, `{height}` in
+feet, `[ ]` and `\P` as above).
+
+- The depth is read from either end's notes: `D1.5`, `D 1.5`, `D=1.5`, `DEPTH 1.5`,
+  `1.5D`, `1.5' DEEP`, `18IN D`; the height the same way with `H`, `HT`, `HEIGHT`,
+  `HIGH`. Inches are converted. Two ends that disagree, or a number with no D or H
+  beside it, are shown and the depth is asked for, never guessed.
+- The length is what was shot; only the label rounds it. A depth larger than the
+  length, or ends more than 40 ft apart, is drawn but flagged as worth checking.
+- The label goes beside the bench by default (at plotted sizes the text is often
+  taller than the bench is deep), or wherever you click.
+- The outline and label are deliberate drafting: `FTFCLEAN` leaves them alone,
+  `FTFDRAFTCLEAN` manages them with the drafted lines, and running `FTFBENCH` again
+  on the same two shots replaces that bench rather than drawing a second.
+- `bench.layer` ships as `V-SITE-FURN-E` as a starting point; set it to the office's
+  site furniture layer.
+
+## Driveways: FTFLABELDRIVEWAY
+
+`FTFLABELDRIVEWAY` (`FTFDWY`) is `FTFLABELBETWEEN` for a driveway: pick its two
+edges, slide the label along the midline, click. The wording is the first edge's
+**surface type read from its layer** with DWY after it: an edge on `V-SURF-ASPH-E`
+labels `ASPH DWY`, on `V-SURF-CONC-E` `CONC DWY`, on `V-SURF-GRVL-E` `GRVL DWY`. The
+type is the layer's last field once a one-letter status field (`-E`) is set aside,
+so the edge need not be a configured line feature. `W` switches to the spelled-out
+word where the feature has one (`ASPHALT DWY` for an EP edge). The wording is
+Settings > Line Labels > Driveway wording (`{type} DWY`); the label layer is the one
+`FTFLABELBETWEEN` would use.
+
+## Label Everything: FTFLABELALL
+
+Once the points are imported and Civil 3D has built the linework, the **Label
+Everything** button (`FTFLABELALL`) labels the drawing in one go:
+
+1. Every recognised line, by the whole-drawing line pass. It runs even when the
+   automatic pass is off in Settings > Line Labels; that switch only governs
+   `FTFRUN`. A line is identified by figure name, then TrimbleName XData, then the
+   notes of the survey points it was drawn through, then its layer, the same order
+   `FTFLABELLINE` uses. Two shots noted with a span marker (`FGP`) along a line get
+   a `GATE` label between them.
+2. Every point (`FTFLABELS`), steering around the line labels just placed.
+3. Draw order (`FTFORDER`).
+
+**Lettered and symbol linetypes are left to the legend.** A line whose linetype
+draws its own letter or symbol -- water `---W---`, power `---P---`, a fence's x's --
+already says what it is, so the line pass gives it no text label. FTF reads this from
+the linetype's definition (its text and shape elements), from the line's own linetype
+or its layer's when ByLayer, never from the name. Gate labels along such a line are
+still placed, `FTFLABELLINE` still labels one you click (with a note), and the summary
+lists them by linetype (`Left to the legend: WATER (W) 12, POWER (P) 4`). Turn it off
+under Settings > Line Labels. **Fences are the exception:** every fence code carries
+`"alwaysLabel": true` in `rules.json`, so a fence is labelled whether or not its
+linetype draws x's. Any other line feature can be given the same flag. A survey figure whose style gives it a lettered linetype
+of its own, rather than by layer, is not seen. `FTFLEGEND` itself lists only the line
+features configured in `rules.json`, so an unconfigured water or power line is in the
+office legend, not FTF's.
+
+Labels placed with `FTFLABELLINE`, or moved by hand, are kept. Running it again
+after more linework arrives replaces only its own labels. It ends by listing every
+identified line it could not label, grouped: a feature with no wording configured
+(`GRL Guardrail: no label configured (4 lines)`), or a layer two features share and
+nothing on the line tells apart (`V-SURF-FENC-E: could be FNC (FENCE) or FHW (HOG
+WIRE FENCE)`). Label those with `FTFLABELLINE`, which asks which it is.
+
+**Fences.** Only chain link (`FCK`) used to have a wording, so every other fence
+was refused. The shipped rules now label `FNC` FENCE, `FHW` HOG WIRE FENCE, `FBD`
+WOOD FENCE, `FRL` RAIL FENCE and `FBW` BARBED WIRE FENCE; confirm the wordings
+against the office standard. `FNC`/`FHW` share `V-SURF-FENC-E` and `FBD`/`FRL` share
+`V-SURF-FENC-WOOD-E`: a survey figure names itself (`FNC3`), a plain polyline is
+named by its shots' notes, and only when neither says does `FTFLABELLINE` ask.
+
+## Contours at an exact elevation: FTFCONTOUR
+
+`FTFCONTOUR` draws the contour at any elevation you name, straight off an existing TIN
+surface, without touching the surface:
+
+```
+Command: FTFCONTOUR
+Select a TIN surface or [Name] <EG>:            (click it, Enter for the last one, N to pick by name)
+Elevation(s) on "EG" in feet -- 12.6, or 12.6, 13, 13.5, or 10 to 14 by 0.5 [Boundary=none / Labels=off]: 12.60
+FTFCONTOUR: surface "EG" (1,234 points, 2,401 triangles, elevations 10.12 to 18.4).
+  12.60  3 contours (1 closed, 2 open), 412.37 ft, 386 vertices.
+  Accuracy: 12 vertices read back from the surface; all on their contour elevation (largest difference 0.0000 ft).
+  Surface untouched: definition, triangles, elevation range, style and build state read the same before and after.
+  3 contour polylines on layer V-TOPO-CONT-E. One U undoes the lot.
+```
+
+- **Elevations.** One (`12.6`), a list separated by commas, semicolons or spaces
+  (`12.6, 13.0, 13.5`), or a run (`10 to 14 by 0.5`, which counts in decimal so it lands
+  on 14 exactly). Each value is the exact double its text names -- `12.60` is drawn at
+  12.6, never rounded to a display precision -- in drawing units (the prompt says which).
+  The same value typed twice (`13, 13.0`) is drawn once. Anything unreadable is refused
+  and asked again; nothing is drawn from a half-understood list.
+- **What is drawn.** Every piece where the surface crosses the elevation: disconnected
+  pieces, open pieces that run off the surface or into a hidden area, and closed loops
+  around hills and hollows, each its own lightweight polyline with **Elevation** set to
+  the value typed, on the contour layer (colour, linetype and lineweight ByLayer).
+- **Where it comes from.** Civil 3D's own extraction,
+  `TinSurface.ExtractContoursAt(double elevation)` (the `ITerrainSurface` member; the
+  no-smoothing overload), which intersects the built TIN at that elevation -- the
+  surface's actual intersection, not a position interpolated between the contours its
+  style displays. Civil 3D adds its result to the drawing as polylines; FTF reads each
+  one exactly (vertices, bulges, closure), erases it, and draws its own in its place. If
+  that call fails, FTF traces the same intersection from the surface's visible triangles
+  (`GetTriangles(false)`) and says so.
+- **The surface is only read.** It is opened for read for the whole command, so AutoCAD
+  itself would refuse any change. Nothing is added to its definition; no triangle,
+  breakline, boundary, point, style or contour interval is touched; it is **never
+  rebuilt**. An out-of-date surface is reported and contoured as last built -- rebuild it
+  yourself first if its definition changed. (Regenerating the display, `REGEN`, is not a
+  rebuild and is never needed.) Its point and triangle counts, elevation range and mean,
+  style and out-of-date flag are read before and after; if anything differs, the whole
+  command is rolled back and says why.
+- **Elevations with no contour** are reported, not errors: below the lowest point, above
+  the highest (with the surface's own figure), touching only at a single point, crossed
+  only inside a hidden area, or crossed only outside the boundary.
+- **Boundary (`B`).** Pick a closed polyline (arcs followed to 0.0001) or a circle; the
+  contours are cut exactly where they cross it -- the cut points lie on the original
+  contour segments, so clipping changes where a contour stops, never where it runs.
+  `B` then `N` goes back to the whole surface.
+- **Labels (`L`).** Elevation text centred on the contour, along it and never upside
+  down, one per piece or one per *label spacing* along long pieces, slid off sharp
+  bends, with a mask so the contour breaks for the text. The text is the elevation as
+  typed (or to a fixed number of decimals, in settings). Pieces too short to carry the
+  text are left bare.
+- **No duplicates.** Each contour is stamped with the surface and exact elevation. Running
+  it again at the same elevation on the same surface replaces FTF's earlier contours and
+  labels; with a boundary, only inside it (an earlier contour that crosses the boundary
+  is trimmed back to its outside part, so old and new meet without overlapping).
+  Contours at other elevations, from other surfaces, or drawn by hand are never touched.
+  `FTFCLEAN` leaves contours alone; erase them like any polyline.
+- **Undo.** Everything is one transaction in one command: one `U` removes it all.
+- **Several surfaces.** Click the one you want, or `N` lists every TIN surface by
+  name (useful when its style hides it). The last one used is the default.
+
+Settings > Contours: contour layer (`V-TOPO-CONT-E`) and label layer
+(`V-TOPO-CONT-TEXT-E`), both through the project's layer mappings like the production
+layers; labels on by default or not; label height (0.08 plotted), spacing (6" plotted,
+0 = one per piece), decimals (-1 = as typed); masks; and the read-back accuracy check.
+
+**What still needs Civil 3D to confirm** (none of this has run in the product yet): that
+`ExtractContoursAt` behaves as documented on the office's surfaces -- that it adds
+lightweight polylines to model space which open and erase within the command's
+transaction, and returns them unsmoothed; that `GetGeneralProperties`,
+`GetTinProperties`, `IsOutOfDate` and `StyleId` read the same before and after (the
+"Surface untouched" line); that `GetTriangles(false)` and `TinSurfaceVertex.Location`
+exist as used by the fallback; that a data-shortcut (reference) surface can be
+contoured; that one `U` removes a multi-elevation run; and the labels, masks and layer
+prompts on a real drawing. The elevation parsing, the tracer, clipping, label spacing,
+the before/after comparison and the report are unit tested
+(`tests/FieldCodes.Tests/ContourTests.cs`), and a source guard fails the build's tests
+if the command ever calls a surface-editing API.
 
 ## Line labelling: the primary workflow is interactive
 
@@ -694,7 +902,8 @@ start point from the command line and approve everything above the threshold, so
 LiveSmoke script can drive the whole build.
 
 The Civil 3D side (`RecordCommands`, `RecordDrafter`, `RecordDocumentReader`, the review
-window and the settings page) is compiled by `tests\CadCompileCheck` against stand-ins for
+window and the settings page), along with the line labelling, driveway and bench commands
+and two setup pages, is compiled by `tests\CadCompileCheck` against stand-ins for
 the AutoCAD, Civil 3D and Windows Runtime types, with the plugin's own C# 7.3 and
 warnings-as-errors settings: `dotnet build tests/CadCompileCheck` on any machine. That
 catches what a compiler catches and nothing more; the plugin remains UNTESTED against a

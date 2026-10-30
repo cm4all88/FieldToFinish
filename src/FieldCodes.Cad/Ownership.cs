@@ -130,7 +130,18 @@ namespace FieldCodes.Cad
         /// <summary>FTFTRIM: the outside piece of an aerial line cut at our limits of survey, copied back plotting.</summary>
         TrimSplit = 47,
         /// <summary>FTFTRIM: revision cloud or note marking a seam that needs attention.</summary>
-        TrimCloud = 48
+        TrimCloud = 48,
+
+        // Contours extracted from a surface (FTFCONTOUR). Deliberate drafting: FTFCLEAN leaves
+        // them alone. PointNumber = surface handle @ exact elevation, TagText = the elevation as
+        // typed, so a re-run at the same elevation replaces its own earlier contours.
+
+        /// <summary>A contour polyline at one exact elevation.</summary>
+        Contour = 49,
+        /// <summary>The elevation label on a contour.</summary>
+        ContourLabel = 50,
+        /// <summary>The wipeout under a contour label.</summary>
+        ContourMask = 51
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

@@ -62,7 +62,7 @@ namespace FieldCodes.Editing
 
             if (!string.IsNullOrEmpty(p.LabelText))
             {
-                lines.Add("Label: " + p.LabelText);
+                lines.Add("Label: " + p.LabelDisplay);
                 lines.Add("Layer: " + p.LabelLayer);
             }
 

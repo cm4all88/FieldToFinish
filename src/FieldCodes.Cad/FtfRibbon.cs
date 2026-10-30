@@ -72,6 +72,9 @@ namespace FieldCodes.Cad
             var tab = new RibbonTab { Title = "FTF", Id = TabId };
 
             tab.Panels.Add(Panel("Label",
+                Large("Label\nEverything", "FTFLABELALL",
+                    "After the points and linework come in: labels every recognised line and every point, then draw order. Hand-placed labels are kept.",
+                    FtfIcons.Labels),
                 Large("Label\nLine", "FTFLABELLINE",
                     "Click a line, slide the preview, click to place. FTFL for short.",
                     FtfIcons.LabelLine),
@@ -81,7 +84,10 @@ namespace FieldCodes.Cad
                 Large("Stairs", "FTFLABELSTAIRS",
                     "Select the stair lines; the step count places itself. FTFS for short.",
                     FtfIcons.Stairs),
+                Small("Driveway", "FTFLABELDRIVEWAY", FtfIcons.Between),
+                Small("Bench", "FTFBENCH", FtfIcons.Bench),
                 Small("Spot Shots", "FTFSPOT", FtfIcons.Spot),
+                Small("Contour", "FTFCONTOUR", FtfIcons.Contour),
                 Small("Tilde", "FTFTILDE", FtfIcons.Lines),
                 Small("ROW Width", "FTFROWDIM", FtfIcons.Between)));
 
@@ -357,6 +363,17 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>A bench: its outline, with the two end shots at the middles of its ends.</summary>
+        public static ImageSource Bench(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawRectangle(null, GrayPen(2.5), new Rect(4, 11, 24, 10));
+                dc.DrawEllipse(Blue, null, new Point(4, 16), 2.5, 2.5);
+                dc.DrawEllipse(Blue, null, new Point(28, 16), 2.5, 2.5);
+            });
+        }
+
         /// <summary>A staircase.</summary>
         public static ImageSource Stairs(int px)
         {
@@ -549,6 +566,17 @@ namespace FieldCodes.Cad
                 dc.PushTransform(new RotateTransform(-45, 21, 12));
                 dc.DrawRectangle(Gray, null, new Rect(14, 9, 14, 6));
                 dc.Pop();
+            });
+        }
+
+        /// <summary>Contours: two nested level lines over a hill, one picked out.</summary>
+        public static ImageSource Contour(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawEllipse(null, GrayPen(2.0), new Point(16, 17), 13, 10);
+                dc.DrawEllipse(null, BluePen(2.6), new Point(16, 17), 8, 5.5);
+                dc.DrawEllipse(Gray, null, new Point(16, 17), 2, 2);
             });
         }
 

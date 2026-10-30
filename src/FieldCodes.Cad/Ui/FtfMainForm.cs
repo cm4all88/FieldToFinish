@@ -1091,6 +1091,12 @@ namespace FieldCodes.Cad.Ui
             CommandGroup(stack, "Daily workflow");
             CommandRow(stack, "FTF",
                 "Opens this window. Never processes anything on its own.");
+            CommandRow(stack, "FTFLABELALL",
+                "Label everything once the points and linework are in: every " +
+                "recognised line (with gate labels between marked shots), then " +
+                "every point, then draw order. Labels you placed or moved by hand " +
+                "are kept; run it again after more linework arrives. Lists any line " +
+                "it could not label and why.");
             CommandRow(stack, "FTFLABELLINE   (or FTFL)",
                 "Label a line: click it, slide the live preview along it, click to " +
                 "place. The cursor picks the spot and the side; text, layer, offset " +
@@ -1099,6 +1105,16 @@ namespace FieldCodes.Cad.Ui
                 "Label the space between two edges -- a driveway between its " +
                 "edge-of-asphalt lines. Pick both edges; the label rides the " +
                 "midline; click to place.");
+            CommandRow(stack, "FTFLABELDRIVEWAY   (or FTFDWY)",
+                "Label a driveway: pick its two edges as for FTFLABELBETWEEN. The " +
+                "label is the first edge's surface type, read from its layer, with " +
+                "DWY after it -- ASPH DWY off V-SURF-ASPH-E. W switches to the " +
+                "spelled-out word where the feature has one (ASPHALT DWY).");
+            CommandRow(stack, "FTFBENCH",
+                "Draw a bench from its two end shots: pick the points (or the line " +
+                "between them). The depth comes from the notes (D1.5, 1.5D, DEPTH " +
+                "18IN) or is asked for; the outline is offset half the depth each " +
+                "side with the ends closed, labelled with its size, BENCH 3'x1.5'.");
             CommandRow(stack, "FTFLABELSTAIRS   (or FTFS)",
                 "Label a staircase: select the stair lines (each tread edge is one " +
                 "line) and the step-count label places itself centred in them.");
@@ -1106,6 +1122,12 @@ namespace FieldCodes.Cad.Ui
                 "Spot elevations off the surface: click, click, click. An X at " +
                 "each spot, the elevation beside it at the office angle, and " +
                 "close-together spots never overlap.");
+            CommandRow(stack, "FTFCONTOUR",
+                "Contour polylines at an exact elevation off a TIN surface: pick the " +
+                "surface, type 12.6 (or 12.6, 13, 13.5, or 10 to 14 by 0.5). Every " +
+                "piece where the surface crosses it, at exactly that elevation, on the " +
+                "contour layer. B clips to a closed boundary, L adds elevation labels. " +
+                "The surface is only read -- never rebuilt or edited.");
             CommandRow(stack, "FTFRUN",
                 "The whole pipeline in one go -- the same thing as Process Drawing.");
 
@@ -1159,7 +1181,8 @@ namespace FieldCodes.Cad.Ui
                 "The optional bulk line-label pass. Off by default in Settings; never " +
                 "touches labels placed with FTFLABELLINE.");
             CommandRow(stack, "FTFDRAWLINE / FTFDRAFTCLEAN",
-                "Draft cadastral lines by bearing and distance, and remove them.");
+                "Draft cadastral lines by bearing and distance, and remove them. " +
+                "FTFDRAFTCLEAN also manages benches drawn with FTFBENCH.");
             CommandRow(stack, "FTFLOTS",
                 "Divide a platted block into lots: pick its corners, say which side the lots front, " +
                 "how many and how wide, the alley, setbacks, easements and where each lot drains.");

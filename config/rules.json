@@ -32,6 +32,7 @@
     "XW", "XX"
   ],
 
+  "//alwaysLabel": "On a line feature: label it even when its linetype draws its own letter or symbol. Lines like water ---W--- and power ---P--- are normally left to the legend (Settings > Line Labels); fences are labelled whether or not their linetype draws x's.",
   "//lineFeatures": "LINEWORK IDENTIFICATION ONLY - no labeling standards live here yet. Civil 3D creates these figures from the field codes (see lineworkCodes); FTF's job is to FINISH the existing linework, never recreate it. Each entry ties a figure code to the layer the office Figure Prefix Database assigns it, so existing linework can be identified two ways: by SurveyFigure name (RWC3 -> RWC) or, for plain polylines, by layer. Layers are copied verbatim from Civil3D parametrix.fdb_xdef. Names identify the feature; what its label should SAY is deliberately unconfigured until the office standard is supplied. Several codes share a layer (FNC/FHW, BLD/BLC, CU/CX, LNSO/FOG, XW/JBAR/BAR, AFL/TILT, FBD/FRL) - layer-based identification reports all candidates; a figure name resolves exactly.",
   "lineFeatures": [
     { "code": "RWC",   "name": "Concrete Wall",        "layer": "V-SURF-WALL-CONC-E" },
@@ -41,12 +42,12 @@
     { "code": "RWBK",  "name": "Block Wall",           "layer": "V-SURF-WALL-CMUW-E" },
     { "code": "RWMT",  "name": "Wall",                 "layer": "V-SURF-WALL-E", "label": "WALL" },
     { "code": "RWWD",  "name": "Wood Wall",            "layer": "V-SURF-WALL-WOOD-E" },
-    { "code": "FNC",   "name": "Fence",                "layer": "V-SURF-FENC-E" },
-    { "code": "FHW",   "name": "Fence (hog wire)",     "layer": "V-SURF-FENC-E" },
-    { "code": "FBD",   "name": "Wood Fence",           "layer": "V-SURF-FENC-WOOD-E" },
-    { "code": "FRL",   "name": "Rail Fence",           "layer": "V-SURF-FENC-WOOD-E" },
-    { "code": "FBW",   "name": "Barbed Wire Fence",    "layer": "V-SURF-FENC-BARB-E" },
-    { "code": "FCK",   "name": "Chain Link Fence",     "layer": "V-SURF-FENC-CHNL-E", "label": "CHAIN LINK FENCE" },
+    { "code": "FNC",   "name": "Fence",                "layer": "V-SURF-FENC-E", "label": "FENCE", "alwaysLabel": true },
+    { "code": "FHW",   "name": "Fence (hog wire)",     "layer": "V-SURF-FENC-E", "label": "HOG WIRE FENCE", "alwaysLabel": true },
+    { "code": "FBD",   "name": "Wood Fence",           "layer": "V-SURF-FENC-WOOD-E", "label": "WOOD FENCE", "alwaysLabel": true },
+    { "code": "FRL",   "name": "Rail Fence",           "layer": "V-SURF-FENC-WOOD-E", "label": "RAIL FENCE", "alwaysLabel": true },
+    { "code": "FBW",   "name": "Barbed Wire Fence",    "layer": "V-SURF-FENC-BARB-E", "label": "BARBED WIRE FENCE", "alwaysLabel": true },
+    { "code": "FCK",   "name": "Chain Link Fence",     "layer": "V-SURF-FENC-CHNL-E", "label": "CHAIN LINK FENCE", "alwaysLabel": true },
     { "code": "GRL",   "name": "Guardrail",            "layer": "V-SURF-GRAL-E" },
     { "code": "HDR",   "name": "Handrail",             "layer": "V-SURF-HDRL-E" },
     { "code": "BLD",   "name": "Building",             "layer": "V-SURF-BLDG-E", "label": "BUILDING" },
@@ -92,6 +93,14 @@
   "//stairsLabelFormat": "What FTFLABELSTAIRS says; {count} is the number of stair lines selected (each drawn tread edge is one line). The label places itself centred in the selected treads.",
   "stairsLabelFormat": "{count} STEPS",
 
+  "//bench": "FTFBENCH. A bench is shot as two points, one at the middle of each end, with its depth (and height) in the notes: 'BENCH D1.5 H1.5', 'BENCH 1.5D', 'BENCH DEPTH 18IN'. The outline is the line between the shots offset half the depth to each side with the ends closed; nothing is adjusted. A number with no D or H beside it is shown and asked about, never guessed. codes only identify bench shots for the messages: any two points can be picked. labelFormat: {length} (between the shots), {depth}, {height}, in feet, with a number format after the colon; [ ] and \\P as in point labels. The layer is a starting point: set it to the office's site furniture layer.",
+  "bench": {
+    "codes": [ "BENCH", "BNCH", "BENCHL" ],
+    "layer": "V-SITE-FURN-E",
+    "labelLayer": "V-SITE-TEXT",
+    "labelFormat": "BENCH {length:0.#}'x{depth:0.#}'"
+  },
+
   "//spanMarkers": "Notes on the points ALONG a line that mark a span between two of them: two fence shots noted GATE define a gate, and FTFLABELLINE places the label centred between the pair. Token-exact ('FCK B GATE' carries GATE; 'GATEPOST' does not); markers pair up in order along the line; an odd one out is reported, never guessed.",
   "spanMarkers": [
     { "token": "FGP", "label": "GATE" }
@@ -133,13 +142,42 @@
 
   "codes": [
     {
-      "//pole": "PROOF THAT THE ENGINE IS NOT TREE-SPECIFIC. This rule was added with no C# change at all: the parser skips species, trunk, drip and rotation because this rule declares none of them, and modifiers still compose (PP 1234 DEAD labels '(DEAD)' and suffixes the layer). Like trees, it places NO block - the Civil 3D point style already draws the pole symbol, and a second one on top would be wrong. A bare 'PP' carries no data and so draws nothing; only a pole with a number on it produces a label.",
+      "//pole": "PROOF THAT THE ENGINE IS NOT TREE-SPECIFIC. The parser skips species, trunk, drip and rotation because this rule declares none of them, and modifiers still compose (PP 1234 DEAD labels '(DEAD)' and suffixes the layer). Like trees, it places NO block - the Civil 3D point style already draws the pole symbol, and a second one on top would be wrong. A bare 'PP' carries no data and so draws nothing; a pole with a number or notes produces a label built from its notes vocabulary.",
       "id": "pole",
       "description": "Power Pole",
-      "match": "^(?<code>PP)\\s+(?<number>[0-9]+)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "//match": "PP, then the crew's notes in any order: the pole number, the owner, what is on it. 'PP 1234 PSE XFMR TEL CATV' and 'PP CATV PSE TEL 1234 XFMR' label the same. A bare PP still draws nothing.",
+      "match": "^(?<code>PP)(?<mods>(?:\\s+\\S+)+)\\s*$",
+
+      "//notes": "THE POLE VOCABULARY. Each term turns the words a crew writes into the label's wording and puts it in a group; the label format below reads the groups in a fixed order. Terms are tried in the order listed (height before number, so 45FT is a height), and within a group the values read in this order too (XFMR before TEL before CATV) whatever order they were shot in. The rule's own terms are read before the global modifiers, so DEAD/REM/PROT still work here. A word in no term is labelled as written on the last line and the point is FLAGGED (exception report) so the office can add it here. Starter vocabulary: confirm against the office code sheet and extend.",
+      "notes": {
+        "unknown": "Flag",
+        "unknownGroup": "other",
+        "terms": [
+          { "match": "(?:HT\\s*)?(?<ft>[0-9]+(?:\\.[0-9]+)?)(?:FT|')", "text": "{ft}'", "group": "height" },
+          { "match": "HT\\s*(?<ft>[0-9]+(?:\\.[0-9]+)?)", "text": "{ft}'", "group": "height" },
+          { "match": "#?(?<n>[0-9][0-9-]*[A-Z]?)", "text": "{n}", "group": "number" },
+          { "match": "PSE|SCL|TPU|SNOPUD|PUD|AVISTA|PACIFICORP|BPA", "group": "owner" },
+          { "match": "CENTURYLINK|CTL|LUMEN|QWEST|FRONTIER|ZIPLY|COMCAST", "group": "owner" },
+          { "match": "WD|WOOD", "text": "WOOD", "group": "material" },
+          { "match": "STL|STEEL|MTL|METAL", "text": "STEEL", "group": "material" },
+          { "match": "CONC|CONCRETE", "text": "CONC", "group": "material" },
+          { "match": "FG|FIBERGLASS", "text": "FIBERGLASS", "group": "material" },
+          { "match": "XFMR|XFMRS|TRANS|TRANSFORMER|TX", "text": "XFMR", "group": "attach" },
+          { "match": "RISER|RSR", "text": "RISER", "group": "attach" },
+          { "match": "SW|SWITCH", "text": "SWITCH", "group": "attach" },
+          { "match": "MTR|METER", "text": "METER", "group": "attach" },
+          { "match": "TEL|TELE|TELCO|PHONE|TELEPHONE", "text": "TEL", "group": "attach" },
+          { "match": "CATV|TV|CABLE", "text": "CATV", "group": "attach" },
+          { "match": "FO|FOC|FIBER", "text": "FIBER", "group": "attach" },
+          { "match": "LUM|SL|STLT|STREETLIGHT|LUMINAIRE|LIGHT", "text": "LUMINAIRE", "group": "attach" },
+          { "match": "GUY|GUYS|GUYED|DG", "text": "GUY", "group": "attach" },
+          { "match": "ANC|ANCHOR", "text": "ANCHOR", "group": "attach" }
+        ]
+      },
 
       "label": {
-        "format": "POLE {number}",
+        "//format": "Read top to bottom: [ ] parts appear only when they have a value, \\P starts a new line, an empty line is dropped. PP 1234 PSE XFMR TEL -> 'POLE 1234 PSE' / 'W/ XFMR, TEL'. A modifier's suffix goes on the first line: 'POLE 1234 (DEAD)'.",
+        "format": "POLE[ {number}][ {owner}][ {material}][ {height}]\\P[W/ {attach}]\\P[{other}]",
         "layer": "V-UTIL-POWR-TEXT",
         "leader": "Auto"
       },
@@ -232,9 +270,30 @@
       "//sn-sign": "Office sign code. The number after SN is the field azimuth: FTF rotates the existing COGO marker. It never inserts a sign block.",
       "id": "sn-sign",
       "description": "Sign",
-      "match": "^(?<code>SN(?:NP)?)\\s+(?<rotation>[0-9]+(?:\\.[0-9]+)?)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "match": "^(?<code>SN(?:NP)?)\\s+(?<rotation>[0-9]+(?:\\.[0-9]+)?)(?<mods>(?:\\s+\\S+)*)\\s*$",
       "rotation": { "from": "rotation", "mode": "Azimuth" },
-      "label": { "format": "SIGN", "layer": "V-SIGN-TEXT", "leader": "Auto" },
+      "//notes": "After the azimuth, the words on the sign as the crew wrote them: 'SN 135 STOP' -> STOP SIGN, 'SN 90 NO PARKING ANYTIME' -> NO PARKING ANYTIME SIGN. The wording keeps the order it was written in (message reads AsShot); the terms below only expand shorthand and pick out the post. DEAD END is a term so it is never read as the DEAD modifier. Unknown words are the sign's text, so they are kept quietly. Starter vocabulary: confirm against the office code sheet.",
+      "notes": {
+        "unknown": "Keep",
+        "unknownGroup": "message",
+        "groups": { "message": { "order": "AsShot", "joiner": " " } },
+        "terms": [
+          { "match": "NP|NOPARK|NO\\s+PARK(?:ING)?", "text": "NO PARKING", "group": "message" },
+          { "match": "(?:SL|SPD|SPEED(?:\\s+LIMIT)?)\\s*(?<mph>[0-9]+)(?:\\s*MPH)?", "text": "SPEED LIMIT {mph}", "group": "message" },
+          { "match": "YLD|YIELD", "text": "YIELD", "group": "message" },
+          { "match": "DE|DEAD\\s+END", "text": "DEAD END", "group": "message" },
+          { "match": "OW|ONE\\s+WAY", "text": "ONE WAY", "group": "message" },
+          { "match": "DNE|DO\\s+NOT\\s+ENTER", "text": "DO NOT ENTER", "group": "message" },
+          { "match": "SNS|STNAME|ST\\s+NAME|STREET\\s+NAME", "text": "STREET NAME", "group": "message" },
+          { "match": "ADA|HC|HANDICAP", "text": "ACCESSIBLE PARKING", "group": "message" },
+          { "match": "PEDX|PED\\s+XING", "text": "PED XING", "group": "message" },
+          { "match": "WP|WOOD(?:\\s+POST)?", "text": "WOOD POST", "group": "post" },
+          { "match": "MP|UPOST|U-POST|METAL(?:\\s+POST)?|STEEL(?:\\s+POST)?", "text": "METAL POST", "group": "post" },
+          { "match": "2P|DBL|DOUBLE(?:\\s+POST)?|2\\s+POSTS", "text": "2 POSTS", "group": "post" },
+          { "match": "ON\\s+(?:PP|POLE)", "text": "ON POLE", "group": "post" }
+        ]
+      },
+      "label": { "format": "[{message} ]SIGN[ ({post})]", "layer": "V-SIGN-TEXT", "leader": "Auto" },
       "tagPrefix": "S",
       "validate": [
         { "field": "rotation", "min": 0, "max": 360, "severity": "Warning",
