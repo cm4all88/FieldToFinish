@@ -196,6 +196,32 @@ namespace FieldCodes.Cad
             obj.Erase();
         }
 
+        // ----------------------------------------------------------------- compare
+
+        private const string CompareKey = "COMPARE";
+
+        /// <summary>FTFCOMPARE state that must travel with the DWG: the applied-change record
+        /// (restore depends on it), review decisions, the chosen profile and source.</summary>
+        public static string ReadCompareText(Database db, Transaction tr, string key)
+        {
+            return ReadText(tr, SubDictionary(tr, db, CompareKey, false), key);
+        }
+
+        public static void WriteCompareText(Database db, Transaction tr, string key, string text)
+        {
+            WriteText(tr, SubDictionary(tr, db, CompareKey, true), key, text ?? string.Empty);
+        }
+
+        public static void DeleteCompareText(Database db, Transaction tr, string key)
+        {
+            var dict = SubDictionary(tr, db, CompareKey, false);
+            if (dict == null || !dict.Contains(key)) return;
+            var obj = tr.GetObject(dict.GetAt(key), OpenMode.ForWrite);
+            dict.UpgradeOpen();
+            dict.Remove(key);
+            obj.Erase();
+        }
+
         // ----------------------------------------------------------------- profile
 
         /// <summary>The drafting profile this drawing selected, or null. Read in its

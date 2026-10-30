@@ -98,6 +98,11 @@ foreach ($build in $found) {
     # config-only change could otherwise deploy stale (it did, once - FOG's label).
     Copy-Item (Join-Path $repo 'config\rules.json') -Destination $contents -Force
 
+    # Factory comparison profiles for FTFCOMPARE, same reasoning: from config\ directly.
+    $profilesOut = Join-Path $contents 'compare-profiles'
+    New-Item -ItemType Directory -Force -Path $profilesOut | Out-Null
+    Copy-Item (Join-Path $repo 'config\compare-profiles\*.json') -Destination $profilesOut -Force
+
     $count = (Get-ChildItem $contents -File).Count
     Write-Host ("Installed Civil 3D {0}: {1} file(s) -> {2}" -f $build.Series, $count, $contents)
 }

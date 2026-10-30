@@ -115,7 +115,22 @@ namespace FieldCodes.Cad
         /// <summary>The zigzag along the seam a viewport cuts.</summary>
         BreakLine = 43,
         /// <summary>A width stated between a centerline and a right-of-way line.</summary>
-        RowWidth = 44
+        RowWidth = 44,
+
+        // Survey comparison (FTFCOMPARE / FTFTRIM). These were 35-38 on the branch they were
+        // developed on, which FTFRECORD already used; drawings stamped by that build are read
+        // back correctly by Ownership.Read (see LegacyStamps). Never reuse 35-38 for them.
+
+        /// <summary>FTFCOMPARE: the plotting copy of the uncovered portion of a survey line
+        /// whose original was moved to a nonplot layer. PointNumber = the original's handle.
+        /// Restored (erased) by FTFCOMPARERESTORE; FTFCLEAN leaves it alone.</summary>
+        CompareSplit = 45,
+        /// <summary>FTFCOMPARE revision cloud or note marking a discrepancy; removed by restore and before each run.</summary>
+        CompareCloud = 46,
+        /// <summary>FTFTRIM: the outside piece of an aerial line cut at our limits of survey, copied back plotting.</summary>
+        TrimSplit = 47,
+        /// <summary>FTFTRIM: revision cloud or note marking a seam that needs attention.</summary>
+        TrimCloud = 48
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>
@@ -276,6 +291,9 @@ namespace FieldCodes.Cad
                     }
                 }
 
+                // A stamp written before kinds were renumbered on the integration branch.
+                stamp.Kind = (FtfEntityKind)FieldCodes.Stamps.LegacyStamps.Remap(
+                    (short)stamp.Kind, stamp.PointNumber, stamp.TagText);
                 return stamp;
             }
         }

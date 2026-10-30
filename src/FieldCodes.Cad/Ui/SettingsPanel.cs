@@ -77,6 +77,7 @@ namespace FieldCodes.Cad.Ui
             AddSection("Strip Easements", new EasementsPage());
             AddSection("Easement Exhibits", new ExhibitsPage());
             AddSection("Recorded Surveys", new RecordSurveyPage());
+            AddSection("Survey Comparison", new ComparePage());
 
             AddGroup("MAINTENANCE");
             AddSection("Advanced", new CleanupPage());

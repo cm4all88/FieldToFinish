@@ -1,0 +1,2536 @@
+{
+  "name": "Default",
+  "version": "1",
+  "consultant": "(any)",
+  "notes": "Built-in starting profile. Save a copy per consultant and narrow the consultant mappings.",
+  "tolerances": {
+    "pointFeet": 2.0,
+    "lineOffsetFeet": 1.0,
+    "angleDegrees": 15.0,
+    "gapFeet": 5.0,
+    "minUncoveredFeet": 3.0,
+    "elevationFeet": 0.5,
+    "pointDiscrepancyFeet": 0.5,
+    "annotationSearchFeet": 15.0,
+    "fullCoverageFraction": 0.97,
+    "sampleStepFeet": 1.0,
+    "reviewOffsetFraction": 0.6,
+    "autoAcceptConfidence": 0.75,
+    "chordToleranceFeet": 0.05,
+    "sliverNearFactor": 2.0
+  },
+  "categories": [
+    {
+      "key": "UTILITY-POLE",
+      "name": "Utility Pole",
+      "kind": "Point",
+      "system": "POWER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "PP",
+          "UP",
+          "PPU",
+          "PPX",
+          "POLE",
+          "TP",
+          "JP"
+        ],
+        "layers": [
+          "V-UTIL-POWR-POLE*",
+          "V-UTIL-POWR*"
+        ],
+        "blocks": [
+          "*POLE*",
+          "*UPOLE*",
+          "*PP*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*POLE*",
+          "*PWR*",
+          "*POWR*",
+          "*POWER*",
+          "*ELEC*",
+          "*UTIL*OH*"
+        ],
+        "blocks": [
+          "*POLE*",
+          "*UP*",
+          "*PP*",
+          "*PWRP*"
+        ],
+        "keywords": [
+          "UTILITY POLE",
+          "POWER POLE",
+          "PWR POLE",
+          "POLE",
+          "UP"
+        ]
+      }
+    },
+    {
+      "key": "LIGHT-POLE",
+      "name": "Light Pole",
+      "kind": "Point",
+      "system": "POWER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "LT",
+          "LP",
+          "LITE",
+          "SLP",
+          "LGT"
+        ],
+        "layers": [
+          "V-UTIL-POWR-LITE*",
+          "V-SITE-LITE*"
+        ],
+        "blocks": [
+          "*LIGHT*",
+          "*LITE*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*LIGHT*",
+          "*LITE*",
+          "*LUM*"
+        ],
+        "blocks": [
+          "*LIGHT*",
+          "*LITE*",
+          "*LP*"
+        ],
+        "keywords": [
+          "LIGHT POLE",
+          "STREET LIGHT",
+          "LUMINAIRE",
+          "LIGHT STANDARD"
+        ]
+      }
+    },
+    {
+      "key": "GUY-ANCHOR",
+      "name": "Guy Wire / Anchor",
+      "kind": "Point",
+      "system": "POWER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "GYA",
+          "GA",
+          "GUY",
+          "GW",
+          "ANC"
+        ],
+        "layers": [
+          "V-UTIL-POWR-GUY*",
+          "V-UTIL-POWR-ANCH*"
+        ],
+        "blocks": [
+          "*GUY*",
+          "*ANCH*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GUY*",
+          "*ANCH*"
+        ],
+        "blocks": [
+          "*GUY*",
+          "*ANCH*"
+        ],
+        "keywords": [
+          "GUY",
+          "GUY WIRE",
+          "GUY ANCHOR",
+          "ANCHOR"
+        ]
+      }
+    },
+    {
+      "key": "HANDHOLE",
+      "name": "Handhole",
+      "kind": "Point",
+      "system": "COMM",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "HH",
+          "PHH",
+          "THH",
+          "CHH",
+          "EHH",
+          "FHH",
+          "HHE",
+          "HHT"
+        ],
+        "layers": [
+          "V-UTIL-*HH*",
+          "V-UTIL-*HNDH*"
+        ],
+        "blocks": [
+          "*HH*",
+          "*HANDHOLE*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*HH*",
+          "*HANDHOLE*",
+          "*HNDH*"
+        ],
+        "blocks": [
+          "*HH*",
+          "*HANDHOLE*"
+        ],
+        "keywords": [
+          "HANDHOLE",
+          "HAND HOLE",
+          "ELEC HH",
+          "TEL HH",
+          "COMM HH",
+          "HH"
+        ]
+      }
+    },
+    {
+      "key": "VAULT",
+      "name": "Utility Vault",
+      "kind": "Point",
+      "system": "POWER",
+      "enabled": true,
+      "pointToleranceFeet": 3.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "UVLT",
+          "PVT",
+          "VLT",
+          "TV",
+          "EV",
+          "PV",
+          "CV",
+          "VAULT"
+        ],
+        "layers": [
+          "V-UTIL-*VLT*",
+          "V-UTIL-*VAULT*"
+        ],
+        "blocks": [
+          "*VAULT*",
+          "*VLT*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*VAULT*",
+          "*VLT*"
+        ],
+        "blocks": [
+          "*VAULT*",
+          "*VLT*"
+        ],
+        "keywords": [
+          "VAULT",
+          "ELEC VAULT",
+          "TEL VAULT",
+          "COMM VAULT",
+          "POWER VAULT"
+        ]
+      }
+    },
+    {
+      "key": "CABINET",
+      "name": "Cabinet / Pedestal",
+      "kind": "Point",
+      "system": "COMM",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "CAB",
+          "PED",
+          "TPED",
+          "CPED",
+          "PPED",
+          "EPED",
+          "CABINET",
+          "TCAB",
+          "SCAB"
+        ],
+        "layers": [
+          "V-UTIL-*CAB*",
+          "V-UTIL-*PED*"
+        ],
+        "blocks": [
+          "*CAB*",
+          "*PED*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*CAB*",
+          "*PED*"
+        ],
+        "blocks": [
+          "*CAB*",
+          "*PED*"
+        ],
+        "keywords": [
+          "CABINET",
+          "PEDESTAL",
+          "PED",
+          "TEL PED",
+          "COMM PED",
+          "SIGNAL CABINET"
+        ]
+      }
+    },
+    {
+      "key": "JUNCTION-BOX",
+      "name": "Junction Box",
+      "kind": "Point",
+      "system": "POWER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "PJB",
+          "JB",
+          "EJB",
+          "TJB",
+          "SJB",
+          "JBOX"
+        ],
+        "layers": [
+          "V-UTIL-*JB*",
+          "V-UTIL-*JBOX*"
+        ],
+        "blocks": [
+          "*JB*",
+          "*JBOX*",
+          "*JUNC*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*JB*",
+          "*JBOX*",
+          "*JUNC*"
+        ],
+        "blocks": [
+          "*JB*",
+          "*JBOX*",
+          "*JUNC*"
+        ],
+        "keywords": [
+          "JUNCTION BOX",
+          "J-BOX",
+          "JBOX",
+          "JB"
+        ]
+      }
+    },
+    {
+      "key": "STORM-MH",
+      "name": "Storm Manhole",
+      "kind": "Point",
+      "system": "STORM",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "SDMH",
+          "STMH",
+          "DMH",
+          "SDM"
+        ],
+        "layers": [
+          "V-UTIL-STRM-MH*",
+          "V-UTIL-STRC*"
+        ],
+        "blocks": [
+          "*SDMH*",
+          "*STMH*",
+          "*STORM*MH*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*STRM*MH*",
+          "*STORM*MH*",
+          "*SD*MH*",
+          "*SDMH*",
+          "*STM*MH*",
+          "*DRAIN*MH*",
+          "*STRM*STRC*",
+          "*STRM*STRUCT*"
+        ],
+        "blocks": [
+          "*SDMH*",
+          "*STMH*",
+          "*STORM*MH*",
+          "*ST*MH*",
+          "*MH*STM*",
+          "*DMH*",
+          "*STRM*MH*"
+        ],
+        "keywords": [
+          "STORM MH",
+          "STORM MANHOLE",
+          "DRAIN MH",
+          "DRAINAGE MANHOLE",
+          "SDMH",
+          "STM MH",
+          "SD MH"
+        ]
+      }
+    },
+    {
+      "key": "SAN-MH",
+      "name": "Sanitary Manhole",
+      "kind": "Point",
+      "system": "SANITARY",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "SSMH",
+          "SMH",
+          "SAMH",
+          "SSM"
+        ],
+        "layers": [
+          "V-UTIL-SSWR-MH*",
+          "V-UTIL-SSWR*"
+        ],
+        "blocks": [
+          "*SSMH*",
+          "*SAN*MH*",
+          "*SEW*MH*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*SSWR*MH*",
+          "*SAN*MH*",
+          "*SEW*MH*",
+          "*SS*MH*",
+          "*SSMH*",
+          "*SSWR*STRC*",
+          "*SEW*STRUCT*"
+        ],
+        "blocks": [
+          "*SSMH*",
+          "*SAN*MH*",
+          "*SEW*MH*",
+          "*SS*MH*",
+          "*MH*SS*",
+          "*SMH*"
+        ],
+        "keywords": [
+          "SAN MH",
+          "SANITARY MANHOLE",
+          "SEWER MH",
+          "SEWER MANHOLE",
+          "SSMH",
+          "SS MH"
+        ]
+      }
+    },
+    {
+      "key": "CATCH-BASIN",
+      "name": "Catch Basin / Inlet",
+      "kind": "Point",
+      "system": "STORM",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "CB",
+          "CBS",
+          "SDCB",
+          "INLET",
+          "CBG",
+          "CBI",
+          "DI",
+          "YD",
+          "CI"
+        ],
+        "layers": [
+          "V-UTIL-STRM-CB*",
+          "V-UTIL-STRM*"
+        ],
+        "blocks": [
+          "*CB*",
+          "*CATCH*",
+          "*INLET*",
+          "*BASIN*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*-CB*",
+          "*CB-*",
+          "*CATCH*",
+          "*INLET*",
+          "*STRM*CB*",
+          "*STORM*CB*",
+          "*STRM*INL*",
+          "*BASIN*"
+        ],
+        "blocks": [
+          "*CB*",
+          "*CATCH*",
+          "*INLET*",
+          "*BASIN*",
+          "*-DI*",
+          "*DI-*"
+        ],
+        "keywords": [
+          "CATCH BASIN",
+          "INLET",
+          "CB",
+          "DROP INLET",
+          "CURB INLET",
+          "YARD DRAIN",
+          "GRATE INLET"
+        ]
+      }
+    },
+    {
+      "key": "CLEANOUT",
+      "name": "Cleanout",
+      "kind": "Point",
+      "system": "SANITARY",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "CO",
+          "SSCO",
+          "SDCO",
+          "SCO",
+          "CLNOUT"
+        ],
+        "layers": [
+          "V-UTIL-*CO*",
+          "V-UTIL-SSWR*"
+        ],
+        "blocks": [
+          "*CO*",
+          "*CLEANOUT*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*CLEANOUT*",
+          "*CLNOUT*",
+          "*-CO*",
+          "*CO-*",
+          "*SSCO*",
+          "*SDCO*"
+        ],
+        "blocks": [
+          "*-CO*",
+          "*CO-*",
+          "*CLEANOUT*",
+          "*CLNOUT*",
+          "*SSCO*",
+          "*SDCO*",
+          "CO"
+        ],
+        "keywords": [
+          "CLEANOUT",
+          "CLEAN OUT",
+          "SEWER CO",
+          "CO",
+          "SSCO"
+        ]
+      }
+    },
+    {
+      "key": "WATER-VALVE",
+      "name": "Water Valve",
+      "kind": "Point",
+      "system": "WATER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "WV",
+          "WVL",
+          "WVLV",
+          "GV",
+          "BFV",
+          "VLV"
+        ],
+        "layers": [
+          "V-UTIL-WATR-VLV*",
+          "V-UTIL-WATR*"
+        ],
+        "blocks": [
+          "*WV*",
+          "*VALVE*",
+          "*VLV*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*WATR*VLV*",
+          "*WATR*VALVE*",
+          "*WATER*VALVE*",
+          "*WTR*VLV*",
+          "*-WV*",
+          "*WV-*",
+          "*VALVE*",
+          "*VLV*"
+        ],
+        "blocks": [
+          "*WV*",
+          "*VALVE*",
+          "*VLV*",
+          "*-GV*",
+          "*GV-*"
+        ],
+        "keywords": [
+          "WATER VALVE",
+          "VALVE",
+          "WV",
+          "GATE VALVE",
+          "BUTTERFLY VALVE",
+          "WTR VALVE"
+        ]
+      }
+    },
+    {
+      "key": "WATER-METER",
+      "name": "Water Meter",
+      "kind": "Point",
+      "system": "WATER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "WM",
+          "WMT",
+          "WMTR",
+          "MTR",
+          "METER"
+        ],
+        "layers": [
+          "V-UTIL-WATR-MTR*",
+          "V-UTIL-WATR*"
+        ],
+        "blocks": [
+          "*WM*",
+          "*METER*",
+          "*MTR*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*WATR*MTR*",
+          "*WATR*METER*",
+          "*WATER*METER*",
+          "*WTR*MTR*",
+          "*-WM*",
+          "*WM-*",
+          "*METER*",
+          "*MTR*"
+        ],
+        "blocks": [
+          "*WM*",
+          "*METER*",
+          "*MTR*"
+        ],
+        "keywords": [
+          "WATER METER",
+          "METER",
+          "WM",
+          "WTR METER"
+        ]
+      }
+    },
+    {
+      "key": "HYDRANT",
+      "name": "Fire Hydrant",
+      "kind": "Point",
+      "system": "WATER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "FH",
+          "WFH",
+          "HYD",
+          "FHYD"
+        ],
+        "layers": [
+          "V-UTIL-WATR-HYD*",
+          "V-UTIL-WATR*"
+        ],
+        "blocks": [
+          "*HYD*",
+          "*FH*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*HYD*",
+          "*-FH*",
+          "*FH-*",
+          "*HYDRANT*"
+        ],
+        "blocks": [
+          "*HYD*",
+          "*FH*"
+        ],
+        "keywords": [
+          "FIRE HYDRANT",
+          "HYDRANT",
+          "HYD",
+          "FH"
+        ]
+      }
+    },
+    {
+      "key": "WATER-FITTING",
+      "name": "Water Fitting / Blowoff",
+      "kind": "Point",
+      "system": "WATER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "WBO",
+          "BO",
+          "WF",
+          "WFIT",
+          "ARV",
+          "WAV",
+          "WT"
+        ],
+        "layers": [
+          "V-UTIL-WATR*"
+        ],
+        "blocks": [
+          "*BLOW*",
+          "*BO*",
+          "*ARV*",
+          "*FITT*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*BLOW*",
+          "*FITT*",
+          "*ARV*",
+          "*-BO*",
+          "*BO-*"
+        ],
+        "blocks": [
+          "*BLOW*",
+          "*-BO*",
+          "*BO-*",
+          "*ARV*",
+          "*FITT*",
+          "*TEE*",
+          "*BEND*"
+        ],
+        "keywords": [
+          "BLOWOFF",
+          "BLOW OFF",
+          "AIR RELEASE",
+          "ARV",
+          "FITTING",
+          "TEE",
+          "BEND"
+        ]
+      }
+    },
+    {
+      "key": "GAS-VALVE",
+      "name": "Gas Valve",
+      "kind": "Point",
+      "system": "GAS",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "GVL",
+          "GAV",
+          "GSV"
+        ],
+        "layers": [
+          "V-UTIL-NGAS*"
+        ],
+        "blocks": [
+          "*GAS*VLV*",
+          "*GV*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GAS*VLV*",
+          "*GAS*VALVE*",
+          "*NGAS*VLV*"
+        ],
+        "blocks": [
+          "*GAS*VLV*",
+          "*GAS*VALVE*",
+          "*-GV*",
+          "*GV-*",
+          "GV"
+        ],
+        "keywords": [
+          "GAS VALVE",
+          "GV"
+        ]
+      }
+    },
+    {
+      "key": "GAS-METER",
+      "name": "Gas Meter",
+      "kind": "Point",
+      "system": "GAS",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "GM",
+          "GMT",
+          "GMTR"
+        ],
+        "layers": [
+          "V-UTIL-NGAS*"
+        ],
+        "blocks": [
+          "*GAS*MTR*",
+          "*GM*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GAS*MTR*",
+          "*GAS*METER*",
+          "*NGAS*MTR*"
+        ],
+        "blocks": [
+          "*GAS*MTR*",
+          "*GAS*METER*",
+          "*-GM*",
+          "*GM-*",
+          "GM"
+        ],
+        "keywords": [
+          "GAS METER",
+          "GM"
+        ]
+      }
+    },
+    {
+      "key": "UTILITY-MARKER",
+      "name": "Utility Marker / Test Station",
+      "kind": "Point",
+      "system": "OTHER",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "UM",
+          "UMK",
+          "MKR",
+          "TS",
+          "TSTA",
+          "MARKER"
+        ],
+        "layers": [
+          "V-UTIL-*MRK*",
+          "V-UTIL-*MARK*"
+        ],
+        "blocks": [
+          "*MARK*",
+          "*MRK*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*MARK*",
+          "*MRK*",
+          "*TEST*STA*"
+        ],
+        "blocks": [
+          "*MARK*",
+          "*MRK*",
+          "*TSTA*"
+        ],
+        "keywords": [
+          "UTILITY MARKER",
+          "MARKER",
+          "TEST STATION"
+        ]
+      }
+    },
+    {
+      "key": "SIGN",
+      "name": "Sign",
+      "kind": "Point",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "SN",
+          "SNNP",
+          "SIGN",
+          "SGN"
+        ],
+        "layers": [
+          "V-SIGN*"
+        ],
+        "blocks": [
+          "*SIGN*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*SIGN*"
+        ],
+        "blocks": [
+          "*SIGN*"
+        ],
+        "keywords": [
+          "SIGN"
+        ]
+      }
+    },
+    {
+      "key": "MAILBOX",
+      "name": "Mailbox",
+      "kind": "Point",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": 2.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "MB",
+          "MBX",
+          "MAIL"
+        ],
+        "layers": [
+          "V-SITE*"
+        ],
+        "blocks": [
+          "*MAIL*",
+          "*MB*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*MAIL*"
+        ],
+        "blocks": [
+          "*MAIL*",
+          "*-MB*",
+          "*MB-*",
+          "MB"
+        ],
+        "keywords": [
+          "MAILBOX",
+          "MAIL BOX",
+          "MB"
+        ]
+      }
+    },
+    {
+      "key": "POST",
+      "name": "Post / Bollard",
+      "kind": "Point",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": 1.5,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "POST",
+          "BOL",
+          "BOLL",
+          "PST"
+        ],
+        "layers": [
+          "V-SITE*"
+        ],
+        "blocks": [
+          "*POST*",
+          "*BOL*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*POST*",
+          "*BOL*"
+        ],
+        "blocks": [
+          "*POST*",
+          "*BOL*"
+        ],
+        "keywords": [
+          "POST",
+          "BOLLARD"
+        ]
+      }
+    },
+    {
+      "key": "TREE",
+      "name": "Tree",
+      "kind": "Point",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": 3.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "CON",
+          "DEC",
+          "MAP",
+          "TR",
+          "TREE",
+          "TRD",
+          "TRC"
+        ],
+        "layers": [
+          "V-TREE*",
+          "V-VEG*"
+        ],
+        "blocks": [
+          "*TREE*",
+          "*CONIF*",
+          "*DECID*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*TREE*",
+          "*VEG*",
+          "*LAND*"
+        ],
+        "blocks": [
+          "*TREE*",
+          "*CONIF*",
+          "*DECID*"
+        ],
+        "keywords": [
+          "TREE",
+          "CONIFER",
+          "DECIDUOUS"
+        ]
+      }
+    },
+    {
+      "key": "MONUMENT",
+      "name": "Survey Monument",
+      "kind": "Point",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": 1.0,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": null,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "MON",
+          "FMON",
+          "XMON",
+          "FND",
+          "FIP",
+          "FRB",
+          "FPK",
+          "FMAG"
+        ],
+        "layers": [
+          "V-CTRL*",
+          "V-MONU*"
+        ],
+        "blocks": [
+          "*MON*"
+        ],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*MON*",
+          "*CTRL*",
+          "*CONTROL*"
+        ],
+        "blocks": [
+          "*MON*"
+        ],
+        "keywords": [
+          "MONUMENT",
+          "FOUND",
+          "MON"
+        ]
+      }
+    },
+    {
+      "key": "CURB",
+      "name": "Curb",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "CU",
+          "CX"
+        ],
+        "layers": [
+          "V-SURF-CURB-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*CURB*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "CURB"
+        ]
+      }
+    },
+    {
+      "key": "CURB-FLOWLINE",
+      "name": "Curb Flowline / Gutter",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "CG"
+        ],
+        "layers": [
+          "V-SURF-CURB-FLOW-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GUTT*",
+          "*FLOW*",
+          "*-FL-*",
+          "*-FL",
+          "*CURB*FL*",
+          "*CURB*GUT*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "GUTTER",
+          "FLOWLINE",
+          "FL"
+        ]
+      }
+    },
+    {
+      "key": "CURB-BACK",
+      "name": "Top Back of Curb",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "TBC"
+        ],
+        "layers": [
+          "V-SURF-CURB-BACK-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*TBC*",
+          "*BACK*CURB*",
+          "*CURB*BACK*",
+          "*-BOC*",
+          "*BOC-*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "TBC",
+          "BACK OF CURB",
+          "BOC"
+        ]
+      }
+    },
+    {
+      "key": "EDGE-PAVEMENT",
+      "name": "Edge of Pavement",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "EP",
+          "ASPH"
+        ],
+        "layers": [
+          "V-SURF-ASPH-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*-EOP*",
+          "*EOP-*",
+          "*-EP-*",
+          "*-EP",
+          "EP-*",
+          "*PAVE*",
+          "*PVMT*",
+          "*ASPH*",
+          "*EDGE*PAV*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "EDGE OF PAVEMENT",
+          "EOP",
+          "EP",
+          "ASPHALT",
+          "EDGE OF ASPHALT"
+        ]
+      }
+    },
+    {
+      "key": "ASPHALT-FLOWLINE",
+      "name": "Asphalt Flowline",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "AFL",
+          "TILT"
+        ],
+        "layers": [
+          "V-SURF-ASPH-FLOW-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*AFL*",
+          "*ASPH*FL*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "ASPHALT FLOWLINE",
+          "AFL"
+        ]
+      }
+    },
+    {
+      "key": "ASPHALT-PATCH",
+      "name": "Asphalt Patch",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "PATCH"
+        ],
+        "layers": [
+          "V-SURF-ASPH-PATC-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*PATCH*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "PATCH"
+        ]
+      }
+    },
+    {
+      "key": "EDGE-CONCRETE",
+      "name": "Edge of Concrete / Sidewalk",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "EC",
+          "CONC",
+          "SW"
+        ],
+        "layers": [
+          "V-SURF-CONC-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*CONC*",
+          "*-EOC*",
+          "*EOC-*",
+          "*SIDEWALK*",
+          "*SDWK*",
+          "*SWLK*",
+          "*WALK*",
+          "*-SW-*",
+          "*-SW",
+          "SW-*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "EDGE OF CONCRETE",
+          "EOC",
+          "SIDEWALK",
+          "CONC WALK",
+          "CONCRETE"
+        ]
+      }
+    },
+    {
+      "key": "EDGE-GRAVEL",
+      "name": "Edge of Gravel",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.5,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "EGR",
+          "GRVL"
+        ],
+        "layers": [
+          "V-SURF-GRVL-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GRAV*",
+          "*GRVL*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "GRAVEL",
+          "EDGE OF GRAVEL"
+        ]
+      }
+    },
+    {
+      "key": "EDGE-GRASS",
+      "name": "Edge of Grass / Landscape",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.5,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "EGG",
+          "LNDS",
+          "LAND"
+        ],
+        "layers": [
+          "V-SURF-GRAS-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GRAS*",
+          "*LAWN*",
+          "*LNDS*",
+          "*LANDS*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "GRASS",
+          "LAWN",
+          "LANDSCAPE"
+        ]
+      }
+    },
+    {
+      "key": "PATH",
+      "name": "Path / Trail",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.5,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "PATH",
+          "TRL",
+          "TRAIL"
+        ],
+        "layers": [
+          "V-SURF-TRAL-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*PATH*",
+          "*TRAIL*",
+          "*TRL*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "PATH",
+          "TRAIL"
+        ]
+      }
+    },
+    {
+      "key": "DRIVEWAY",
+      "name": "Driveway",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "DW",
+          "DWY",
+          "DRVWY"
+        ],
+        "layers": [
+          "V-SURF-DRIV*",
+          "V-SURF-DRWY*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*DRIV*",
+          "*DWY*",
+          "*DRWY*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "DRIVEWAY",
+          "DW"
+        ]
+      }
+    },
+    {
+      "key": "FENCE",
+      "name": "Fence",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "FNC",
+          "FHW",
+          "FBD",
+          "FRL",
+          "FBW",
+          "FCK",
+          "FEN",
+          "FENCE"
+        ],
+        "layers": [
+          "V-SURF-FENC*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*FENC*",
+          "*FNC*",
+          "*CLF*",
+          "*CHAIN*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "FENCE",
+          "CHAIN LINK",
+          "WOOD FENCE",
+          "CLF"
+        ]
+      }
+    },
+    {
+      "key": "WALL",
+      "name": "Wall",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "RWC",
+          "RWB",
+          "RWT",
+          "RWRK",
+          "RWBK",
+          "RWMT",
+          "RWWD",
+          "WALL",
+          "RW"
+        ],
+        "layers": [
+          "V-SURF-WALL*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*WALL*",
+          "*RW*",
+          "*RETAIN*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "WALL",
+          "RETAINING WALL",
+          "ROCK WALL",
+          "CONC WALL"
+        ]
+      }
+    },
+    {
+      "key": "GUARDRAIL",
+      "name": "Guardrail",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "GRL",
+          "GR",
+          "GDRL"
+        ],
+        "layers": [
+          "V-SURF-GRAL-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GUARD*",
+          "*GRAL*",
+          "*GDRL*",
+          "*BARRIER*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "GUARDRAIL",
+          "GUARD RAIL",
+          "BARRIER"
+        ]
+      }
+    },
+    {
+      "key": "HANDRAIL",
+      "name": "Handrail",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "HDR",
+          "HR",
+          "HNDRL"
+        ],
+        "layers": [
+          "V-SURF-HDRL-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*HANDRAIL*",
+          "*HDRL*",
+          "*HNDRL*",
+          "*RAIL*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "HANDRAIL",
+          "HAND RAIL"
+        ]
+      }
+    },
+    {
+      "key": "BUILDING",
+      "name": "Building",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "BLD",
+          "BLC",
+          "BLE",
+          "BLDG"
+        ],
+        "layers": [
+          "V-SURF-BLDG*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*BLDG*",
+          "*BUILD*",
+          "*STRUCT*",
+          "*HOUSE*",
+          "*ROOF*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "BUILDING",
+          "BLDG",
+          "STRUCTURE",
+          "ROOF"
+        ]
+      }
+    },
+    {
+      "key": "STAIRS",
+      "name": "Stairs",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "STR",
+          "STAIR",
+          "STEP"
+        ],
+        "layers": [
+          "V-SURF-STAR-E"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*STAIR*",
+          "*STEP*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "STAIRS",
+          "STEPS"
+        ]
+      }
+    },
+    {
+      "key": "STRIPE",
+      "name": "Pavement Striping",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "LN",
+          "LNSO",
+          "FOG",
+          "LNDY",
+          "LNWH",
+          "LNYE",
+          "STRP"
+        ],
+        "layers": [
+          "V-CHAN-STRP*",
+          "V-CHAN-SKST*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*STRP*",
+          "*STRIP*",
+          "*PAINT*",
+          "*MARK*",
+          "*LANE*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "STRIPE",
+          "STRIPING",
+          "FOG LINE",
+          "LANE LINE",
+          "DOUBLE YELLOW",
+          "PAINT"
+        ]
+      }
+    },
+    {
+      "key": "MARKING",
+      "name": "Pavement Marking / Crosswalk",
+      "kind": "Line",
+      "system": "SURFACE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "XW",
+          "JBAR",
+          "BAR",
+          "ARROW",
+          "STOP"
+        ],
+        "layers": [
+          "V-CHAN-MRKG*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*MRKG*",
+          "*XWALK*",
+          "*CROSS*",
+          "*MARK*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "CROSSWALK",
+          "STOP BAR",
+          "MARKING"
+        ]
+      }
+    },
+    {
+      "key": "STORM-PIPE",
+      "name": "Storm Pipe",
+      "kind": "Line",
+      "system": "STORM",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "SDTD",
+          "SDU",
+          "SD",
+          "STM",
+          "CULV",
+          "CVTL"
+        ],
+        "layers": [
+          "V-UTIL-STRM*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*STRM*",
+          "*STORM*",
+          "*-SD-*",
+          "*-SD",
+          "SD-*",
+          "*DRAIN*",
+          "*CULV*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "STORM",
+          "SD",
+          "DRAIN",
+          "CULVERT"
+        ]
+      }
+    },
+    {
+      "key": "SAN-PIPE",
+      "name": "Sanitary Sewer Pipe",
+      "kind": "Line",
+      "system": "SANITARY",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "SSU",
+          "SS",
+          "SAN",
+          "SEW"
+        ],
+        "layers": [
+          "V-UTIL-SSWR*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*SSWR*",
+          "*SANIT*",
+          "*-SAN-*",
+          "*-SAN",
+          "*SEWER*",
+          "*-SS-*",
+          "*-SS",
+          "SS-*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "SANITARY",
+          "SEWER",
+          "SS"
+        ]
+      }
+    },
+    {
+      "key": "WATER-LINE",
+      "name": "Water Line",
+      "kind": "Line",
+      "system": "WATER",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "WU",
+          "WL",
+          "WAT",
+          "WTR"
+        ],
+        "layers": [
+          "V-UTIL-WATR*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*WATR*",
+          "*WATER*",
+          "*WTR*",
+          "*-WL-*",
+          "*-WL",
+          "WL-*",
+          "*-W-*",
+          "*-W"
+        ],
+        "blocks": [],
+        "keywords": [
+          "WATER",
+          "WATERLINE",
+          "WTR"
+        ]
+      }
+    },
+    {
+      "key": "POWER-LINE",
+      "name": "Power Line",
+      "kind": "Line",
+      "system": "POWER",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "PU",
+          "POH",
+          "UPD",
+          "PWR",
+          "ELEC",
+          "OHP",
+          "OHW"
+        ],
+        "layers": [
+          "V-UTIL-POWR*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*POWR*",
+          "*POWER*",
+          "*PWR*",
+          "*ELEC*",
+          "*OHP*",
+          "*OHW*",
+          "*OVHD*",
+          "*-OH-*",
+          "*-OH",
+          "*-E-*",
+          "*-E"
+        ],
+        "blocks": [],
+        "keywords": [
+          "POWER",
+          "ELECTRIC",
+          "OVERHEAD",
+          "OHP",
+          "OHW",
+          "PWR"
+        ]
+      }
+    },
+    {
+      "key": "COMM-LINE",
+      "name": "Communication Line",
+      "kind": "Line",
+      "system": "COMM",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "TU",
+          "CAU",
+          "UCAD",
+          "UFOD",
+          "TEL",
+          "COMM",
+          "FO",
+          "CATV",
+          "CAOH"
+        ],
+        "layers": [
+          "V-UTIL-TELE*",
+          "V-UTIL-CATV*",
+          "V-UTIL-FIBR*",
+          "V-UTIL-COMM*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*TELE*",
+          "*-TEL-*",
+          "*-TEL",
+          "*COMM*",
+          "*CATV*",
+          "*FIB*",
+          "*-FO-*",
+          "*-FO",
+          "*CABLE*",
+          "*PHONE*",
+          "*-T-*",
+          "*-T"
+        ],
+        "blocks": [],
+        "keywords": [
+          "TELEPHONE",
+          "TEL",
+          "COMM",
+          "FIBER",
+          "CATV",
+          "CABLE"
+        ]
+      }
+    },
+    {
+      "key": "GAS-LINE",
+      "name": "Gas Line",
+      "kind": "Line",
+      "system": "GAS",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "GU",
+          "GAS",
+          "GL"
+        ],
+        "layers": [
+          "V-UTIL-NGAS*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*GAS*",
+          "*NGAS*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "GAS",
+          "NATURAL GAS"
+        ]
+      }
+    },
+    {
+      "key": "TOPO-BREAKLINE",
+      "name": "Top / Toe / Bank",
+      "kind": "Line",
+      "system": "TOPO",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "TOP",
+          "TOE",
+          "BANK",
+          "TOH",
+          "TSL",
+          "DIKE",
+          "CRW",
+          "CLS"
+        ],
+        "layers": [
+          "V-TOPO*",
+          "V-SURF-TOP*",
+          "V-SURF-TOE*",
+          "V-SURF-BANK*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*TOP*",
+          "*TOE*",
+          "*BANK*",
+          "*BREAK*",
+          "*SLOPE*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "TOP OF SLOPE",
+          "TOE OF SLOPE",
+          "TOP",
+          "TOE",
+          "BANK"
+        ]
+      }
+    },
+    {
+      "key": "WATER-EDGE",
+      "name": "Edge of Water / OHWM",
+      "kind": "Line",
+      "system": "TOPO",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 2.0,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "EOW",
+          "WLF",
+          "OHWM",
+          "WLOHWM",
+          "HWM",
+          "WLST",
+          "CRK"
+        ],
+        "layers": [
+          "V-TOPO-WATR*",
+          "V-SURF-WATR*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*WATER*EDGE*",
+          "*EOW*",
+          "*OHWM*",
+          "*SHORE*",
+          "*CREEK*",
+          "*STREAM*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "EDGE OF WATER",
+          "OHWM",
+          "ORDINARY HIGH WATER",
+          "CREEK",
+          "STREAM"
+        ]
+      }
+    },
+    {
+      "key": "RAILROAD",
+      "name": "Railroad",
+      "kind": "Line",
+      "system": "SITE",
+      "enabled": true,
+      "pointToleranceFeet": null,
+      "pointDiscrepancyFeet": null,
+      "lineOffsetToleranceFeet": 1.5,
+      "angleToleranceDegrees": null,
+      "elevationToleranceFeet": null,
+      "survey": {
+        "codes": [
+          "RRCL",
+          "RRRAIL",
+          "RRTIE",
+          "RR"
+        ],
+        "layers": [
+          "V-RAIL*",
+          "V-SURF-RAIL*"
+        ],
+        "blocks": [],
+        "keywords": []
+      },
+      "consultant": {
+        "codes": [],
+        "layers": [
+          "*RAIL*",
+          "*RR*",
+          "*TRACK*"
+        ],
+        "blocks": [],
+        "keywords": [
+          "RAILROAD",
+          "RAIL",
+          "TRACK"
+        ]
+      }
+    }
+  ],
+  "nonplotLayers": {
+    "mode": "Suffix",
+    "suffix": "-NP",
+    "restyleFixedMarkerPoints": true,
+    "point": "PMX-COMP-NP-POINT",
+    "line": "PMX-COMP-NP-LINE",
+    "block": "PMX-COMP-NP-BLOCK",
+    "text": "PMX-COMP-NP-TEXT",
+    "utility": "PMX-COMP-NP-UTILITY",
+    "colorIndex": 8
+  },
+  "review": {
+    "drawClouds": true,
+    "layer": "PMX-COMP-REVIEW",
+    "colorIndex": 1,
+    "textHeightFeet": 2.0,
+    "marginFeet": 3.0
+  },
+  "trim": {
+    "limitsLayers": [
+      "V-SURV-LIMIT*",
+      "*-LIMITS*",
+      "*LIMIT-OF-SURVEY*",
+      "*SURVEY-LIMIT*",
+      "*SURV-BNDY*"
+    ],
+    "seamSearchFeet": 2.0,
+    "seamOffsetFeet": 0.5,
+    "seamElevationFeet": 0.5,
+    "seamAngleDegrees": 20.0,
+    "minPieceFeet": 0.5,
+    "drawClouds": true
+  },
+  "annotation": {
+    "rimKeywords": [
+      "RIM",
+      "RIM EL",
+      "RIM ELEV",
+      "TOP",
+      "TC",
+      "GRATE"
+    ],
+    "invertKeywords": [
+      "IE",
+      "INV",
+      "I.E.",
+      "INVERT",
+      "FL"
+    ],
+    "materials": [
+      "PVC",
+      "CONC",
+      "CONCRETE",
+      "RCP",
+      "CMP",
+      "DI",
+      "DIP",
+      "HDPE",
+      "PE",
+      "ADS",
+      "CPP",
+      "VCP",
+      "CI",
+      "STEEL",
+      "STL",
+      "AC",
+      "CPEP",
+      "CLAY",
+      "COPPER"
+    ],
+    "synonyms": [
+      [
+        "CONC",
+        "CONCRETE"
+      ],
+      [
+        "ASPH",
+        "ASPHALT",
+        "AC"
+      ],
+      [
+        "EOP",
+        "EDGE OF PAVEMENT",
+        "EP"
+      ],
+      [
+        "EOC",
+        "EDGE OF CONCRETE"
+      ],
+      [
+        "GRVL",
+        "GRAVEL"
+      ],
+      [
+        "CONC WALK",
+        "SIDEWALK",
+        "CW",
+        "CONCRETE WALK"
+      ]
+    ],
+    "compareTextWhenNoFacts": true
+  },
+  "boundary": {
+    "points": [],
+    "outsideLimitsAction": "Review",
+    "useConsultantExtentWhenNoBoundary": true,
+    "consultantExtentMarginFeet": 10.0
+  },
+  "units": {
+    "consultantUnitsPerFoot": null,
+    "consultantShiftX": 0.0,
+    "consultantShiftY": 0.0,
+    "consultantRotationDegrees": 0.0
+  },
+  "qc": {
+    "blockOnNeedsReview": true,
+    "blockOnDiscrepancies": true,
+    "blockOnNotEvaluated": true,
+    "blockOnIncompleteSources": true
+  },
+  "ignore": {
+    "surveyLayers": [
+      "DEFPOINTS",
+      "0",
+      "*-VPRT*",
+      "*TTLB*",
+      "*BORDER*",
+      "*NPLT*",
+      "*NOPLOT*"
+    ],
+    "consultantLayers": [
+      "DEFPOINTS",
+      "*-VPRT*",
+      "*TTLB*",
+      "*TITLE*",
+      "*BORDER*",
+      "*NPLT*",
+      "*NOPLOT*",
+      "*SHEET*",
+      "*VIEWPORT*",
+      "*MATCHLINE*",
+      "*GRID*"
+    ],
+    "blocks": []
+  },
+  "explodeBlocks": [],
+  "deliveryFolder": ""
+}

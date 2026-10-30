@@ -103,6 +103,19 @@ namespace FieldCodes.Cad
                     FtfIcons.Dips),
                 Small("Check Dips", "FTFDIPCHECK", FtfIcons.Check)));
 
+            tab.Panels.Add(Panel("Compare",
+                Large("Compare\nSurvey", "FTFCOMPARE",
+                    "Compare our survey with the consultant's base map: what they already show goes nonplot, what they lack keeps plotting.",
+                    FtfIcons.Check),
+                Small("Run", "FTFCOMPARERUN", FtfIcons.Run),
+                Small("Apply", "FTFCOMPAREAPPLY", FtfIcons.Check),
+                Small("Restore", "FTFCOMPARERESTORE", FtfIcons.Clean),
+                Small("Final QC", "FTFCOMPAREQC", FtfIcons.Check),
+                Small("Save Deliverable", "FTFCOMPARESAVE", FtfIcons.Check),
+                Small("Batch", "FTFCOMPAREBATCH", FtfIcons.Run),
+                Small("Trim Aerial", "FTFTRIM", FtfIcons.Run),
+                Small("Restore Trim", "FTFTRIMRESTORE", FtfIcons.Clean)));
+
             tab.Panels.Add(Panel("Review",
                 Large("FTF\nWindow", "FTF",
                     "Status, review, settings and standards in one window.",

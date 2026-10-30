@@ -3,9 +3,7 @@ using FieldCodes.Settings;
 
 namespace FieldCodes.Tests;
 
-// Both classes drive the same static FtfSettings.ProfileDirectoryOverride, so they share a
-// collection: xunit runs classes in parallel, and one clearing it mid-test fails the other.
-[Collection("drafting profiles")]
+[Collection(ProfileDirectoryCollection.Name)]
 public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
 {
     private readonly RulesFixture _fx;
@@ -33,7 +31,7 @@ public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
     public void EverySectionIsExposedForTheSetupWindow()
     {
         var s = new FtfSettings();
-        Assert.Equal(15, s.Sections.Count);
+        Assert.Equal(16, s.Sections.Count);
         Assert.All(s.Sections, sec =>
         {
             Assert.False(string.IsNullOrWhiteSpace(sec.Title));

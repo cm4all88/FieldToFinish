@@ -371,6 +371,8 @@ turn the symbol off in the point style.
 | `FTFRECORDLABEL` | Places or refreshes the record labels | yes |
 | `FTFRECORDSOURCE` | Where a reconstructed line came from | n/a |
 | `FTFRECORDREBUILD` | Reopen the review, rebuild after edits | yes |
+| `FTFCOMPARE` | Survey-vs-consultant comparison window: what they already show goes nonplot, what they lack keeps plotting. See "FTFCOMPARE" below | yes |
+| `FTFCOMPARERUN` / `FTFCOMPAREAPPLY` / `FTFCOMPARERESTORE` / `FTFCOMPAREQC` / `FTFCOMPARESAVE` / `FTFCOMPAREBATCH` | The same workflow from the command line, step by step | yes |
 
 ## Line labelling: the primary workflow is interactive
 
@@ -813,3 +815,224 @@ Nothing below has run. In rough order of how badly a mistake would hurt:
 Newtonsoft is not a problem on 2024: the shipped `Newtonsoft.Json.dll` next to
 `acad.exe` is **13.0.3**, which is exactly what `FieldCodes.csproj` pins, so
 option 1 above already holds. Re-check if either side moves.
+
+## FTFCOMPARE: survey comparison for ACC deliverables
+
+We receive a consultant's existing-conditions base map and we have our own survey of
+the same ground. The deliverable plots THEIR information plus only what OUR survey adds.
+`FTFCOMPARE` decides, feature by feature, which of our objects the consultant already
+shows (those stop plotting), which they lack (those keep plotting), which lines they show
+only in part (the represented stations stop plotting, the rest keeps plotting), and
+which it cannot decide (those are shown for review, untouched). It never redraws survey
+geometry, never edits the consultant's data or any shared block definition, verifies
+every change it makes, and reverses everything from its own record.
+
+### Workflow
+
+```
+open a WORKING COPY of the survey drawing (the original is never written)
+  FTFCOMPARESOURCE   consultant data = the drawing's xrefs (default) or a separate file
+  FTFCOMPAREPROFILE  pick / save the consultant's mapping profile (Default to start)
+  FTFCOMPAREAREA     optional: the comparison limits (a picked polygon or closed polyline)
+  FTFCOMPARE         the window: Run comparison -> review the exceptions -> Apply approved changes
+  FTFCOMPAREQC       the final checks; FTFCOMPARESAVE refuses while a blocking one fails
+  FTFCOMPARESAVE     writes <name>-ACC.dwg + CSV + QC text to the delivery folder
+```
+
+Each command is also usable without the window. `FTFCOMPARERUN All|Select|Window`
+compares everything, a selection, or a crossing window. `FTFCOMPAREDECIDE <handle>
+AcceptMatch|KeepPlotting|MakeNonplot|AcceptPartial|Exclude|None` (or `Confident`) records a
+decision from scripts. `FTFCOMPAREBATCH <manifest.json>` processes many sites (kept simple
+on purpose; prove the single-site workflow first).
+
+### Compile, load and test on one real drawing
+
+See `FTFCOMPARE-SETUP.md` at the repository root: what to pull, how to build against the
+installed Civil 3D 2024 assemblies, install, run the smoke test, run the comparison on a
+project drawing, judge the results, and restore. `deploy\build-install-test.ps1` does
+the build, the unit tests, the install and the smoke test in one run and stops at the
+first failure with the reason. Framework split: the plugin targets .NET Framework 4.8
+(Civil 3D 2024's runtime), the engine netstandard2.0; the .NET 8 SDK is only the
+compiler, and the script verifies the built output and the host release before
+installing.
+
+### How it decides
+
+The engine lives in `FieldCodes.Compare` (no Autodesk types; 110 unit tests) and works on
+geometry the CAD reader extracts first; the drawing is modified only afterwards, through
+`CompareLayerManager`, from the approved plan.
+
+| Step | What happens |
+|---|---|
+| Read | Model space of the working copy; the consultant's xrefs (nested references followed, every transform applied) or a separate file. Only what is SHOWN counts: an xref insert that is invisible or on a frozen / off / no-plot layer makes the data incomplete; content on layers frozen, off or no-plot in the drawing (the `XREF\|LAYER` records) is left out and counted; a clipped xref is cut to its clip boundary (inverted clips honoured; the boundary follows an insert moved after clipping), so linework outside the clip is split off and cannot cover ours. Survey objects that do not plot as the drawing stands are left out too. |
+| Classify | Every object is classified from code (`SDMH 12` -> STORM-MH), block name, key words and layer, per the profile. Agreeing evidence raises confidence; disagreement (storm code on a sanitary layer) marks a conflict that sends any match to review. No evidence = NOT EVALUATED, reported with the unmapped layer, never "missing". |
+| Points | Nearest consultant feature of the SAME category within the category tolerance (poles 2 ft, monuments 1 ft ... per profile). Same system but another type (CB where we shot an MH) = review. Another system (sanitary vs storm) is never a candidate. Real elevations on both sides that differ beyond tolerance = DISCREPANCY. |
+| Linework | Our line is sampled at every vertex and at a step that shrinks for short lines (1 ft, down to 0.25 ft); a sample is covered when a same-category consultant line runs within the offset tolerance (1 ft) and within 15 degrees of our direction. Every change of coverage between two samples is bisected to 0.1 ft, and each interval carries its end POINTS. A gap in their drafting is bridged only where our line runs straight across it; an uncovered stretch shorter than 3 ft is absorbed only while it stays within two tolerances of their line (a near miss); a short stretch that swings farther away, a jog, a return, a stub, keeps plotting however short. Arcs are chorded at no more than 10 degrees per chord, so tight returns compare correctly. 97 % covered with no uncovered stretch = matched; otherwise PARTIAL with the uncovered stations, or MISSING. |
+| Annotation | Each label belongs to the nearest feature within 15 ft (or its attribute block). Facts are parsed: RIM, IE with direction, pipe size, material, structure id; otherwise the normalised wording with synonyms. A fact the consultant also shows at the matched feature = duplicate; a fact they lack = keeps plotting; a different value = DISCREPANCY. Civil 3D labels (pipe, structure, note, spot...) are read through their text components; one whose text cannot be read is OPAQUE: it proves a label exists there, so our annotation beside it goes to review, never to nonplot. Our own unreadable labels are NOT EVALUATED and keep plotting. |
+| Limits | A polygon from `FTFCOMPAREAREA`, else the consultant data's own extent plus 10 ft. Survey beyond the limits is "outside limits", never missing; what to do with it is a profile setting (Review by default). |
+| Incomplete sources | An unloaded, unresolved or hidden xref makes the consultant data INCOMPLETE: nothing is called missing (NOT EVALUATED instead) and the final QC blocks the deliverable. |
+
+Automatic acceptance needs confidence >= 0.75 (profile `autoAcceptConfidence`): clean
+geometry and unconflicted classification. A match whose offset is above 60 % of the
+tolerance is shown for review as a possible parallel feature.
+
+### Discrepancies: clouded in the drawing, listed in the report
+
+A counterpart found within the 2 ft search radius but more than 0.5 ft away
+horizontally (`tolerances.pointDiscrepancyFeet`), or differing by more than 0.5 ft
+vertically (`tolerances.elevationFeet`; their rim can come from a block attribute or a
+label beside the symbol), is a discrepancy: ours keeps plotting, the comparison draws a
+revision cloud around it and a note beside it ("FTFCOMPARE DISCREPANCY <handle>
+(<category>): 0.95 ft from the consultant Handhole, more than the 0.50 ft tolerance")
+on the plotting layer `PMX-COMP-REVIEW` (`review.*` in the profile), and the CSV report
+lists it with the same note. A category can loosen that distance with its own
+`pointDiscrepancyFeet` (trees, say), never beyond its search radius. The marks are
+stamped as the comparison's own, redrawn on every run and erased by
+`FTFCOMPARERESTORE`; the final QC warns that they will plot.
+
+### What changes in the drawing, how it is verified, and how it comes back
+
+- Nonplot layers. Default (`nonplotLayers.mode` = `Suffix`): each object goes to its own
+  layer's name plus `-NP` (`V-UTIL-POWR-POLE` to `V-UTIL-POWR-POLE-NP`), created no-plot
+  with the source layer's colour, linetype and lineweight where missing; an existing
+  `-NP` layer is forced no-plot, thawed and on. Alternative (`Fixed`): five named layers
+  by kind, `PMX-COMP-NP-POINT`, `-LINE`, `-BLOCK`, `-TEXT`, `-UTILITY`, colour 8.
+- Every change is checked the moment it is made with the same resolver the final QC
+  uses (`PlotVisibility`: visibility, layer, block content layer by layer with layer 0
+  following the insert, attributes, point style and label). An object that would still
+  plot, or whose state cannot be determined, is put back on the spot, reported as
+  "NOT changed" with the reason, shown in the window, and blocks the final QC until a
+  person decides. Only verified changes are recorded.
+- A plain object moves to its nonplot layer. Block attributes move with their block.
+- A COGO point moves to the nonplot layer AND its label is hidden on the point
+  (`IsLabelVisible`), because a label style may fix its own layer. If the point style
+  fixes the marker's layer (anything but 0), the point gets the comparison's own point
+  style `PMX-COMP-NP`, whose marker and label sit on layer 0 (so they follow the point's
+  nonplot layer) in suffix mode, or on the point nonplot layer in fixed mode; with
+  `nonplotLayers.restyleFixedMarkerPoints` false nothing is restyled and such a point is
+  reported as NOT changed for a person to handle. A point whose primary point
+  group overrides the point style is refused (the group would win): remove the override
+  or exclude the point.
+- A block whose definition draws on its own layers is pointed at a nonplot twin
+  definition `PMX-COMP-NP$<name>` (a deep clone with every entity on a nonplot layer: its
+  own layer's `-NP` twin in suffix mode, the block nonplot layer in fixed mode; layer 0
+  stays 0 and follows the insert; nested blocks twinned too). The shared definition is never edited, so other inserts are
+  untouched. A dynamic block in that situation is hidden instead (its displayed geometry
+  lives in an anonymous definition AutoCAD manages).
+- A partly represented line moves to nonplot INTACT and the uncovered stations are copied
+  back onto its original layer with `Curve.GetSplitCurves` at the closest points to the
+  interval's recorded end points (arcs stay arcs, elevations stay, colour / linetype /
+  lineweight / plot style / transparency copied, layer the original's). Each piece is
+  checked against the expected end points. Closed polylines and Civil 3D figures get a 3D
+  polyline sampled along the real curve and the record says so (QC warns).
+- `FTFCOMPARERESTORE` puts every recorded object back (layer, visibility, block
+  definition, point style, label visibility), erases the split copies plus any copy no
+  record owns, and erases twin definitions nothing references. Decisions are kept.
+  Re-running the comparison restores first, so nothing accumulates; applying twice changes
+  nothing the second time (a change already recorded with the same stations is skipped).
+- The deliverable is always a new file: `FTFCOMPARESAVE` refuses a path equal to the
+  working drawing, the consultant file or any xref. Source files are only ever read.
+- The applied record, the decisions, the profile choice and the source live IN the
+  drawing (named object dictionary `FTF_FIELDTOFINISH\COMPARE`); the full result is
+  `<name>.ftf-compare-result.json` beside it, the report `<name>.ftf-compare.csv`, and
+  decisions are mirrored to `<name>.ftf-compare-decisions.json`. A decision is re-applied
+  only while the feature's fingerprint (geometry, layer, description) is unchanged.
+
+### Profiles
+
+`%APPDATA%\FieldToFinish\compare-profiles\<name>.json`; the factory `Default.json` ships
+with the plugin (`config\compare-profiles`, generated from `CompareProfile.CreateDefault()`
+and pinned by `ShippedProfileTests`). A `ftf-compare-profile.json` beside a drawing wins
+for that job. The survey side of every category also takes the layers from `rules.json`'s
+`lineFeatures`. The consultant side is deliberately broad wildcards: the first run lists
+every unmapped consultant layer; `FTFCOMPAREPROFILE SaveAs` makes the consultant's copy
+and `Edit` opens the JSON. Once mapped, every site from that consultant reuses it.
+
+### Final QC (FTFCOMPARESAVE refuses on a blocking failure)
+
+SOURCES (consultant data complete), DISCREPANCIES, REVIEW, NOT-EVALUATED (profile decides
+whether each blocks), NONPLOT-LAYERS (exist, do not plot), MISSING-PLOT (every feature
+meant for delivery, and every split copy, REALLY plots), APPLIED (every planned change
+made and verified; refused ones listed with their reason), DUPLICATES-NONPLOT (every
+matched duplicate really does not plot: layer, visibility, block content, point style
+and label resolved), PLOT-VERIFIED (no object whose plot state could not be determined),
+PREVIOUS-RUNS (no split copies from an earlier run), XREFS (all resolve), OUTPUT
+(delivery folder writable). Non-blocking warnings list sampled split copies and hidden
+dynamic blocks.
+
+### FTFTRIM: trim the aerial base inside our limits and flag the seams
+
+For the ACC merge the base drawing on the site is aerial; our finished survey replaces it
+inside each site's limits of survey. In the aerial drawing (a working copy), attach the
+finished site drawing(s) as xrefs (or point at one file), then `FTFTRIM`:
+
+- Our limits of survey are the closed polylines on a limits layer (`trim.limitsLayers`,
+  `V-SURV-LIMIT*` and the like) found inside the survey xrefs, transformed by their
+  insert, or in the aerial drawing itself; or pick them (`Select`). Read regardless of
+  plot state, since limits usually sit on a no-plot layer.
+- Inside a footprint every aerial object goes to its own layer plus `-NP` (same rule and
+  record as the comparison). An aerial line crossing the limit is cut exactly at the
+  edge: the original goes nonplot intact and the outside part is copied back plotting
+  (`GetSplitCurves`, verified against the expected end points). An outside remnant
+  shorter than `trim.minPieceFeet` goes nonplot with the rest and the report says so.
+  Hatches, dimensions and unreadable objects inside a footprint are not trimmed and are
+  listed as "check by hand". Nothing is erased.
+- At every cut the seam is checked: our line of the same feature type within
+  `trim.seamSearchFeet` (2 ft), its offset at the cut, the elevation difference when
+  both sides carry real elevations, and the direction. Beyond 0.5 ft horizontally or
+  vertically it is a discrepancy; no continuation, an unknown feature type on either
+  side or a direction difference above 20 degrees sends it to review. Every seam that is
+  not aligned gets a revision cloud and a note on the review layer; every seam is listed
+  in `<name>.ftf-seams.csv`, every trimmed object in `<name>.ftf-trim.csv`.
+- `FTFTRIMRESTORE` puts every aerial object back exactly, erases the outside pieces and
+  the marks. Running `FTFTRIM` again restores first, so nothing accumulates. Our survey
+  is never written: the fix for a bad seam is to adjust the aerial to ours, by hand for
+  now (an assisted "move the aerial end to our end" pass is the next step).
+
+The trim's split copies and marks are stamped apart from the comparison's, so each
+tool's restore takes only its own.
+
+### Verified and not verified
+
+Verified here (`dotnet test`: 1,051 tests, 1,047 passing on the Linux build machine
+where the 4 pre-existing Windows-path tests cannot run; 110 cover the comparison):
+every scenario of the first version plus coverage boundaries refined to 0.1 ft with end
+points, a 2 ft jog and a 2.5 ft end stub kept while near misses are absorbed, drafting
+gaps bridged only when our line runs straight across, 1.5 ft lines decided, tight returns
+across two chordings, a crossing line not covering the crossing, polygon clipping of
+polylines (inside, inverted, multiple pieces) and clipped consultant geometry unable to
+cover ours, unreadable consultant labels sending our annotation to review, unreadable
+survey labels not evaluated, QC failing on real plot state (a point style or block
+definition that still plots) and on undeterminable state, split copies that must plot,
+the applied record for every method, interval end points in the plan, and identical
+plans on repeated runs.
+
+NOT verified: nothing in `FieldCodes.Cad\Compare` has run in Civil 3D. The code compiles
+against a stub of every AutoCAD and Civil 3D member it uses, which does not prove the
+members behave as expected. Run the steps above. What to watch, in order of consequence:
+
+1. `CogoPointPlotting.cs`: `PointStyle.GetDisplayStylePlan(PointDisplayStyleType.Marker)`
+   and `DisplayStyle.Layer / Visible` are the members used to read where a point style
+   puts its marker and to build the `PMX-COMP-NP` style; `CogoPoint.StyleId`,
+   `LabelStyleId`, `IsLabelVisible` are used directly; the point-group override is read by
+   reflection (`PrimaryPointGroupId`, `IsPointStyleOverridden`, `PointStyleId`) and a
+   missing member reads as "could not determine", which blocks. The smoke test seeds a
+   fixed-layer style and checks the nonplot style is assigned and restored.
+2. `BlockTwins.cs`: `Database.DeepCloneObjects` into the twin definition and
+   `BlockReference.BlockTableRecord` reassignment; the smoke test checks the twin is used
+   and purged.
+3. `CompareDrawingReader.ReadClip`: the spatial filter boundary through
+   `ClipSpaceToWorldCoordinateSystemTransform` and `OriginalInverseBlockTransform`. The
+   smoke test clips the xref at x = 1150 and checks the fence beyond it keeps plotting;
+   an xref clipped and then MOVED is not seeded, check one by hand.
+4. Civil 3D label text through `GetTextComponentIds` / `GetTextComponentText`
+   (reflection); if the text comes back with unresolved fields the label is opaque and
+   our annotation beside it goes to review, which is the safe outcome.
+5. `GetSplitCurves` pieces are checked against the expected end points; a mismatch falls
+   back to a sampled polyline and the QC warns.
+
+Known limits of this version: hatches and dimensions are listed as not evaluated;
+curved pipes in pipe networks are read as straight; a COGO point whose point group
+overrides its style is refused rather than changed; model space only (layout viewports
+with per-viewport frozen layers are not evaluated); the batch runner applies only
+confident results and leaves every review item for the window.
