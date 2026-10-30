@@ -64,6 +64,8 @@ namespace FieldCodes.Cad
         [CommandMethod("FTFCONTOUR", CommandFlags.Modal)]
         public void FtfContour()
         {
+            // Lets the headless smoke test prove this command really ran (see FtfCommandTrace).
+            FtfCommandTrace.Start("FTFCONTOUR");
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             var ed = doc.Editor;
@@ -203,6 +205,7 @@ namespace FieldCodes.Cad
             if (!committed) return;
             foreach (var line in report.Lines()) ed.WriteMessage("\n{0}", line);
             ed.WriteMessage("\n");
+            FtfCommandTrace.Finish("FTFCONTOUR");
         }
 
         // ================================================================== drawing

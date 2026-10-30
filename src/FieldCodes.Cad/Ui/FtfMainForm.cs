@@ -1348,8 +1348,11 @@ namespace FieldCodes.Cad.Ui
 
             PageHeader(stack, "About");
 
-            var version = typeof(FtfMainForm).Assembly.GetName().Version;
-            Caption(stack, "Field to Finish " + version);
+            Caption(stack, FtfBuildInfo.OneLine());
+            foreach (var verdict in FieldCodes.Deploy.VersionReport.Verdicts(
+                         FtfBuildInfo.Running, FtfBuildInfo.RunningFromInstalledBundle,
+                         FtfBuildInfo.Installed, FtfBuildInfo.LatestApproved))
+                Caption(stack, verdict);
             SectionGap(stack);
             Caption(stack, "FTF is not a replacement for Civil 3D Field to Finish. Civil 3D " +
                            "creates the survey geometry -- points, description-key symbols " +
@@ -1576,7 +1579,7 @@ namespace FieldCodes.Cad.Ui
         private void ShowBuild()
         {
             if (_buildNote == null) return;
-            _buildNote.Text = OfficeUpdate.Sentence;
+            _buildNote.Text = FtfBuildInfo.OneLine() + "\n" + OfficeUpdate.Sentence;
             _buildNote.ForeColor = OfficeUpdate.State == FieldCodes.Deploy.UpdateState.UpdateWaiting
                 ? Color.FromArgb(178, 108, 0)
                 : CaptionGray;

@@ -1,0 +1,93 @@
+<Project>
+  <!--
+    Stamps every FTF assembly with the build it came from, so Civil 3D can say exactly which
+    FTF it is running (FTFVERSION) and UPDATEFTF.ps1 can prove what it installed.
+
+    Written into the assembly as [AssemblyMetadata] attributes and the informational version
+    (which Windows shows as the DLL's "Product version"):
+
+      FtfCommit     full commit id                     5c3c021e...
+      FtfBranch     branch it was built from           integration
+      FtfChannel    approved | dev                     approved only when UPDATEFTF builds a
+                                                       clean checkout of origin/integration
+      FtfBuildDate  UTC, ISO 8601                      2026-10-30T14:05:12Z
+      FtfDirty      true when the working tree had uncommitted changes
+
+    Every value can be passed in (dotnet build -p:FtfChannel=approved -p:FtfBranch=integration);
+    anything not passed is read from git. A plain developer build is therefore always "dev",
+    and a build from a tree with uncommitted changes always says so.
+  -->
+
+  <PropertyGroup>
+    <FtfChannel Condition="'$(FtfChannel)' == ''">dev</FtfChannel>
+    <!-- The SDK would append its own +sha to the informational version; FTF writes its own. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <Target Name="FtfReadGit" Condition="'$(FtfCommit)' == '' Or '$(FtfBranch)' == '' Or '$(FtfDirty)' == ''">
+    <Exec Command="git rev-parse HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" EchoOff="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true"
+          WorkingDirectory="$(MSBuildProjectDirectory)" Condition="'$(FtfCommit)' == ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_FtfGitCommit" />
+      <Output TaskParameter="ExitCode" PropertyName="_FtfGitCommitExit" />
+    </Exec>
+    <Exec Command="git rev-parse --abbrev-ref HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" EchoOff="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true"
+          WorkingDirectory="$(MSBuildProjectDirectory)" Condition="'$(FtfBranch)' == ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_FtfGitBranch" />
+      <Output TaskParameter="ExitCode" PropertyName="_FtfGitBranchExit" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no" ConsoleToMSBuild="true" IgnoreExitCode="true" EchoOff="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" IgnoreStandardErrorWarningFormat="true"
+          WorkingDirectory="$(MSBuildProjectDirectory)" Condition="'$(FtfDirty)' == ''">
+      <Output TaskParameter="ConsoleOutput" ItemName="_FtfGitStatus" />
+      <Output TaskParameter="ExitCode" PropertyName="_FtfGitStatusExit" />
+    </Exec>
+
+    <PropertyGroup>
+      <FtfCommit Condition="'$(FtfCommit)' == '' And '$(_FtfGitCommitExit)' == '0'">$(_FtfGitCommit.Trim())</FtfCommit>
+      <FtfBranch Condition="'$(FtfBranch)' == '' And '$(_FtfGitBranchExit)' == '0'">$(_FtfGitBranch.Trim())</FtfBranch>
+      <FtfDirty Condition="'$(FtfDirty)' == '' And '$(_FtfGitStatusExit)' == '0' And '@(_FtfGitStatus)' != ''">true</FtfDirty>
+      <FtfDirty Condition="'$(FtfDirty)' == '' And '$(_FtfGitStatusExit)' == '0'">false</FtfDirty>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="FtfStampBuild" BeforeTargets="GetAssemblyAttributes" DependsOnTargets="FtfReadGit">
+    <PropertyGroup>
+      <!-- Anything git could not say is "unknown", never a guess. -->
+      <FtfCommit Condition="'$(FtfCommit)' == '' Or !$([System.Text.RegularExpressions.Regex]::IsMatch('$(FtfCommit)', '^[0-9a-f]{40}$'))">unknown</FtfCommit>
+      <FtfBranch Condition="'$(FtfBranch)' == ''">unknown</FtfBranch>
+      <FtfDirty Condition="'$(FtfDirty)' == ''">unknown</FtfDirty>
+      <FtfBuildDate Condition="'$(FtfBuildDate)' == ''">$([System.DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))</FtfBuildDate>
+      <_FtfShort Condition="'$(FtfCommit)' != 'unknown'">$(FtfCommit.Substring(0, 7))</_FtfShort>
+      <_FtfShort Condition="'$(FtfCommit)' == 'unknown'">unknown</_FtfShort>
+      <_FtfDirtyMark Condition="'$(FtfDirty)' == 'true'">.dirty</_FtfDirtyMark>
+      <InformationalVersion>$(Version)+$(_FtfShort).$(FtfChannel)$(_FtfDirtyMark)</InformationalVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FtfCommit</_Parameter1>
+        <_Parameter2>$(FtfCommit)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FtfBranch</_Parameter1>
+        <_Parameter2>$(FtfBranch)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FtfChannel</_Parameter1>
+        <_Parameter2>$(FtfChannel)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FtfBuildDate</_Parameter1>
+        <_Parameter2>$(FtfBuildDate)</_Parameter2>
+      </AssemblyAttribute>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>FtfDirty</_Parameter1>
+        <_Parameter2>$(FtfDirty)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+
+    <Message Importance="normal" Text="FTF build stamp: $(InformationalVersion), $(FtfBranch), $(FtfBuildDate)" />
+  </Target>
+</Project>

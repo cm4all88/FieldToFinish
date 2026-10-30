@@ -214,6 +214,8 @@ namespace FieldCodes.Cad
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 
+            foreach (var line in FtfBuildInfo.Report()) doc.Editor.WriteMessage("\n" + line);
+
             OfficeUpdate.Check();
             doc.Editor.WriteMessage("\n" + OfficeUpdate.Report() + "\n");
 

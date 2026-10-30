@@ -115,4 +115,7 @@
     </Reference>
   </ItemGroup>
 
+  <!-- Commit, branch, build date and channel, stamped into the assembly (FTFVERSION reads them). -->
+  <Import Project="..\..\build\FtfBuildInfo.targets" />
+
 </Project>

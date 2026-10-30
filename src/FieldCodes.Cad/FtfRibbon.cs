@@ -33,6 +33,10 @@ namespace FieldCodes.Cad
             // FTF the same as the office copy? An update installs itself when Civil 3D closes.
             OfficeUpdate.Start();
 
+            // One line on the command line once Civil 3D settles: which build this is, and a
+            // warning when it is a development build, not the installed one, or out of date.
+            FtfBuildInfo.AnnounceWhenReady();
+
             if (ComponentManager.Ribbon != null)
             {
                 Build();
@@ -130,7 +134,7 @@ namespace FieldCodes.Cad
                 Small("Where", "FTFWHERE", FtfIcons.Where),
                 Small("Settings", "FTFSETUP", FtfIcons.Settings),
                 Small("Profile", "FTFPROFILE", FtfIcons.Settings),
-                Small("FTF Version", "FTFUPDATE", FtfIcons.Check)));
+                Small("FTF Version", "FTFVERSION", FtfIcons.Check)));
 
             tab.Panels.Add(Panel("Sheets",
                 Large("Plan\nSheets", "FTFSHEETPLAN",
