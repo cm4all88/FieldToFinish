@@ -1,0 +1,75 @@
+{
+  "version": "1",
+  "drafting": {
+    "lineTypes": [
+      {
+        "name": "Right of Way",
+        "enabled": true,
+        "layer": "V-ROAD-ROW-E",
+        "linetype": "",
+        "annotation": "BearingDistance",
+        "featureText": "",
+        "bearingFormat": "QuadrantBearing",
+        "annotationLayer": "",
+        "textStyle": "",
+        "textHeightPlotted": 0.08,
+        "offsetPlotted": 0.04,
+        "placement": "Above",
+        "stacked": false,
+        "mask": false,
+        "bearingSecondsDecimals": 0,
+        "distanceDecimals": 2,
+        "footSymbol": true
+      },
+      {
+        "name": "Lot Line",
+        "enabled": true,
+        "layer": "V-PROP-LOT-E",
+        "linetype": "",
+        "annotation": "BearingDistance",
+        "featureText": "",
+        "bearingFormat": "QuadrantBearing",
+        "annotationLayer": "V-PROP-LOT-TEXT-E",
+        "textStyle": "",
+        "textHeightPlotted": 0.08,
+        "offsetPlotted": 0.04,
+        "placement": "Above",
+        "stacked": false,
+        "mask": false,
+        "bearingSecondsDecimals": 0,
+        "distanceDecimals": 2,
+        "footSymbol": true
+      }
+    ]
+  },
+  "rightOfWay": {
+    "lineTypeName": "Right of Way",
+    "monumentLineLayer": "V-PROP-MON-E",
+    "centerlineLayer": "V-ROAD-CNTR-E",
+    "monumentLayer": "V-SURV-MONU-E",
+    "monumentTextLayer": "V-SURV-MONU-TEXT-E",
+    "dimensionLayer": "V-ROAD-ROW-DIM-E",
+    "roadNameLayer": "V-ROAD-NAME-E",
+    "dimensionPolicy": "Ends"
+  },
+  "lots": {
+    "lotLineTypeName": "Lot Line",
+    "alleyTypeName": "Right of Way",
+    "setbackLayer": "V-PROP-SETB-E",
+    "easementLayer": "V-PROP-ESMT-E",
+    "lotTextLayer": "V-PROP-LOT-TEXT-E",
+    "drainLayer": "V-PROP-DRAN-E",
+    "notesLayer": "V-PROP-NOTE-E",
+    "drawBlockPerimeter": true,
+    "defaultAlleyWidthFeet": 20.0,
+    "defaultFrontSetbackFeet": 25.0,
+    "defaultSideSetbackFeet": 5.0,
+    "defaultCornerSideSetbackFeet": 15.0,
+    "defaultRearSetbackFeet": 20.0,
+    "defaultFrontEasementFeet": 10.0,
+    "defaultSideEasementFeet": 0.0,
+    "defaultRearEasementFeet": 5.0,
+    "minimumLotAreaSqFt": 4000.0,
+    "minimumLotWidthFeet": 45.0
+  }
+}

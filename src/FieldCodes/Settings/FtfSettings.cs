@@ -72,6 +72,8 @@ namespace FieldCodes.Settings
         [JsonProperty("sheets")] public SheetSettings Sheets { get; set; }
         [JsonProperty("dips")] public UtilitySettings Dips { get; set; }
         [JsonProperty("easements")] public EasementSettings Easements { get; set; }
+        [JsonProperty("rightOfWay")] public RightOfWaySettings RightOfWay { get; set; }
+        [JsonProperty("lots")] public LotSettings Lots { get; set; }
         [JsonProperty("exhibits")] public ExhibitSettings Exhibits { get; set; }
         [JsonProperty("recordSurvey")] public RecordSurveySettings RecordSurvey { get; set; }
         [JsonProperty("cleanup")] public CleanupSettings Cleanup { get; set; }
@@ -92,6 +94,8 @@ namespace FieldCodes.Settings
             Sheets = new SheetSettings();
             Dips = new UtilitySettings();
             Easements = new EasementSettings();
+            RightOfWay = new RightOfWaySettings();
+            Lots = new LotSettings();
             Exhibits = new ExhibitSettings();
             RecordSurvey = new RecordSurveySettings();
             Cleanup = new CleanupSettings();
@@ -107,7 +111,7 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Sheets, Dips, Easements, Exhibits, RecordSurvey, Cleanup, Compare
+                    Spots, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare
                 };
             }
         }
@@ -324,6 +328,8 @@ namespace FieldCodes.Settings
             if (Sheets == null) Sheets = new SheetSettings();
             if (Dips == null) Dips = new UtilitySettings();
             if (Easements == null) Easements = new EasementSettings();
+            if (RightOfWay == null) RightOfWay = new RightOfWaySettings();
+            if (Lots == null) Lots = new LotSettings();
             if (Exhibits == null) Exhibits = new ExhibitSettings();
             if (RecordSurvey == null) RecordSurvey = new RecordSurveySettings();
             if (RecordSurvey.Entities == null || RecordSurvey.Entities.Count == 0 ||

@@ -373,6 +373,8 @@ turn the symbol off in the point style.
 | `FTFRECORDREBUILD` | Reopen the review, rebuild after edits | yes |
 | `FTFCOMPARE` | Survey-vs-consultant comparison window: what they already show goes nonplot, what they lack keeps plotting. See "FTFCOMPARE" below | yes |
 | `FTFCOMPARERUN` / `FTFCOMPAREAPPLY` / `FTFCOMPARERESTORE` / `FTFCOMPAREQC` / `FTFCOMPARESAVE` / `FTFCOMPAREBATCH` | The same workflow from the command line, step by step | yes |
+| `FTFLOTS` | Divides a platted block into lots: lot lines with bearings/distances, alley, setbacks, easements, numbers and areas, drainage arrows (see below) | n/a |
+| `FTFROW` | Right of way from picked monuments: lines, opposite line, centerline, width dimensions, monument notes — runs, blocks, intersections (see below) | n/a |
 
 ## Line labelling: the primary workflow is interactive
 
@@ -700,6 +702,149 @@ running Civil 3D until it is loaded there.
 
 This is a production aid for a licensed surveyor. It makes no boundary determination;
 the surveyor interprets the controlling evidence.
+
+## Right of way from monuments: FTFROW
+
+`FTFROW` is drafted in the same world as `FTFDRAWLINE` (its output is stamped
+`DraftLine` / `DraftAnnotation`, so `FTFCLEAN` leaves it alone and `FTFDRAFTCLEAN`
+manages it) but it works from picked **monuments** instead of typed courses. Pick
+the monuments (survey points snap), fill in the popup, and it draws:
+
+- the right-of-way line between the monuments, with bearing and distance;
+- the **opposite right-of-way line** and the **centerline**, offset to the road
+  side and drawn on their own layers;
+- the right-of-way **width**, square across, labelled in the office wording;
+- each monument's **note** (found / set) and, for an **offset monument**, the
+  monument where it actually sits, a tie to the corner it marks, and the offset
+  note ("5.00' OFFSET N 45°00'00" E TO CORNER" -- direction from the monument TO the corner).
+
+Three modes:
+
+| Mode | You pick | Each side is |
+|---|---|---|
+| **Run** | the monuments along one road frontage | offset by the road's width to the side the road is on, or to both sides when the monuments are on the centerline |
+| **Block** | the corner monuments around a platted block, in order | a frontage (offset outward by *its own* road's width), a line across a road, or plain (no road). A corner can take a radius: a tangent arc with R, L, Δ and chord |
+| **Intersection** | the corner monuments around the intersection | a line across a road. The distance between the monuments is checked against the record right-of-way width and a miss is reported |
+
+Where it is configured: **FTF Settings > Right of Way**. The right-of-way *lines*
+take the layer, linetype and bearing/distance format of the Drafting Lines type
+named there, so a line from `FTFROW` and one from `FTFDRAWLINE` cannot disagree.
+Centerline, monument, dimension, monument-note and road-name layers are set on the
+page; a layer that is unset or missing from the drawing is refused with an
+explanation, never created. Note wording ("FND {desc}", "{width}' R/W", the
+offset note) is the office's to set; the shipped defaults are common platting
+practice, not any one office's standard.
+
+What it will not do, by design: it draws only straight sides between monuments
+(a curved right-of-way frontage is two monuments and a chord for now), and
+a corner radius treats the picked monument as the point of intersection. Where a
+square dimension would land beyond the join of two offset lines (the inside of
+a turn) it is skipped and reported instead of being forced. The geometry and
+wording are in `FieldCodes.Row` and unit tested (`RightOfWayTests`).
+
+**Verified headless (2026-10-24, accoreconsole against the stock NCS template):**
+`tests\LiveSmoke\run-rowlots.ps1` drives all three modes and `FTFLOTS` — see
+[Platted blocks](#platted-blocks-ftflots) below for what it checks.
+
+## Platted blocks: FTFLOTS
+
+`FTFLOTS` divides a block into lots. Pick the block's corners (survey points snap; or pick a closed
+polyline of straight sides), then the popup asks for what a plat needs:
+
+- **which side the lots front**, how many lots and how wide each is. Frontages must add up to that
+  side; if they miss it you choose whether the first or last lot takes the difference or the tool
+  refuses. A corner-lot allowance prefills wider end lots;
+- **depth** -- blank runs the lots to the back of the block; a number leaves the rest undivided
+  and says how much;
+- **an alley** -- none, along the back (behind one row), or between two rows. A second row of lots
+  can front another side, numbered on round the block;
+- **where each lot drains** -- toward the front, rear, left, right, both ways (a ridge) or no arrow,
+  for the whole block with any lot overridden, and the slope. Left and right are as seen standing on
+  the front line looking into the lot;
+- **building setbacks and utility easements** -- front, side, corner-lot street side and rear,
+  drawn as an envelope inside each lot, with the plat notes written from the numbers used;
+- **minimum lot area and frontage**, flagged lot by lot; and rounded block corners.
+
+Lot lines are cut **square to the front**. Each lot is the block cut by half-planes, so a skewed or
+trapezoidal block ends its end lots on the block's own sides and the lot areas still add up to the
+block (a check that is run and reported). A line two lots share is one line, labelled with bearing and
+distance; a line on the block's own boundary carries its distance only, because the right-of-way
+drawing (`FTFROW`) already owns that boundary's bearings and is not drawn again unless the setting asks.
+
+Configured at **FTF Settings > Platted Blocks**: lot lines and the alley take the layer and annotation
+of Drafting Lines types (Lot Line, Right of Way); the setback, easement, lot-text, drainage and notes
+layers are set there and never created from a name. The numbers the popup starts from are the office's;
+the shipped defaults are zero, not an ordinance.
+
+Not done: lines other than straight sides for the block (rounded corners excepted), a front that
+bends at an angle point (divide it as separate fronts), cul-de-sac or flag lots, and corner sight
+triangles. The geometry and wording are in `FieldCodes.Lots` and unit tested (`LotTests`).
+
+## Verified headless: FTFROW and FTFLOTS
+
+**2026-10-24, accoreconsole against the stock NCS template.**
+`tests\LiveSmoke\run-rowlots.ps1` seeds the office layers and the monument and corner survey
+points, then drives both commands through everything described above and checks what is
+actually stamped in the drawing:
+
+- **the refusal first.** One configured layer is renamed out of the drawing and `FTFROW`
+  refuses before it asks anything — *layer "V-SURV-MONU-E" (set for monument symbols) is not
+  in this drawing. FTF never creates office layers from a configured name.*
+- **Run** — three monuments along one frontage, 60' to the right, the last an offset monument
+  5.00' at N45E. The line through the corners landed on the monument-line layer, the opposite
+  right-of-way line 60' south of it on the Right of Way type's layer, the centerline 30' south
+  of that on the centerline layer, `60' R/W` dimensions with ticks at both ends only (the
+  *Ends* policy), `FND MON IN CASE` / `SET REBAR AND CAP` notes, and the offset monument's
+  cross, tie to its corner and `5.00' OFFSET N 45°00'00" E TO CORNER`.
+- **Block** — a 200x100 block, 60' and 40' frontages, two plain sides, one 25' rounded corner.
+  The arc came out tangent (centre 25' in from the corner both ways, `R=25.00' L=39.27'
+  Δ=90°00'00" CH=N 45°00'00" E 35.36'`) with the two sides shortened to 175' and 75'.
+- **Intersection** — a 100' ring of crossings, one given as 99.5' record width, which reported
+  *the monuments are 100.00' apart across the road but the record right of way is 99.5'*.
+- **FTFLOTS** — the same block as four 50' x 80' lots with a 20' rear alley: lot lines square
+  to the front, the shared lines labelled with bearing and distance and the block's own
+  boundary with its distance only, setback and easement envelopes per lot, `LOT n` / `4,000 SF`,
+  drainage arrows (lot 3 overridden to the rear), `20' ALLEY`, `BLOCK A`, and the plat notes
+  written from the numbers used.
+- **ownership.** `FTFCLEAN` left all 156 objects alone; `FTFDRAFTCLEAN` Annotation removed all
+  77 annotation entities and touched none of the 79 lines.
+
+The log is `tests\LiveSmoke\rowlots\rowlots_out.log` and the drawing `outrowlots.dwg`.
+`accoreconsole` has no window, so there the popups ask their questions on the command line
+instead — the same questions in the same order, parsed as strictly, which is what the script
+answers.
+
+## Verified in Civil 3D: the FTFROW and FTFLOTS windows
+
+**2026-10-24, full Civil 3D 2024, unattended.**
+Because the headless run bypasses both popups, `Ui\RowForm.cs`, `Ui\LotForm.cs` and the two
+settings pages had never been constructed. `tests\LiveSmoke\rowlots-ui\run-rowlots-ui.ps1`
+runs them: it stages the harness in the trusted bundle folder, launches Civil 3D on a seeded
+drawing, and drives the real windows through their own controls — 99 checks, all passing.
+
+- **the Right of Way window** in all three modes: the monument grid carries the survey points
+  the picks snapped to; choosing "on the centerline" swaps the width field out for the two
+  offsets and back; a block shows the sides grid with the distance between each pair of picks
+  and offers a corner radius, an intersection offers none and starts its sides as crossings.
+- **it refuses on screen.** A width of "sixty" keeps the window open and says *The
+  right-of-way width is not a number.*; Cancel draws nothing.
+- **the Platted Block window**: 200' divides four ways to 50' each, the second row of lots
+  appears and goes again with its box, and a per-lot drainage override reaches the drawing.
+- **each window's work matches the headless run exactly** — 29, 35, 24 and 68 objects on the
+  same layers, with the same wording.
+- **both settings pages** build, fill themselves, offer only layers that are really in the
+  drawing (46 of them, from the template), save back what they show, and report a text height
+  of zero rather than taking it.
+- **layout at 100%, 125% and 150% text**, off-screen copies of both windows checked for
+  clipped controls.
+
+The log is `tests\LiveSmoke\rowlots-ui\rowlots-ui.log`, with a screenshot of each window
+beside it. Known and left alone: the Platted Block window's row of lot fields runs wider than
+the window (1479px of content in 979px), so the body scrolls sideways to reach the lot depth
+and the close-the-frontages choice. Every field is reachable; the row is set to wrap and does
+not, because an AutoSize flow panel grows instead of folding.
+
+Still needing a person: pick UX with osnaps, and the settings sections other than these two.
 
 ## Configuration ownership
 

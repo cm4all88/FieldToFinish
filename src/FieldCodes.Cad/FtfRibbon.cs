@@ -157,6 +157,14 @@ namespace FieldCodes.Cad
                 Small("Record Source", "FTFRECORDSOURCE", FtfIcons.Where),
                 Small("Rebuild Record", "FTFRECORDREBUILD", FtfIcons.Check)));
 
+            tab.Panels.Add(Panel("Right of Way & Lots",
+                Large("Right of\nWay", "FTFROW",
+                    "Pick monuments; get the right-of-way lines, opposite line, centerline, dimensions and monument notes.",
+                    FtfIcons.Easement),
+                Large("Platted\nBlock", "FTFLOTS",
+                    "Divide a block into lots: lot lines, alley, setbacks, easements, numbers, areas and drainage.",
+                    FtfIcons.Easement)));
+
             tab.Panels.Add(Panel("Easements",
                 Large("Strip\nEasement", "STRIPEASEMENT",
                     "Strip easement from its angle points and width, trimmed to the lot lines you click.",
