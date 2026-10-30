@@ -97,6 +97,12 @@ namespace FieldCodes.Cad.Compare
             return ReadSurvey(db, tr, profile, onlyThese, progress, CompareSource.Survey);
         }
 
+        /// <summary>The survey read with a chosen side's layer mapping.</summary>
+        /// <param name="db">The host drawing.</param>
+        /// <param name="tr">The open transaction.</param>
+        /// <param name="profile">The comparison profile.</param>
+        /// <param name="onlyThese">Only these objects, or null for all of model space.</param>
+        /// <param name="progress">Progress reporting.</param>
         /// <param name="role">Which side's layer mapping the host drawing's objects are classified
         /// with: Survey for the comparison, Consultant when the host is the aerial base being trimmed.</param>
         public static CompareDataset ReadSurvey(Database db, Transaction tr, CompareProfile profile,
@@ -172,6 +178,13 @@ namespace FieldCodes.Cad.Compare
             return ReadConsultant(hostDb, tr, spec, profile, surveyUnitsPerFoot, progress, CompareSource.Consultant);
         }
 
+        /// <summary>The consultant's content read with a chosen side's layer mapping.</summary>
+        /// <param name="hostDb">The drawing the consultant content is attached to.</param>
+        /// <param name="tr">The open transaction.</param>
+        /// <param name="spec">Which external content to read.</param>
+        /// <param name="profile">The comparison profile.</param>
+        /// <param name="surveyUnitsPerFoot">Drawing units per foot in the survey drawing.</param>
+        /// <param name="progress">Progress reporting.</param>
         /// <param name="role">Which side's layer mapping the external content is classified with:
         /// Consultant for the comparison, Survey when the xrefs are our finished sites being merged
         /// into the aerial base.</param>

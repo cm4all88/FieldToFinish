@@ -28,9 +28,13 @@ namespace FieldCodes.Cad.Compare
         }
 
         /// <summary>The twin of a definition, created on first use.</summary>
+        /// <param name="db">The drawing that holds the definition.</param>
+        /// <param name="tr">The open transaction.</param>
+        /// <param name="originalId">The block definition to twin.</param>
         /// <param name="layerFor">Maps an entity's layer inside the definition to the layer it
         /// gets in the twin (a fixed nonplot layer, or the layer's own -NP twin; "0" stays "0"
         /// and follows the insert).</param>
+        /// <param name="depth">How deep in nested definitions this call is (guards runaway nesting).</param>
         public static ObjectId Ensure(Database db, Transaction tr, ObjectId originalId, Func<string, string> layerFor, int depth)
         {
             var original = (BlockTableRecord)tr.GetObject(originalId, OpenMode.ForRead);
