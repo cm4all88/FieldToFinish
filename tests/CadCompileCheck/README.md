@@ -1,8 +1,8 @@
 # CadCompileCheck
 
-Compiles the FTFRECORD side of `FieldCodes.Cad` against hand-written stand-ins for the
-AutoCAD, Civil 3D and Windows Runtime types it uses, so the plugin code gets a compiler
-on a machine with no Civil 3D (Linux, a CI runner, a laptop without Autodesk). Nothing here
+Compiles the whole of `FieldCodes.Cad` against hand-written stand-ins for the AutoCAD,
+Civil 3D, ribbon (AdWindows) and Windows Runtime types it uses, so the plugin code gets a
+compiler on a machine with no Civil 3D (Linux, a CI runner, a laptop without Autodesk). Nothing here
 runs: the stubs return nothing and draw nothing. What the check catches is the class of
 mistake a compiler catches -- a misspelt member, a wrong argument order, a method that hides
 a WinForms event, an `internal` helper called from the wrong assembly, a warning that the
@@ -17,23 +17,30 @@ warnings-as-errors and documentation settings as `src/FieldCodes.Cad`.
 
 ## Scope
 
-The FTFRECORD files, the line labelling, driveway, bench and contour commands, two setup pages,
-and the plugin helpers they lean on:
+Every `.cs` file under `src/FieldCodes.Cad` (bin and obj excepted), picked up by a wildcard,
+so a file a branch adds is compiled without anyone listing it. The point is the merge: when
+feature branches come together on `integration`, a call into plugin code whose signature
+another branch changed, a member that went missing, or two branches defining the same type
+fails here, on Linux, before anyone builds on Windows. Nothing in the plugin is stubbed;
+only Autodesk's assemblies and the Windows Runtime are.
 
-| Compiled from source | Stubbed (`Stubs/Internal.cs`) |
+| Stub file | Stands in for |
 |---|---|
-| RecordCommands, RecordDrafter, RecordDocumentReader, Ui/RecordReviewForm, Setup/RecordSurveyPage | `EasementInspectCommands` (three members), `EasementCommands.Extract`, `InspectRow`, the `DipBuilderForm` palette, `ThemePreference` |
-| LineworkCommands (FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFLABELSTAIRS, FTFLINELABELS), BenchCommands (FTFBENCH), LabelAllCommand (FTFLABELALL), LabelCommands (FTFLABELS), DrawOrderCommands (FTFORDER), FtfLineworkService, MaskSync | |
-| ContourCommands (FTFCONTOUR), ProductionLayers | |
-| Setup/Pages, Setup/PointFeaturesPage | |
-| Ownership, DrawingStore, CadUtil, FtfSession, TextMask, Setup/DrawingResources, Setup/SetupPage | |
+| `Stubs/Database.cs` | AcDbMgd / AcMgd / AcCoreMgd: database, entities, symbol tables, plotting, editor and prompts, documents and their events, transient graphics; the Civil 3D (AeccDbMgd) points, styles, alignments and surfaces |
+| `Stubs/Geometry.cs` | The Ge types (points, vectors, matrices, curves), plus `Extents2d` / `Extents3d`, which AcDbMgd declares in DatabaseServices |
+| `Stubs/Extra.cs` | The AdWindows ribbon, `ProgressMeter`, xref spatial filters, regions, `CompositeCurve3d`, Civil 3D pipes and structures |
+| `Stubs/WinRt.cs` | The Windows 10 SDK contracts (OCR, PDF rendering) used by FTFRECORD |
 
-`Stubs/Geometry.cs` and `Stubs/Database.cs` follow the real AcDbMgd / AcMgd / AeccDbMgd
-signatures (the surface members -- `TinSurface.ExtractContoursAt`, `GetGeneralProperties`,
-`GetTinProperties`, `GetTriangles`, `IsOutOfDate` -- as the Civil 3D API reference documents
-them); `Stubs/WinRt.cs` follows the Windows 10 SDK contracts. When the plugin starts
-using a member the stubs lack, the build says so: add the member with the real signature
-(check the Autodesk docs, do not guess) rather than changing the plugin to fit the stub.
+The stubs follow the real AcDbMgd / AcMgd / AcCoreMgd / AdWindows / AeccDbMgd signatures
+(namespace, declaring type, parameter types, return type, static or instance) for the
+members the plugin uses -- the surface members `TinSurface.ExtractContoursAt`,
+`GetGeneralProperties`, `GetTinProperties`, `GetTriangles` and `IsOutOfDate` as the Civil 3D
+API reference documents them; `FeatureLinePointType` in `Autodesk.Civil` and
+`PointDisplayStyleType` outside it, as the first real FTFCOMPARE build found. When the plugin
+starts using a member the stubs lack, the build says so: add the member with the real
+signature (check the Autodesk docs, do not guess) rather than changing the plugin to fit the
+stub. A missing type or member in a `FieldCodes.*` namespace is never a stub gap -- that is
+the plugin itself not compiling, and the fix belongs in `src/`.
 
 ## What it cannot tell you
 

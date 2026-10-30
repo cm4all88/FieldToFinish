@@ -128,41 +128,33 @@ namespace Autodesk.AutoCAD.Geometry
         public static Matrix3d Rotation(double angle, Vector3d axis, Point3d center) { return Identity; }
         public static Matrix3d Scaling(double scale, Point3d center) { return Identity; }
         public static Matrix3d Mirroring(Plane plane) { return Identity; }
+        public static Matrix3d WorldToPlane(Vector3d normal) { return Identity; }
         public static Matrix3d AlignCoordinateSystem(Point3d fo, Vector3d fx, Vector3d fy, Vector3d fz, Point3d to, Vector3d tx, Vector3d ty, Vector3d tz) { return Identity; }
         public Matrix3d PreMultiplyBy(Matrix3d m) { return this; }
         public Matrix3d PostMultiplyBy(Matrix3d m) { return this; }
         public Matrix3d Inverse() { return this; }
         public Vector3d Translation { get { return _shift; } }
+        public CoordinateSystem3d CoordinateSystem3d { get { return new CoordinateSystem3d(Point3d.Origin.Add(_shift), Vector3d.XAxis, Vector3d.YAxis); } }
         public Point3d Apply(Point3d p) { return p.Add(_shift); }
         public static Matrix3d operator *(Matrix3d a, Matrix3d b) { return a; }
     }
+
+    public struct CoordinateSystem3d
+    {
+        public CoordinateSystem3d(Point3d origin, Vector3d xAxis, Vector3d yAxis) { Origin = origin; Xaxis = xAxis; Yaxis = yAxis; }
+        public Point3d Origin { get; }
+        public Vector3d Xaxis { get; }
+        public Vector3d Yaxis { get; }
+        public Vector3d Zaxis { get { return Xaxis.CrossProduct(Yaxis); } }
+    }
+
+    public sealed class IntegerCollection : System.Collections.Generic.List<int> { }
 
     public sealed class Plane
     {
         public Plane() { }
         public Plane(Point3d origin, Vector3d normal) { }
         public Vector3d Normal { get { return Vector3d.ZAxis; } }
-    }
-
-    public struct Extents3d
-    {
-        public Extents3d(Point3d min, Point3d max) { MinPoint = min; MaxPoint = max; }
-        public Point3d MinPoint { get; private set; }
-        public Point3d MaxPoint { get; private set; }
-        public void AddPoint(Point3d p)
-        {
-            MinPoint = new Point3d(Math.Min(MinPoint.X, p.X), Math.Min(MinPoint.Y, p.Y), Math.Min(MinPoint.Z, p.Z));
-            MaxPoint = new Point3d(Math.Max(MaxPoint.X, p.X), Math.Max(MaxPoint.Y, p.Y), Math.Max(MaxPoint.Z, p.Z));
-        }
-        public void AddExtents(Extents3d e) { AddPoint(e.MinPoint); AddPoint(e.MaxPoint); }
-        public void TransformBy(Matrix3d m) { }
-    }
-
-    public struct Extents2d
-    {
-        public Extents2d(Point2d min, Point2d max) { MinPoint = min; MaxPoint = max; }
-        public Point2d MinPoint { get; }
-        public Point2d MaxPoint { get; }
     }
 
     public sealed class Point2dCollection : System.Collections.Generic.List<Point2d>
@@ -192,11 +184,10 @@ namespace Autodesk.AutoCAD.Geometry
         public Vector2d Direction { get { return StartPoint.GetVectorTo(EndPoint).GetNormal(); } }
     }
 
-    public sealed class LineSegment3d
+    // The Ge curves are Curve3d's, so a Curve's GetGeCurve() result can be tested with `as`.
+    public sealed class LineSegment3d : Curve3d
     {
-        public LineSegment3d(Point3d a, Point3d b) { StartPoint = a; EndPoint = b; }
-        public Point3d StartPoint { get; }
-        public Point3d EndPoint { get; }
+        public LineSegment3d(Point3d a, Point3d b) { }
         public double Length { get { return StartPoint.DistanceTo(EndPoint); } }
         public Vector3d Direction { get { return StartPoint.GetVectorTo(EndPoint).GetNormal(); } }
     }
@@ -213,7 +204,7 @@ namespace Autodesk.AutoCAD.Geometry
         public bool IsClockWise { get { return false; } }
     }
 
-    public sealed class CircularArc3d
+    public sealed class CircularArc3d : Curve3d
     {
         public CircularArc3d(Point3d center, Vector3d normal, Vector3d reference, double radius, double start, double end) { Center = center; Radius = radius; StartAngle = start; EndAngle = end; Normal = normal; }
         public Point3d Center { get; }
@@ -221,7 +212,33 @@ namespace Autodesk.AutoCAD.Geometry
         public double StartAngle { get; }
         public double EndAngle { get; }
         public Vector3d Normal { get; }
-        public Point3d StartPoint { get { return Center; } }
-        public Point3d EndPoint { get { return Center; } }
+    }
+}
+
+namespace Autodesk.AutoCAD.DatabaseServices
+{
+    using System;
+    using Autodesk.AutoCAD.Geometry;
+
+    // Extents2d and Extents3d live in DatabaseServices in AcDbMgd, not in Geometry.
+    public struct Extents2d
+    {
+        public Extents2d(Point2d min, Point2d max) { MinPoint = min; MaxPoint = max; }
+        public Point2d MinPoint { get; }
+        public Point2d MaxPoint { get; }
+    }
+
+    public struct Extents3d
+    {
+        public Extents3d(Point3d min, Point3d max) { MinPoint = min; MaxPoint = max; }
+        public Point3d MinPoint { get; private set; }
+        public Point3d MaxPoint { get; private set; }
+        public void AddPoint(Point3d p)
+        {
+            MinPoint = new Point3d(Math.Min(MinPoint.X, p.X), Math.Min(MinPoint.Y, p.Y), Math.Min(MinPoint.Z, p.Z));
+            MaxPoint = new Point3d(Math.Max(MaxPoint.X, p.X), Math.Max(MaxPoint.Y, p.Y), Math.Max(MaxPoint.Z, p.Z));
+        }
+        public void AddExtents(Extents3d e) { AddPoint(e.MinPoint); AddPoint(e.MaxPoint); }
+        public void TransformBy(Matrix3d m) { }
     }
 }

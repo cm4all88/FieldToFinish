@@ -48,12 +48,19 @@ namespace Autodesk.AutoCAD.Runtime
 
     public class RXClass { public string Name { get; } public string DxfName { get; } public bool IsDerivedFrom(RXClass other) { return false; } }
 
-    public class RXObject : IDisposable
+    // UnmanagedObject and Dispose live on DisposableWrapper, the base of every managed wrapper.
+    public abstract class DisposableWrapper : MarshalByRefObject, IDisposable
+    {
+        public IntPtr UnmanagedObject { get; }
+        public bool IsDisposed { get; }
+        public void Dispose() { }
+    }
+
+    public class RXObject : DisposableWrapper
     {
         public static RXClass GetClass(Type type) { return new RXClass(); }
         public RXClass GetRXClass() { return new RXClass(); }
-        public virtual void Dispose() { }
-        public bool IsDisposed { get; }
+        public virtual void CopyFrom(RXObject source) { }
     }
 }
 
@@ -74,6 +81,8 @@ namespace Autodesk.AutoCAD.Colors
         public byte Blue { get; }
         public string ColorNameForDisplay { get { return ColorIndex.ToString(); } }
     }
+
+    public struct Transparency { }
 }
 
 namespace Autodesk.AutoCAD.DatabaseServices
@@ -134,6 +143,10 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public Handle(long value) { Value = value; }
         public long Value { get; }
         public override string ToString() { return Value.ToString("X"); }
+        public static bool operator ==(Handle a, Handle b) { return a.Value == b.Value; }
+        public static bool operator !=(Handle a, Handle b) { return a.Value != b.Value; }
+        public override bool Equals(object obj) { return obj is Handle && ((Handle)obj).Value == Value; }
+        public override int GetHashCode() { return Value.GetHashCode(); }
     }
 
     public struct ObjectId
@@ -170,9 +183,9 @@ namespace Autodesk.AutoCAD.DatabaseServices
         IEnumerator IEnumerable.GetEnumerator() { return _ids.GetEnumerator(); }
     }
 
-    public sealed class AnnotationScale : DBObject
+    // An annotation scale is an object context (AcDbAnnotationScale : AcDbObjectContext), not a DBObject.
+    public sealed class AnnotationScale : ObjectContext
     {
-        public string Name { get; set; }
         public double DrawingUnits { get; set; }
         public double PaperUnits { get; set; }
         public double Scale { get { return DrawingUnits / PaperUnits; } }
@@ -188,11 +201,12 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public ObjectContext CurrentContext { get; set; }
         public ObjectContext GetContext(string name) { return null; }
         public bool HasContext(string name) { return false; }
+        public void AddContext(ObjectContext context) { }
         public IEnumerator<ObjectContext> GetEnumerator() { yield break; }
         IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
     }
 
-    public class ObjectContext { public string Name { get; } }
+    public abstract class ObjectContext : RXObject { public string Name { get; set; } }
 
     public sealed class TransactionManager
     {
@@ -219,7 +233,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
     public enum UnitsValue { Undefined = 0, Inches = 1, Feet = 2, Miles = 3, Millimeters = 4, Centimeters = 5, Meters = 6, Kilometers = 7, USSurveyFeet = 21, USSurveyInch = 22, USSurveyYard = 23, USSurveyMile = 24 }
     public enum LineWeight { ByLayer = -1, ByBlock = -2, ByLineWeightDefault = -3, LineWeight000 = 0, LineWeight005 = 5, LineWeight009 = 9, LineWeight013 = 13, LineWeight015 = 15, LineWeight018 = 18, LineWeight020 = 20, LineWeight025 = 25, LineWeight030 = 30, LineWeight035 = 35, LineWeight040 = 40, LineWeight050 = 50, LineWeight053 = 53, LineWeight060 = 60, LineWeight070 = 70, LineWeight080 = 80, LineWeight090 = 90, LineWeight100 = 100, LineWeight106 = 106, LineWeight120 = 120, LineWeight140 = 140, LineWeight158 = 158, LineWeight200 = 200, LineWeight211 = 211 }
 
-    public sealed class Database : IDisposable
+    public sealed class Database : RXObject
     {
         public Database() { }
         public Database(bool buildDefaultDrawing, bool noDocument) { }
@@ -254,15 +268,33 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public double Dimscale { get; set; }
         public bool TileMode { get; set; }
         public UnitsValue Insunits { get; set; }
-        public Extents3d Extmin { get { return new Extents3d(); } }
-        public Point3d Extmax { get; }
+        public Point3d Extmin { get; set; }
+        public Point3d Extmax { get; set; }
         public ObjectContextManager ObjectContextManager { get; } = new ObjectContextManager();
+        public ObjectId GeoDataObject { get; }
+        public SecurityParameters SecurityParameters { get; }
         public void ReadDwgFile(string fileName, System.IO.FileShare share, bool allowCPConversion, string password) { }
         public void CloseInput(bool closeFile) { }
-        public void Dispose() { }
+        public void SaveAs(string fileName, DwgVersion version) { }
+        public void SaveAs(string fileName, bool bBakAndRename, DwgVersion version, SecurityParameters security) { }
+        public void DeepCloneObjects(ObjectIdCollection identifiers, ObjectId id, IdMapping mapping, bool deferTranslation) { }
+        public void WblockCloneObjects(ObjectIdCollection identifiers, ObjectId id, IdMapping mapping, DuplicateRecordCloning cloning, bool deferTranslation) { }
+        public ObjectId Insert(string blockName, Database dataBase, bool preserveSourceDatabase) { return ObjectId.Null; }
+        public void LoadLineTypeFile(string ltypeName, string fileName) { }
     }
 
-    public class DBObject : RXObject
+    public enum DwgVersion { Current = 33 }
+    public struct SecurityParameters { }
+    public enum DuplicateRecordCloning { NotApplicable = 0, Ignore = 1, Replace = 2, XrefMangleName = 3, MangleName = 4, UnmangleName = 5 }
+    public enum AnnotativeStates { NotApplicable = 0, True = 1, False = 2 }
+    public enum XrefStatus { NotAnXref = 0, Resolved = 1, Unloaded = 2, Unreferenced = 3, FileNotFound = 4, Unresolved = 5 }
+
+    public sealed class GeoLocationData : DBObject
+    {
+        public Point3d TransformToLonLatAlt(Point3d dwgPt) { return dwgPt; }
+    }
+
+    public class DBObject : Autodesk.AutoCAD.GraphicsInterface.Drawable
     {
         public ObjectId ObjectId { get; }
         public ObjectId Id { get { return ObjectId; } }
@@ -289,6 +321,9 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public DBObject Clone() { return this; }
         public DBObject DeepClone(DBObject owner, IdMapping map, bool primary) { return this; }
         public virtual ObjectId LayerId { get; set; }
+        public AnnotativeStates Annotative { get; set; }
+        public bool HasContext(ObjectContext context) { return false; }
+        public void AddContext(ObjectContext context) { }
     }
 
     public sealed class IdMapping : IDisposable { public void Dispose() { } }
@@ -303,8 +338,9 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public Autodesk.AutoCAD.Colors.Color Color { get; set; }
         public int ColorIndex { get; set; }
         public LineWeight LineWeight { get; set; }
+        public Autodesk.AutoCAD.Colors.Transparency Transparency { get; set; }
+        public string PlotStyleName { get; set; }
         public bool Visible { get; set; }
-        public bool Annotative { get; set; }
         public ObjectId BlockId { get; }
         public ObjectId OwnerBlockId { get { return BlockId; } }
         public Extents3d GeometricExtents { get { return new Extents3d(); } }
@@ -319,6 +355,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public void Draw() { }
         public bool IsPlanar { get; }
         public DBObjectCollection GetOffsetCurves(double offset) { return new DBObjectCollection(); }
+        public void Explode(DBObjectCollection entitySet) { }
         public HyperLinkCollection Hyperlinks { get; } = new HyperLinkCollection();
         public void IntersectWith(Entity other, Intersect type, Point3dCollection points, IntPtr a, IntPtr b) { }
         public void IntersectWith(Entity other, Intersect type, Plane plane, Point3dCollection points, IntPtr a, IntPtr b) { }
@@ -368,10 +405,8 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public DBObjectCollection GetSplitCurves(Point3dCollection points) { return new DBObjectCollection(); }
         public DBObjectCollection GetSplitCurves(DoubleCollection parameters) { return new DBObjectCollection(); }
         public void ReverseCurve() { }
-        public Curve3dEx GetGeCurve() { return new Curve3dEx(); }
+        public virtual Curve3d GetGeCurve() { return null; }
     }
-
-    public sealed class Curve3dEx { }
 
     public class Line : Curve
     {
@@ -445,8 +480,85 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public void Reset(bool reuse, int vertices) { }
     }
 
-    public class Polyline2d : Curve { }
-    public class Polyline3d : Curve { }
+    // The old-style polylines enumerate their vertex ObjectIds (non-generic IEnumerable, as AcDbMgd has it).
+    public enum Poly2dType { SimplePoly = 0, FitCurvePoly = 1, QuadSplinePoly = 2, CubicSplinePoly = 3 }
+    public enum Poly3dType { SimplePoly = 0, QuadSplinePoly = 1, CubicSplinePoly = 2 }
+    public enum Vertex2dType { SimpleVertex = 0, CurveFitVertex = 1, SplineFitVertex = 2, SplineControlVertex = 3 }
+    public enum Vertex3dType { SimpleVertex = 0, ControlVertex = 1, FitVertex = 2 }
+
+    public class Polyline2d : Curve, IEnumerable
+    {
+        public Poly2dType PolyType { get; set; }
+        public Point3d VertexPosition(Vertex2d vertex) { return Point3d.Origin; }
+        public IEnumerator GetEnumerator() { yield break; }
+    }
+
+    public class Polyline3d : Curve, IEnumerable
+    {
+        public Polyline3d() { }
+        public Polyline3d(Poly3dType type, Point3dCollection vertices, bool closed) { }
+        public Poly3dType PolyType { get; set; }
+        public IEnumerator GetEnumerator() { yield break; }
+    }
+
+    public abstract class Vertex : Entity { }
+
+    public class Vertex2d : Vertex
+    {
+        public Point3d Position { get; set; }
+        public double Bulge { get; set; }
+        public Vertex2dType VertexType { get; }
+    }
+
+    public class PolylineVertex3d : Vertex
+    {
+        public Point3d Position { get; set; }
+        public Vertex3dType VertexType { get; }
+    }
+
+    public class DBPoint : Entity
+    {
+        public DBPoint() { }
+        public DBPoint(Point3d position) { Position = position; }
+        public Point3d Position { get; set; }
+    }
+
+    public class Solid : Entity
+    {
+        public Solid() { }
+        public Solid(Point3d pointer1, Point3d pointer2, Point3d pointer3) { }
+        public Solid(Point3d pointer1, Point3d pointer2, Point3d pointer3, Point3d pointer4) { }
+        public Point3d GetPointAt(short index) { return Point3d.Origin; }
+    }
+
+    public class Leader : Curve { }
+
+    public abstract class Dimension : Entity
+    {
+        public ObjectId DimensionStyle { get; set; }
+        public string DimensionStyleName { get; set; }
+        public double Measurement { get; }
+        public Point3d TextPosition { get; set; }
+        public double Dimlfac { get; set; }
+        public double Dimtxt { get; set; }
+        public double Dimasz { get; set; }
+        public double Dimgap { get; set; }
+        public double Dimexo { get; set; }
+        public double Dimexe { get; set; }
+        public int Dimdec { get; set; }
+        public int Dimzin { get; set; }
+        public string Dimpost { get; set; }
+        public int Dimtad { get; set; }
+    }
+
+    public class AlignedDimension : Dimension
+    {
+        public AlignedDimension() { }
+        public AlignedDimension(Point3d xLine1Point, Point3d xLine2Point, Point3d dimLinePoint, string dimText, ObjectId dimStyle) { }
+        public Point3d XLine1Point { get; set; }
+        public Point3d XLine2Point { get; set; }
+        public Point3d DimLinePoint { get; set; }
+    }
     public class Spline : Curve { public Polyline ToPolyline() { return new Polyline(); } }
     public class Ellipse : Curve { }
 
@@ -515,8 +627,12 @@ namespace Autodesk.AutoCAD.DatabaseServices
     public class Hatch : Entity
     {
         public string PatternName { get; }
+        public HatchPatternType PatternType { get; }
         public double PatternScale { get; set; }
         public double PatternAngle { get; set; }
+        public HatchStyle HatchStyle { get; set; }
+        public int NumberOfPatternDefinitions { get; }
+        public PatternDefinition GetPatternDefinitionAt(int index) { return new PatternDefinition(); }
         public void SetHatchPattern(HatchPatternType type, string name) { }
         public void AppendLoop(HatchLoopTypes type, ObjectIdCollection ids) { }
         public void EvaluateHatch(bool underestimate) { }
@@ -526,6 +642,8 @@ namespace Autodesk.AutoCAD.DatabaseServices
     }
 
     public enum HatchPatternType { UserDefined = 0, PreDefined = 1, CustomDefined = 2 }
+    public enum HatchStyle { Normal = 0, Outer = 1, Ignore = 2 }
+    public struct PatternDefinition { public double Angle { get; } public double BaseX { get; } public double BaseY { get; } public double OffsetX { get; } public double OffsetY { get; } }
     [Flags] public enum HatchLoopTypes { Default = 0, External = 1, Polyline = 2, Derived = 4, Textbox = 8, Outermost = 16, NotClosed = 32, SelfIntersecting = 64, TextIsland = 128, Duplicate = 256 }
 
     public sealed class AttributeCollection : IEnumerable<ObjectId>
@@ -555,6 +673,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public string Tag { get; set; }
         public bool Invisible { get; set; }
         public bool IsMTextAttribute { get; set; }
+        public MText MTextAttribute { get; set; }
         public bool LockPositionInBlock { get; set; }
         public void SetAttributeFromBlock(AttributeDefinition definition, Matrix3d transform) { }
         public void SetAttributeFromBlock(Matrix3d transform) { }
@@ -597,7 +716,6 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public DynamicBlockReferencePropertyCollection DynamicBlockReferencePropertyCollection { get; } = new DynamicBlockReferencePropertyCollection();
         public void ResetBlock() { }
         public void ExplodeToOwnerSpace() { }
-        public void Explode(DBObjectCollection entities) { }
     }
 
     public abstract class SymbolTable : DBObject, IEnumerable<ObjectId>
@@ -641,6 +759,8 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public BlockScaling BlockScaling { get; set; }
         public ObjectId LayoutId { get; }
         public ObjectId DrawOrderTableId { get; }
+        public XrefStatus XrefStatus { get; }
+        public Database GetXrefDatabase(bool includeUnresolved) { return null; }
         public ObjectId AppendEntity(Entity entity) { return ObjectId.Null; }
         public ObjectIdCollection GetBlockReferenceIds(bool directOnly, bool forceValidity) { return new ObjectIdCollection(); }
         public ObjectIdCollection GetAnonymousBlockIds() { return new ObjectIdCollection(); }
@@ -665,7 +785,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public bool IsHidden { get; set; }
         public bool IsUsed { get; }
         public string Description { get; set; }
-        public double Transparency { get; set; }
+        public Autodesk.AutoCAD.Colors.Transparency Transparency { get; set; }
         public ObjectId PlotStyleNameId { get; set; }
         public bool ViewportVisibilityDefault { get; set; }
         public void SetIsFrozen(bool frozen) { IsFrozen = frozen; }
@@ -693,7 +813,6 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public bool IsVertical { get; set; }
         public FontDescriptor Font { get; set; }
         public byte Flags { get; set; }
-        public bool Annotative { get; set; }
     }
 
     public sealed class LinetypeTable : SymbolTable { }
@@ -739,21 +858,40 @@ namespace Autodesk.AutoCAD.DatabaseServices
 
     public class Xrecord : DBObject { public ResultBuffer Data { get; set; } }
 
-    public sealed class Layout : DBObject
+    // A layout is a page setup: Layout derives from PlotSettings, which carries the paper and device.
+    public class PlotSettings : DBObject
     {
-        public string LayoutName { get; set; }
-        public ObjectId BlockTableRecordId { get; }
-        public int TabOrder { get; set; }
+        public PlotSettings(bool modelType) { }
         public bool ModelType { get; }
-        public ObjectIdCollection GetViewports() { return new ObjectIdCollection(); }
-        public Extents2d PlotPaperSize { get { return new Extents2d(); } }
+        public Point2d PlotPaperSize { get; }
         public double StdScale { get; }
         public bool UseStandardScale { get; }
         public string CanonicalMediaName { get; }
         public string PlotConfigurationName { get; }
         public string CurrentStyleSheet { get; }
+    }
+
+    public enum PlotPaperUnit { Inches = 0, Millimeters = 1, Pixels = 2 }
+
+    public sealed class PlotSettingsValidator
+    {
+        public static PlotSettingsValidator Current { get; }
+        public void SetPlotConfigurationName(PlotSettings plotSet, string plotDeviceName, string mediaName) { }
+        public void SetPlotPaperUnits(PlotSettings plotSet, PlotPaperUnit units) { }
+        public void SetCurrentStyleSheet(PlotSettings plotSet, string styleSheetName) { }
+        public System.Collections.Specialized.StringCollection GetPlotStyleSheetList() { return new System.Collections.Specialized.StringCollection(); }
+        public string GetLocaleMediaName(PlotSettings plotSet, string canonicalName) { return canonicalName; }
+    }
+
+    public sealed class Layout : PlotSettings
+    {
+        public Layout() : base(false) { }
+        public string LayoutName { get; set; }
+        public ObjectId BlockTableRecordId { get; }
+        public int TabOrder { get; set; }
+        public ObjectIdCollection GetViewports() { return new ObjectIdCollection(); }
         public Extents3d Extents { get { return new Extents3d(); } }
-        public Extents3d Limits { get { return new Extents3d(); } }
+        public Extents2d Limits { get { return new Extents2d(); } }
     }
 
     public sealed class LayoutManager
@@ -777,6 +915,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public Point2d ViewCenter { get; set; }
         public double ViewHeight { get; set; }
         public Vector3d ViewDirection { get; set; }
+        public Point3d ViewTarget { get; set; }
         public double TwistAngle { get; set; }
         public int Number { get; }
         public bool On { get; set; }
@@ -800,7 +939,8 @@ namespace Autodesk.AutoCAD.DatabaseServices
     public enum TableBreakOptions { None = 0, EnableBreaking = 1, RepeatTopLabels = 2, RepeatBottomLabels = 4, AllowManualPositions = 8, AllowManualHeights = 16 }
     public enum TableBreakFlowDirection { Right = 1, DownOrUp = 2, Manual = 4 }
 
-    public sealed class Cell
+    // Table.Cells is a CellRange, and a CellRange is itself a Cell (format a whole range at once).
+    public class Cell
     {
         public string TextString { get; set; }
         public double? TextHeight { get; set; }
@@ -820,13 +960,6 @@ namespace Autodesk.AutoCAD.DatabaseServices
     }
 
     public sealed class CellContent { public string TextString { get; set; } }
-
-    public sealed class CellCollection : IEnumerable<Cell>
-    {
-        public Cell this[int row, int column] { get { return new Cell(); } }
-        public IEnumerator<Cell> GetEnumerator() { yield break; }
-        IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
-    }
 
     public sealed class Row { public double Height { get; set; } public RowType Style { get; } public bool IsMerged { get; } }
     public sealed class Column { public double Width { get; set; } }
@@ -850,7 +983,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public bool IsTitleSuppressed { get; set; }
         public bool IsHeaderSuppressed { get; set; }
         public FlowDirection FlowDirection { get; set; }
-        public CellCollection Cells { get; } = new CellCollection();
+        public CellRange Cells { get; } = new CellRange();
         public RowsCollection Rows { get; } = new RowsCollection();
         public ColumnsCollection Columns { get; } = new ColumnsCollection();
         public void SetSize(int rows, int columns) { }
@@ -883,8 +1016,9 @@ namespace Autodesk.AutoCAD.DatabaseServices
     [Flags] public enum CellMargins { Top = 1, Left = 2, Bottom = 4, Right = 8, HorizontalSpacing = 16, VerticalSpacing = 32 }
     [Flags] public enum CellStateFlags { None = 0, ContentLocked = 1, ContentReadOnly = 2, Linked = 4, ContentModifiedAfterUpdate = 8, FormatLocked = 16, FormatReadOnly = 32, FormatModifiedAfterUpdate = 64 }
 
-    public sealed class CellRange
+    public sealed class CellRange : Cell
     {
+        public Cell this[int row, int column] { get { return new Cell(); } }
         public static CellRange Create(Table table, int topRow, int leftColumn, int bottomRow, int rightColumn) { return new CellRange(); }
         public int TopRow { get; }
         public int LeftColumn { get; }
@@ -915,6 +1049,7 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public MText MText { get; set; }
         public ObjectId BlockContentId { get; set; }
         public int AddLeaderLine(Point3d point) { return 0; }
+        public ArrayList GetLeaderLineIndexes(int leaderIndex) { return new ArrayList(); }
         public void AddFirstVertex(int leaderLine, Point3d point) { }
         public void AddLastVertex(int leaderLine, Point3d point) { }
         public void SetFirstVertex(int leaderLine, Point3d point) { }
@@ -970,13 +1105,14 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public static bool IsBlockLayoutName(string name) { return false; }
     }
 
-    public static class HostApplicationServices
+    // HostApplicationServices.Current is the host's own instance; FindFile and UserBreak are its members.
+    public abstract class HostApplicationServices : RXObject
     {
         public static Database WorkingDatabase { get; set; }
-        public static Current Current { get; } = new Current();
+        public static HostApplicationServices Current { get; }
+        public virtual string FindFile(string fileName, Database database, FindFileHint hint) { return fileName; }
+        public virtual bool UserBreak() { return false; }
     }
-
-    public sealed class Current { public string FindFile(string name, Database db, FindFileHint hint) { return name; } }
     public enum FindFileHint { Default = 0, FontFile = 1, CompiledShapeFile = 2, TrueTypeFontFile = 3, EmbeddedImageFile = 4, XRefDrawing = 5, PatternFile = 6, ARXApplication = 7, FontMapFile = 8, UnderlayFile = 9, DataLinkFile = 10, PhotometricWebFile = 11, MaterialMapFile = 12, CloudCollaborationFile = 13 }
 
     public sealed class ObjectIdEnumerator { }
@@ -1225,6 +1361,8 @@ namespace Autodesk.AutoCAD.EditorInput
         public void WriteMessage(string format, params object[] args) { }
         public PromptPointResult GetPoint(PromptPointOptions options) { return new PromptPointResult(); }
         public PromptPointResult GetPoint(string message) { return new PromptPointResult(); }
+        public PromptPointResult GetCorner(string message, Point3d basePoint) { return new PromptPointResult(); }
+        public PromptFileNameResult GetFileNameForOpen(PromptOpenFileOptions options) { return new PromptFileNameResult(); }
         public PromptDoubleResult GetDistance(PromptDistanceOptions options) { return new PromptDoubleResult(); }
         public PromptDoubleResult GetDistance(string message) { return new PromptDoubleResult(); }
         public PromptDoubleResult GetDouble(PromptDoubleOptions options) { return new PromptDoubleResult(); }
@@ -1260,9 +1398,8 @@ namespace Autodesk.AutoCAD.EditorInput
         public void Regen() { }
         public EditorUserInteraction StartUserInteraction(System.Windows.Forms.Control control) { return new EditorUserInteraction(); }
         public EditorUserInteraction StartUserInteraction(IntPtr handle) { return new EditorUserInteraction(); }
-        public Autodesk.AutoCAD.GraphicsSystem.View GetCurrentView() { return new Autodesk.AutoCAD.GraphicsSystem.View(); }
-        public ViewTableRecord GetCurrentView2() { return new ViewTableRecord(); }
-        public void SetCurrentView(ViewTableRecord view) { }
+        public ViewTableRecord GetCurrentView() { return new ViewTableRecord(); }
+        public void SetCurrentView(ViewTableRecord value) { }
         public Point3d PointToWorld(System.Drawing.Point point) { return Point3d.Origin; }
         public System.Drawing.Point PointToScreen(Point3d point, int viewport) { return new System.Drawing.Point(); }
         public void DrawVector(Point3d a, Point3d b, int color, bool highlighted) { }
@@ -1280,7 +1417,20 @@ namespace Autodesk.AutoCAD.EditorInput
 
     public sealed class PromptDragOptions : PromptOptions { public PromptDragOptions(string message) : base(message) { } }
 
-    public sealed class ViewTableRecord : IDisposable
+    public abstract class PromptFileOptions : PromptOptions
+    {
+        protected PromptFileOptions(string message) : base(message) { }
+        public string Filter { get; set; }
+    }
+
+    public sealed class PromptOpenFileOptions : PromptFileOptions { public PromptOpenFileOptions(string message) : base(message) { } }
+    public sealed class PromptFileNameResult : PromptResult { }
+}
+
+namespace Autodesk.AutoCAD.DatabaseServices
+{
+    // Editor.GetCurrentView hands back a ViewTableRecord; the view members are AbstractViewTableRecord's.
+    public abstract class AbstractViewTableRecord : SymbolTableRecord
     {
         public Point2d CenterPoint { get; set; }
         public double Height { get; set; }
@@ -1288,13 +1438,9 @@ namespace Autodesk.AutoCAD.EditorInput
         public Vector3d ViewDirection { get; set; }
         public Point3d Target { get; set; }
         public double ViewTwist { get; set; }
-        public void Dispose() { }
     }
-}
 
-namespace Autodesk.AutoCAD.GraphicsSystem
-{
-    public sealed class View : IDisposable { public void Dispose() { } public void ZoomExtents(Point3d min, Point3d max) { } public void Zoom(double factor) { } }
+    public sealed class ViewTableRecord : AbstractViewTableRecord { }
 }
 
 namespace Autodesk.AutoCAD.ApplicationServices
@@ -1311,7 +1457,7 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public string Name { get; }
         public bool IsActive { get; }
         public bool IsReadOnly { get; }
-        public Window Window { get; }
+        public Autodesk.AutoCAD.Windows.Window Window { get; }
         public DocumentLock LockDocument() { return new DocumentLock(); }
         public DocumentLock LockDocument(DocumentLockMode mode, string globalCommandName, string localCommandName, bool promptIfFails) { return new DocumentLock(); }
         public void SendStringToExecute(string command, bool activate, bool wrapUpInactiveDoc, bool echoCommand) { }
@@ -1321,13 +1467,19 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public Autodesk.AutoCAD.DatabaseServices.TransactionManager TransactionManager2 { get; }
         public void CloseAndDiscard() { }
         public void CloseAndSave(string fileName) { }
-        public event EventHandler CommandEnded;
-        public void Raise() { if (CommandEnded != null) CommandEnded(this, EventArgs.Empty); }
+        public event CommandEventHandler CommandEnded;
+        public void Raise() { if (CommandEnded != null) CommandEnded(this, null); }
     }
 
-    public enum DocumentLockMode { NotLocked = 0, AutoWrite = 1, Read = 2, Write = 4, ProtectedAutoWrite = 8, ExclusiveWrite = 16 }
+    public delegate void CommandEventHandler(object sender, CommandEventArgs e);
+    public sealed class CommandEventArgs : EventArgs { public string GlobalCommandName { get; } }
 
-    public sealed class Window { public IntPtr Handle { get; } public string Text { get; set; } public void Focus() { } }
+    public delegate void DocumentCollectionEventHandler(object sender, DocumentCollectionEventArgs e);
+    public sealed class DocumentCollectionEventArgs : EventArgs { public Document Document { get; } }
+
+    public delegate void ExecuteInApplicationContextCallback(object userData);
+
+    public enum DocumentLockMode { NotLocked = 0, AutoWrite = 1, Read = 2, Write = 4, ProtectedAutoWrite = 8, ExclusiveWrite = 16 }
 
     public sealed class DocumentCollection : IEnumerable<Document>
     {
@@ -1337,17 +1489,18 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public Document Add(string template) { return null; }
         public IEnumerator<Document> GetEnumerator() { yield break; }
         IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
-        public event EventHandler DocumentActivated;
-        public event EventHandler DocumentCreated;
-        public event EventHandler DocumentToBeDestroyed;
-        public void Raise() { if (DocumentActivated != null) DocumentActivated(this, EventArgs.Empty); if (DocumentCreated != null) DocumentCreated(this, EventArgs.Empty); if (DocumentToBeDestroyed != null) DocumentToBeDestroyed(this, EventArgs.Empty); }
+        public void ExecuteInApplicationContext(ExecuteInApplicationContextCallback callback, object data) { }
+        public event DocumentCollectionEventHandler DocumentActivated;
+        public event DocumentCollectionEventHandler DocumentCreated;
+        public event DocumentCollectionEventHandler DocumentToBeDestroyed;
+        public void Raise() { if (DocumentActivated != null) DocumentActivated(this, null); if (DocumentCreated != null) DocumentCreated(this, null); if (DocumentToBeDestroyed != null) DocumentToBeDestroyed(this, null); }
     }
 
     public static class Application
     {
         public static DocumentCollection DocumentManager { get; } = new DocumentCollection();
         public static Version Version { get { return new Version(24, 3); } }
-        public static Window MainWindow { get; }
+        public static Autodesk.AutoCAD.Windows.Window MainWindow { get; }
         public static System.Windows.Forms.DialogResult ShowModalDialog(System.Windows.Forms.Form form) { return System.Windows.Forms.DialogResult.OK; }
         public static System.Windows.Forms.DialogResult ShowModalDialog(IntPtr owner, System.Windows.Forms.Form form, bool persistSizeAndPosition) { return System.Windows.Forms.DialogResult.OK; }
         public static System.Windows.Forms.DialogResult ShowModalDialog(IntPtr owner, System.Windows.Forms.Form form) { return System.Windows.Forms.DialogResult.OK; }
@@ -1360,13 +1513,26 @@ namespace Autodesk.AutoCAD.ApplicationServices
         public static void UpdateScreen() { }
         public static bool IsQuiescent { get; }
         public static event EventHandler Idle;
-        public static void Raise() { if (Idle != null) Idle(null, EventArgs.Empty); }
+        public static event EventHandler QuitWillStart;
+        public static void Raise() { if (Idle != null) Idle(null, EventArgs.Empty); if (QuitWillStart != null) QuitWillStart(null, EventArgs.Empty); }
         public static Autodesk.AutoCAD.Runtime.Exception ExceptionOf() { return null; }
         public static System.Windows.Forms.DialogResult ShowModalDialog(System.Windows.Forms.Form form, bool persistSizeAndPosition) { return System.Windows.Forms.DialogResult.OK; }
     }
 }
 
-namespace System.Windows { public class Window { } }
+// AcCoreMgd's half of the application object (AcMgd's Application above forwards to it).
+namespace Autodesk.AutoCAD.ApplicationServices.Core
+{
+    public static class Application
+    {
+        public static Autodesk.AutoCAD.ApplicationServices.DocumentCollection DocumentManager { get; }
+    }
+}
+
+namespace Autodesk.AutoCAD.Windows
+{
+    public class Window { public IntPtr Handle { get; } public string Text { get; set; } public void Focus() { } }
+}
 
 namespace Autodesk.Civil.ApplicationServices
 {
@@ -1379,6 +1545,12 @@ namespace Autodesk.Civil.ApplicationServices
         public Autodesk.AutoCAD.DatabaseServices.ObjectIdCollection GetSitelessAlignmentIds() { return new Autodesk.AutoCAD.DatabaseServices.ObjectIdCollection(); }
         public Autodesk.AutoCAD.DatabaseServices.ObjectIdCollection GetSurfaceIds() { return new Autodesk.AutoCAD.DatabaseServices.ObjectIdCollection(); }
     }
+}
+
+namespace Autodesk.Civil
+{
+    public enum FeatureLinePointType { AllPoints, PIPoint, ElevationPoint }
+    public enum PointMarkerDisplayType { UseCustomMarker }
 }
 
 namespace Autodesk.Civil.Settings
@@ -1420,7 +1592,21 @@ namespace Autodesk.Civil.DatabaseServices.Styles
 
     public class StyleBase : DBObject { public string Name { get; set; } public string Description { get; set; } }
     public sealed class LabelStyle : StyleBase { }
-    public sealed class PointStyle : StyleBase { }
+
+    public sealed class PointStyle : StyleBase
+    {
+        public Autodesk.Civil.PointMarkerDisplayType MarkerType { get; set; }
+        public DisplayStyle GetDisplayStylePlan(PointDisplayStyleType component) { return new DisplayStyle(); }
+        public DisplayStyle GetDisplayStyleModel(PointDisplayStyleType component) { return new DisplayStyle(); }
+    }
+
+    public enum PointDisplayStyleType { Marker = 0, Label = 1 }
+
+    public sealed class DisplayStyle
+    {
+        public string Layer { get; set; }
+        public bool Visible { get; set; }
+    }
 }
 
 namespace Autodesk.Civil.DatabaseServices
@@ -1469,8 +1655,7 @@ namespace Autodesk.Civil.DatabaseServices
         public bool IsLabelDragged { get; set; }
         public bool IsLabelStyleOverridden { get; set; }
         public double ScaleXY { get; set; }
-        public double MarkerRotationAngle { get; set; }
-        public bool IsMarkerRotationAngleOverridden { get; set; }
+        public double MarkerRotation { get; set; }
         public ObjectId PointGroupId { get; }
         public string PrimaryPointGroupName { get; }
         public void ResetLabelLocation() { }
@@ -1504,11 +1689,46 @@ namespace Autodesk.Civil.DatabaseServices
         public string Name { get; set; }
     }
 
-    public enum FeatureLinePointType { ElevationPoint = 1, PIPoint = 2, AllPoints = 3 }
-
     public sealed class SurveyFigure : FeatureLine { }
 
-    public class Alignment : Entity { public string Name { get; set; } public double Length { get; } public double StartingStation { get; } public double EndingStation { get; } public ObjectId StyleId { get; set; } }
+    public class Alignment : Entity
+    {
+        public string Name { get; set; }
+        public double Length { get; }
+        public double StartingStation { get; }
+        public double EndingStation { get; }
+        public ObjectId StyleId { get; set; }
+        public AlignmentEntityCollection Entities { get; }
+    }
+
+    // Alignment geometry: entities in order, each made of sub-entities (2D: alignments are plan geometry).
+    public sealed class AlignmentEntityCollection
+    {
+        public int Count { get; }
+        public AlignmentEntity GetEntityByOrder(int index) { return null; }
+    }
+
+    public abstract class AlignmentEntity
+    {
+        public int SubEntityCount { get; }
+        public AlignmentSubEntity this[int index] { get { return null; } }
+    }
+
+    public abstract class AlignmentSubEntity { }
+
+    public sealed class AlignmentSubEntityLine : AlignmentSubEntity
+    {
+        public Point2d StartPoint { get; }
+        public Point2d EndPoint { get; }
+    }
+
+    public sealed class AlignmentSubEntityArc : AlignmentSubEntity
+    {
+        public Point2d StartPoint { get; }
+        public Point2d EndPoint { get; }
+        public Point2d CenterPoint { get; }
+        public bool Clockwise { get; }
+    }
     public class Parcel : Entity { public string Name { get; set; } public double Area { get; } public double Perimeter { get; } }
     // Surfaces, as AeccDbMgd declares the members FTFSPOT and FTFCONTOUR use. Surface derives
     // from Civil's own Entity in the real assembly; here it sits straight on AutoCAD's.
@@ -1635,4 +1855,16 @@ namespace Autodesk.AutoCAD.EditorInput
 namespace Autodesk.AutoCAD.GraphicsInterface
 {
     public abstract class WorldDraw { }
+
+    // Every DBObject is a Drawable; transient graphics take Drawables.
+    public abstract class Drawable : Autodesk.AutoCAD.Runtime.RXObject { }
+
+    public enum TransientDrawingMode { Main = 0, Sprite = 1, DirectShortTerm = 2, Highlight = 3, DirectTopmost = 4, Contrast = 5 }
+
+    public sealed class TransientManager
+    {
+        public static TransientManager CurrentTransientManager { get; }
+        public bool AddTransient(Drawable drawable, TransientDrawingMode mode, int subDrawingMode, Autodesk.AutoCAD.Geometry.IntegerCollection viewportNumbers) { return false; }
+        public bool EraseTransient(Drawable drawable, Autodesk.AutoCAD.Geometry.IntegerCollection viewportNumbers) { return false; }
+    }
 }

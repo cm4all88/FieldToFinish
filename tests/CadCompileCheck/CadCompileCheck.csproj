@@ -19,32 +19,16 @@
     </PackageReference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+    <!-- WPF, as the real project references it: the ribbon icons and the ribbon API types. -->
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
     <ProjectReference Include="..\..\src\FieldCodes\FieldCodes.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Stubs/*.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\RecordCommands.cs" Link="RecordCommands.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\BenchCommands.cs" Link="BenchCommands.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\ContourCommands.cs" Link="ContourCommands.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\ProductionLayers.cs" Link="ProductionLayers.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\LineworkCommands.cs" Link="LineworkCommands.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\FtfLineworkService.cs" Link="FtfLineworkService.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\MaskSync.cs" Link="MaskSync.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\LabelAllCommand.cs" Link="LabelAllCommand.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\LabelCommands.cs" Link="LabelCommands.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\DrawOrderCommands.cs" Link="DrawOrderCommands.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Setup\Pages.cs" Link="Setup\Pages.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Setup\PointFeaturesPage.cs" Link="Setup\PointFeaturesPage.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\RecordDrafter.cs" Link="RecordDrafter.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\RecordDocumentReader.cs" Link="RecordDocumentReader.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Ui\RecordReviewForm.cs" Link="Ui\RecordReviewForm.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Setup\RecordSurveyPage.cs" Link="Setup\RecordSurveyPage.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Ownership.cs" Link="Ownership.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\DrawingStore.cs" Link="DrawingStore.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\CadUtil.cs" Link="CadUtil.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\FtfSession.cs" Link="FtfSession.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\TextMask.cs" Link="TextMask.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Setup\DrawingResources.cs" Link="Setup\DrawingResources.cs" />
-    <Compile Include="..\..\src\FieldCodes.Cad\Setup\SetupPage.cs" Link="Setup\SetupPage.cs" />
+    <!-- The whole plugin, every file: a branch merged into integration must compile as one. -->
+    <Compile Include="..\..\src\FieldCodes.Cad\**\*.cs" Exclude="..\..\src\FieldCodes.Cad\obj\**;..\..\src\FieldCodes.Cad\bin\**" LinkBase="FieldCodes.Cad" />
   </ItemGroup>
 </Project>
