@@ -85,6 +85,11 @@ namespace FieldCodes
         public string PointNumber { get; set; }
         public string RawDescription { get; set; }
 
+        /// <summary>The crew's note when it came from somewhere other than the raw description
+        /// (a point property, the full description) and was read; null otherwise. When set,
+        /// <see cref="RawDescription"/> is the code with the note after it, as it was read.</summary>
+        public string Note { get; set; }
+
         // --- classification ---
 
         /// <summary>

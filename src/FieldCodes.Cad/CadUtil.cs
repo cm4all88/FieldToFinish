@@ -233,6 +233,31 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>
+        /// Sizes a leader's arrowhead at plot scale (Settings > Point Labels > Arrow size, times
+        /// drawing units per plotted unit). Without it the arrow is whatever the multileader style
+        /// says in drawing units -- Standard's 0.18 is a speck at 1"=20' beside text sized for the
+        /// sheet. An annotative leader is left alone: its style already sizes it per annotation
+        /// scale. The multileader's overall scale multiplies the arrow, so it is divided out.
+        /// </summary>
+        public static void SizeArrow(MLeader leader, FieldCodes.Settings.LabelSettings labels,
+                                     double drawingUnitsPerPlotted)
+        {
+            if (leader == null || labels == null || !labels.SizeLeaderArrows) return;
+            var size = labels.LeaderArrowSizePlotted * drawingUnitsPerPlotted;
+            if (!(size > 0)) return;
+            try
+            {
+                if (leader.Annotative == AnnotativeStates.True) return;
+                var overall = leader.Scale;
+                leader.ArrowSize = overall > 0 ? size / overall : size;
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+                // A leader that refuses the override keeps its style's arrow.
+            }
+        }
+
+        /// <summary>
         /// A leader-only multileader from the anchor to the label box corner. The
         /// office standard: anything with a leader is an MLEADER entity, never the
         /// legacy Leader. Content-free on purpose -- the label text is its own

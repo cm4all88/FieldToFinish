@@ -147,7 +147,10 @@ namespace FieldCodes.Standards
             section.Items.Add(new StandardsItem("Mask under labels",
                 lp.DrawMask ? "On" : "Off", Settings));
             section.Items.Add(new StandardsItem("Leader arrowhead",
-                lp.LeaderArrowhead ? "On, size " + Num(lp.LeaderArrowSizePlotted) + " plotted" : "Off",
+                lp.SizeLeaderArrows ? Num(lp.LeaderArrowSizePlotted) + " plotted" : "As the multileader style draws it",
+                Settings));
+            section.Items.Add(new StandardsItem("Crew notes read from",
+                OrDefault(lp.NoteSource, "Automatic: a Note/Comment point property, else the Full Description"),
                 Settings));
             section.Items.Add(new StandardsItem("Collision boxes",
                 "Measured from the actual text geometry, never estimated", BuiltIn));

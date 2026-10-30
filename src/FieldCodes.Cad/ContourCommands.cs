@@ -205,6 +205,7 @@ namespace FieldCodes.Cad
             if (!committed) return;
             foreach (var line in report.Lines()) ed.WriteMessage("\n{0}", line);
             ed.WriteMessage("\n");
+            FtfSession.RegenIfPending(ed);   // labels shown above their masks
             FtfCommandTrace.Finish("FTFCONTOUR");
         }
 

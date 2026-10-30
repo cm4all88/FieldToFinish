@@ -43,6 +43,7 @@ namespace FieldCodes.Cad
                     ed.WriteMessage("\nFTFTREES: removed {0} previously placed block(s).", removed);
 
                 var points = CadUtil.CogoPointsInOrder(db, tr);
+                var notes = CogoNotes.For(db, tr, settings);
 
                 var placed = 0;
                 var skipped = 0;
@@ -61,7 +62,7 @@ namespace FieldCodes.Cad
                     var raw = cogo.RawDescription;
                     var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
 
-                    var parsed = parser.Parse(number, raw);
+                    var parsed = notes.Parse(parser, cogo);
 
                     if (parsed.Ignored || parsed.NoContent) { ignored++; continue; }
 

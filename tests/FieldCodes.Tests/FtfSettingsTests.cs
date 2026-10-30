@@ -194,7 +194,8 @@ public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
         var s = new FtfSettings();
         s.Labels.TextStyle = "PMX-ROMANS";
         s.Labels.DrawMask = false;
-        s.Labels.LeaderArrowhead = true;
+        s.Labels.SizeLeaderArrows = false;
+        s.Labels.NoteSource = "Pole Notes";
         s.General.ReportLocation = ReportLocation.CustomFolder;
         s.General.ReportFolder = @"C:\reports";
         s.Drip.UnifyByDefault = false;
@@ -205,7 +206,8 @@ public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
 
         Assert.Equal("PMX-ROMANS", back.Labels.TextStyle);
         Assert.False(back.Labels.DrawMask);
-        Assert.True(back.Labels.LeaderArrowhead);
+        Assert.False(back.Labels.SizeLeaderArrows);
+        Assert.Equal("Pole Notes", back.Labels.NoteSource);
         Assert.Equal(ReportLocation.CustomFolder, back.General.ReportLocation);
         Assert.Equal(@"C:\reports", back.General.ReportFolder);
         Assert.False(back.Drip.UnifyByDefault);

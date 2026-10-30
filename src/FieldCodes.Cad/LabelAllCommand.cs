@@ -47,13 +47,19 @@ namespace FieldCodes.Cad
 
             ed.WriteMessage("\n=== FTFLABELALL: label everything -- linework, then points ===");
             var failed = new List<string>();
-            for (var i = 0; i < stages.Count; i++)
+            using (FtfSession.Batch())
             {
-                var stage = stages[i];
-                ed.WriteMessage("\n--- [{0}/{1}] {2} ---", i + 1, stages.Count, stage.Title);
-                stage.Run();
-                if (FtfSession.LastRunError != null) failed.Add(stage.Title + ": " + FtfSession.LastRunError);
+                for (var i = 0; i < stages.Count; i++)
+                {
+                    var stage = stages[i];
+                    ed.WriteMessage("\n--- [{0}/{1}] {2} ---", i + 1, stages.Count, stage.Title);
+                    stage.Run();
+                    if (FtfSession.LastRunError != null) failed.Add(stage.Title + ": " + FtfSession.LastRunError);
+                }
             }
+
+            // Once, after all three: the screen then shows every label above its mask.
+            FtfSession.RegenIfPending(ed);
 
             ed.WriteMessage("\n\n=== FTFLABELALL finished ===");
             var report = LineworkCommands.LastReport;

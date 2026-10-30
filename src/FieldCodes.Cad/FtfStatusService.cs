@@ -64,10 +64,11 @@ namespace FieldCodes.Cad
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 RulesConfig cfg = null;
+                FieldCodes.Settings.FtfSettings settings = null;
                 try
                 {
                     cfg = FtfSession.Rules(db);
-                    FtfSession.SettingsFor(db, cfg);
+                    settings = FtfSession.SettingsFor(db, cfg);
                 }
                 catch (ConfigException ex)
                 {
@@ -77,14 +78,13 @@ namespace FieldCodes.Cad
                 if (cfg != null)
                 {
                     var parser = new FieldCodeParser(cfg);
+                    var notes = CogoNotes.For(db, tr, settings);
 
                     foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
                     {
                         status.TotalPoints++;
 
-                        var parsed = parser.Parse(
-                            cogo.PointNumber.ToString(CultureInfo.InvariantCulture),
-                            cogo.RawDescription);
+                        var parsed = notes.Parse(parser, cogo);
 
                         if (parsed.Ignored || parsed.NoContent) status.OutsideScope++;
                         else if (parsed.Unhandled) status.Unconfigured++;

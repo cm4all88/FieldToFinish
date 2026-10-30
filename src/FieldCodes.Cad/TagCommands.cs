@@ -47,10 +47,11 @@ namespace FieldCodes.Cad
                 var points = new List<ParsedPoint>();
                 var anchors = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
 
+                var notes = CogoNotes.For(db, tr, settings);
                 foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
                 {
                     var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
-                    var parsed = parser.Parse(number, cogo.RawDescription);
+                    var parsed = notes.Parse(parser, cogo);
                     points.Add(parsed);
                     anchors[number] = CadUtil.Flatten(cogo.Location);
                 }
@@ -129,6 +130,7 @@ namespace FieldCodes.Cad
                                    assignment.Text, textHeight, styleId,
                                    CadUtil.EnsureLayer(db, tr, layer), target, anchor))
                         {
+                            CadUtil.SizeArrow(leadered, settings.Labels, scale);
                             Ownership.Stamp(leadered, assignment.PointNumber,
                                             cfg.Version, FtfEntityKind.Tag, target,
                                             assignment.Text);
@@ -204,11 +206,9 @@ namespace FieldCodes.Cad
                 }
 
                 var points = new List<ParsedPoint>();
+                var notes = CogoNotes.For(db, tr, settings);
                 foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
-                {
-                    var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
-                    points.Add(parser.Parse(number, cogo.RawDescription));
-                }
+                    points.Add(notes.Parse(parser, cogo));
 
                 // Rebuild assignments from what is on the drawing, so the table always
                 // agrees with the tags rather than recomputing them independently.

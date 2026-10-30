@@ -33,8 +33,9 @@
     "ringCount": 4,
     "drawMask": true,
     "maskLayer": "",
-    "leaderArrowhead": false,
-    "leaderArrowSizePlotted": 0.06
+    "sizeLeaderArrows": true,
+    "leaderArrowSizePlotted": 0.06,
+    "noteSource": ""
   },
   "lineLabels": {
     "Title": "Line Labels",

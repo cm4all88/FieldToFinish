@@ -267,10 +267,10 @@
     {
       "//point-features": "The rules below are common point features added as CONFIGURATION ONLY - no C# changes. Civil 3D's description keys own every symbol; these rules add the finishing: label, rotation, tag, modifier treatment. Each fires only when the description carries data after the code, so a bare CB or MB stays 'nothing to draw'. The grammar is deliberately uniform (CODE <id/size> [modifiers]) and conservative: anything that does not fit lands in the unknown-codes report with its real description, which is how grammar gets corrected against reality rather than guessed. Codes marked 'unconfirmed' were not seen in survey data yet and are inert until they appear.",
 
-      "//sn-sign": "Office sign code. The number after SN is the field azimuth: FTF rotates the existing COGO marker. It never inserts a sign block.",
+      "//sn-sign": "Office sign code. The number after SN is the field azimuth: FTF rotates the existing COGO marker. It never inserts a sign block. The azimuth may be left off ('SN STOP', or a bare SN whose words are in the crew's note field): the sign is labelled and the marker is left as Civil 3D placed it. A bare SN with no note still draws nothing.",
       "id": "sn-sign",
       "description": "Sign",
-      "match": "^(?<code>SN(?:NP)?)\\s+(?<rotation>[0-9]+(?:\\.[0-9]+)?)(?<mods>(?:\\s+\\S+)*)\\s*$",
+      "match": "^(?<code>SN(?:NP)?)(?=\\s+\\S)(?:\\s+(?<rotation>[0-9]+(?:\\.[0-9]+)?)(?=\\s|$))?(?<mods>(?:\\s+\\S+)*)\\s*$",
       "rotation": { "from": "rotation", "mode": "Azimuth" },
       "//notes": "After the azimuth, the words on the sign as the crew wrote them: 'SN 135 STOP' -> STOP SIGN, 'SN 90 NO PARKING ANYTIME' -> NO PARKING ANYTIME SIGN. The wording keeps the order it was written in (message reads AsShot); the terms below only expand shorthand and pick out the post. DEAD END is a term so it is never read as the DEAD modifier. Unknown words are the sign's text, so they are kept quietly. Starter vocabulary: confirm against the office code sheet.",
       "notes": {

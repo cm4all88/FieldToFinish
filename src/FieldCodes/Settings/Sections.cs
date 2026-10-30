@@ -200,7 +200,7 @@ namespace FieldCodes.Settings
     public sealed class LabelSettings : ISettingsSection
     {
         public string Title { get { return "Labels"; } }
-        public string AffectedCommands { get { return "FTFLABELS"; } }
+        public string AffectedCommands { get { return "FTFLABELS, FTFLABELALL, FTFTAG"; } }
 
         /// <summary>
         /// Drawing text style used for labels. Empty means the drawing's current style.
@@ -235,11 +235,27 @@ namespace FieldCodes.Settings
         [JsonProperty("maskLayer")]
         public string MaskLayer { get; set; }
 
-        [JsonProperty("leaderArrowhead")]
-        public bool LeaderArrowhead { get; set; }
+        /// <summary>
+        /// Size the arrowhead of every FTF point-label and tag leader here, at plot scale. Off:
+        /// the drawing's multileader style decides -- and a style's arrow size is in drawing
+        /// units, so at 1"=20' a style arrow of 0.18 is a speck. Stored as "sizeLeaderArrows":
+        /// the older "leaderArrowhead" key was never applied to a leader, so it is not read.
+        /// </summary>
+        [JsonProperty("sizeLeaderArrows")]
+        public bool SizeLeaderArrows { get; set; }
 
         [JsonProperty("leaderArrowSizePlotted")]
         public double LeaderArrowSizePlotted { get; set; }
+
+        /// <summary>
+        /// Where a crew note written apart from the code is read from (a pole shot "PP" with
+        /// "1234 PSE XFMR" in the data collector's note field). Empty: automatic -- a point
+        /// property named like Note, Comment, Remark or Description 1, then the Full Description
+        /// when it adds to the code. "Full Description", "None", or a point property's name pick
+        /// one place. See FieldCodes.FieldNoteReader.
+        /// </summary>
+        [JsonProperty("noteSource")]
+        public string NoteSource { get; set; }
 
         public LabelSettings() { RestoreDefaults(); }
 
@@ -253,8 +269,9 @@ namespace FieldCodes.Settings
             RingCount = 4;
             DrawMask = true;
             MaskLayer = string.Empty;
-            LeaderArrowhead = false;
+            SizeLeaderArrows = true;
             LeaderArrowSizePlotted = 0.06;
+            NoteSource = string.Empty;
         }
 
         public void Validate(ICollection<string> problems)
@@ -271,9 +288,9 @@ namespace FieldCodes.Settings
                 Require.Positive(RingStepPlotted,
                     "Labels: ring step must be greater than zero when ring count is above 1.",
                     problems);
-            if (LeaderArrowhead)
+            if (SizeLeaderArrows)
                 Require.Positive(LeaderArrowSizePlotted,
-                    "Labels: leader arrow size must be greater than zero when arrowheads are on.",
+                    "Labels: leader arrow size must be greater than zero.",
                     problems);
         }
     }

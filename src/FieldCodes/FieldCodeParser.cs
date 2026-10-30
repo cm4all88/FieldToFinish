@@ -109,17 +109,11 @@ namespace FieldCodes
                 // layer. Trailing figure digits match the base code (CB2 -> CB).
                 if (!HasDataBeyondCode(normalized))
                 {
-                    var trimmedEnd = normalized.Length;
-                    while (trimmedEnd > 0 && char.IsDigit(normalized[trimmedEnd - 1]))
-                        trimmedEnd--;
-                    var baseCode = trimmedEnd > 0
-                        ? normalized.Substring(0, trimmedEnd) : normalized;
-
-                    SymbolLabelRule symbol;
-                    if (_symbolLabels.TryGetValue(baseCode, out symbol))
+                    var symbol = SymbolFor(normalized);
+                    if (symbol != null)
                     {
                         p.Recognized = true;
-                        p.RuleId = "symbol-label";
+                        p.RuleId = SymbolLabelRuleId;
                         p.LabelText = string.IsNullOrWhiteSpace(symbol.Label)
                             ? normalized : symbol.Label;
                         p.LabelLayer = symbol.Layer;
@@ -155,6 +149,64 @@ namespace FieldCodes
             RunChecks(p, rule);
 
             return p;
+        }
+
+        /// <summary>
+        /// As <see cref="Parse(string, string)"/>, for a point whose crew note arrived apart from
+        /// its code -- in a point property or the full description (see <see cref="FieldNoteReader"/>).
+        /// The note is read as if it had been typed after the code, but only where the code takes
+        /// notes: a bare code (PP, SN, CB) or a rule with a notes vocabulary (the pole). A tree's
+        /// grammar has no place for "LEANING", so a tree is parsed exactly as before. A bare code
+        /// the office labels with its code (symbolLabels) is labelled with the note instead when no
+        /// rule reads it. Whatever the note cannot improve is parsed exactly as before.
+        /// </summary>
+        public ParsedPoint Parse(string pointNumber, string rawDescription, string note)
+        {
+            var plain = Parse(pointNumber, rawDescription);
+            note = FieldNoteReader.Strip(note, rawDescription);
+            if (note == null || plain.Ignored) return plain;
+
+            var bare = plain.NoContent || plain.RuleId == SymbolLabelRuleId;
+            var rule = plain.Recognized && !bare
+                ? _cfg.Codes.FirstOrDefault(c => c.Enabled && c.Id == plain.RuleId)
+                : null;
+            if (!bare && (rule == null || rule.Notes == null)) return plain;
+
+            var combined = Parse(pointNumber, FieldNoteReader.Normalize(rawDescription) + " " + note);
+            if (combined.Recognized && !combined.HasErrors && !combined.Unhandled && !combined.Ignored &&
+                combined.RuleId != SymbolLabelRuleId)
+            {
+                combined.Note = note;
+                return combined;
+            }
+
+            if (plain.RuleId == SymbolLabelRuleId)
+            {
+                var symbol = SymbolFor(FieldNoteReader.Normalize(rawDescription));
+                plain.LabelLines.Clear();
+                if (symbol != null && !string.IsNullOrWhiteSpace(symbol.Label)) plain.LabelLines.Add(symbol.Label);
+                plain.LabelLines.Add(note);
+                plain.LabelText = string.Join(MTextLineBreak, plain.LabelLines.ToArray());
+                plain.Fields["note"] = note;
+                plain.Note = note;
+                plain.RawDescription = FieldNoteReader.Normalize(rawDescription) + " " + note;
+            }
+            return plain;
+        }
+
+        private const string SymbolLabelRuleId = "symbol-label";
+
+        /// <summary>The symbolLabels entry for a bare code; trailing figure digits match the
+        /// base code (CB2 -> CB). Null when the code is not listed.</summary>
+        private SymbolLabelRule SymbolFor(string normalized)
+        {
+            var trimmedEnd = normalized.Length;
+            while (trimmedEnd > 0 && char.IsDigit(normalized[trimmedEnd - 1]))
+                trimmedEnd--;
+            var baseCode = trimmedEnd > 0 ? normalized.Substring(0, trimmedEnd) : normalized;
+
+            SymbolLabelRule symbol;
+            return _symbolLabels.TryGetValue(baseCode, out symbol) ? symbol : null;
         }
 
         public IList<ParsedPoint> ParseAll(IEnumerable<KeyValuePair<string, string>> points)
@@ -761,7 +813,7 @@ namespace FieldCodes
         }
 
         /// <summary>The leading token, which is the field code for every rule shape.</summary>
-        internal static string FirstToken(string normalized)
+        public static string FirstToken(string normalized)
         {
             if (string.IsNullOrEmpty(normalized)) return string.Empty;
             var space = normalized.IndexOf(' ');

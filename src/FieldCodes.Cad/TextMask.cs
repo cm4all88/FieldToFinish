@@ -94,6 +94,7 @@ namespace FieldCodes.Cad
                     ids.Add(wipeout.ObjectId);
                     drawOrder.MoveBelow(ids, belowId);
                 }
+                FtfSession.RegenWhenDone();
 
                 return wipeout.ObjectId;
             }

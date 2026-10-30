@@ -176,6 +176,15 @@ namespace FieldCodes.Cad
             var db = doc.Database;
 
             using (doc.LockDocument())
+            {
+                RunInTransaction(commandName, db, ed, body);
+                if (LastRunError == null) RegenIfPending(ed);
+            }
+        }
+
+        private static void RunInTransaction(string commandName, Database db, Editor ed,
+                                             Action<Database, Transaction, Editor> body)
+        {
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 try
@@ -203,6 +212,58 @@ namespace FieldCodes.Cad
                     ed.WriteMessage("\n{0} failed: {1}\n{2}\n",
                         commandName, ex.Message, ex.StackTrace);
                 }
+            }
+        }
+
+        // ------------------------------------------------------------------ regen
+
+        private static bool _regenPending;
+        private static int _batchDepth;
+
+        /// <summary>
+        /// Asks for one REGEN once the running command has committed. Draw order changed from
+        /// code is in the drawing at once, but AutoCAD keeps showing the old stacking until a
+        /// regen: a mask added after its label goes on drawing over it, which reads as the label
+        /// sitting behind its mask. Called wherever a mask is placed or draw order is banded.
+        /// </summary>
+        public static void RegenWhenDone()
+        {
+            _regenPending = true;
+        }
+
+        /// <summary>Holds regens until the batch ends, so FTFLABELALL's three stages regen
+        /// once at the end rather than three times.</summary>
+        public static IDisposable Batch()
+        {
+            _batchDepth++;
+            return new BatchEnd();
+        }
+
+        /// <summary>The REGEN asked for by <see cref="RegenWhenDone"/>, unless a batch is still
+        /// running. Never fails a command: a regen that cannot run leaves the display stale, and
+        /// typing REGEN shows the drawing as it is.</summary>
+        public static void RegenIfPending(Editor ed)
+        {
+            if (!_regenPending || _batchDepth > 0 || ed == null) return;
+            _regenPending = false;
+            try
+            {
+                ed.Regen();
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+            }
+        }
+
+        private sealed class BatchEnd : IDisposable
+        {
+            private bool _done;
+
+            public void Dispose()
+            {
+                if (_done) return;
+                _done = true;
+                if (_batchDepth > 0) _batchDepth--;
             }
         }
     }

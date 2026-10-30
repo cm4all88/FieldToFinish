@@ -432,6 +432,30 @@ SPEED LIMIT, YIELD, DEAD END, ONE WAY, posts). Confirm them against the office
 code sheet and extend them in `rules.json`. Any other rule (light poles, junction
 boxes) takes a vocabulary the same way, with no code change.
 
+**Notes in the data collector's note field.** When the crew shoots the pole as just
+`PP` and writes `1234 PSE XFMR` in the note field, the point's raw description is
+only the code; the note arrives in a Civil 3D point property or the Full
+Description, depending on how the points were imported. FTF reads it from there and
+treats it as if it had been typed after the code, so the pole still gets
+`POLE 1234 PSE / W/ XFMR` rather than `PP`. Where it looks (Settings > Point Labels >
+Read notes from):
+
+- **Blank (automatic):** a point property whose name says note -- Note, Notes, Field
+  Note, Comment, Remarks, Memo, Description, Description 1/2 -- then the Full
+  Description when it adds to the code (`PP 1234 PSE`), or when it differs from point
+  to point. A Full Description that reads the same on every point of a code (`POWER
+  POLE` on every PP) is a description key's wording, not a note, and is not read; nor
+  is one built from the code's own `$` parameters.
+- **Full Description**, **None**, or a point property's name: that place only.
+
+The note is read only where the code takes notes: a bare code (PP, SN, CB...) or a
+rule with a notes vocabulary. A tree's grammar has no place for a remark, so trees
+are never changed by one. A bare code the office labels with its code (CB, SSMH,
+WFH...) is labelled with its note when no rule reads it. A sign may be shot without
+its azimuth (`SN STOP`, or `SN` with `STOP` in the note): it is labelled `STOP SIGN`
+and the marker is left as Civil 3D placed it. `FTFLABELS` says how many notes it read
+and from where.
+
 ## Benches: FTFBENCH
 
 A bench is shot as two points, one at the middle of each end, with its depth (and
@@ -478,8 +502,19 @@ Everything** button (`FTFLABELALL`) labels the drawing in one go:
    notes of the survey points it was drawn through, then its layer, the same order
    `FTFLABELLINE` uses. Two shots noted with a span marker (`FGP`) along a line get
    a `GATE` label between them.
-2. Every point (`FTFLABELS`), steering around the line labels just placed.
-3. Draw order (`FTFORDER`).
+2. Every point (`FTFLABELS`), steering around the line labels just placed, worded
+   from the crew's notes even when they are in the note field (see *Labels from field
+   notes* above).
+3. Draw order (`FTFORDER`): all of FTF's own text on top, its masks under it, then
+   one REGEN so the screen shows that order (a drawing changed from code keeps showing
+   the old stacking until a regen, which made new masks look as if they covered their
+   labels).
+
+**Leader arrows** are sized at plot scale: Settings > Point Labels > Arrow size
+(0.06 plotted by default, times the drawing scale), for point labels and tag leaders.
+Before, the arrow was the multileader style's size in drawing units -- a speck at
+1"=20'. Turn "Size leader arrowheads here" off to leave it to the style; an annotative
+multileader is always left to its style.
 
 **Lettered and symbol linetypes are left to the legend.** A line whose linetype
 draws its own letter or symbol -- water `---W---`, power `---P---`, a fence's x's --

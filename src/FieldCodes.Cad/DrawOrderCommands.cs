@@ -49,7 +49,12 @@ namespace FieldCodes.Cad
 
                 var counted = 0;
 
-                foreach (ObjectId id in ms)
+                // DrawOrderTable is the managed wrapper over the block's sortents table.
+                var sortEnts = (DrawOrderTable)tr.GetObject(ms.DrawOrderTableId, OpenMode.ForWrite);
+
+                // Read in the CURRENT draw order, so each band keeps its own stacking: a mask
+                // placed just under its label stays under it, whatever order MoveToTop is handed.
+                foreach (ObjectId id in sortEnts.GetFullDrawOrder(0))
                 {
                     if (id.IsErased) continue;
 
@@ -59,9 +64,6 @@ namespace FieldCodes.Cad
                     bands[(int)BandFor(entity, classifier)].Add(id);
                     counted++;
                 }
-
-                // DrawOrderTable is the managed wrapper over the block's sortents table.
-                var sortEnts = (DrawOrderTable)tr.GetObject(ms.DrawOrderTableId, OpenMode.ForWrite);
 
                 // MoveToTop preserves the relative order of the ids it is given, so
                 // raising the bands in ascending order leaves labels on top.
@@ -74,6 +76,8 @@ namespace FieldCodes.Cad
                         sortEnts.MoveToTop(ids);
                     }
                 }
+
+                FtfSession.RegenWhenDone();
 
                 ed.WriteMessage(
                     "\nFTFORDER: {0} entities banded -- {1} linework, {2} mask(s), " +
@@ -106,6 +110,13 @@ namespace FieldCodes.Cad
                 // Line labels live on a layer no code rule derives, so band them by
                 // what they are rather than falling through to layer classification.
                 if (stamp.Kind == FtfEntityKind.LineLabel)
+                    return DrawOrderBand.Label;
+
+                // All of FTF's own text goes on top, whatever layer it is on -- point labels,
+                // tags, contour labels, spot elevations, leadered callouts. Its mask sits under
+                // it; banded by layer, text on a layer the lists call maskable (or one sharing
+                // its mask's layer) could land under a mask and read as blanked out.
+                if (entity is DBText || entity is MText || entity is MLeader)
                     return DrawOrderBand.Label;
             }
 

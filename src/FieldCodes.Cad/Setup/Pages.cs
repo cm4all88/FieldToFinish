@@ -284,6 +284,7 @@ namespace FieldCodes.Cad.Setup
         private ComboBox _maskLayer;
         private CheckBox _arrowhead;
         private TextBox _arrowSize;
+        private TextBox _noteSource;
         private Label _preview;
 
         public override string Title { get { return "Point Labels"; } }
@@ -323,8 +324,16 @@ namespace FieldCodes.Cad.Setup
             foreach (var name in Context.Drawing.Layers) layers.Add(name);
             _maskLayer = ComboRow("Mask layer", layers, null);
 
-            _arrowhead = CheckRow("Leaders have an arrowhead", null);
-            _arrowSize = TextRow("Arrow size (plotted)", null);
+            _arrowhead = CheckRow("Size leader arrowheads here",
+                "Off: the drawing's multileader style decides, in drawing units -- tiny at most scales.");
+            _arrowSize = TextRow("Arrow size (plotted)", "e.g. 0.06 in on the sheet. Point labels and tags.");
+
+            Heading("Crew notes");
+            _noteSource = TextRow("Read notes from",
+                "Blank: automatic. Or Full Description, None, or a point property's name.");
+            Note("A pole shot \"PP\" with \"1234 PSE XFMR\" in the data collector's note field " +
+                 "is labelled from the note. Automatic reads a point property named Note, Comment, " +
+                 "Remark or Description 1/2, else the Full Description when it adds to the code.");
 
             _textStyle.SelectedIndexChanged += (s, e) => Refresh();
             _height.TextChanged += (s, e) => Refresh();
@@ -372,8 +381,9 @@ namespace FieldCodes.Cad.Setup
             _ringCount.Text = s.Labels.RingCount.ToString(CultureInfo.InvariantCulture);
             _mask.Checked = s.Labels.DrawMask;
             ComboHelp.SelectOrAdd(_maskLayer, s.Labels.MaskLayer, true);
-            _arrowhead.Checked = s.Labels.LeaderArrowhead;
+            _arrowhead.Checked = s.Labels.SizeLeaderArrows;
             _arrowSize.Text = Fmt(s.Labels.LeaderArrowSizePlotted);
+            _noteSource.Text = s.Labels.NoteSource ?? string.Empty;
 
             _maskLayer.Enabled = _mask.Checked;
             _arrowSize.Enabled = _arrowhead.Checked;
@@ -414,7 +424,8 @@ namespace FieldCodes.Cad.Setup
                 ? string.Empty
                 : Convert.ToString(_maskLayer.SelectedItem);
 
-            s.Labels.LeaderArrowhead = _arrowhead.Checked;
+            s.Labels.SizeLeaderArrows = _arrowhead.Checked;
+            s.Labels.NoteSource = (_noteSource.Text ?? string.Empty).Trim();
 
             var arrow = s.Labels.LeaderArrowSizePlotted;
             ReadDouble(_arrowSize, "Labels: arrow size", v => v > 0,

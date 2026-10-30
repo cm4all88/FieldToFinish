@@ -44,10 +44,10 @@ namespace FieldCodes.Cad
                 var owners = new List<ParsedPoint>();
                 var centres = new List<Point3d>();
 
+                var notes = CogoNotes.For(db, tr, settings);
                 foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
                 {
-                    var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
-                    var parsed = parser.Parse(number, cogo.RawDescription);
+                    var parsed = notes.Parse(parser, cogo);
 
                     if (parsed.HasErrors) continue;          // reported by FTFTREES
                     if (!parsed.HasDripLine) continue;

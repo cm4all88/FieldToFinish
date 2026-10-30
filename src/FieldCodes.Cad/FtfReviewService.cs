@@ -39,10 +39,11 @@ namespace FieldCodes.Cad
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 RulesConfig cfg;
+                FieldCodes.Settings.FtfSettings settings;
                 try
                 {
                     cfg = FtfSession.Rules(db);
-                    FtfSession.SettingsFor(db, cfg);
+                    settings = FtfSession.SettingsFor(db, cfg);
                 }
                 catch (ConfigException ex)
                 {
@@ -53,12 +54,11 @@ namespace FieldCodes.Cad
 
                 var parser = new FieldCodeParser(cfg);
                 var builder = new FeatureReviewBuilder(cfg);
+                var notes = CogoNotes.For(db, tr, settings);
 
                 foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
                 {
-                    var parsed = parser.Parse(
-                        cogo.PointNumber.ToString(CultureInfo.InvariantCulture),
-                        cogo.RawDescription);
+                    var parsed = notes.Parse(parser, cogo);
 
                     result.Rows.Add(builder.Build(parsed));
                 }

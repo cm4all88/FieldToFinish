@@ -68,6 +68,10 @@ namespace FieldCodes.Cad
 
                 var obstacles = GatherObstacles(db, tr, classifier);
 
+                // A pole shot "PP" with its note in the note field is labelled from the note.
+                var notes = CogoNotes.For(db, tr, settings);
+                var codeOnly = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
                 var placed = 0;
                 var leaders = 0;
                 var failed = 0;
@@ -77,9 +81,16 @@ namespace FieldCodes.Cad
                     var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
                     if (keptByHand.Contains(number)) continue;
 
-                    var parsed = parser.Parse(number, cogo.RawDescription);
+                    var parsed = notes.Parse(parser, cogo);
                     if (parsed.HasErrors) continue;
                     if (string.IsNullOrEmpty(parsed.LabelText)) continue;
+
+                    if (parsed.RuleId == "symbol-label" && parsed.Note == null)
+                    {
+                        var code = FieldCodeParser.FirstToken(parsed.RawDescription ?? string.Empty);
+                        int seen;
+                        codeOnly[code] = codeOnly.TryGetValue(code, out seen) ? seen + 1 : 1;
+                    }
 
                     var anchor = CadUtil.Flatten(cogo.Location);
 
@@ -136,6 +147,7 @@ namespace FieldCodes.Cad
                                    CadUtil.EnsureLayer(db, tr, parsed.LabelLayer),
                                    target, anchor))
                         {
+                            CadUtil.SizeArrow(leadered, lp, scale);
                             Ownership.Stamp(leadered, parsed.PointNumber, cfg.Version,
                                             FtfEntityKind.Label, target);
                             if (lp.DrawMask)
@@ -165,6 +177,16 @@ namespace FieldCodes.Cad
                     "\nFTFLABELS: {0} placed, {1} leader(s), {2} kept as hand-placed, " +
                     "{3} with no clear position.\n",
                     placed, leaders, keptByHand.Count, failed);
+                notes.Report(ed, "FTFLABELS");
+                if (codeOnly.Count > 0)
+                {
+                    var list = new List<string>();
+                    foreach (var pair in codeOnly) list.Add(pair.Key + " x" + pair.Value);
+                    ed.WriteMessage(
+                        "\nFTFLABELS: labelled with the code alone, no note found ({0}). If the crew's " +
+                        "notes are in a point property or the Full Description, name it in Settings > " +
+                        "Point Labels > Read notes from.\n", string.Join(", ", list.ToArray()));
+                }
 
                 // Label and mask are a pair: rebuild every mask around where its
                 // label ACTUALLY is, so a hand-moved label's mask follows it.
@@ -360,6 +382,7 @@ namespace FieldCodes.Cad
                     ids.Add(wipeout.ObjectId);
                     drawOrder.MoveBelow(ids, textId);
                 }
+                FtfSession.RegenWhenDone();
             }
         }
 
