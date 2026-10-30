@@ -89,7 +89,13 @@ $state = Join-Path $env:LOCALAPPDATA 'FieldToFinish'
 $pluginsRoot = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins'
 $installedDir = Join-Path $pluginsRoot 'FieldToFinish.bundle'
 $installedDll = Join-Path $installedDir 'Contents\2024\FieldCodes.Cad.dll'
-$hostExe = (Get-Process -Id $PID).Path
+# The PowerShell running this script, to run the other scripts and a newer UPDATEFTF with.
+$hostExe = if ($PSVersionTable.PSEdition -eq 'Desktop') { Join-Path $PSHOME 'powershell.exe' }
+           else { Join-Path $PSHOME $(if ($env:OS -eq 'Windows_NT') { 'pwsh.exe' } else { 'pwsh' }) }
+if (-not (Test-Path -LiteralPath $hostExe)) {
+    $found = Get-Command pwsh, powershell -ErrorAction SilentlyContinue | Select-Object -First 1
+    $hostExe = if ($found) { $found.Source } else { 'powershell.exe' }
+}
 $script:touched = $false        # the installed FTF has been changed in this run
 $script:backup = $null
 $selfHash = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
