@@ -492,16 +492,26 @@ namespace FtfRowLotsUiTest
                     Check(!rowB.Visible, "and unticking hides it again");
                 }
 
-                // The row of lot fields runs wider than the window, so the body scrolls sideways
-                // to reach the last two. Recorded rather than asserted: the window works and
-                // every field is reachable, but that row is set to wrap and does not, because an
-                // AutoSize flow panel grows instead of folding. Worth a look.
+                // The row of lot fields has to fold into the window: everything on it must be
+                // reachable without scrolling sideways for it.
                 var body = Descendants(form).OfType<FlowLayoutPanel>().FirstOrDefault(p => p.AutoScroll);
                 if (body != null)
-                    Log("   body scrolls sideways: " + body.HorizontalScroll.Visible + " (wants " +
-                        body.GetPreferredSize(new Size(0, body.Height)).Width + "px, has " + body.ClientSize.Width + "px)");
-                Check(Field<TextBox>(rowA, "_depth") != null && Field<ComboBox>(rowA, "_close") != null,
-                      "the lot depth and what-if-the-frontages-miss fields are on the row editor");
+                {
+                    var wants = body.GetPreferredSize(new Size(body.ClientSize.Width, 0)).Width;
+                    Log("   body wants " + wants + "px across, has " + body.ClientSize.Width + "px");
+                    foreach (Control child in body.Controls)
+                        if (child.Visible && (child.Width > body.ClientSize.Width || child.PreferredSize.Width > body.ClientSize.Width))
+                            Log("      wide: " + child.GetType().Name + " is " + child.Width +
+                                "px, says it wants " + child.PreferredSize.Width + "px");
+                    Check(!body.HorizontalScroll.Visible, "the window needs no sideways scrolling");
+                    Check(wants <= body.ClientSize.Width, "the lot fields fold into the window rather than running past it");
+                }
+                var depth = Field<TextBox>(rowA, "_depth");
+                var close = Field<ComboBox>(rowA, "_close");
+                Check(depth != null && close != null, "the lot depth and what-if-the-frontages-miss fields are on the row editor");
+                if (depth != null && close != null)
+                    Check(depth.Right <= form.ClientSize.Width && close.Right <= form.ClientSize.Width,
+                          "and both sit inside the window (" + depth.Right + ", " + close.Right + " of " + form.ClientSize.Width + ")");
 
                 Field<ComboBox>(form, "_alley").SelectedIndex = 1;        // along the back
                 Field<TextBox>(form, "_alleyWidth").Text = "20";

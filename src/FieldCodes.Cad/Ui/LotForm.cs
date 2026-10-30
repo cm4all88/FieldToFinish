@@ -56,6 +56,7 @@ namespace FieldCodes.Cad.Ui
         private TextBox _minArea, _minWidth;
         private DataGridView _radii;
         private Label _errors;
+        private Panel _body;
 
         public LotForm(LotJob job, LotSettings settings, IList<string> cornerLabels)
         {
@@ -176,6 +177,20 @@ namespace FieldCodes.Cad.Ui
             Controls.Add(_errors);
             Controls.Add(buttons);
             Controls.Add(header);
+
+            // The lot fields fold into the body rather than running off its edge, and follow it
+            // as the window is resized.
+            _body = stack;
+            Load += (s, e) => FitRows();
+            stack.ClientSizeChanged += (s, e) => FitRows();
+        }
+
+        private void FitRows()
+        {
+            if (_body == null) return;
+            var width = _body.ClientSize.Width - _body.Padding.Horizontal;
+            _a.FitTo(width);
+            _b.FitTo(width);
         }
 
         private string[] SideNames()
@@ -290,6 +305,7 @@ namespace FieldCodes.Cad.Ui
             private readonly TextBox _depth;
             private readonly ComboBox _close;
             private readonly DataGridView _lots;
+            private readonly FlowLayoutPanel _fields;
 
             public RowEditor(string[] sides, LotJob job, LotSettings settings, int rowIndex)
             {
@@ -321,6 +337,7 @@ namespace FieldCodes.Cad.Ui
                 _lots.Columns.Add(drain);
 
                 var fields = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = true, Dock = DockStyle.Top };
+                _fields = fields;
                 fields.Controls.Add(Field("LOTS FRONT", _side));
                 fields.Controls.Add(Field("HOW MANY", _count));
                 fields.Controls.Add(Field("EXTRA ON CORNER LOTS (FT)", _extra));
@@ -364,6 +381,28 @@ namespace FieldCodes.Cad.Ui
                     var index = Array.IndexOf(DrainNames, name);
                     yield return index <= 0 ? null : DrainValues[index];
                 }
+            }
+
+            /// <summary>
+            /// Folds the row of fields into <paramref name="width"/> instead of letting it run
+            /// past the window's edge. A FlowLayoutPanel only wraps when something fixes its
+            /// width, and every container between here and the window sizes itself to what it
+            /// holds -- so without this the row grows and the body scrolls sideways instead.
+            /// Setting the same width twice is ignored, so this cannot chase a scrollbar that
+            /// appears and disappears.
+            /// </summary>
+            public void FitTo(int width)
+            {
+                if (width < 200 || _fields.MaximumSize.Width == width) return;
+                _fields.MaximumSize = new Size(width, 0);
+                _fields.MinimumSize = new Size(width, 0);
+
+                // The row folds once its own width is fixed, but a wrapping flow panel still
+                // reports the width it would want unwrapped, and the body sizes its scrollbars
+                // from what its children say they want. Fix this editor's width too, so what it
+                // reports is what it is.
+                MaximumSize = new Size(width, 0);
+                MinimumSize = new Size(width, 0);
             }
 
             public LotRow Read(ICollection<string> problems, string name)

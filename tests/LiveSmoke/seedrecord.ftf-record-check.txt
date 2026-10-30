@@ -1,0 +1,16 @@
+﻿FTFRECORDCHECK SP-2019-0042-sample.pdf (REC-DD74DA6D), 2026-10-06 14:45 UTC
+Course K1: MATCH
+Course K9: MATCH
+Course K3: MATCH
+Course K4: MATCH
+Lot 1 closure: 0.000'
+Course K7: MATCH
+Course K2: MATCH
+Course K5: MATCH
+Curve K8: Radius MATCH / Arc MATCH / Delta MATCH / Chord MATCH
+Course K6: MATCH
+Lot 2 closure: 0.005' (1:127,195)
+Shared boundary Lot 1 / Lot 2: MATCH
+12 match, 0 review, 0 missing, 0 error(s).
+Nothing was adjusted. Discrepancies are for the surveyor to resolve.
+

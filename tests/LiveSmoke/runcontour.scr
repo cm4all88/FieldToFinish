@@ -1,0 +1,36 @@
+NETLOAD "C:\dev\FieldToFinish\src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll"
+NETLOAD "C:\dev\FieldToFinish\tests\LiveSmoke\ContourTestHarness.dll"
+OSNAPCOORD
+1
+CONTOURSEED
+ZOOM
+E
+FTFCONTOUR
+N
+FTF-SMOKE
+12.6, 13.0, 13.5
+U
+CONTOURVERIFY
+UNDONE
+FTFCONTOUR
+N
+FTF-SMOKE
+12.6, 13.0, 13.5, 99, 5
+CONTOURVERIFY
+FIRST
+FTFCONTOUR
+
+12.60
+CONTOURVERIFY
+AGAIN
+FTFCONTOUR
+
+B
+50,10
+L
+13.0
+CONTOURVERIFY
+BOUNDARY
+SAVEAS
+2018
+"C:\dev\FieldToFinish\tests\LiveSmoke\outcontour.dwg"

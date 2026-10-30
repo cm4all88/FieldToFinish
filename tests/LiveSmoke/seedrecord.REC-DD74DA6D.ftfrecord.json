@@ -1,0 +1,1591 @@
+{
+  "schema": "ftf-record-1",
+  "id": "REC-DD74DA6D",
+  "document": {
+    "path": "SP-2019-0042-sample.pdf",
+    "title": "SHORT PLAT NO. SP-2019-0042",
+    "surveyType": "Short Plat",
+    "recordingNumber": "20190815000123",
+    "volumePage": null,
+    "county": "KING COUNTY",
+    "surveyor": "JANE Q. SURVEYOR, PLS NO. 54321",
+    "basisOfBearing": "BASIS OF BEARINGS: WASHINGTON STATE PLANE COORDINATE SYSTEM, NORTH ZONE, NAD 83/2011",
+    "scaleFeetPerInch": 50.0,
+    "sheet": "2 OF 3",
+    "pages": 1
+  },
+  "createdUtc": "2026-10-06T14:45:41.3416292Z",
+  "builtUtc": "2026-10-06T14:45:41.772612Z",
+  "revision": 2,
+  "profile": null,
+  "mode": "ReconstructGeometry",
+  "calls": [
+    {
+      "id": "K1",
+      "kind": "Line",
+      "figure": "Lot 1",
+      "order": 1,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 89.705,
+          "distance": 150.0,
+          "bearingText": "N 89°42'18\" E",
+          "distanceText": "150.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 895.99403541371112,
+              "y": 843.68308565465077,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "N 89°42'18\" E",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 895.99403541371112,
+              "y": 843.68308565465077,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "150.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 895.99403541371112,
+          "y": 843.68308565465077,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "N 89°42'18\" E  150.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 895.99403541371112,
+        "y": 843.68308565465077,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K2",
+      "kind": "Line",
+      "figure": "Lot 2",
+      "order": 2,
+      "reversed": true,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 179.705,
+          "distance": 120.0,
+          "bearingText": "S 00°17'42\" E",
+          "distanceText": "120.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 1387.8416023037018,
+              "y": 1241.3613996402703,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": -90.0
+            },
+            "text": "S 00°17'42\" E",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 1387.8416023037018,
+              "y": 1241.3613996402703,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": -90.0
+            },
+            "text": "120.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1387.8416023037018,
+          "y": 1241.3613996402703,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": -90.0
+        },
+        "text": "S 00°17'42\" E  120.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 1387.8416023037018,
+        "y": 1241.3613996402703,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": -90.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K3",
+      "kind": "Line",
+      "figure": "Lot 1",
+      "order": 3,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 269.705,
+          "distance": 150.0,
+          "bearingText": "S 89°42'18\" W",
+          "distanceText": "150.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 899.70109836627034,
+              "y": 1643.6735423165887,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "S 89°42'18\" W",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 899.70109836627034,
+              "y": 1643.6735423165887,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "150.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 899.70109836627034,
+          "y": 1643.6735423165887,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "S 89°42'18\" W  150.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 899.70109836627034,
+        "y": 1643.6735423165887,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K4",
+      "kind": "Line",
+      "figure": "Lot 1",
+      "order": 4,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 359.705,
+          "distance": 120.0,
+          "bearingText": "N 00°17'42\" W",
+          "distanceText": "120.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 407.85353147627961,
+              "y": 1245.995228330969,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 90.0
+            },
+            "text": "N 00°17'42\" W",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 407.85353147627961,
+              "y": 1245.995228330969,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 90.0
+            },
+            "text": "120.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 407.85353147627961,
+          "y": 1245.995228330969,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": 90.0
+        },
+        "text": "N 00°17'42\" W  120.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 407.85353147627961,
+        "y": 1245.995228330969,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": 90.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K5",
+      "kind": "Line",
+      "figure": "Lot 2",
+      "order": 3,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 89.705,
+          "distance": 100.0,
+          "bearingText": "N 89°42'18\" E",
+          "distanceText": "100.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 1645.9840944365633,
+              "y": 839.82156174573527,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "N 89°42'18\" E",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 1645.9840944365633,
+              "y": 839.82156174573527,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "100.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1645.9840944365633,
+          "y": 839.82156174573527,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "N 89°42'18\" E  100.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 1645.9840944365633,
+        "y": 839.82156174573527,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K6",
+      "kind": "Line",
+      "figure": "Lot 2",
+      "order": 5,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 179.705,
+          "distance": 100.0,
+          "bearingText": "S 00°17'42\" E",
+          "distanceText": "100.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 2572.2546686296573,
+              "y": 1293.6726356487818,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": -90.0
+            },
+            "text": "S 00°17'42\" E",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 2572.2546686296573,
+              "y": 1293.6726356487818,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": -90.0
+            },
+            "text": "100.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2572.2546686296573,
+          "y": 1293.6726356487818,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": -90.0
+        },
+        "text": "S 00°17'42\" E  100.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 2572.2546686296573,
+        "y": 1293.6726356487818,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": -90.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K7",
+      "kind": "Line",
+      "figure": "Lot 2",
+      "order": 1,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 269.62805555555553,
+          "distance": 197.35,
+          "bearingText": "S 89°37'41\" W",
+          "distanceText": "197.35'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 1941.7472059866022,
+              "y": 1637.5126436145808,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "S 89°37'41\" W",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 1941.7472059866022,
+              "y": 1637.5126436145808,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "197.35'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1941.7472059866022,
+          "y": 1637.5126436145808,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "S 89°37'41\" W  197.35'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 1941.7472059866022,
+        "y": 1637.5126436145808,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K8",
+      "kind": "Curve",
+      "figure": "Lot 2",
+      "order": 4,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": null,
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [],
+      "basis": "Recorded",
+      "curve": {
+        "radius": 250.0,
+        "delta": 22.918333333333333,
+        "arc": 100.0,
+        "chord": 99.33,
+        "chordAzimuth": 101.16416666666667,
+        "tangent": null,
+        "radialInAzimuth": null,
+        "turn": null,
+        "tangentIn": null,
+        "stated": [
+          "CB",
+          "DELTA",
+          "R",
+          "L",
+          "CH"
+        ],
+        "sources": [
+          {
+            "page": 1,
+            "box": {
+              "x": 1700.0,
+              "y": 2080.0,
+              "w": 826.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "C1   250.00'   22°55'06\"   100.00'   S 78°50'09\" E   99.33'",
+            "ocrConf": 0.95
+          },
+          {
+            "page": 1,
+            "box": {
+              "x": 1700.0,
+              "y": 2080.0,
+              "w": 826.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "C1   250.00'   22°55'06\"   100.00'   S 78°50'09\" E   99.33'",
+            "ocrConf": 0.95
+          },
+          {
+            "page": 1,
+            "box": {
+              "x": 1700.0,
+              "y": 2080.0,
+              "w": 826.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "C1   250.00'   22°55'06\"   100.00'   S 78°50'09\" E   99.33'",
+            "ocrConf": 0.95
+          },
+          {
+            "page": 1,
+            "box": {
+              "x": 1700.0,
+              "y": 2080.0,
+              "w": 826.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "C1   250.00'   22°55'06\"   100.00'   S 78°50'09\" E   99.33'",
+            "ocrConf": 0.95
+          },
+          {
+            "page": 1,
+            "box": {
+              "x": 1700.0,
+              "y": 2080.0,
+              "w": 826.0,
+              "h": 28.0,
+              "rot": 0.0
+            },
+            "text": "C1   250.00'   22°55'06\"   100.00'   S 78°50'09\" E   99.33'",
+            "ocrConf": 0.95
+          }
+        ],
+        "tag": "C1"
+      },
+      "confidence": 0.95,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [
+        "Curve table columns taken from the table header."
+      ],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1700.0,
+          "y": 2080.0,
+          "w": 826.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "C1   250.00'   22°55'06\"   100.00'   S 78°50'09\" E   99.33'",
+        "ocrConf": 0.95
+      },
+      "pageHint": {
+        "x": 2378.3450885558977,
+        "y": 895.97678211090511,
+        "w": 28.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    },
+    {
+      "id": "K9",
+      "kind": "Line",
+      "figure": "Lot 1",
+      "order": 2,
+      "reversed": false,
+      "objectType": "Boundary",
+      "sharedWith": "K2",
+      "measured": {
+        "azimuth": null,
+        "distance": null,
+        "bearingText": null,
+        "distanceText": null,
+        "bearingSource": null,
+        "distanceSource": null,
+        "confidence": 1.0
+      },
+      "records": [
+        {
+          "sourceId": "",
+          "azimuth": 179.705,
+          "distance": 120.0,
+          "bearingText": "S 00°17'42\" E",
+          "distanceText": "120.00'",
+          "bearingSource": {
+            "page": 1,
+            "box": {
+              "x": 1387.8416023037018,
+              "y": 1241.3613996402703,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": -90.0
+            },
+            "text": "S 00°17'42\" E",
+            "ocrConf": 0.96
+          },
+          "distanceSource": {
+            "page": 1,
+            "box": {
+              "x": 1387.8416023037018,
+              "y": 1241.3613996402703,
+              "w": 308.0,
+              "h": 28.0,
+              "rot": -90.0
+            },
+            "text": "120.00'",
+            "ocrConf": 0.96
+          },
+          "confidence": 0.96
+        }
+      ],
+      "basis": "Recorded",
+      "curve": null,
+      "confidence": 0.96,
+      "status": "Approved",
+      "alternatives": [],
+      "notes": [
+        "Shared course: the document labels this line once; it also bounds Lot 2 as K2."
+      ],
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1387.8416023037018,
+          "y": 1241.3613996402703,
+          "w": 308.0,
+          "h": 28.0,
+          "rot": -90.0
+        },
+        "text": "S 00°17'42\" E  120.00'",
+        "ocrConf": 0.96
+      },
+      "pageHint": {
+        "x": 1387.8416023037018,
+        "y": 1241.3613996402703,
+        "w": 308.0,
+        "h": 28.0,
+        "rot": -90.0
+      },
+      "edits": [
+        "approved (MoreyChr, 2026-10-06 14:45 UTC)"
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "name": "Lot 1",
+      "kind": "Lot",
+      "lot": "1",
+      "block": null,
+      "closed": true,
+      "start": {
+        "X": 500.0,
+        "Y": 500.0,
+        "Length": 707.10678118654755
+      },
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1016.8475668899907,
+          "y": 1243.6783139856198,
+          "w": 70.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "LOT 1",
+        "ocrConf": 0.99
+      },
+      "pageHint": {
+        "x": 1016.8475668899907,
+        "y": 1243.6783139856198,
+        "w": 70.0,
+        "h": 28.0,
+        "rot": 0.0
+      }
+    },
+    {
+      "name": "Lot 2",
+      "kind": "Lot",
+      "lot": "2",
+      "block": null,
+      "closed": true,
+      "start": {
+        "X": 847.96169732349222,
+        "Y": 382.05501449177461,
+        "Length": 930.05648980373655
+      },
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2058.8936745103229,
+          "y": 1237.5174152836121,
+          "w": 70.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "LOT 2",
+        "ocrConf": 0.99
+      },
+      "pageHint": {
+        "x": 2058.8936745103229,
+        "y": 1237.5174152836121,
+        "w": 70.0,
+        "h": 28.0,
+        "rot": 0.0
+      }
+    }
+  ],
+  "references": [
+    {
+      "id": "R1",
+      "description": "R1: AFN 9807150123, VOL. 121 OF SURVEYS, PG. 45",
+      "afn": "9807150123",
+      "volume": "121",
+      "page": "45",
+      "kind": "SURVEYS",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 300.0,
+          "y": 3060.0,
+          "w": 658.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "R1: AFN 9807150123, VOL. 121 OF SURVEYS, PG. 45",
+        "ocrConf": 0.94
+      },
+      "confidence": 0.846
+    }
+  ],
+  "monuments": [
+    {
+      "id": "M1",
+      "status": "Found",
+      "description": "FOUND 1/2\" REBAR & CAP LS 12345",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 223.0,
+          "y": 816.0,
+          "w": 434.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "FOUND 1/2\" REBAR & CAP LS 12345",
+        "ocrConf": 0.93
+      },
+      "confidence": 0.7905,
+      "pageHint": {
+        "x": 223.0,
+        "y": 816.0,
+        "w": 434.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "corner": "",
+      "callStatus": "NeedsReview"
+    },
+    {
+      "id": "M2",
+      "status": "Set",
+      "description": "SET 5/8\" REBAR & CAP LS 54321",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1456.9880708274222,
+          "y": 811.36617130930142,
+          "w": 406.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "SET 5/8\" REBAR & CAP LS 54321",
+        "ocrConf": 0.93
+      },
+      "confidence": 0.7905,
+      "pageHint": {
+        "x": 1456.9880708274222,
+        "y": 811.36617130930142,
+        "w": 406.0,
+        "h": 28.0,
+        "rot": 0.0
+      },
+      "corner": "",
+      "callStatus": "NeedsReview"
+    }
+  ],
+  "annotations": [
+    {
+      "kind": "Legend",
+      "text": "FOUND MONUMENT AS NOTED",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2000.0,
+          "y": 2440.0,
+          "w": 322.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "FOUND MONUMENT AS NOTED",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.8245
+    },
+    {
+      "kind": "Legend",
+      "text": "SET 5/8\" REBAR & CAP LS 54321",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2000.0,
+          "y": 2480.0,
+          "w": 406.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "SET 5/8\" REBAR & CAP LS 54321",
+        "ocrConf": 0.95
+      },
+      "confidence": 0.8075
+    },
+    {
+      "kind": "SurveyTitle",
+      "text": "SHORT PLAT NO. SP-2019-0042",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 700.0,
+          "y": 120.0,
+          "w": 378.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "SHORT PLAT NO. SP-2019-0042",
+        "ocrConf": 0.99
+      },
+      "confidence": 0.8415
+    },
+    {
+      "kind": "SheetNumber",
+      "text": "SHEET 2 OF 3",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2200.0,
+          "y": 3200.0,
+          "w": 168.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "SHEET 2 OF 3",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.9215
+    },
+    {
+      "kind": "Scale",
+      "text": "SCALE: 1\" = 50'",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2100.0,
+          "y": 3100.0,
+          "w": 210.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "SCALE: 1\" = 50'",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.9215
+    },
+    {
+      "kind": "BasisOfBearing",
+      "text": "BASIS OF BEARINGS: WASHINGTON STATE PLANE COORDINATE SYSTEM, NORTH ZONE, NAD 83/2011",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 300.0,
+          "y": 3000.0,
+          "w": 1176.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "BASIS OF BEARINGS: WASHINGTON STATE PLANE COORDINATE SYSTEM, NORTH ZONE, NAD 83/2011",
+        "ocrConf": 0.95
+      },
+      "confidence": 0.9025
+    },
+    {
+      "kind": "Legend",
+      "text": "LEGEND",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 2000.0,
+          "y": 2400.0,
+          "w": 84.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "LEGEND",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.873
+    },
+    {
+      "kind": "Note",
+      "text": "NOTES:",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 300.0,
+          "y": 2600.0,
+          "w": 84.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "NOTES:",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.67899999999999994
+    },
+    {
+      "kind": "Note",
+      "text": "1. THIS SURVEY WAS PERFORMED WITH A 3\" TOTAL STATION.",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 300.0,
+          "y": 2640.0,
+          "w": 742.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "1. THIS SURVEY WAS PERFORMED WITH A 3\" TOTAL STATION.",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.67899999999999994
+    },
+    {
+      "kind": "StreetName",
+      "text": "N.E. 8TH STREET",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1200.0,
+          "y": 2900.0,
+          "w": 210.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "N.E. 8TH STREET",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.7275
+    },
+    {
+      "kind": "Surveyor",
+      "text": "JANE Q. SURVEYOR, PLS NO. 54321",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1900.0,
+          "y": 3000.0,
+          "w": 434.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "JANE Q. SURVEYOR, PLS NO. 54321",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.776
+    },
+    {
+      "kind": "Legend",
+      "text": "CURVE TABLE",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1800.0,
+          "y": 2000.0,
+          "w": 154.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "CURVE TABLE",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.873
+    },
+    {
+      "kind": "Legend",
+      "text": "CURVE   RADIUS   DELTA   LENGTH   CHORD BEARING   CHORD",
+      "source": {
+        "page": 1,
+        "box": {
+          "x": 1700.0,
+          "y": 2040.0,
+          "w": 770.0,
+          "h": 28.0,
+          "rot": 0.0
+        },
+        "text": "CURVE   RADIUS   DELTA   LENGTH   CHORD BEARING   CHORD",
+        "ocrConf": 0.97
+      },
+      "confidence": 0.873
+    }
+  ],
+  "built": [
+    {
+      "handle": "8C66",
+      "role": "Line",
+      "callId": "K1",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "ab715903d8a439718368f058"
+    },
+    {
+      "handle": "8C69",
+      "role": "Line",
+      "callId": "K9",
+      "figure": "Lot 1",
+      "sharedWith": [
+        "K2"
+      ],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "1671060dda24612351fdcff1"
+    },
+    {
+      "handle": "8C6C",
+      "role": "Line",
+      "callId": "K3",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "e914ac120f1b34a6b50a285f"
+    },
+    {
+      "handle": "8C6F",
+      "role": "Line",
+      "callId": "K4",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "8902086b01d4acf09d3d34e3"
+    },
+    {
+      "handle": "8C72",
+      "role": "Line",
+      "callId": "K7",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "cae59b1d25185df0671bd695"
+    },
+    {
+      "handle": "8C75",
+      "role": "Line",
+      "callId": "K5",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "5705143c291ac089052e861e"
+    },
+    {
+      "handle": "8C78",
+      "role": "Curve",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "7d59143a6d3901e6c23cce4a"
+    },
+    {
+      "handle": "8C7B",
+      "role": "Line",
+      "callId": "K6",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": "66a6792cf49bbacaa888c7f6"
+    },
+    {
+      "handle": "8C7F",
+      "role": "Mask",
+      "callId": "K1",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C7E",
+      "role": "Label",
+      "callId": "K1",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C81",
+      "role": "Mask",
+      "callId": "K1",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C80",
+      "role": "Label",
+      "callId": "K1",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C83",
+      "role": "Mask",
+      "callId": "K9",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C82",
+      "role": "Label",
+      "callId": "K9",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C85",
+      "role": "Mask",
+      "callId": "K9",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C84",
+      "role": "Label",
+      "callId": "K9",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C87",
+      "role": "Mask",
+      "callId": "K3",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C86",
+      "role": "Label",
+      "callId": "K3",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C89",
+      "role": "Mask",
+      "callId": "K3",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C88",
+      "role": "Label",
+      "callId": "K3",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C8B",
+      "role": "Mask",
+      "callId": "K4",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C8A",
+      "role": "Label",
+      "callId": "K4",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C8D",
+      "role": "Mask",
+      "callId": "K4",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C8C",
+      "role": "Label",
+      "callId": "K4",
+      "figure": "Lot 1",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C8F",
+      "role": "Mask",
+      "callId": "K7",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C8E",
+      "role": "Label",
+      "callId": "K7",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C91",
+      "role": "Mask",
+      "callId": "K7",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C90",
+      "role": "Label",
+      "callId": "K7",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C93",
+      "role": "Mask",
+      "callId": "K5",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C92",
+      "role": "Label",
+      "callId": "K5",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C95",
+      "role": "Mask",
+      "callId": "K5",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C94",
+      "role": "Label",
+      "callId": "K5",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C97",
+      "role": "Mask",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C96",
+      "role": "Label",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C99",
+      "role": "Mask",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C98",
+      "role": "Label",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C9B",
+      "role": "Mask",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C9A",
+      "role": "Label",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C9D",
+      "role": "Mask",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C9C",
+      "role": "Label",
+      "callId": "K8",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C9F",
+      "role": "Mask",
+      "callId": "K6",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8C9E",
+      "role": "Label",
+      "callId": "K6",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8CA1",
+      "role": "Mask",
+      "callId": "K6",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    },
+    {
+      "handle": "8CA0",
+      "role": "Label",
+      "callId": "K6",
+      "figure": "Lot 2",
+      "sharedWith": [],
+      "layer": "V-PROP-BNDY-E",
+      "fingerprint": null
+    }
+  ],
+  "closures": [
+    {
+      "figure": "Lot 1",
+      "closed": true,
+      "misclosure": 1.2710574864626038E-13,
+      "misclosureAzimuth": null,
+      "misclosureDx": 5.6843418860808015E-14,
+      "misclosureDy": 1.1368683772161603E-13,
+      "perimeter": 540.0,
+      "precision": null,
+      "area": 18000.000000000018,
+      "courses": 4
+    },
+    {
+      "figure": "Lot 2",
+      "closed": true,
+      "misclosure": 0.0048535425436900172,
+      "misclosureAzimuth": 267.53241511225241,
+      "misclosureDx": -0.0048490420448388249,
+      "misclosureDy": -0.00020896523824376345,
+      "perimeter": 617.35009393405846,
+      "precision": 127195.77264995062,
+      "area": 23026.448577372117,
+      "courses": 5
+    }
+  ],
+  "warnings": [],
+  "reviewThreshold": 0.85,
+  "builtFromMeasured": true,
+  "ocrPath": null
+}
