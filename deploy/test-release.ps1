@@ -12,7 +12,11 @@
     .\test-release.ps1
 #>
 [CmdletBinding()]
-param([ValidateSet('Release', 'Debug')][string]$Configuration = 'Debug')
+param(
+    [ValidateSet('Release', 'Debug')][string]$Configuration = 'Debug',
+    # Package what is already built (UPDATEFTF.ps1 builds once and tests that build).
+    [switch]$NoBuild
+)
 
 $ErrorActionPreference = 'Continue'
 $pass = 0
@@ -46,7 +50,7 @@ try
 {
     # --- package ------------------------------------------------------------------
     Write-Host "-- packaging a $Configuration setup folder"
-    & (Join-Path $PSScriptRoot 'make-release.ps1') -Configuration $Configuration -OutputRoot $out | Out-Null
+    & (Join-Path $PSScriptRoot 'make-release.ps1') -Configuration $Configuration -OutputRoot $out -NoBuild:$NoBuild | Out-Null
     $setup = Join-Path $out 'FieldToFinish-Setup'
     Check (Test-Path $setup) 'make-release.ps1 writes a setup folder'
     if (-not (Test-Path $setup)) { throw 'nothing to test' }
@@ -68,6 +72,17 @@ try
     Check ($autodesk.Count -eq 0) ("no Autodesk assemblies are copied -- the host has its own (" + (($autodesk | ForEach-Object { $_.Name }) -join ', ') + ")")
     $symbols = @($files | Where-Object { $_.Extension -eq '.pdb' })
     Check ($symbols.Count -eq 0) 'no debug symbols in what goes out'
+
+    $infoFile = Join-Path $setup 'Bundle\build-info.json'
+    Check (Test-Path $infoFile) 'the bundle carries build-info.json (commit, channel, file hashes)'
+    if (Test-Path $infoFile) {
+        $info = Get-Content $infoFile -Raw | ConvertFrom-Json
+        Check ($info.commit -match '^[0-9a-f]{40}$') "build-info.json names the commit ($($info.commit))"
+        $dllHash = (Get-FileHash -LiteralPath (Join-Path $contents 'FieldCodes.Cad.dll') -Algorithm SHA256).Hash
+        Check ($info.files.'Contents/2024/FieldCodes.Cad.dll' -eq $dllHash) 'and the hash of the very DLL it ships'
+        $product = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $contents 'FieldCodes.Cad.dll')).ProductVersion
+        Check ($product -match ('\+' + $info.commit.Substring(0, 7) + '\.')) "the DLL itself carries the same commit ($product)"
+    }
 
     $version = Get-Content (Join-Path $setup 'version.txt') -First 1
     Check ($version -match '^FTF \d{4}-\d{2}-\d{2}') "version.txt says which build this is ($version)"
@@ -146,6 +161,16 @@ try
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
         Check (-not (Test-Path $recorded)) 'a copy run from TEMP records no office copy, so nothing points at a staging folder'
         Remove-Item $staged -Recurse -Force -ErrorAction SilentlyContinue
+
+        # --- a developer install (UPDATEFTF) --------------------------------------
+        # UPDATEFTF installs with -NoOfficeCopy: the machine takes builds from the integration
+        # branch, so nothing may point it at a setup folder to "update" from.
+        Write-Host '-- a developer install records no office copy'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup -NoOfficeCopy | Out-Null
+        Check ($LASTEXITCODE -eq 0) 'installing with -NoOfficeCopy works'
+        Check (-not (Test-Path (Join-Path $installed 'source.txt'))) 'and records no office copy to update from'
+        Check (Test-Path (Join-Path $installed 'build-info.json')) 'and the installed bundle says which build it is'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
 
         # --- telling Civil 3D to load it ------------------------------------------
         # Civil 3D writes this record itself after reading a bundle, but only on a machine

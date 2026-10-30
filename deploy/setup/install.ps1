@@ -33,6 +33,11 @@
     An ApplicationPlugins folder to install into instead of the real one. For the
     installer's own test, which must not disturb a real install.
 
+.PARAMETER NoOfficeCopy
+    Records no office copy, so this install never replaces itself from one. UPDATEFTF.ps1
+    passes it: a developer's machine takes its builds from the integration branch, not
+    from a setup folder.
+
 .PARAMETER WaitMinutes
 .PARAMETER ProcessName
     How long -WaitForCivil3D waits, and what it waits for. Both are here so the
@@ -49,6 +54,7 @@ param(
     [string]$Source,
     [switch]$WaitForCivil3D,
     [string]$TargetRoot,
+    [switch]$NoOfficeCopy,
     [int]$WaitMinutes = 60,
     [string]$ProcessName = 'acad',
     [string]$RegistryRoot = 'HKCU:\SOFTWARE\Autodesk\AutoCAD',
@@ -213,18 +219,19 @@ $version = if (Test-Path $versionFile) { (Get-Content $versionFile -First 1) } e
 # worth recording is where "Install FTF.bat" stages itself: it deletes it on the way out.
 
 $office = $null
+if ($NoOfficeCopy) { $declared = $null }
 
 # A setup folder can name its own home in updates-from.txt. That is how a copy taken to a
 # laptop, a zip sent by email, or an install run from a local folder still takes its
 # updates from the office drive. It is believed even when that drive is not reachable
 # right now: FTF checks reachability later, every time Civil 3D starts.
-$declared = Join-Path $here 'updates-from.txt'
-if (Test-Path $declared) {
+if (-not $NoOfficeCopy) { $declared = Join-Path $here 'updates-from.txt' }
+if ($declared -and (Test-Path $declared)) {
     $declaredHome = (Get-Content $declared -First 1)
     if (-not [string]::IsNullOrWhiteSpace($declaredHome)) { $office = $declaredHome.Trim().TrimEnd('\') }
 }
 
-if (-not $office) {
+if (-not $office -and -not $NoOfficeCopy) {
     $candidate = if ([string]::IsNullOrWhiteSpace($Source)) { $here } else { $Source }
     try { $candidate = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).Path } catch { }
     $candidate = $candidate.TrimEnd('\')

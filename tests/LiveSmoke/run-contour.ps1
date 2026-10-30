@@ -1,45 +1,35 @@
-# Headless live-smoke run of FTFCONTOUR in real Civil 3D via accoreconsole.
-# Builds a test TIN surface (a slope with two hills) plus a second surface, contours it at
-# 12.6, 13.0 and 13.5 (and 99 and 5, which must report nothing), undoes once, runs again,
-# re-runs 12.60 (must replace, not duplicate) and finally 13.0 inside a boundary with labels.
-# After every step the harness checks that the surface's statistics and every triangle are
-# exactly as seeded, that none of Civil 3D's own extracted polylines was left behind, and
-# that every contour vertex sits on the surface at its contour elevation.
-# Output: contour_out.log and outcontour.dwg. Civil 3D must be closed.
+# Headless FTFCONTOUR smoke test in real Civil 3D (accoreconsole), for a developer build.
+#
+# Thin wrapper: deploy\smoke-test.ps1 does the work (UPDATEFTF.ps1 runs the same test on every
+# build before it keeps it). It proves the DLL under test is the one Civil 3D loaded, that
+# FTFVERSION and FTFCONTOUR are registered and actually ran, and then checks what FTFCONTOUR drew
+# against a seeded TIN surface. An "Unknown command" fails the run at once.
+#
+#   .\run-contour.ps1                 builds Debug, tests src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll
+#   .\run-contour.ps1 -Installed      tests the installed bundle instead
+#
+# Civil 3D must be closed. When an FTF bundle is installed, accoreconsole loads THAT at startup, so
+# a development DLL cannot be tested beside it: the test then fails and says so (use -Installed, or
+# run UPDATEFTF.ps1, which installs and then tests).
+param([switch]$Installed, [string]$C3D2024 = 'C:\Program Files\Autodesk\AutoCAD 2024')
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
-$csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-$template = "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D (Imperial) NCS.dwt"
+$repo = Resolve-Path (Join-Path $here '..\..')
 
-dotnet build (Join-Path $here '..\..\FieldToFinish.sln') | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'plugin build failed' }
+if (Get-Process -Name acad -ErrorAction SilentlyContinue) { throw 'Close Civil 3D first.' }
 
-& $csc /nologo /target:library /out:"$here\ContourTestHarness.dll" "$here\ContourTestHarness.cs" `
-    /r:"$acad\accoremgd.dll" /r:"$acad\acdbmgd.dll" /r:"$acad\acmgd.dll" `
-    /r:"$acad\C3D\AeccDbMgd.dll" /r:"$acad\AecBaseMgd.dll" /r:System.Core.dll
-if ($LASTEXITCODE -ne 0) { throw 'contour harness compile failed' }
-
-foreach ($stale in @("$here\outcontour.dwg", "$here\seedcontour.dwg")) {
-    if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale }
+if ($Installed) {
+    $dll = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle\Contents\2024\FieldCodes.Cad.dll'
+    $info = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle\build-info.json'
+    if (-not (Test-Path $info)) { throw "No installed build with build-info.json at $info. Run UPDATEFTF.ps1." }
+    $commit = (Get-Content $info -Raw | ConvertFrom-Json).commit
+} else {
+    dotnet build (Join-Path $repo 'src\FieldCodes.Cad\FieldCodes.Cad.csproj') -c Debug --nologo -v q "-p:C3D2024=$C3D2024"
+    if ($LASTEXITCODE -ne 0) { throw 'plugin build failed' }
+    $dll = Join-Path $repo 'src\FieldCodes.Cad\bin\Debug\net48\FieldCodes.Cad.dll'
+    $commit = (git -C $repo rev-parse HEAD)
 }
-Copy-Item -LiteralPath $template -Destination "$here\seedcontour.dwg"
 
-& (Join-Path $here 'run-accore.ps1') -Drawing "$here\seedcontour.dwg" -Script "$here\runcontour.scr" -Log "$here\contour_out.log" -TimeoutSeconds 240
-
-$c = Get-Content "$here\contour_out.log"
-$text = $c -join "`n"
-$extra = @()
-$extra += if ($text.Contains('Surface untouched')) { '[PASS] FTFCONTOUR reported the surface untouched' } else { '[FAIL] no "Surface untouched" line in the FTFCONTOUR report' }
-$extra += if ($text.Contains("none: above the surface's highest point")) { '[PASS] 99 reported above the surface' } else { '[FAIL] 99 not reported as above the surface' }
-$extra += if ($text.Contains("none: below the surface's lowest point")) { '[PASS] 5 reported below the surface' } else { '[FAIL] 5 not reported as below the surface' }
-$extra += if ($text.Contains('traced from the surface triangles')) { '[FAIL] ExtractContoursAt failed and the fallback tracer was used' } else { '[PASS] Civil 3D extraction used (no fallback)' }
-$extra += if ($text -match 'WARNING') { '[FAIL] a WARNING was reported' } else { '[PASS] no warnings' }
-$extra | ForEach-Object { Write-Host "  $_" }
-Write-Host ("contour_out.log: PASS {0}, FAIL {1}, stages passed {2}/4, command errors {3}" -f
-    (($c | Select-String '\[PASS\]').Count + ($extra | Where-Object { $_ -like '[[]PASS*' }).Count),
-    (($c | Select-String '\[FAIL\]').Count + ($extra | Where-Object { $_ -like '[[]FAIL*' }).Count),
-    ($c | Select-String 'CONTOURVERIFY \w+: PASS').Count,
-    ($c | Select-String 'FTFCONTOUR: AutoCAD error|Nothing drawn\.|rolled back|rules problem').Count)
-# Expected: every check PASS, 4/4 stages, 0 command errors.
+& (Join-Path $repo 'deploy\smoke-test.ps1') -PluginDll $dll -Commit $commit -C3D2024 $C3D2024
+exit $LASTEXITCODE

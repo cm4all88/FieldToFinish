@@ -352,6 +352,12 @@ To hand the symbol back to the plugin, restore `block` / `blockLayer` /
 `blockScaleFrom` on the tree rule (see the `//block` note in `rules.json`) **and**
 turn the symbol off in the point style.
 
+## Installing and updating: UPDATEFTF
+
+`C:\dev\UPDATEFTF` builds the approved `integration` branch, tests it, installs it where Civil 3D
+loads it at startup, and proves it in Civil 3D before keeping it; type `FTFVERSION` in Civil 3D to
+see which build is running. See [DEPLOY.md](DEPLOY.md).
+
 ## Commands
 
 | Command | Does | Re-runnable |
@@ -369,6 +375,7 @@ turn the symbol off in the point style.
 | `FTFLABELALL` | Label Everything: every recognised line (gates included), every point, then draw order; lists what it could not label | yes |
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
+| `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
 | `FTFCONTOUR` | Contour polylines at exact elevations off a TIN surface (one, a list, or a run), optionally clipped to a boundary and labelled; the surface is only read | yes (replaces its own at the same surface and elevation) |
 | `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
 | `FTFRECORDCHECK` | Drawing versus the record; flags only | yes |

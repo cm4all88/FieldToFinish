@@ -1,10 +1,24 @@
-// Headless checks for FTFCONTOUR on a TIN surface built for the purpose:
+// Headless smoke checks for an FTF build in real Civil 3D (accoreconsole), driven by
+// deploy\smoke-test.ps1 (which UPDATEFTF.ps1 runs before it keeps a new build installed).
+//
+// First, that the build under test is the one actually loaded and that its commands really run:
+//
+// FTFSMOKEBEGIN   exactly one FieldCodes.Cad is loaded, from the DLL the runner named (FTF_SMOKE_EXPECT_DLL)
+//                 and stamped with the commit it named (FTF_SMOKE_EXPECT_COMMIT); its [CommandMethod]s include
+//                 FTFVERSION and FTFCONTOUR. Anything else is FATAL: the result file says why and the process
+//                 exits at once, so no later check can pass against the wrong build.
+// FTFSMOKEEXPECT  names a command that should have run since the last check; FATAL when FtfCommandTrace says
+//                 it did not start AND finish exactly once (an "Unknown command" leaves the count unchanged).
+// FTFSMOKEEND     writes the verdict and COMPLETE to the result file; without COMPLETE the run did not finish.
+//
+// Then FTFCONTOUR on a TIN surface built for the purpose:
 //
 // CONTOURSEED     builds FTF-SMOKE: a plane rising east (z = 10 + 0.04x over 100 x 60) with two cone hills at
 //                 (30,30) and (70,30); a second surface FTF-SMOKE-FLAT so the surface has to be chosen; a closed
 //                 boundary rectangle (20,10)-(80,50); and a drafter's own polyline that must never be touched.
 //                 Snapshots the surface: statistics and every triangle's vertices.
-// CONTOURVERIFY   checks the stage named:
+// CONTOURVERIFY   first requires that FTFCONTOUR ran exactly once since the previous stage (FATAL otherwise), then
+//                 checks the stage named:
 //                 UNDONE    one U after FTFCONTOUR left no FTF contour behind.
 //                 FIRST     12.6, 13.0 and 13.5 drawn; 12.6 in at least two disconnected pieces, one closed round
 //                           the west hill and one open; nothing at 99 or 5; every vertex on the surface at its
@@ -16,11 +30,14 @@
 //                 none of Civil 3D's own extracted polylines was left in the drawing, and that the drafter's
 //                 polyline is untouched.
 //
+// The FTF ownership kinds are read from the loaded plugin's own FtfEntityKind enum, never hard-coded.
 // Compiled with the .NET Framework csc (C# 5 only).
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -36,12 +53,11 @@ namespace FtfContourTest
     {
         private static readonly CultureInfo C = CultureInfo.InvariantCulture;
         private const string AppName = "FTF_FIELDTOFINISH";
-        private const short ContourKind = 42;
-        private const short LabelKind = 43;
-        private const short MaskKind = 44;
         private const double Tolerance = 1e-6;
 
         private static int _failures;
+        private static int _passes;
+        private static readonly List<string> Stages = new List<string>();
         private static string _stats;
         private static string _triangles;
         private static string _drafterPolyline;
@@ -50,11 +66,169 @@ namespace FtfContourTest
         private static AcDb.ObjectId _surfaceId;
         private static AcDb.ObjectId _drafterId;
 
+        private static Assembly _plugin;
+        private static short _contourKind = -1;
+        private static short _labelKind = -1;
+        private static short _maskKind = -1;
+        private static readonly Dictionary<string, int> SeenStarted = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, int> SeenFinished = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        private static Editor Ed
+        {
+            get { return Application.DocumentManager.MdiActiveDocument.Editor; }
+        }
+
         private static void Check(Editor ed, bool ok, string what)
         {
-            if (!ok) _failures++;
+            if (ok) _passes++; else _failures++;
             ed.WriteMessage("\n  [{0}] {1}", ok ? "PASS" : "FAIL", what);
         }
+
+        // ================================================================ the build under test
+
+        private static string ResultFile
+        {
+            get
+            {
+                var path = Environment.GetEnvironmentVariable("FTF_SMOKE_RESULT");
+                return string.IsNullOrEmpty(path) ? null : path;
+            }
+        }
+
+        private static void Record(string line)
+        {
+            var file = ResultFile;
+            if (file == null) return;
+            try { File.AppendAllText(file, line + Environment.NewLine); }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>Stops the whole run now: nothing after this can be trusted.</summary>
+        private static void Fatal(string why)
+        {
+            _failures++;
+            try { Ed.WriteMessage("\n  [FATAL] {0}\n", why); } catch (System.Exception) { }
+            Record("FATAL " + why);
+            Environment.Exit(3);
+        }
+
+        [CommandMethod("FTFSMOKEBEGIN")]
+        public void Begin()
+        {
+            var ed = Ed;
+            var expectedDll = Environment.GetEnvironmentVariable("FTF_SMOKE_EXPECT_DLL");
+            var expectedCommit = (Environment.GetEnvironmentVariable("FTF_SMOKE_EXPECT_COMMIT") ?? string.Empty).Trim().ToLowerInvariant();
+            Record("BEGIN " + DateTime.UtcNow.ToString("o", C));
+
+            var loaded = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(a => string.Equals(a.GetName().Name, "FieldCodes.Cad", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (loaded.Count == 0)
+                Fatal("FieldCodes.Cad is not loaded at all: NETLOAD failed or the plugin did not autoload.");
+            if (loaded.Count > 1)
+                Fatal("FieldCodes.Cad is loaded " + loaded.Count + " times (" +
+                      string.Join(" | ", loaded.Select(a => Location(a)).ToArray()) +
+                      "): two builds are fighting over the same commands.");
+
+            _plugin = loaded[0];
+            var location = Location(_plugin);
+            ed.WriteMessage("\nFTF loaded from: {0}", location);
+            if (!string.IsNullOrEmpty(expectedDll) &&
+                !string.Equals(Path.GetFullPath(location), Path.GetFullPath(expectedDll), StringComparison.OrdinalIgnoreCase))
+                Fatal("the wrong FieldCodes.Cad is loaded: " + location + " (expected " + expectedDll +
+                      "). An installed bundle autoloaded instead of the build under test.");
+
+            var commit = Metadata(_plugin, "FtfCommit");
+            ed.WriteMessage("\nFTF build: {0} {1} {2}", commit, Metadata(_plugin, "FtfChannel"), Metadata(_plugin, "FtfBuildDate"));
+            if (!string.IsNullOrEmpty(expectedCommit) && !string.Equals(commit, expectedCommit, StringComparison.OrdinalIgnoreCase))
+                Fatal("the loaded FieldCodes.Cad is commit " + commit + ", not the " + expectedCommit + " under test.");
+
+            var commands = _plugin.GetTypes()
+                .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+                .SelectMany(m => m.GetCustomAttributes(typeof(CommandMethodAttribute), false).Cast<CommandMethodAttribute>())
+                .Select(a => a.GlobalName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            Check(ed, commands.Count > 50, commands.Count + " FTF commands declared by the loaded build");
+            foreach (var needed in new[] { "FTFVERSION", "FTFCONTOUR", "FTFLABELALL", "FTFROW", "FTFLOTS", "FTFCOMPARE", "FTFRECORD", "FTFDIP" })
+                if (!commands.Contains(needed, StringComparer.OrdinalIgnoreCase))
+                    Fatal("the loaded build does not declare " + needed + ".");
+            Record("COMMANDS " + commands.Count);
+
+            var kinds = _plugin.GetType("FieldCodes.Cad.FtfEntityKind");
+            if (kinds == null) Fatal("FieldCodes.Cad.FtfEntityKind not found in the loaded build.");
+            _contourKind = Convert.ToInt16(Enum.Parse(kinds, "Contour"));
+            _labelKind = Convert.ToInt16(Enum.Parse(kinds, "ContourLabel"));
+            _maskKind = Convert.ToInt16(Enum.Parse(kinds, "ContourMask"));
+
+            foreach (var name in new[] { "FTFVERSION", "FTFCONTOUR" })
+            {
+                SeenStarted[name] = Trace("StartedCount", name);
+                SeenFinished[name] = Trace("FinishedCount", name);
+            }
+            Check(ed, true, "the build under test is the one loaded (" + commit.Substring(0, Math.Min(7, commit.Length)) + ")");
+            Record("LOADED " + location + " " + commit);
+        }
+
+        [CommandMethod("FTFSMOKEEXPECT")]
+        public void Expect()
+        {
+            var name = Ed.GetString("\nCommand that should have run: ").StringResult.Trim().ToUpperInvariant();
+            RequireRanOnce(name);
+            Check(Ed, true, name + " was registered and ran");
+        }
+
+        [CommandMethod("FTFSMOKEEND")]
+        public void End()
+        {
+            var verdict = _failures == 0 ? "PASS" : "FAIL";
+            Ed.WriteMessage("\nFTF SMOKE: {0} ({1} passed, {2} failed; stages {3})\n", verdict, _passes, _failures,
+                            string.Join(", ", Stages.ToArray()));
+            Record("STAGES " + string.Join(",", Stages.ToArray()));
+            Record("RESULT " + verdict + " " + _passes + " " + _failures);
+            Record("COMPLETE");
+        }
+
+        /// <summary>FATAL unless the command started and finished exactly once since it was last checked.</summary>
+        private static void RequireRanOnce(string name)
+        {
+            if (_plugin == null) Fatal("FTFSMOKEBEGIN did not run before checking " + name + ".");
+            var started = Trace("StartedCount", name);
+            var finished = Trace("FinishedCount", name);
+            int seenStarted, seenFinished;
+            SeenStarted.TryGetValue(name, out seenStarted);
+            SeenFinished.TryGetValue(name, out seenFinished);
+            if (started == seenStarted)
+                Fatal(name + " never ran (Unknown command, or the script fell out of step).");
+            if (started != seenStarted + 1)
+                Fatal(name + " ran " + (started - seenStarted) + " times where once was expected.");
+            if (finished != seenFinished + 1)
+                Fatal(name + " started but did not finish (it failed or was cancelled; see the command line above).");
+            SeenStarted[name] = started;
+            SeenFinished[name] = finished;
+        }
+
+        private static int Trace(string method, string command)
+        {
+            var trace = _plugin.GetType("FieldCodes.Cad.FtfCommandTrace");
+            if (trace == null) Fatal("FieldCodes.Cad.FtfCommandTrace not found: the loaded build predates the smoke test.");
+            return (int)trace.GetMethod(method, BindingFlags.Public | BindingFlags.Static).Invoke(null, new object[] { command });
+        }
+
+        private static string Location(Assembly assembly)
+        {
+            try { return string.IsNullOrEmpty(assembly.Location) ? new Uri(assembly.CodeBase).LocalPath : assembly.Location; }
+            catch (System.Exception) { return "(unknown location)"; }
+        }
+
+        private static string Metadata(Assembly assembly, string key)
+        {
+            foreach (AssemblyMetadataAttribute a in assembly.GetCustomAttributes(typeof(AssemblyMetadataAttribute), false))
+                if (a.Key == key) return a.Value ?? string.Empty;
+            return string.Empty;
+        }
+
+        // ================================================================ the contour surface
 
         private static double Distance(double x, double y, double cx, double cy)
         {
@@ -127,6 +301,7 @@ namespace FtfContourTest
                 tr.Commit();
             }
             ed.WriteMessage("\nCONTOURSEED: FTF-SMOKE {0}; {1} unstamped polylines in model space.", _stats, _plainCurves);
+            Record("SEEDED " + _stats);
         }
 
         [CommandMethod("CONTOURVERIFY")]
@@ -137,6 +312,11 @@ namespace FtfContourTest
             var ed = doc.Editor;
             var stage = ed.GetString("\nStage: ").StringResult.Trim().ToUpperInvariant();
             var before = _failures;
+
+            // Before anything else: FTFCONTOUR itself must have run, once, to the end. Without this an
+            // "Unknown command" would leave nothing drawn and the UNDONE stage would pass on nothing.
+            RequireRanOnce("FTFCONTOUR");
+            if (_surfaceId.IsNull) Fatal("CONTOURSEED did not run before stage " + stage + ".");
 
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -158,9 +338,9 @@ namespace FtfContourTest
                 {
                     var entity = tr.GetObject(id, AcDb.OpenMode.ForRead) as AcDb.Entity;
                     var kind = Kind(entity);
-                    if (kind == ContourKind) contours.Add(entity as AcDb.Polyline);
-                    else if (kind == LabelKind) labels.Add(entity as AcDb.MText);
-                    else if (kind == MaskKind) masks++;
+                    if (kind == _contourKind) contours.Add(entity as AcDb.Polyline);
+                    else if (kind == _labelKind) labels.Add(entity as AcDb.MText);
+                    else if (kind == _maskKind) masks++;
                 }
 
                 Check(ed, contours.All(p => p != null), "every FTF contour is a lightweight polyline");
@@ -182,7 +362,9 @@ namespace FtfContourTest
                         }
                         catch (System.Exception) { }
                     }
-                Check(ed, worst <= Tolerance, string.Format(C, "{0} contour vertices on the surface at their elevation (worst {1:0.0000000})", read, worst));
+                if (contours.Count > 0)
+                    Check(ed, read > 0 && worst <= Tolerance,
+                          string.Format(C, "{0} contour vertices on the surface at their elevation (worst {1:0.0000000})", read, worst));
 
                 var at126 = contours.Where(p => p.Elevation == 12.6).ToList();
                 var at13 = contours.Where(p => p.Elevation == 13.0).ToList();
@@ -204,7 +386,8 @@ namespace FtfContourTest
                         break;
 
                     case "AGAIN":
-                        Check(ed, at126.Count == _firstAt126, "re-running 12.6 replaced its own contours (" + at126.Count + " pieces, was " + _firstAt126 + ")");
+                        Check(ed, _firstAt126 > 0 && at126.Count == _firstAt126,
+                              "re-running 12.6 replaced its own contours (" + at126.Count + " pieces, was " + _firstAt126 + ")");
                         break;
 
                     case "BOUNDARY":
@@ -235,12 +418,15 @@ namespace FtfContourTest
                         break;
 
                     default:
-                        Check(ed, false, "unknown stage " + stage);
+                        Fatal("unknown stage " + stage + ": the script is out of step.");
                         break;
                 }
                 tr.Commit();
             }
-            ed.WriteMessage("\nCONTOURVERIFY {0}: {1}\n", stage, _failures == before ? "PASS" : "FAIL");
+            var verdict = _failures == before ? "PASS" : "FAIL";
+            Stages.Add(stage + "=" + verdict);
+            Record("STAGE " + stage + " " + verdict);
+            ed.WriteMessage("\nCONTOURVERIFY {0}: {1}\n", stage, verdict);
         }
 
         private static short Kind(AcDb.Entity entity)
