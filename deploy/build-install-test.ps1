@@ -193,6 +193,11 @@ if (-not $SkipInstall) {
     $contents = Join-Path $bundle 'Contents\2024'
     New-Item -ItemType Directory -Force -Path $contents | Out-Null
     Copy-Item (Join-Path $PSScriptRoot 'FieldToFinish.bundle\PackageContents.xml') -Destination $bundle -Force
+    # A hand install is a development build: drop what UPDATEFTF or the office installer recorded, so
+    # FTFVERSION reports the DLL's own (dev) stamp and nothing updates this copy from elsewhere.
+    foreach ($stale in @('build-info.json', 'version.txt', 'source.txt')) {
+        Remove-Item (Join-Path $bundle $stale) -Force -ErrorAction SilentlyContinue
+    }
     # Never the Autodesk assemblies: the host already has them loaded.
     Get-ChildItem $buildOut -File | Where-Object { $_.Name -notmatch '^(Ac|Aecc|Aec)' } | Copy-Item -Destination $contents -Force
     Copy-Item (Join-Path $repo 'config\rules.json') -Destination $contents -Force

@@ -89,6 +89,17 @@ public sealed class DeploymentContractTests
         Assert.Contains("build-info.json", release);
     }
 
+    [Fact]
+    public void ThePackageCarriesEverythingTheMergedFeaturesNeedAndNoAutodeskAssembly()
+    {
+        var release = Code(Read("deploy", "make-release.ps1"));
+        Assert.Contains(@"config\rules.json", release);
+        Assert.Contains(@"config\compare-profiles\*.json", release);       // FTFCOMPARE's factory profiles
+        Assert.Contains("'^(Ac|Aec)'", release);                               // AecBaseMgd too, not just Aecc
+        Assert.Contains("'^(Ac|Aec)'", Code(Read("deploy", "install-dev.ps1")));
+        Assert.Contains("'build-info.json'", Code(Read("deploy", "install-dev.ps1")));   // a dev install never claims a stamp
+    }
+
     // ----------------------------------------------------------------- the smoke test
 
     [Fact]

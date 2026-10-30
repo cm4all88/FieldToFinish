@@ -81,6 +81,9 @@ Copy-Item (Join-Path $source 'PackageContents.xml') -Destination $target -Force
 # left behind, so FTF does not replace this build with the office one at the next close.
 Remove-Item (Join-Path $target 'source.txt') -Force -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $target 'version.txt') -Force -ErrorAction SilentlyContinue
+# Nor is it the build UPDATEFTF installed: FTFVERSION reads the DLL's own stamp (a dev build) and
+# must not find an approved build-info.json beside it.
+Remove-Item (Join-Path $target 'build-info.json') -Force -ErrorAction SilentlyContinue
 
 foreach ($build in $found) {
     $contents = Join-Path $target ("Contents\" + $build.Series)
@@ -90,7 +93,7 @@ foreach ($build in $found) {
     # already has them loaded and a duplicate is the classic "works on my machine"
     # load failure.
     Get-ChildItem $build.Path -File |
-        Where-Object { $_.Name -notmatch '^(Ac|Aecc)' } |
+        Where-Object { $_.Name -notmatch '^(Ac|Aec)' } |
         Copy-Item -Destination $contents -Force
 
     # The factory rules ship from config\ directly, NOT from the build output copy:

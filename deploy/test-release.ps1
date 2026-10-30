@@ -66,9 +66,10 @@ try
     Check (Test-Path (Join-Path $contents 'FieldCodes.Cad.dll')) 'the plugin itself is there'
     Check (Test-Path (Join-Path $contents 'FieldCodes.dll')) 'and the core library beside it'
     Check (Test-Path (Join-Path $contents 'rules.json')) 'the factory rules ship with it'
+    Check (Test-Path (Join-Path $contents 'compare-profiles\Default.json')) 'and the FTFCOMPARE factory profiles'
 
     $files = Get-ChildItem $contents -File
-    $autodesk = @($files | Where-Object { $_.Name -match '^(Ac|Aecc)' })
+    $autodesk = @($files | Where-Object { $_.Name -match '^(Ac|Aec)' })
     Check ($autodesk.Count -eq 0) ("no Autodesk assemblies are copied -- the host has its own (" + (($autodesk | ForEach-Object { $_.Name }) -join ', ') + ")")
     $symbols = @($files | Where-Object { $_.Extension -eq '.pdb' })
     Check ($symbols.Count -eq 0) 'no debug symbols in what goes out'

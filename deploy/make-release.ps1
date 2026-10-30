@@ -123,14 +123,21 @@ New-Item -ItemType Directory -Force -Path $contents | Out-Null
 Copy-Item (Join-Path $setupSource '*') -Destination $setup -Force
 Copy-Item (Join-Path $PSScriptRoot 'FieldToFinish.bundle\PackageContents.xml') -Destination $bundle -Force
 
+# Never an Autodesk assembly (AcDbMgd, AcMgd, AcCoreMgd, AdWindows' Ac*, AecBaseMgd, AeccDbMgd).
 Get-ChildItem $binaries -File |
-    Where-Object { $_.Name -notmatch '^(Ac|Aecc)' -and $_.Extension -ne '.pdb' } |
+    Where-Object { $_.Name -notmatch '^(Ac|Aec)' -and $_.Extension -ne '.pdb' } |
     Copy-Item -Destination $contents -Force
 
 # The factory rules ship from config\ directly, not from the build output copy, which
 # only refreshes when the CAD project itself rebuilds (a config-only change once
 # deployed stale that way).
 Copy-Item (Join-Path $repo 'config\rules.json') -Destination $contents -Force
+
+# FTFCOMPARE's factory comparison profiles, from config\ for the same reason. A user's own copies in
+# %APPDATA%\FieldToFinish\compare-profiles win over these.
+$profilesOut = Join-Path $contents 'compare-profiles'
+New-Item -ItemType Directory -Force -Path $profilesOut | Out-Null
+Copy-Item (Join-Path $repo 'config\compare-profiles\*.json') -Destination $profilesOut -Force
 
 # --- what this build is -----------------------------------------------------------
 # version.txt is the one-line form the office updater compares (FieldCodes.Deploy.OfficeBuild);
