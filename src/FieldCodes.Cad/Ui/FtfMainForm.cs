@@ -1058,7 +1058,7 @@ namespace FieldCodes.Cad.Ui
             var plan = CurrentPlan();
             InAutoCad("Preview", () =>
             {
-                var lines = new List<string> { FieldCodes.Annotation.ProcessPresets.Title(plan.Preset) + ": " +
+                var lines = new List<string> { plan.Title + ": " +
                     string.Join(" > ", plan.Stages.Select(n => _pipeline.Steps.First(st => st.Name == n).Title).ToArray()) };
                 lines.AddRange(plan.Adjustments);
                 FtfSession.Run("FTF PREVIEW", (db, tr, ed) =>
@@ -1085,7 +1085,7 @@ namespace FieldCodes.Cad.Ui
             if (ConfirmBeforeReplacing() &&
                 MessageBox.Show(this, "These stages replace FTF's earlier output for the families shown (labels moved by hand are kept). Continue?",
                                 "Process Drawing", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
-            InAutoCad("Processing: " + FieldCodes.Annotation.ProcessPresets.Title(plan.Preset), () =>
+            InAutoCad("Processing: " + plan.Title, () =>
             {
                 FtfRunResult result;
                 using (FieldCodes.Annotation.AnnotationRun.Use(plan))
@@ -1097,7 +1097,7 @@ namespace FieldCodes.Cad.Ui
                 Log(string.Format("Done: {0} stage(s) completed{1}.", result.Completed,
                     result.Failed > 0 ? ", " + result.Failed + " failed" : string.Empty));
 
-                var lines = new List<string> { DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + FieldCodes.Annotation.ProcessPresets.Title(plan.Preset) };
+                var lines = new List<string> { DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + plan.Title };
                 lines.AddRange(plan.Adjustments);
                 foreach (var o in result.Outcomes)
                     lines.Add(string.Format("  {0}  {1}{2}", o.Succeeded ? "OK    " : "FAILED",

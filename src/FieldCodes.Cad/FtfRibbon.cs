@@ -597,6 +597,19 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>Update annotation styles: a label with a curved arrow going round it.</summary>
+        public static ImageSource Restyle(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawEllipse(Gray, null, P(6, 25), 2.6, 2.6);
+                LabelBox(dc, 10, 13);
+                dc.DrawLine(BluePen(Regular), P(4, 9), P(12, 4));
+                dc.DrawLine(BluePen(Regular), P(12, 4), P(22, 4));
+                Path(dc, Blue, null, true, P(22, 1), P(27, 4), P(22, 7));
+            });
+        }
+
         /// <summary>A dripline canopy: circle with the trunk dot.</summary>
         public static ImageSource Drip(int px)
         {

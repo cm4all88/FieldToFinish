@@ -189,7 +189,9 @@ namespace FieldCodes.Commands
                     Large("Label\nEverything", "FTFLABELALL", "LabelAll",
                         "Labels every recognised line and every point, then fixes the draw order. Labels you placed or moved by hand are kept."),
                     Tool("Point Labels", "FTFLABELS", "Labels",
-                        "Places point labels, masks and leaders around existing work. A label moved by hand stays where you put it.")),
+                        "Places point labels, masks and leaders around existing work. A label moved by hand stays where you put it."),
+                    Tool("Update Styles", "FTFRESTYLE", "Restyle",
+                        "Brings FTF's existing labels, tags and line labels up to the current text and leader styles, in place. Previews first; never moves a label or touches anything FTF did not draw.")),
 
                 Panel("Trees",
                     Large("Driplines", "FTFDRIP", "Drip",

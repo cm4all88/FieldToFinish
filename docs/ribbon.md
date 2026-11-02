@@ -28,6 +28,7 @@ command it types, so any button can also be typed.
 | | Legend | `FTFLEGEND` |
 | Labels | Label Everything (large) | `FTFLABELALL` |
 | | Point Labels | `FTFLABELS` |
+| | Update Styles | `FTFRESTYLE` |
 | Trees | Driplines (large) | `FTFDRIP` |
 | | Tree Tags | `FTFTAGS` |
 | | Tree Schedule | `FTFTABLE` |
