@@ -28,12 +28,20 @@ namespace FieldCodes.Cad
 
         private static FieldCodes.Settings.SettingsResolution _settings;
         private static string _settingsKey;
+        private static string _settingsStamp;
 
         /// <summary>
-        /// Behaviour settings for this drawing, resolved from the drawing's folder, then
-        /// the user's profile, then the plugin folder. Falls back to values carried over
-        /// from the rules file so an install that predates the settings file keeps
-        /// behaving the way it did.
+        /// Behaviour settings for this drawing: one configuration, layered value by value --
+        /// built-in values, the office standard (ftf-settings.json in the plugin folder),
+        /// the user's own defaults (%APPDATA%), the drawing's selected profile, and the
+        /// project file beside the drawing, each level overriding only the values it sets
+        /// (FieldCodes.Settings.SettingsLayers). With no file anywhere, values carried over
+        /// from the rules file keep an install that predates the settings file behaving the
+        /// way it did.
+        ///
+        /// Cached per drawing folder, plugin folder and profile, and re-read when any level
+        /// file changes on disk -- an office standard saved from another computer, or a
+        /// project file edited in another window, reaches the next command.
         /// </summary>
         public static FieldCodes.Settings.SettingsResolution ResolveSettings(
             Database db, RulesConfig rules)
@@ -42,13 +50,17 @@ namespace FieldCodes.Cad
             var pluginDir = AssemblyDirectory();
             var profile = DrawingStore.ReadProfileName(db);
             var key = (drawingDir ?? "-") + "|" + (pluginDir ?? "-") + "|" + (profile ?? "-");
+            var stamp = FieldCodes.Settings.SettingsLayers.FileStamp(drawingDir, pluginDir, profile);
 
-            if (_settings != null && _settingsKey == key) return _settings;
+            if (_settings != null && _settingsKey == key)
+            {
+                if (_settingsStamp == stamp) return _settings;
+                SettingsVersion++;      // a level file changed on disk since it was read
+            }
 
-            // The drawing's selected drafting profile, when it has one, drives every
-            // FTF tool; a settings file beside the drawing still overrides it.
             _settings = FieldCodes.Settings.FtfSettings.Resolve(drawingDir, pluginDir, rules, profile);
             _settingsKey = key;
+            _settingsStamp = stamp;
             return _settings;
         }
 
@@ -68,6 +80,7 @@ namespace FieldCodes.Cad
         {
             _settings = null;
             _settingsKey = null;
+            _settingsStamp = null;
             SettingsVersion++;
         }
 
