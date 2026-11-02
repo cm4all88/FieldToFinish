@@ -1008,6 +1008,7 @@ namespace FieldCodes.Cad.Ui
                 UpdateRunSummary(result);
                 _status = FtfStatusService.Gather();
                 ShowStatus();
+                RecordSessionRun(result);
             });
         }
 
@@ -2071,8 +2072,8 @@ namespace FieldCodes.Cad.Ui
             var stack = PageStack(page);
 
             PageHeader(stack, "Commands");
-            Caption(stack, "Everything FTF adds to Civil 3D -- all of it also on the FTF " +
-                           "ribbon tab. Every command deletes only its own previous " +
+            Caption(stack, "Everything FTF adds to Civil 3D -- on the FieldToFinish, Survey " +
+                           "Drafting, Boundary and Easements ribbon tabs. Every command deletes only its own previous " +
                            "output before redrawing; Civil 3D's points, symbols and " +
                            "linework are never touched.");
 
@@ -2125,6 +2126,10 @@ namespace FieldCodes.Cad.Ui
                 "review. P previews; nothing but marker rotation is changed.");
             CommandRow(stack, "FTFORIENTRESET",
                 "Put every symbol FTFORIENT turned back as it was, and remove its QC arrows.");
+            CommandRow(stack, "FTFDIPPDF",
+                "Save the completed utility dips as printable field notes (PDF): measured depths in " +
+                "black, calculated inverts in red, a plan sketch per structure, warnings included. " +
+                "Saved under Survey\\Field Notes\\Utility Dips; an issued file is never overwritten.");
             CommandRow(stack, "FTFRUN",
                 "The whole pipeline in one go -- the same thing as Process Drawing.");
 

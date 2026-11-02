@@ -203,7 +203,9 @@ namespace FieldCodes.Commands
                     Large("Dip\nBuilder", "FTFDIP", "Dips",
                         "Builds storm and sewer structures from field dips: pipes, connections, labels and QC, in one window."),
                     Step("Check Dips", "FTFDIPCHECK", "DipCheck",
-                        "Finds structures whose surveyed point moved since their pipes and labels were drafted, and offers to rebuild each one.")),
+                        "Finds structures whose surveyed point moved since their pipes and labels were drafted, and offers to rebuild each one."),
+                    Tool("Field Notes PDF", "FTFDIPPDF", "DipNotesPdf",
+                        "Saves the completed dips as printable field notes: measured depths in black, invert elevations in red, a sketch per structure. Never overwrites an issued file.")),
 
                 Panel("Settings",
                     Large("Settings", "FTFSETUP", "Settings",

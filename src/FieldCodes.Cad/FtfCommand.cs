@@ -124,6 +124,10 @@ namespace FieldCodes.Cad
                     return AskToContinue(ed, step.Name);
                 });
 
+            // The drawing remembers its last processing run (Overview > Last processed).
+            try { FtfStatusService.RecordRun(result, FtfStatusService.Gather(), "FTFRUN " + choice, null); }
+            catch (System.Exception ex) { ed.WriteMessage("\n(Could not record the run in the drawing: {0})", ex.Message); }
+
             ed.WriteMessage("\n\n=== Finished: {0} of {1} step(s) ===\n",
                             result.Completed, total);
 

@@ -33,6 +33,7 @@ command it types, so any button can also be typed.
 | | Tree Schedule | `FTFTABLE` |
 | Utility Features | Dip Builder (large) | `FTFDIP` |
 | | Check Dips | `FTFDIPCHECK` |
+| | Field Notes PDF | `FTFDIPPDF` |
 | Settings | Settings (large) | `FTFSETUP` |
 | | Profile | `FTFPROFILE` |
 | | Version | `FTFVERSION` |

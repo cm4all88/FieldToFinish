@@ -331,7 +331,7 @@ if (-not $testInstall -and -not $WaitForCivil3D -and -not (Test-Path 'C:\Program
 
 if (-not $WaitForCivil3D) {
     Say ''
-    Say 'Start Civil 3D. Two ribbon tabs will be there: FTF and FTF Boundary.'
+    Say 'Start Civil 3D. Four ribbon tabs will be there: FieldToFinish, Survey Drafting, Boundary and Easements.'
     Say 'Nothing to load, nothing to type.'
     Say ''
 }

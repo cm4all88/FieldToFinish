@@ -107,7 +107,7 @@ powershell -ExecutionPolicy Bypass -File deploy\build-install-test.ps1 -SkipSmok
 
 The install step copies the bundle to
 `%APPDATA%\Autodesk\ApplicationPlugins\FieldToFinish.bundle` (per user, no admin
-rights). Civil 3D loads it on startup: the FTF ribbon gets a **Compare** panel and these
+rights). Civil 3D loads it on startup: the Boundary ribbon tab gets a **Record Comparison** panel and these
 commands exist on the command line:
 
 | Command | Does |

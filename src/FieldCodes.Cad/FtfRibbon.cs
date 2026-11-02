@@ -578,6 +578,18 @@ namespace FieldCodes.Cad
         /// <summary>Check Dips: the manhole, checked.</summary>
         public static ImageSource DipCheck(int px) { return Badged(px, DipsGlyph, TickBadge); }
 
+        /// <summary>Dip field notes PDF: a field-book page with a manhole sketched on it, going out.</summary>
+        public static ImageSource DipNotesPdf(int px) { return Badged(px, DipNotesGlyph, ExportBadge); }
+
+        private static void DipNotesGlyph(DrawingContext dc)
+        {
+            Page(dc);
+            dc.DrawEllipse(null, BluePen(Regular), P(13, 15), 3.5, 3.5);
+            dc.DrawLine(BluePen(Fine), P(16.5, 15), P(22, 15));
+            dc.DrawLine(GrayPen(Fine), P(9.5, 22), P(21, 22));
+            dc.DrawLine(GrayPen(Fine), P(9.5, 25.5), P(17, 25.5));
+        }
+
         private static void DipsGlyph(DrawingContext dc)
         {
             dc.DrawEllipse(null, BluePen(Regular), P(11, 16), 7, 7);
