@@ -119,6 +119,7 @@ namespace FieldCodes.Cad.Ui
         private ComboBox _type;
         private ComboBox _system;
         private Label _status;
+        private Button _cancelPrompt;
         private TextBox _bottom;
         private TextBox _water;
         private Label _calcDips;
@@ -387,7 +388,13 @@ namespace FieldCodes.Cad.Ui
         {
             var bar = new Panel { Dock = DockStyle.Bottom, BackColor = Surface, Padding = new Padding(20, 5, 20, 5) };
             _status = new Label { Dock = DockStyle.Fill, ForeColor = Muted, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft, Text = "Ready." };
+            // Shown while an action of this window waits for a pick or an answer in the drawing.
+            _cancelPrompt = Btn("Cancel prompt", (s, e) => DipSession.CancelActivePrompt());
+            _cancelPrompt.Dock = DockStyle.Right;
+            _cancelPrompt.Margin = new Padding(6, 0, 0, 0);
+            _cancelPrompt.Visible = false;
             bar.Controls.Add(_status);
+            bar.Controls.Add(_cancelPrompt);
             bar.Height = Font.Height + bar.Padding.Vertical + 8;
             return bar;
         }
@@ -1340,6 +1347,27 @@ namespace FieldCodes.Cad.Ui
             }
         }
 
+        /// <summary>
+        /// Says when the drawing is waiting: an action from this window stopped at a prompt (pick
+        /// a point, type a reason), or changes made here are queued behind the drawing's current
+        /// command. Nothing typed here is lost meanwhile; it is saved, in order, once the drawing
+        /// is free.
+        /// </summary>
+        public void ShowDrawingState()
+        {
+            if (IsDisposed || _status == null) return;
+            var active = DipSession.Active;
+            var waiting = DipSession.Deferred;
+            _cancelPrompt.Visible = active != null;
+            var queued = waiting == 0 ? string.Empty
+                : " " + waiting.ToString(CultureInfo.InvariantCulture) + (waiting == 1 ? " change" : " changes") +
+                  " made here will be saved when it finishes.";
+            if (active != null)
+                Say("The drawing is waiting for you (" + active + "): answer the prompt at the command line, or press Cancel prompt." + queued, Warn);
+            else if (waiting > 0)
+                Say("The drawing is busy (" + (DipSession.WaitingFor ?? "a command") + ")." + queued, Warn);
+        }
+
         public void RefreshFromSession()
         {
             _settings = null;
@@ -1372,6 +1400,8 @@ namespace FieldCodes.Cad.Ui
             RefreshMapSummary();
             RefreshProposals();
             if (DipSession.LastMessage != null) Say(DipSession.LastMessage, Bad);
+            if (DipSession.Active != null || DipSession.Deferred > 0) ShowDrawingState();
+            else if (_cancelPrompt != null) _cancelPrompt.Visible = false;
             FitAll();
             _map.Invalidate();
             _projectMap.Invalidate();
@@ -2700,7 +2730,7 @@ namespace FieldCodes.Cad.Ui
             var structureId = s.Id;
             var pipeId = p.Id;
 
-            DipSession.Post("manual connection", (db, tr, ed, project, settings, version) =>
+            var posted = DipSession.Post("manual connection", (db, tr, ed, project, settings, version) =>
             {
                 var structure = project.Structure(structureId);
                 var pipe = project.Pipe(structureId, pipeId);
@@ -2722,6 +2752,7 @@ namespace FieldCodes.Cad.Ui
                 ed.WriteMessage("\nManual connection {0} -> {1} recorded as a manual override.", structure.Label, target.Label);
                 return true;
             });
+            if (posted) Say("Pick the structure point this pipe runs to in the drawing (Esc or Cancel prompt to stop).", Muted);
         }
 
         private void OnLeaveUnresolved(object sender, EventArgs e)

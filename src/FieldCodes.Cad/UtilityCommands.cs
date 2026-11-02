@@ -38,6 +38,24 @@ namespace FieldCodes.Cad
         private static readonly Queue<KeyValuePair<string, DipWork>> Pending = new Queue<KeyValuePair<string, DipWork>>();
         public static string LastMessage;
 
+        // Clicks made while a command is running -- a pick this window asked for and is still
+        // waiting on, or the drafter's own command -- wait here and run as soon as the drawing is
+        // free. They used to be refused, and the window kept showing a value (a diameter, a pipe
+        // marked outside the survey) that was never saved.
+        private static int _deferred;
+        private static Document _deferredDoc;
+        private static bool _idleHooked;
+
+        /// <summary>The window action running in the drawing now ("select structure", "manual
+        /// connection"...), so the window can say the drawing is waiting for a pick; null when none.</summary>
+        public static string Active;
+
+        /// <summary>Changes made in the window that wait for the drawing's current command.</summary>
+        public static int Deferred { get { return _deferred; } }
+
+        /// <summary>The command the deferred changes wait for.</summary>
+        public static string WaitingFor;
+
         public static UtilityProject ProjectFor(Database db, Transaction tr)
         {
             if (Project == null || ProjectDatabase != db.UnmanagedObject)
@@ -66,15 +84,55 @@ namespace FieldCodes.Cad
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return false;
+            Pending.Enqueue(new KeyValuePair<string, DipWork>(name, work));
             if (!fromOwnCommand && !string.IsNullOrEmpty(doc.CommandInProgress))
             {
-                LastMessage = "Finish or cancel the command in progress (" + doc.CommandInProgress + ") first.";
-                if (Form != null && !Form.IsDisposed) Form.BeginInvoke(new Action(Form.RefreshFromSession));
-                return false;
+                // Typing FTFDIPACT now would land in that command's prompt. Keep the change and
+                // run it, in order, once the drawing is free (OnIdle).
+                _deferred++;
+                _deferredDoc = doc;
+                WaitingFor = doc.CommandInProgress;
+                LastMessage = null;
+                if (!_idleHooked)
+                {
+                    AcadApp.Idle += OnIdle;
+                    _idleHooked = true;
+                }
+                if (Form != null && !Form.IsDisposed) Form.BeginInvoke(new Action(Form.ShowDrawingState));
+                return true;
             }
-            Pending.Enqueue(new KeyValuePair<string, DipWork>(name, work));
             doc.SendStringToExecute("FTFDIPACT ", true, false, true);
             return true;
+        }
+
+        /// <summary>Runs the deferred changes once their drawing has no command in progress:
+        /// one FTFDIPACT each, in the order they were made.</summary>
+        private static void OnIdle(object sender, EventArgs e)
+        {
+            if (_deferred == 0)
+            {
+                AcadApp.Idle -= OnIdle;
+                _idleHooked = false;
+                return;
+            }
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            // Made in another drawing: they wait until that drawing is active again.
+            if (doc == null || doc != _deferredDoc || !string.IsNullOrEmpty(doc.CommandInProgress)) return;
+            var count = _deferred;
+            _deferred = 0;
+            WaitingFor = null;
+            AcadApp.Idle -= OnIdle;
+            _idleHooked = false;
+            for (var i = 0; i < count; i++) doc.SendStringToExecute("FTFDIPACT ", true, false, true);
+        }
+
+        /// <summary>Cancels the prompt an action of this window left waiting in the drawing (the
+        /// window's Cancel prompt button): the same as Esc at the command line.</summary>
+        public static void CancelActivePrompt()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null || Active == null) return;
+            doc.SendStringToExecute("\x03\x03", true, false, false);
         }
 
         public static void RunPending()
@@ -85,14 +143,22 @@ namespace FieldCodes.Cad
             var work = next.Value;
 
             LastMessage = null;
-            FtfSession.Run("FTFDIP " + name, (db, tr, ed) =>
+            // Shown by the window only if this action stops to ask something in the drawing: the
+            // window updates when AutoCAD pumps messages during the prompt.
+            Active = name;
+            if (Form != null && !Form.IsDisposed) Form.BeginInvoke(new Action(Form.ShowDrawingState));
+            try
             {
-                var rules = FtfSession.Rules(db);
-                var settings = FtfSession.SettingsFor(db, rules);
-                var project = ProjectFor(db, tr);
-                if (work(db, tr, ed, project, settings, rules.Version))
-                    DrawingStore.SaveDips(db, tr, project);
-            });
+                FtfSession.Run("FTFDIP " + name, (db, tr, ed) =>
+                {
+                    var rules = FtfSession.Rules(db);
+                    var settings = FtfSession.SettingsFor(db, rules);
+                    var project = ProjectFor(db, tr);
+                    if (work(db, tr, ed, project, settings, rules.Version))
+                        DrawingStore.SaveDips(db, tr, project);
+                });
+            }
+            finally { Active = null; }
             if (FtfSession.LastRunError != null)
             {
                 LastMessage = "Failed: " + FtfSession.LastRunError;
