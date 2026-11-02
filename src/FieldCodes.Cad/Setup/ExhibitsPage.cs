@@ -7,6 +7,7 @@ using FieldCodes.Settings;
 namespace FieldCodes.Cad.Setup
 {
     /// <summary>How FTFEXHIBIT lays out an easement exhibit, saved with the drafting profile.</summary>
+    [SettingsPage(Group = "Boundary and Easements", Label = "Easement Exhibits", Order = 60, Sections = "exhibits", Commands = "FTFEXHIBIT,FTFEXHIBITREBUILD,FTFEASEMENTGROUP,FTFEXHIBITQA,FTFEXHIBITPREVIEW,FTFEXHIBITSTAMP,FTFEXHIBITINSPECT")]
     internal sealed class ExhibitsPage : SetupPage
     {
         private readonly Dictionary<string, TextBox> _numbers = new Dictionary<string, TextBox>();

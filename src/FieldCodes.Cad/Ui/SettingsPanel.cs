@@ -143,41 +143,29 @@ namespace FieldCodes.Cad.Ui
             _context.Reload = ReloadAll;
 
             // Grouped by workflow: field-to-finish processing, survey drafting, boundary and
-            // easement production, then administration. Group captions are visual only. Labels
-            // are the navigation keys other pages use (SelectSection), so a rename keeps an alias.
-            AddGroup("FIELDTOFINISH");
-            AddSection("General", new GeneralPage());
-            AddSection("Layers", new LayersPage());
-            AddSection("Point Features", new PointFeaturesPage());
-            AddSection("Symbols and Rotations", new SymbolsPage());
-            AddSection("Trees", new TreesPage());
-            AddSection("Point Labels", new LabelsPage());
-            AddSection("Line Labels", new LineLabelsPage());
-            AddSection("Label All", new LabelAllPage());
-            AddSection("Tags", new TagsPage());
-            AddSection("Schedule", new TablesPage());
-            AddSection("Driplines", new DriplinesPage());
-            AddSection("Drawing Order", new DrawOrderPage());
+            // easement production, administration, then any group a newer page names. Group
+            // captions are visual only. Labels are the navigation keys other pages use
+            // (SelectSection), so a rename keeps an alias. Nothing is listed here: every page
+            // registers itself with [SettingsPage(...)] (docs/settings-registry.md), and a page
+            // for a new command appears in its group without this window changing.
+            foreach (var entry in SettingsPages.Navigation())
+            {
+                if (entry.IsGroup) { AddGroup(entry.Caption); continue; }
 
-            AddGroup("SURVEY DRAFTING");
-            AddSection("Spot Elevations", new SpotsPage());
-            AddSection("Contours", new ContoursPage());
-            AddSection("Drafting Lines", new DraftingLinesPage());
-            AddSection("Sheets", new SheetsPage());
-            AddSection("Utility Dips", new DipsPage());
-
-            AddGroup("BOUNDARY AND EASEMENTS");
-            AddSection("Right of Way", new RightOfWayPage());
-            AddSection("Platted Blocks", new LotsPage());
-            AddSection("Recorded Surveys", new RecordSurveyPage());
-            AddSection("Survey Comparison", new ComparePage());
-            AddSection("Strip Easements", new EasementsPage());
-            AddSection("Easement Exhibits", new ExhibitsPage());
-
-            AddGroup("ADMINISTRATION");
-            AddSection("Profiles", new ProfilesPage());
-            AddSection("Diagnostics", new DiagnosticsPage());
-            AddSection("Advanced Settings", new CleanupPage());
+                SetupPage page;
+                try { page = SettingsPages.Create(entry.Page); }
+                catch (Exception ex)
+                {
+                    // One page that cannot be made must not take the whole window with it.
+                    _log("Settings: the " + entry.Page.Label + " page could not be created: " +
+                         (ex.InnerException ?? ex).Message);
+                    continue;
+                }
+                AddSection(entry.Page.Label, page);
+                foreach (var alias in entry.Page.Aliases)
+                    if (!Renamed.ContainsKey(alias)) Renamed[alias] = entry.Page.Label;
+            }
+            foreach (var problem in SettingsPages.Problems) _log("Settings registry: " + problem);
 
             BuildLayout();
             ShowSection(1);

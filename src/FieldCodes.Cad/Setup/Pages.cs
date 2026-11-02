@@ -10,6 +10,7 @@ namespace FieldCodes.Cad.Setup
 {
     // ------------------------------------------------------------------- general
 
+    [SettingsPage(Group = "FieldToFinish", Label = "General", Order = 10, Sections = "general", Commands = "*")]
     internal sealed class GeneralPage : SetupPage
     {
         private TextBox _unitsPerFoot;
@@ -149,6 +150,7 @@ namespace FieldCodes.Cad.Setup
 
     // --------------------------------------------------------------------- trees
 
+    [SettingsPage(Group = "FieldToFinish", Label = "Trees", Order = 50, Sections = "trees,annotation", Commands = "FTFPOINTS,FTFLABELS,FTFTAGS,FTFTABLE,FTFLABELALL")]
     internal sealed class TreesPage : SetupPage
     {
         private TextBox _decimals;
@@ -247,6 +249,7 @@ namespace FieldCodes.Cad.Setup
 
     // -------------------------------------------------------------------- labels
 
+    [SettingsPage(Group = "FieldToFinish", Label = "Point Labels", Order = 60, Sections = "labels", Commands = "FTFLABELS,FTFTAGS,FTFLABELALL")]
     internal sealed class LabelsPage : SetupPage
     {
         private ComboBox _textStyle;
@@ -418,6 +421,7 @@ namespace FieldCodes.Cad.Setup
 
     // -------------------------------------------------------------- line labels
 
+    [SettingsPage(Group = "FieldToFinish", Label = "Line Labels", Order = 70, Sections = "lineLabels", Commands = "FTFLINELABELS,FTFLABELLINE,FTFLABELBETWEEN,FTFLABELDRIVEWAY,FTFLABELSTAIRS,FTFBENCH,FTFLABELALL,FTFLEGEND")]
     internal sealed class LineLabelsPage : SetupPage
     {
         private CheckBox _enabled;
@@ -709,6 +713,7 @@ namespace FieldCodes.Cad.Setup
 
     // ------------------------------------------------------------ tags and table
 
+    [SettingsPage(Group = "FieldToFinish", Label = "Tags", Order = 90, Sections = "tags", Commands = "FTFTAGS,FTFLABELALL")]
     internal sealed class TagsPage : SetupPage
     {
         private ComboBox _tagLayer;
@@ -801,6 +806,7 @@ namespace FieldCodes.Cad.Setup
 
     // ------------------------------------------------------------------- tables
 
+    [SettingsPage(Group = "FieldToFinish", Label = "Schedule", Order = 100, Sections = "tags,annotation", Commands = "FTFTABLE,FTFCONTROL")]
     internal sealed class TablesPage : SetupPage
     {
         private CheckBox _scheduleTrees;
@@ -923,6 +929,7 @@ namespace FieldCodes.Cad.Setup
 
     // ---------------------------------------------------------------- draw order
 
+    [SettingsPage(Group = "FieldToFinish", Label = "Drawing Order", Order = 120, Sections = "drawOrder", Commands = "FTFORDER,FTFLABELS")]
     internal sealed class DrawOrderPage : SetupPage
     {
         private ListBox _protected;
@@ -1026,6 +1033,7 @@ namespace FieldCodes.Cad.Setup
 
     // ------------------------------------------------------- cleanup and re-run
 
+    [SettingsPage(Group = "Administration", Label = "Advanced Settings", Order = 30, Sections = "cleanup", Commands = "FTFCLEAN,FTFRUN,FTFLABELS,FTFLABELALL")]
     internal sealed class CleanupPage : SetupPage
     {
         private TextBox _movedTolerance;
@@ -1077,6 +1085,7 @@ namespace FieldCodes.Cad.Setup
 
     // ---------------------------------------------------------------- spot shots
 
+    [SettingsPage(Group = "Survey Drafting", Label = "Spot Elevations", Order = 10, Sections = "spots", Commands = "FTFSPOT")]
     internal sealed class SpotsPage : SetupPage
     {
         private TextBox _height;
@@ -1152,6 +1161,7 @@ namespace FieldCodes.Cad.Setup
 
     // ------------------------------------------------------------------ contours
 
+    [SettingsPage(Group = "Survey Drafting", Label = "Contours", Order = 20, Sections = "contours", Commands = "FTFCONTOUR")]
     internal sealed class ContoursPage : SetupPage
     {
         private ComboBox _layer;
@@ -1235,6 +1245,7 @@ namespace FieldCodes.Cad.Setup
 
     // -------------------------------------------------------------------- sheets
 
+    [SettingsPage(Group = "Survey Drafting", Label = "Sheets", Order = 40, Sections = "sheets", Commands = "FTFSHEETPLAN,FTFSHEETMAKE,FTFSHEETS,FTFKEYMAP,FTFMATCHLINE")]
     internal sealed class SheetsPage : SetupPage
     {
         private TextBox _paperW;
@@ -1375,6 +1386,7 @@ namespace FieldCodes.Cad.Setup
 
     // --------------------------------------------------------------- field codes
 
+    [SettingsPage(Label = "Field Codes", Unlisted = "Superseded by Point Features and the Standards page; kept read-only, not shown")]
     internal sealed class FieldCodesPage : SetupPage
     {
         private TextBox _testInput;

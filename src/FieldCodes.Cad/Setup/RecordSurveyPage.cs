@@ -15,6 +15,7 @@ namespace FieldCodes.Cad.Setup
     /// name that is not in the drawing is still allowed (a template may be loaded later) and
     /// is reported as missing at run time.
     /// </summary>
+    [SettingsPage(Group = "Boundary and Easements", Label = "Recorded Surveys", Order = 30, Sections = "recordSurvey", Commands = "FTFRECORD,FTFRECORDCHECK,FTFRECORDLABEL,FTFRECORDSOURCE,FTFRECORDREBUILD")]
     internal sealed class RecordSurveyPage : SetupPage
     {
         private ComboBox _engine, _buildFrom, _labelMode, _whenMissing, _textStyle;

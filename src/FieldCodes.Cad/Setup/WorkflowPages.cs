@@ -17,6 +17,7 @@ namespace FieldCodes.Cad.Setup
 
     /// <summary>Settings > Driplines: the canopy trimming and linetype (formerly half of
     /// "Trees &amp; Driplines"). The drip layer belongs to each tree rule (Point Features).</summary>
+    [SettingsPage(Group = "FieldToFinish", Label = "Driplines", Order = 110, Sections = "drip", Commands = "FTFDRIP")]
     internal sealed class DriplinesPage : SetupPage
     {
         private CheckBox _unify;
@@ -70,6 +71,7 @@ namespace FieldCodes.Cad.Setup
     /// Process Drawing) annotate, and what is never labelled. How trees are annotated is on
     /// the Trees page; whether a schedule is drawn is on the Schedule page.
     /// </summary>
+    [SettingsPage(Group = "FieldToFinish", Label = "Label All", Order = 80, Sections = "annotation", Commands = "FTFLABELALL,FTFLABELS,FTFTAGS,FTFTABLE,FTFRUN")]
     internal sealed class LabelAllPage : SetupPage
     {
         private CheckedListBox _families;
@@ -171,6 +173,7 @@ namespace FieldCodes.Cad.Setup
     /// draws. READ ONLY here: the standard lives in the rules file's "orientation" section
     /// (office standard), so the page shows what is in force and says where to change it.
     /// </summary>
+    [SettingsPage(Group = "FieldToFinish", Label = "Symbols and Rotations", Order = 40, Commands = "FTFORIENT,FTFORIENTRESET,FTFPOINTS")]
     internal sealed class SymbolsPage : SetupPage
     {
         private ListView _symbols;
@@ -228,6 +231,7 @@ namespace FieldCodes.Cad.Setup
     /// a named project/client profile, the user's, or the office's), and import / export of a
     /// whole configuration. Saving a profile or a project file never touches the office file.
     /// </summary>
+    [SettingsPage(Group = "Administration", Label = "Profiles", Order = 10, Commands = "FTFPROFILE,*")]
     internal sealed class ProfilesPage : SetupPage
     {
         private ListBox _profiles;
@@ -384,6 +388,7 @@ namespace FieldCodes.Cad.Setup
     /// screen. An ignored code is reported as informational, not as needing configuration; a
     /// rule added for it later still wins. Codes are added from Unknown Codes (Mark Ignored).
     /// </summary>
+    [SettingsPage(Group = "Administration", Label = "Diagnostics", Order = 20, Sections = "diagnostics", Commands = "FTFPOINTS,FTF")]
     internal sealed class DiagnosticsPage : SetupPage
     {
         private System.Windows.Forms.ListBox _codes;

@@ -258,6 +258,8 @@ namespace FieldCodes.Cad
                 var size = l.ArrowSizePlotted * Scale;
                 Try(() =>
                 {
+                    // An annotative multileader style already sizes its arrow per scale.
+                    if (leader.Annotative == AnnotativeStates.True) return;
                     var overall = leader.Scale;
                     leader.ArrowSize = overall > 0 ? size / overall : size;
                 });

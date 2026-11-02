@@ -11,6 +11,7 @@ namespace FieldCodes.Cad.Setup
 {
     // ------------------------------------------------------------ storm & sewer dips
 
+    [SettingsPage(Group = "Survey Drafting", Label = "Utility Dips", Order = 50, Sections = "dips", Commands = "FTFDIP,FTFDIPCHECK,FTFDIPPDF")]
     internal sealed class DipsPage : SetupPage
     {
         private TextBox _codes;
@@ -464,6 +465,7 @@ namespace FieldCodes.Cad.Setup
 
     // --------------------------------------------------------------- strip easements
 
+    [SettingsPage(Group = "Boundary and Easements", Label = "Strip Easements", Order = 50, Sections = "easements", Commands = "STRIPEASEMENT,PORTIONEASEMENT,CONSTRUCTIONAREA,FTFEASEMENTEXCLUDE,FTFEASEMENTCOMPONENT,FTFEASEMENTLEGAL,FTFEASEMENTEXPORT,FTFEASEMENTINSPECT,FTFEASEMENTCHECK")]
     internal sealed class EasementsPage : SetupPage
     {
         private ComboBox _boundaryLayer, _sidelineLayer, _centerlineLayer, _hatchLayer, _dimLayer, _textLayer, _tableLayer, _tempLayer;

@@ -21,6 +21,23 @@ namespace FieldCodes.Cad.Ui
         [JsonProperty("customStages")] public List<string> CustomStages { get; set; }
         [JsonProperty("customFamilies")] public List<string> CustomFamilies { get; set; }
 
+        /// <summary>Commands this person put on the ribbon's My Commands panel (Settings > Commands).</summary>
+        [JsonProperty("quickCommands")] public List<string> QuickCommands { get; set; }
+
+        /// <summary>True on the instance that set <see cref="QuickCommands"/>. Any other instance
+        /// (the FTF window keeps one open for hours) writes back what is on disk instead of the
+        /// list it read at the start, so saving its window position cannot undo a tick.</summary>
+        private bool _ownsQuickCommands;
+
+        /// <summary>Saves the My Commands list, leaving everything else in the file as it is.</summary>
+        public static void SaveQuickCommands(IEnumerable<string> commands)
+        {
+            var state = Load();
+            state.QuickCommands = new List<string>(commands ?? new string[0]);
+            state._ownsQuickCommands = true;
+            state.Save();
+        }
+
         private static string PathName()
         {
             var dir = Path.GetDirectoryName(FieldCodes.Settings.FtfSettings.UserProfilePath());
@@ -43,6 +60,7 @@ namespace FieldCodes.Cad.Ui
 
         public void Save()
         {
+            if (!_ownsQuickCommands) QuickCommands = Load().QuickCommands;
             try
             {
                 var path = PathName();

@@ -49,8 +49,14 @@ public sealed class LabelEverythingFixTests
     [Fact]
     public void PointLabelAndTagLeadersAreSizedAtPlotScale()
     {
-        Assert.Contains("CadUtil.SizeArrow(leadered, lp, scale);", Read("src", "FieldCodes.Cad", "LabelCommands.cs"));
-        Assert.Contains("CadUtil.SizeArrow(leadered, settings.Labels, scale);", Read("src", "FieldCodes.Cad", "TagCommands.cs"));
+        // Labels and tags draw their leaders through the annotation styler, which sizes the
+        // arrow at plot scale (Point Labels' arrow size unless a leader style sets one).
+        Assert.Contains("styler.NewLeadered(parsed.LabelText, style, layerId,", Read("src", "FieldCodes.Cad", "LabelCommands.cs"));
+        Assert.Contains("styler.NewLeadered(assignment.Text, style, layerId, target, anchor,", Read("src", "FieldCodes.Cad", "TagCommands.cs"));
+        var styler = Read("src", "FieldCodes.Cad", "AnnotationStyler.cs");
+        Assert.Contains("var size = l.ArrowSizePlotted * Scale;", styler);
+        Assert.Contains("leader.ArrowSize = overall > 0 ? size / overall : size;", styler);
+        Assert.Contains("leader.SizeArrow = lp.SizeLeaderArrows;", Read("src", "FieldCodes", "Styles", "StyleResolver.cs"));
 
         var util = Read("src", "FieldCodes.Cad", "CadUtil.cs");
         Assert.Contains("var size = labels.LeaderArrowSizePlotted * drawingUnitsPerPlotted;", util);

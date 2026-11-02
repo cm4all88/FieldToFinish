@@ -82,6 +82,7 @@ namespace FieldCodes.Settings
         [JsonProperty("annotation")] public AnnotationSettings Annotation { get; set; }
         [JsonProperty("diagnostics")] public DiagnosticsSettings Diagnostics { get; set; }
         [JsonProperty("styles")] public FieldCodes.Styles.StyleSettings Styles { get; set; }
+        [JsonProperty("workflows")] public WorkflowSettings Workflows { get; set; }
 
         public FtfSettings()
         {
@@ -108,6 +109,7 @@ namespace FieldCodes.Settings
             Annotation = new AnnotationSettings();
             Diagnostics = new DiagnosticsSettings();
             Styles = new FieldCodes.Styles.StyleSettings();
+            Workflows = new WorkflowSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -119,7 +121,8 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation, Styles
+                    Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation,
+                    Styles, Workflows
                 };
             }
         }
@@ -359,6 +362,7 @@ namespace FieldCodes.Settings
             if (Diagnostics == null) Diagnostics = new DiagnosticsSettings();
             if (Styles == null) Styles = new FieldCodes.Styles.StyleSettings();
             Styles.FillMissing();
+            if (Workflows == null) Workflows = new WorkflowSettings();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();
             if (DrawOrder.MaskableLayers == null) DrawOrder.MaskableLayers = new List<string>();

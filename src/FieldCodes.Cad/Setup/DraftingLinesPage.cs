@@ -24,6 +24,7 @@ namespace FieldCodes.Cad.Setup
     ///
     /// UNTESTED: never shown in AutoCAD.
     /// </summary>
+    [SettingsPage(Group = "Survey Drafting", Label = "Drafting Lines", Order = 30, Sections = "drafting", Commands = "FTFDRAWLINE,FTFDRAFTCLEAN,FTFROW,FTFLOTS,FTFROWDIM,FTFBENCH")]
     internal sealed class DraftingLinesPage : SetupPage
     {
         private ComboBox _typePicker;

@@ -9,6 +9,7 @@ namespace FieldCodes.Cad.Setup
 {
     /// <summary>Settings for FTFCOMPARE on this machine. Mappings and tolerances live in
     /// the comparison profile (JSON, one per consultant), reachable from here.</summary>
+    [SettingsPage(Group = "Boundary and Easements", Label = "Survey Comparison", Order = 40, Sections = "compare", Commands = "FTFCOMPARE,FTFCOMPARERUN,FTFCOMPAREAPPLY,FTFCOMPAREQC,FTFCOMPARESAVE,FTFCOMPAREBATCH,FTFTRIM")]
     internal sealed class ComparePage : SetupPage
     {
         private ComboBox _profile;

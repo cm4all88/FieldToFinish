@@ -420,6 +420,7 @@ namespace FieldCodes.Cad.Setup
     }
 
     /// <summary>Settings > Text Styles: named text looks for labels, tags and line labels.</summary>
+    [SettingsPage(Group = "FieldToFinish", Label = "Text Styles", Order = 63, Sections = "styles", Commands = "FTFLABELS,FTFTAGS,FTFLINELABELS,FTFLABELALL,FTFRESTYLE")]
     internal sealed class TextStylesPage : NamedStylePage
     {
         private ComboBox _textStyle, _rotation, _justification, _colour, _mask, _maskLayer, _upper, _annotative;
@@ -572,6 +573,7 @@ namespace FieldCodes.Cad.Setup
     }
 
     /// <summary>Settings > Leader Styles: named multileader looks for labels and tags.</summary>
+    [SettingsPage(Group = "FieldToFinish", Label = "Leader Styles", Order = 65, Sections = "styles", Commands = "FTFLABELS,FTFTAGS,FTFLINELABELS,FTFLABELALL,FTFRESTYLE")]
     internal sealed class LeaderStylesPage : NamedStylePage
     {
         private ComboBox _mleader, _arrow, _lineType, _colour, _linetype, _lineweight, _landing, _attachment, _annotative;
@@ -709,6 +711,7 @@ namespace FieldCodes.Cad.Setup
     /// code -- and a tester that shows, for a description typed as the crew would, every
     /// value the label will get and where each one comes from.
     /// </summary>
+    [SettingsPage(Group = "FieldToFinish", Label = "Style Assignments", Order = 67, Sections = "styles", Commands = "FTFLABELS,FTFTAGS,FTFLINELABELS,FTFLABELALL,FTFRESTYLE")]
     internal sealed class StyleAssignmentsPage : SetupPage
     {
         private StyleWorkspace _workspace;
