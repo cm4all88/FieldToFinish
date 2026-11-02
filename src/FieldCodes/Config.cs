@@ -114,6 +114,12 @@ namespace FieldCodes
         [JsonProperty("orientation")]
         public FieldCodes.Orient.OrientationStandard Orientation { get; set; }
 
+        /// <summary>The project's layer mappings in force (set from the settings by
+        /// FtfSettings.ApplyTo, never read from rules.json), so classification knows a mapped
+        /// label layer is still a label layer.</summary>
+        [JsonIgnore]
+        public List<FieldCodes.Settings.LayerMapping> ActiveLayerMappings { get; set; }
+
         public RulesConfig()
         {
             UnitsPerFoot = 1.0;

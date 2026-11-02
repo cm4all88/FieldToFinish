@@ -19,7 +19,6 @@ namespace FieldCodes.Cad.Setup
         private CheckBox _writeWhenEmpty;
         private CheckBox _confirmDelete;
         private Label _scaleNote;
-        private TextBox _layerMappings;
 
         public override string Title { get { return "General"; } }
         public override string AffectedCommands { get { return "All commands"; } }
@@ -55,17 +54,12 @@ namespace FieldCodes.Cad.Setup
             _confirmDelete = CheckRow("Ask before a re-run erases the previous run's work",
                 "Every command deletes only what it drew before redrawing.");
 
-            Heading("Layer mappings (project / profile)");
-            Note("When a project standard names a layer differently from the FTF default, map it " +
-                 "here, one per line: FTF-LAYER = PROJECT-LAYER. For example " +
-                 "V-UTIL-STRM-E = C-STRM-PIPE. Production tools use the mapped layer, and never " +
-                 "create a duplicate of a layer already in the drawing. Save to a drafting profile " +
-                 "to keep a client's mappings together.");
-            _layerMappings = AddFullWidth(new TextBox
-            {
-                Multiline = true, ScrollBars = ScrollBars.Vertical, Width = 540, Height = 110,
-                Font = new Font(FontFamily.GenericMonospace, 9f)
-            });
+            Heading("Layers");
+            Note("Every layer FTF draws on, and the project layer to use instead, is set on the " +
+                 "Layers page: pick from the drawing or type a name, no mapping lines to write.");
+            var layers = new Button { Text = "Open Layers...", AutoSize = true };
+            layers.Click += (s, e) => { if (Context.Navigate != null) Context.Navigate("Layers"); };
+            AddFullWidth(layers);
 
             _reportLocation.SelectedIndexChanged += (s, e) => SyncFolderEnabled();
             _reportFolder.TextChanged += (s, e) => OnFolderTyped();
@@ -123,8 +117,6 @@ namespace FieldCodes.Cad.Setup
             _reportFolder.Text = s.General.ReportFolder ?? string.Empty;
             _writeWhenEmpty.Checked = s.General.WriteReportWhenEmpty;
             _confirmDelete.Checked = s.General.ConfirmBeforeDelete;
-            _layerMappings.Text = string.Join(Environment.NewLine,
-                (s.General.LayerMappings ?? new List<LayerMapping>()).Select(m => m.From + " = " + m.To).ToArray());
             SyncFolderEnabled();
             Refresh();
         }
@@ -142,28 +134,14 @@ namespace FieldCodes.Cad.Setup
             s.General.ReportFolder = (_reportFolder.Text ?? string.Empty).Trim();
             s.General.WriteReportWhenEmpty = _writeWhenEmpty.Checked;
             s.General.ConfirmBeforeDelete = _confirmDelete.Checked;
-
-            var mappings = new List<LayerMapping>();
-            var n = 0;
-            foreach (var raw in (_layerMappings.Text ?? string.Empty).Split('\n'))
-            {
-                n++;
-                var line = raw.Trim();
-                if (line.Length == 0) continue;
-                var eq = line.IndexOf('=');
-                if (eq <= 0 || eq == line.Length - 1)
-                {
-                    problems.Add("General: layer mapping line " + n + " needs FTF-LAYER = PROJECT-LAYER.");
-                    continue;
-                }
-                mappings.Add(new LayerMapping { From = line.Substring(0, eq).Trim(), To = line.Substring(eq + 1).Trim() });
-            }
-            s.General.LayerMappings = mappings;
+            // Layer mappings belong to the Layers page; General leaves them as they are.
         }
 
         public override void RestoreDefaults(FtfSettings s)
         {
+            var mappings = s.General.LayerMappings;
             s.General.RestoreDefaults();
+            s.General.LayerMappings = mappings;      // restored on the Layers page, not here
             LoadFrom(s);
         }
     }
@@ -175,14 +153,25 @@ namespace FieldCodes.Cad.Setup
         private TextBox _decimals;
         private ComboBox _average;
         private Label _worked;
-        private CheckBox _unify;
-        private ComboBox _dripLinetype;
 
-        public override string Title { get { return "Trees & Driplines"; } }
-        public override string AffectedCommands { get { return "FTFPOINTS, FTFDRIP"; } }
+        private RadioButton _tagOnly;
+        private RadioButton _descriptionOnly;
+        private RadioButton _noAnnotation;
+
+        public override string Title { get { return "Trees"; } }
+        public override string AffectedCommands { get { return "FTFPOINTS, FTFLABELS, FTFTAGS, FTFTABLE, FTFLABELALL"; } }
 
         protected override void BuildBody()
         {
+            Heading("Tree annotation (one only)");
+            _descriptionOnly = AddFullWidth(new RadioButton { Text = "Description only -- 18\" FIR beside the tree, no tag", AutoSize = true });
+            _tagOnly = AddFullWidth(new RadioButton { Text = "Tag only -- T12 beside the tree, the description in the schedule", AutoSize = true });
+            _noAnnotation = AddFullWidth(new RadioButton { Text = "No tree label -- the symbol and dripline stand on their own", AutoSize = true });
+            Note("A tree never gets both a tag and a description label. Tag numbers are kept " +
+                 "from run to run. Whether a schedule is drawn is set on the Schedule page.");
+            _descriptionOnly.CheckedChanged += (s, e) => MarkChanged();
+            _tagOnly.CheckedChanged += (s, e) => MarkChanged();
+
             Heading("Trunk size");
             _decimals = TextRow("Decimal places in labels",
                 "Display only. Geometry always uses the unrounded average.");
@@ -196,19 +185,6 @@ namespace FieldCodes.Cad.Setup
             }, "How the diameters of a cluster collapse to one reported size.");
 
             _worked = LiveNote();
-
-            Heading("Driplines");
-            _unify = CheckRow("Trim overlapping canopies to their outer envelope",
-                "Off draws every canopy as a full circle, overlaps and all. A code " +
-                "rule that states its own preference wins over this.");
-
-            var linetypes = new List<object> { "(layer's linetype)" };
-            foreach (var name in Context.Drawing.Linetypes) linetypes.Add(name);
-            _dripLinetype = ComboRow("Drip linetype", linetypes,
-                "The linetype the drip circles and arcs are drawn with -- typically a " +
-                "dashed standard. A linetype the drawing does not have yet is loaded " +
-                "from acad.lin automatically. The drip LAYER belongs to each species " +
-                "rule, so different species can go on different layers.");
 
             Heading("Species");
             Note("Species codes come from the rules file and are listed on the Field Codes " +
@@ -240,8 +216,9 @@ namespace FieldCodes.Cad.Setup
         {
             _decimals.Text = s.Trees.TrunkDecimals.ToString(CultureInfo.InvariantCulture);
             _average.SelectedItem = s.Trees.MultiStemAverage;
-            _unify.Checked = s.Drip.UnifyByDefault;
-            ComboHelp.SelectOrAdd(_dripLinetype, s.Drip.Linetype, true);
+            _tagOnly.Checked = s.Annotation.TreeAnnotation == TreeAnnotation.TagOnly;
+            _noAnnotation.Checked = s.Annotation.TreeAnnotation == TreeAnnotation.None;
+            _descriptionOnly.Checked = s.Annotation.TreeAnnotation == TreeAnnotation.DescriptionOnly;
             Refresh();
         }
 
@@ -255,16 +232,14 @@ namespace FieldCodes.Cad.Setup
             if (_average.SelectedItem is StemAverageMethod)
                 s.Trees.MultiStemAverage = (StemAverageMethod)_average.SelectedItem;
 
-            s.Drip.UnifyByDefault = _unify.Checked;
-            s.Drip.Linetype = _dripLinetype.SelectedIndex <= 0
-                ? string.Empty
-                : Convert.ToString(_dripLinetype.SelectedItem);
+            s.Annotation.TreeAnnotation = _tagOnly.Checked ? TreeAnnotation.TagOnly
+                : _noAnnotation.Checked ? TreeAnnotation.None : TreeAnnotation.DescriptionOnly;
         }
 
         public override void RestoreDefaults(FtfSettings s)
         {
             s.Trees.RestoreDefaults();
-            s.Drip.RestoreDefaults();
+            s.Annotation.TreeAnnotation = new AnnotationSettings().TreeAnnotation;
             LoadFrom(s);
         }
     }
@@ -708,6 +683,7 @@ namespace FieldCodes.Cad.Setup
 
     internal sealed class TablesPage : SetupPage
     {
+        private CheckBox _scheduleTrees;
         private TextBox _tableTitle;
         private ComboBox _tableLayer;
         private TextBox _tableHeight;
@@ -719,8 +695,12 @@ namespace FieldCodes.Cad.Setup
         protected override void BuildBody()
         {
             Heading("Schedule");
+            _scheduleTrees = CheckRow("Draw the tree schedule",
+                "Independent of how trees are annotated: with tags the rows are keyed by tag, with " +
+                "descriptions (or nothing) by point number.");
             Note("The table on the plan that lists every tagged feature -- the tree " +
-                 "schedule. Each row is one tag; the columns below decide what it says.");
+                 "schedule. Each row is one tag (or one tree by point number); the columns " +
+                 "below decide what it says.");
             _tableTitle = TextRow("Title", null, 240);
 
             var tableLayers = new List<object>();
@@ -769,6 +749,7 @@ namespace FieldCodes.Cad.Setup
 
         public override void LoadFrom(FtfSettings s)
         {
+            _scheduleTrees.Checked = s.Annotation.ScheduleTrees;
             _tableTitle.Text = s.Tags.TableTitle ?? string.Empty;
             ComboHelp.SelectOrAdd(_tableLayer, s.Tags.TableLayer, false);
             _tableHeight.Text = Fmt(s.Tags.TableTextHeightPlotted);
@@ -788,6 +769,7 @@ namespace FieldCodes.Cad.Setup
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
         {
+            s.Annotation.ScheduleTrees = _scheduleTrees.Checked;
             s.Tags.TableTitle = (_tableTitle.Text ?? string.Empty).Trim();
             s.Tags.TableLayer = Convert.ToString(_tableLayer.SelectedItem) ?? string.Empty;
 
@@ -814,6 +796,7 @@ namespace FieldCodes.Cad.Setup
             s.Tags.TableLayer = fresh.TableLayer;
             s.Tags.TableTextHeightPlotted = fresh.TableTextHeightPlotted;
             s.Tags.TableColumns = fresh.TableColumns;
+            s.Annotation.ScheduleTrees = new AnnotationSettings().ScheduleTrees;
             LoadFrom(s);
         }
     }

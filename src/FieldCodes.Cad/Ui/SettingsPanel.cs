@@ -45,6 +45,91 @@ namespace FieldCodes.Cad.Ui
         private ComboBox _saveTarget;
         private Button _save;
         private Button _restore;
+        private Button _discard;
+        private Label _dirtyNote;
+        private bool _dirty;
+
+        /// <summary>True while any page has edits not yet saved.</summary>
+        public bool HasUnsavedChanges { get { return _dirty; } }
+
+        private bool _loading;
+
+        /// <summary>Tag for a control that filters the view (search, filter) rather than editing a setting.</summary>
+        public const string ViewOnly = "view-only";
+
+        /// <summary>Any edit in a page's inputs marks the window unsaved -- every page, without
+        /// each one having to remember to say so. Values set while a page loads do not count.</summary>
+        private void WatchForEdits(Control root)
+        {
+            foreach (Control c in root.Controls)
+            {
+                // Search boxes and view filters change what is shown, not a setting.
+                if (Equals(c.Tag, ViewOnly)) continue;
+                var text = c as TextBoxBase;
+                var check = c as CheckBox;
+                var radio = c as RadioButton;
+                var combo = c as ComboBox;
+                var checkedList = c as CheckedListBox;
+                var grid = c as DataGridView;
+                var numeric = c as NumericUpDown;
+                if (text != null && !text.ReadOnly) text.TextChanged += (s, e) => MarkDirty();
+                else if (check != null) check.CheckedChanged += (s, e) => MarkDirty();
+                else if (radio != null) radio.CheckedChanged += (s, e) => MarkDirty();
+                else if (checkedList != null) checkedList.ItemCheck += (s, e) => MarkDirty();
+                else if (combo != null) { combo.SelectedIndexChanged += (s, e) => MarkDirty(); combo.TextChanged += (s, e) => MarkDirty(); }
+                else if (grid != null) grid.CellValueChanged += (s, e) => MarkDirty();
+                else if (numeric != null) numeric.ValueChanged += (s, e) => MarkDirty();
+                WatchForEdits(c);
+            }
+        }
+
+        private void MarkDirty()
+        {
+            if (_loading) return;
+            _dirty = true;
+            if (_dirtyNote != null) _dirtyNote.Text = "Unsaved changes";
+            if (_discard != null) _discard.Enabled = true;
+        }
+
+        private void MarkClean()
+        {
+            _dirty = false;
+            if (_dirtyNote != null) _dirtyNote.Text = string.Empty;
+            if (_discard != null) _discard.Enabled = false;
+        }
+
+        /// <summary>Every page reloads from the settings object (after an import).</summary>
+        private void ReloadAll()
+        {
+            _loading = true;
+            try
+            {
+                foreach (var section in _sections)
+                {
+                    Control built;
+                    if (section.IsGroup || !_built.TryGetValue(section.Label, out built)) continue;
+                    section.Page.LoadFrom(_context.Resolution.Settings);
+                }
+            }
+            finally { _loading = false; }
+        }
+
+        /// <summary>Throws away edits: the settings are read again from where they came from.</summary>
+        private void DiscardChanges()
+        {
+            if (MessageBox.Show(this, "Discard the changes you have not saved?", "Settings",
+                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            var fresh = string.IsNullOrWhiteSpace(_context.Resolution.LoadedFrom) || !File.Exists(_context.Resolution.LoadedFrom)
+                ? new FtfSettings()
+                : FtfSettings.Load(_context.Resolution.LoadedFrom);
+            foreach (var prop in typeof(FtfSettings).GetProperties())
+                if (prop.CanRead && prop.CanWrite &&
+                    prop.GetCustomAttributes(typeof(Newtonsoft.Json.JsonPropertyAttribute), true).Length > 0)
+                    prop.SetValue(_context.Resolution.Settings, prop.GetValue(fresh, null), null);
+            ReloadAll();
+            MarkClean();
+            _log("Unsaved settings changes discarded.");
+        }
 
         public SettingsPanel(SetupContext context, Action<string> log)
         {
@@ -53,40 +138,45 @@ namespace FieldCodes.Cad.Ui
 
             Dock = DockStyle.Fill;
 
-            // The sections follow the workflow, top to bottom: set up the drawing,
-            // decide what the features are, decide how they are annotated, then how
-            // the finished sheet is assembled. Group captions are visual only.
-            AddGroup("DRAWING");
+            _context.Navigate = SelectSection;
+            _context.Changed = MarkDirty;
+            _context.Reload = ReloadAll;
+
+            // Grouped by workflow: field-to-finish processing, survey drafting, boundary and
+            // easement production, then administration. Group captions are visual only. Labels
+            // are the navigation keys other pages use (SelectSection), so a rename keeps an alias.
+            AddGroup("FIELDTOFINISH");
             AddSection("General", new GeneralPage());
-
-            AddGroup("FEATURES");
+            AddSection("Layers", new LayersPage());
             AddSection("Point Features", new PointFeaturesPage());
-            AddSection("Trees & Driplines", new TreesPage());
-
-            AddGroup("ANNOTATION");
+            AddSection("Symbols and Rotations", new SymbolsPage());
+            AddSection("Trees", new TreesPage());
             AddSection("Point Labels", new LabelsPage());
             AddSection("Line Labels", new LineLabelsPage());
-            AddSection("Spot Shots", new SpotsPage());
-            AddSection("Contours", new ContoursPage());
+            AddSection("Label All", new LabelAllPage());
             AddSection("Tags", new TagsPage());
             AddSection("Schedule", new TablesPage());
-
-            AddGroup("FINISHING");
-            AddSection("Drafting Lines", new DraftingLinesPage());
+            AddSection("Driplines", new DriplinesPage());
             AddSection("Drawing Order", new DrawOrderPage());
-            AddSection("Sheets", new SheetsPage());
 
-            AddGroup("PRODUCTION");
-            AddSection("Storm & Sewer Dips", new DipsPage());
-            AddSection("Strip Easements", new EasementsPage());
+            AddGroup("SURVEY DRAFTING");
+            AddSection("Spot Elevations", new SpotsPage());
+            AddSection("Contours", new ContoursPage());
+            AddSection("Drafting Lines", new DraftingLinesPage());
+            AddSection("Sheets", new SheetsPage());
+            AddSection("Utility Dips", new DipsPage());
+
+            AddGroup("BOUNDARY AND EASEMENTS");
             AddSection("Right of Way", new RightOfWayPage());
             AddSection("Platted Blocks", new LotsPage());
-            AddSection("Easement Exhibits", new ExhibitsPage());
             AddSection("Recorded Surveys", new RecordSurveyPage());
             AddSection("Survey Comparison", new ComparePage());
+            AddSection("Strip Easements", new EasementsPage());
+            AddSection("Easement Exhibits", new ExhibitsPage());
 
-            AddGroup("MAINTENANCE");
-            AddSection("Advanced", new CleanupPage());
+            AddGroup("ADMINISTRATION");
+            AddSection("Profiles", new ProfilesPage());
+            AddSection("Advanced Settings", new CleanupPage());
 
             BuildLayout();
             ShowSection(1);
@@ -231,13 +321,50 @@ namespace FieldCodes.Cad.Ui
             _restore.Click += (s, e) => RestoreCurrent();
             footer.Controls.Add(_restore);
 
+            _discard = new Button
+            {
+                Text = "Discard Changes",
+                AutoSize = true,
+                MinimumSize = new Size(110, 28),
+                Margin = new Padding(8, 2, 0, 0),
+                Enabled = false
+            };
+            _discard.Click += (s, e) => DiscardChanges();
+            footer.Controls.Add(_discard);
+
+            _dirtyNote = new Label
+            {
+                Text = string.Empty,
+                AutoSize = true,
+                ForeColor = Color.FromArgb(160, 90, 0),
+                Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+                Margin = new Padding(12, 8, 0, 0)
+            };
+            footer.Controls.Add(_dirtyNote);
+
             return footer;
         }
+
+        /// <summary>Earlier names of sections, so links from other windows keep working.</summary>
+        private static readonly Dictionary<string, string> Renamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Trees & Driplines", "Trees" },
+            { "Spot Shots", "Spot Elevations" },
+            { "Storm & Sewer Dips", "Utility Dips" },
+            { "Advanced", "Advanced Settings" },
+            { "Cleanup & Re-run", "Advanced Settings" },
+            { "Draw Order", "Drawing Order" },
+            { "Labels", "Point Labels" },
+            { "Tags & Table", "Tags" },
+            { "Drip Lines", "Driplines" }
+        };
 
         /// <summary>Navigate to a section by its label -- used by other pages that
         /// send the user here ("Configure Rules..." lands on Point Features).</summary>
         public void SelectSection(string label)
         {
+            string now;
+            if (label != null && Renamed.TryGetValue(label, out now)) label = now;
             for (var i = 0; i < _sections.Count; i++)
             {
                 if (_sections[i].IsGroup) continue;
@@ -275,9 +402,15 @@ namespace FieldCodes.Cad.Ui
             Control control;
             if (!_built.TryGetValue(section.Label, out control))
             {
-                control = section.Page.Build(_context);
-                control.Dock = DockStyle.Fill;
-                section.Page.LoadFrom(_context.Resolution.Settings);
+                _loading = true;
+                try
+                {
+                    control = section.Page.Build(_context);
+                    control.Dock = DockStyle.Fill;
+                    section.Page.LoadFrom(_context.Resolution.Settings);
+                }
+                finally { _loading = false; }
+                WatchForEdits(control);
                 _built[section.Label] = control;
                 _host.Controls.Add(control);
             }
@@ -325,6 +458,7 @@ namespace FieldCodes.Cad.Ui
             {
                 settings.Save(path);
                 FtfSession.InvalidateSettings();
+                MarkClean();
                 _log("Settings saved to " + path);
             }
             catch (ConfigException ex)
@@ -384,7 +518,12 @@ namespace FieldCodes.Cad.Ui
                 "Restore defaults", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
 
             if (answer == DialogResult.OK)
-                section.Page.RestoreDefaults(_context.Resolution.Settings);
+            {
+                _loading = true;
+                try { section.Page.RestoreDefaults(_context.Resolution.Settings); }
+                finally { _loading = false; }
+                MarkDirty();      // restored in the window; Save writes it
+            }
         }
     }
 }

@@ -449,6 +449,7 @@ namespace FieldCodes.Settings
             rules.MultiStemAverage = Trees.MultiStemAverage;
             rules.ProtectedLayers = new List<string>(DrawOrder.ProtectedLayers ?? new List<string>());
             rules.MaskableLayers = new List<string>(DrawOrder.MaskableLayers ?? new List<string>());
+            rules.ActiveLayerMappings = new List<LayerMapping>(General.LayerMappings ?? new List<LayerMapping>());
         }
     }
 }

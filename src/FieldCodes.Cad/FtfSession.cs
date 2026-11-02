@@ -68,7 +68,11 @@ namespace FieldCodes.Cad
         {
             _settings = null;
             _settingsKey = null;
+            SettingsVersion++;
         }
+
+        /// <summary>Goes up each time settings are saved, so caches built from them refresh.</summary>
+        public static int SettingsVersion { get; private set; }
 
         /// <summary>
         /// Rules for the current drawing, reloaded when the file changes on disk so an
@@ -189,7 +193,8 @@ namespace FieldCodes.Cad
             {
                 try
                 {
-                    body(db, tr, ed);
+                    using (ProjectLayers.Use(db))
+                        body(db, tr, ed);
                     tr.Commit();
                 }
                 catch (ConfigException ex)

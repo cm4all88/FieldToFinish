@@ -81,6 +81,16 @@ namespace FieldCodes.Cad
         {
             if (string.IsNullOrEmpty(name)) return db.Clayer;
 
+            // The project's layer, when Settings > Layers maps this one.
+            return EnsureLayerExact(db, tr, ProjectLayers.Apply(db, name), look);
+        }
+
+        /// <summary>This exact layer, created if missing, with no project mapping applied --
+        /// for a layer the user named themselves (Settings > Layers, Create Missing).</summary>
+        public static ObjectId EnsureLayerExact(Database db, Transaction tr, string name, LayerLook look = null)
+        {
+            if (string.IsNullOrEmpty(name)) return db.Clayer;
+
             var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
             if (table.Has(name)) return table[name];
 

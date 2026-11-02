@@ -75,16 +75,20 @@ namespace FieldCodes
                 .OrderByDescending(s => s.Length)
                 .ToArray();
 
-            _protectedPatterns = Compile(cfg.ProtectedLayers);
-            _maskablePatterns = Compile(cfg.MaskableLayers);
+            // A project mapping moves FTF's layer to the project's: the project's layer is then
+            // what is in the drawing, so it is classified as the layer it replaces.
+            var mappings = cfg.ActiveLayerMappings ?? new List<FieldCodes.Settings.LayerMapping>();
 
-            _labelPatterns = Compile(cfg.Codes
+            _protectedPatterns = WithMapped(Compile(cfg.ProtectedLayers), mappings);
+            _maskablePatterns = WithMapped(Compile(cfg.MaskableLayers), mappings);
+
+            _labelPatterns = WithMapped(Compile(cfg.Codes
                 .Where(c => c.Label != null && !string.IsNullOrWhiteSpace(c.Label.Layer))
-                .Select(c => c.Label.Layer));
+                .Select(c => c.Label.Layer)), mappings);
 
-            _symbolPatterns = Compile(cfg.Codes
+            _symbolPatterns = WithMapped(Compile(cfg.Codes
                 .Where(c => !string.IsNullOrWhiteSpace(c.BlockLayer))
-                .Select(c => c.BlockLayer));
+                .Select(c => c.BlockLayer)), mappings);
         }
 
         /// <summary>Layer suffixes contributed by modifiers, longest first.</summary>
@@ -177,6 +181,16 @@ namespace FieldCodes
             for (var i = 0; i < patterns.Length; i++)
                 if (patterns[i].IsMatch(value)) return true;
             return false;
+        }
+
+        private static Regex[] WithMapped(Regex[] patterns, IList<FieldCodes.Settings.LayerMapping> mappings)
+        {
+            if (mappings == null || mappings.Count == 0 || patterns.Length == 0) return patterns;
+            var extra = mappings
+                .Where(m => m != null && !string.IsNullOrWhiteSpace(m.From) && !string.IsNullOrWhiteSpace(m.To))
+                .Where(m => patterns.Any(r => r.IsMatch(m.From.Trim())))
+                .Select(m => new Regex("^" + Regex.Escape(m.To.Trim()) + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
+            return patterns.Concat(extra).ToArray();
         }
 
         private static Regex[] Compile(IEnumerable<string> patterns)

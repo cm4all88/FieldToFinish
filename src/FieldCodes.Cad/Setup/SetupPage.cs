@@ -19,6 +19,17 @@ namespace FieldCodes.Cad.Setup
         /// <summary>Which configuration level the rules came from, and where an edit
         /// would be saved. Never the factory file.</summary>
         public FieldCodes.Editing.RulesResolution RulesResolution { get; set; }
+
+        /// <summary>Shows another settings page by its label (a row's "edit it here" link).
+        /// Null when the page is hosted where there is nowhere to go.</summary>
+        public Action<string> Navigate { get; set; }
+
+        /// <summary>Raised by a page when its controls differ from what was loaded, so the
+        /// window can show that there are unsaved changes.</summary>
+        public Action Changed { get; set; }
+
+        /// <summary>Rebuilds every page from the settings object (after an import).</summary>
+        public Action Reload { get; set; }
     }
 
     /// <summary>
@@ -47,9 +58,36 @@ namespace FieldCodes.Cad.Setup
         /// <summary>Read-only pages get no Restore Defaults button.</summary>
         public virtual bool IsReadOnly { get { return false; } }
 
+        /// <summary>A page that is one big table (Layers, Point Features) returns it here and
+        /// gets the whole page, instead of rows in a scrolling column.</summary>
+        protected virtual Control BuildFilled() { return null; }
+
+        /// <summary>Tells the window this page has unsaved edits.</summary>
+        protected void MarkChanged()
+        {
+            if (Context != null && Context.Changed != null) Context.Changed();
+        }
+
         public Control Build(SetupContext context)
         {
             Context = context;
+
+            var filled = BuildFilled();
+            if (filled != null)
+            {
+                var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 10, 14, 10) };
+                filled.Dock = DockStyle.Fill;
+                host.Controls.Add(filled);
+                host.Controls.Add(new Label
+                {
+                    Text = "Affects: " + AffectedCommands,
+                    ForeColor = SystemColors.GrayText,
+                    AutoSize = false,
+                    Height = 22,
+                    Dock = DockStyle.Top
+                });
+                return host;
+            }
 
             var scroll = new Panel
             {

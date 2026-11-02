@@ -141,7 +141,7 @@ namespace FieldCodes.Cad
         {
             if (string.IsNullOrWhiteSpace(name)) return ObjectId.Null;
             var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-            var trimmed = name.Trim();
+            var trimmed = ProjectLayers.Apply(db, name.Trim());
             return table.Has(trimmed) ? table[trimmed] : ObjectId.Null;
         }
 
