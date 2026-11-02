@@ -115,23 +115,6 @@ namespace FieldCodes.Cad.Ui
             finally { _loading = false; }
         }
 
-        /// <summary>Throws away edits: the settings are read again from where they came from.</summary>
-        private void DiscardChanges()
-        {
-            if (MessageBox.Show(this, "Discard the changes you have not saved?", "Settings",
-                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            var fresh = string.IsNullOrWhiteSpace(_context.Resolution.LoadedFrom) || !File.Exists(_context.Resolution.LoadedFrom)
-                ? new FtfSettings()
-                : FtfSettings.Load(_context.Resolution.LoadedFrom);
-            foreach (var prop in typeof(FtfSettings).GetProperties())
-                if (prop.CanRead && prop.CanWrite &&
-                    prop.GetCustomAttributes(typeof(Newtonsoft.Json.JsonPropertyAttribute), true).Length > 0)
-                    prop.SetValue(_context.Resolution.Settings, prop.GetValue(fresh, null), null);
-            ReloadAll();
-            MarkClean();
-            _log("Unsaved settings changes discarded.");
-        }
-
         public SettingsPanel(SetupContext context, Action<string> log)
         {
             _context = context;

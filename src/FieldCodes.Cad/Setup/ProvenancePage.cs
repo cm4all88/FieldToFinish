@@ -22,6 +22,7 @@ namespace FieldCodes.Cad.Setup
     /// UNTESTED in Civil 3D: compiled against the API stand-ins only. The values, levels and
     /// inherit operations it shows come from SettingsLayers, which is unit tested.
     /// </summary>
+    [SettingsPage(Group = "Administration", Label = "Where Values Come From", Order = 15, Commands = "FTF,FTFSETUP")]
     internal sealed class ProvenancePage : SetupPage
     {
         /// <summary>The label to register this page under in the Settings navigation.</summary>
