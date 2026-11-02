@@ -76,6 +76,14 @@ namespace FieldCodes.Cad
             });
             _steps.Add(new FtfStep
             {
+                Name = "FTFORIENT",
+                Title = "Orient Symbols",
+                Description = "Turn signs, hydrants, valves, arms and markings to face the way the " +
+                              "features do (Apply; unsure ones are listed, not turned)",
+                Run = OrientationCommands.ApplyForPipeline
+            });
+            _steps.Add(new FtfStep
+            {
                 Name = "FTFDRIP",
                 Title = "Driplines",
                 Description = "Tree driplines, trimmed to their outer envelope",

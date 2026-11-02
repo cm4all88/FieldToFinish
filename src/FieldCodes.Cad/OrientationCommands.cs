@@ -76,6 +76,12 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>The Process Drawing stage: Apply, without prompting.</summary>
+        internal static void ApplyForPipeline()
+        {
+            Run(false, false);
+        }
+
         private static void Run(bool preview, bool overwriteExisting)
         {
             FtfSession.Run("FTFORIENT", (db, tr, ed) =>

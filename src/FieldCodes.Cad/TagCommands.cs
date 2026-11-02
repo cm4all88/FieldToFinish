@@ -39,30 +39,42 @@ namespace FieldCodes.Cad
 
                 Ownership.EnsureRegApp(db, tr);
 
-                // Read what was issued before, then erase the old tag entities. The
-                // numbers survive in this dictionary, not on the drawing.
-                var previous = ReadPreviousTags(db, tr);
-                Ownership.DeleteOwnedKinds(db, tr, FtfEntityKind.Tag);
+                // Read what was issued before -- the register in the drawing, then the tags on
+                // it -- so numbers are reissued, never reused. Then erase the old tag entities
+                // of this run's families only: a run limited to trees keeps the poles' tags.
+                var register = DrawingStore.ReadTagRegister(db, tr);
+                var previous = new Dictionary<string, string>(register, StringComparer.OrdinalIgnoreCase);
+                foreach (var pair in ReadPreviousTags(db, tr)) previous[pair.Key] = pair.Value;
+
+                var ann = settings.Annotation;
+                var scope = FieldCodes.Annotation.AnnotationRun.TagScope(ann);
+                var notes = CogoNotes.For(db, tr, settings);
+                var scan = AnnotationScan.Read(db, tr, cfg, settings, parser, notes);
+                Ownership.DeleteOwned(db, tr, s => s.Kind == FtfEntityKind.Tag && scan.InScope(s.PointNumber, scope));
 
                 var points = new List<ParsedPoint>();
-                var anchors = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
-
-                var notes = CogoNotes.For(db, tr, settings);
-                foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
+                var anchors = scan.Anchors;
+                var skipped = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var number in scan.Order)
                 {
-                    var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
-                    var parsed = notes.Parse(parser, cogo);
-                    points.Add(parsed);
-                    anchors[number] = CadUtil.Flatten(cogo.Location);
+                    var parsed = scan.Points[number];
+                    if (string.IsNullOrEmpty(parsed.TagPrefix)) continue;
+                    var decision = FieldCodes.Annotation.AnnotationPolicy.Tag(parsed, ann, scope, cfg);
+                    if (decision.Annotate) points.Add(parsed);
+                    else { int n; skipped[decision.Reason] = skipped.TryGetValue(decision.Reason, out n) ? n + 1 : 1; }
                 }
 
                 var assigner = new TagAssigner { StartNumber = Math.Max(0, ts.StartNumber) };
                 var assignments = assigner.Assign(points, previous);
 
+                foreach (var pair in skipped) ed.WriteMessage("\nFTFTAGS: not tagged, {0}: {1}", pair.Key, pair.Value);
+                foreach (var a in assignments) register[a.PointNumber] = a.Text;
+                DrawingStore.WriteTagRegister(db, tr, register);
+
                 if (assignments.Count == 0)
                 {
                     ed.WriteMessage("\nFTFTAGS: nothing to tag. Only codes whose rule sets " +
-                                    "a tagPrefix are tagged.\n");
+                                    "a tagPrefix are tagged, and trees only when Settings > Trees is Tag only.\n");
                     return;
                 }
 
@@ -179,9 +191,11 @@ namespace FieldCodes.Cad
                 Ownership.EnsureRegApp(db, tr);
 
                 var previous = ReadPreviousTags(db, tr);
-                if (previous.Count == 0)
+                var ann = settings.Annotation;
+                if (previous.Count == 0 && !ann.ScheduleTrees)
                 {
-                    ed.WriteMessage("\nFTFTABLE: no tags in this drawing. Run FTFTAGS first.\n");
+                    ed.WriteMessage("\nFTFTABLE: no tags in this drawing and the tree schedule is off " +
+                                    "(Settings > Schedule). Nothing to list.\n");
                     return;
                 }
 
@@ -227,7 +241,9 @@ namespace FieldCodes.Cad
                     });
                 }
 
-                var model = TagTable.Build(assignments, points, ColumnsFrom(ts),
+                // Trees only when the tree schedule is on; untagged trees by point number.
+                var rows = FieldCodes.Annotation.ScheduleSelection.Rows(assignments, points, ann, cfg);
+                var model = TagTable.Build(rows, points, ColumnsFrom(ts),
                                            ts.TableTitle, settings.Trees.TrunkDecimals);
 
                 if (model.RowCount == 0)

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 
@@ -75,13 +76,42 @@ namespace FieldCodes.Cad
 
             var ed = doc.Editor;
             var pipeline = new FtfPipeline();
-            var total = pipeline.Steps.Count;
+
+            // Which preset: the same four as the Process page. "All" is every stage as before,
+            // except symbol orientation, which is its own decision (FTFORIENT).
+            var ask = new PromptKeywordOptions("\nProcess [Standard/Trees/Annotations/All] <Standard>: ") { AllowNone = true };
+            foreach (var k in new[] { "Standard", "Trees", "Annotations", "All" }) ask.Keywords.Add(k);
+            ask.Keywords.Default = "Standard";
+            var answer = ed.GetKeywords(ask);
+            if (answer.Status != PromptStatus.OK && answer.Status != PromptStatus.None) return;
+            var choice = answer.Status == PromptStatus.None ? "Standard" : answer.StringResult;
+
+            FieldCodes.Settings.AnnotationSettings ann = null;
+            FtfSession.Run("FTFRUN", (db, tr, e) => { ann = FtfSession.SettingsFor(db, FtfSession.Rules(db)).Annotation; });
+            if (ann == null) return;
+
+            FieldCodes.Annotation.ProcessPlan plan;
+            switch (choice)
+            {
+                case "Trees": plan = FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.TreesAndVegetation, ann); break;
+                case "Annotations": plan = FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.AnnotationsOnly, ann); break;
+                case "All":
+                    plan = FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.Custom, ann,
+                        pipeline.Steps.Select(st => st.Name).Where(n => n != "FTFORIENT"));
+                    break;
+                default: plan = FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.StandardTopographic, ann); break;
+            }
+
+            var total = plan.Stages.Count;
             var index = 0;
 
-            ed.WriteMessage("\n=== Field to Finish: polishing the Civil 3D survey result ===\n");
+            ed.WriteMessage("\n=== Field to Finish: {0} ===\n", FieldCodes.Annotation.ProcessPresets.Title(plan.Preset));
+            foreach (var note in plan.Adjustments) ed.WriteMessage("  {0}\n", note);
 
-            var result = pipeline.Run(
-                null,
+            FtfRunResult result;
+            using (FieldCodes.Annotation.AnnotationRun.Use(plan))
+                result = pipeline.Run(
+                plan.Stages,
                 step =>
                 {
                     index++;

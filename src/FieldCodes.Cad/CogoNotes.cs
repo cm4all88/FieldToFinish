@@ -62,6 +62,24 @@ namespace FieldCodes.Cad
             return parser.Parse(number, cogo.RawDescription, NoteOf(cogo));
         }
 
+        /// <summary>As <see cref="Parse"/>, but a note that records dip measurements is not used
+        /// as label text when the Label All settings keep depth notes out: the point is then
+        /// parsed from its description alone.</summary>
+        public ParsedPoint ParseForLabel(FieldCodeParser parser, CogoPoint cogo,
+                                         FieldCodes.Settings.AnnotationSettings annotation, out bool depthNoteKeptOut)
+        {
+            depthNoteKeptOut = false;
+            var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
+            if (!_records.ContainsKey(cogo.ObjectId)) return parser.Parse(number, cogo.RawDescription);
+            var note = NoteOf(cogo);
+            if (!FieldCodes.Annotation.AnnotationPolicy.MayUseNote(note, annotation))
+            {
+                depthNoteKeptOut = true;
+                return parser.Parse(number, cogo.RawDescription);
+            }
+            return parser.Parse(number, cogo.RawDescription, note);
+        }
+
         private readonly Dictionary<ObjectId, string> _notes = new Dictionary<ObjectId, string>();
 
         /// <summary>The crew's note for a point read from outside its raw description (point

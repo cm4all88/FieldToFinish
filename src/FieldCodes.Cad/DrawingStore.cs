@@ -248,5 +248,33 @@ namespace FieldCodes.Cad
         {
             WriteText(tr, RootDictionary(tr, db, true), ProfileKey, name ?? string.Empty);
         }
+
+        // ------------------------------------------------------------- tag numbers
+
+        private const string TagRegisterKey = "TAGREGISTER";
+
+        /// <summary>Every tag number ever issued in this drawing, point number to tag text
+        /// (T12). Kept apart from the tag entities so a tree whose tag is switched off and on
+        /// again (Settings > Trees) gets its old number back.</summary>
+        public static Dictionary<string, string> ReadTagRegister(Database db, Transaction tr)
+        {
+            var text = ReadText(tr, RootDictionary(tr, db, false), TagRegisterKey);
+            if (string.IsNullOrWhiteSpace(text)) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var map = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, string>>(text);
+                return new Dictionary<string, string>(map ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Newtonsoft.Json.JsonException)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        public static void WriteTagRegister(Database db, Transaction tr, IDictionary<string, string> register)
+        {
+            WriteText(tr, RootDictionary(tr, db, true), TagRegisterKey,
+                      Newtonsoft.Json.JsonConvert.SerializeObject(register ?? new Dictionary<string, string>()));
+        }
     }
 }

@@ -13,11 +13,16 @@ namespace FieldCodes.Tagging
         public string Prefix { get; set; }
         public int Number { get; set; }
 
-        /// <summary>What is drawn on the plan and printed in the table: T1, T12, S3.</summary>
+        /// <summary>What is drawn on the plan and printed in the table: T1, T12, S3. Blank for
+        /// a schedule row of an untagged tree (listed by point number).</summary>
         public string Text
         {
-            get { return (Prefix ?? string.Empty) + Number.ToString(CultureInfo.InvariantCulture); }
+            get { return Untagged ? string.Empty : (Prefix ?? string.Empty) + Number.ToString(CultureInfo.InvariantCulture); }
         }
+
+        /// <summary>A schedule row for a feature that carries no tag on the plan (a tree annotated
+        /// with its description): keyed by point number instead.</summary>
+        public bool Untagged { get; set; }
 
         /// <summary>False when this tag already existed and was carried over.</summary>
         public bool IsNew { get; set; }

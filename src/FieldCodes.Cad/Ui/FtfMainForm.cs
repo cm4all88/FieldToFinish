@@ -91,7 +91,7 @@ namespace FieldCodes.Cad.Ui
             FormBorderStyle = FormBorderStyle.Sizable;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = true;
-            MaximizeBox = false;
+            MaximizeBox = true;
             ShowInTaskbar = false;
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.White;
@@ -119,10 +119,14 @@ namespace FieldCodes.Cad.Ui
 
             BuildPages();
 
+            // A roomier first size than before (tables need the width); after that, wherever
+            // and however big the user last left it.
             var working = Screen.PrimaryScreen.WorkingArea;
-            ClientSize = new Size(Math.Min(880, working.Width - 80),
-                                  Math.Min(600, working.Height - 80));
+            ClientSize = new Size(Math.Min(1080, working.Width - 80),
+                                  Math.Min(720, working.Height - 80));
             MinimumSize = new Size(780, 560);
+            _ui.Restore(this);
+            FormClosing += (s, e) => { _ui.Remember(this); _ui.Save(); };
 
             ResumeLayout(true);
 
@@ -495,82 +499,69 @@ namespace FieldCodes.Cad.Ui
 
         // ================================================================= process
 
+        // process presets
+        private ComboBox _preset;
+        private Label _presetDescription;
+        private CheckedListBox _stageList;
+        private CheckedListBox _familyList;
+        private Label _adjustments;
+        private TextBox _processSummary;
+        private bool _processLoading;
+        private UiState _ui = UiState.Load();
+
         private void BuildProcessPage()
         {
             var page = NewPage("Process");
             var stack = PageStack(page);
 
             PageHeader(stack, "Process");
-            Caption(stack, "Finishing stages run in this order regardless of selection; " +
-                           "draw order must always be last.");
+            Caption(stack, "Pick a preset, preview what it will do, then process. Only the stages and " +
+                           "feature families shown are touched; everything else in the drawing is left as it is.");
 
-            var rows = new TableLayoutPanel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                ColumnCount = 1,
-                Margin = new Padding(0, 6, 0, 4)
-            };
+            var presetRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 2) };
+            presetRow.Controls.Add(new Label { Text = "Preset", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+            _preset = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
+            foreach (FieldCodes.Annotation.ProcessPreset p in Enum.GetValues(typeof(FieldCodes.Annotation.ProcessPreset)))
+                _preset.Items.Add(new PresetItem(p));
+            presetRow.Controls.Add(_preset);
+            stack.Controls.Add(presetRow);
+            _presetDescription = Caption(stack, string.Empty);
 
-            foreach (var step in _pipeline.Steps)
-            {
-                var check = new CheckBox
-                {
-                    Text = step.Title,
-                    Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
-                    Checked = true,
-                    AutoSize = true,
-                    Margin = new Padding(2, 6, 0, 0)
-                };
-                var description = new Label
-                {
-                    Text = step.Description,
-                    ForeColor = CaptionGray,
-                    AutoSize = true,
-                    Margin = new Padding(22, 0, 0, 4)
-                };
+            var lists = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 4, 0, 0) };
+            lists.Controls.Add(new Label { Text = "Stages (in run order)", AutoSize = true, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold) }, 0, 0);
+            lists.Controls.Add(new Label { Text = "Feature families", AutoSize = true, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(16, 3, 0, 0) }, 1, 0);
+            _stageList = new CheckedListBox { Width = 280, Height = 150, CheckOnClick = true, IntegralHeight = false };
+            foreach (var step in _pipeline.Steps) _stageList.Items.Add(new StageItem(step));
+            _familyList = new CheckedListBox { Width = 250, Height = 150, CheckOnClick = true, IntegralHeight = false, Margin = new Padding(16, 3, 0, 0) };
+            foreach (var c in FieldCodes.Annotation.AnnotationPolicy.All()) _familyList.Items.Add(new FamilyItem(c));
+            lists.Controls.Add(_stageList, 0, 1);
+            lists.Controls.Add(_familyList, 1, 1);
+            stack.Controls.Add(lists);
+            _adjustments = Caption(stack, string.Empty);
 
-                _stageChecks.Add(check);
-                rows.Controls.Add(check);
-                rows.Controls.Add(description);
-            }
-
-            stack.Controls.Add(rows);
-
-            var selectRow = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                WrapContents = false,
-                Margin = new Padding(0, 2, 0, 10)
-            };
-            var selectAll = LinkButton("Select All");
-            selectAll.Click += (s, e) => SetAllStages(true);
-            var clearAll = LinkButton("Clear All");
-            clearAll.Click += (s, e) => SetAllStages(false);
-            selectRow.Controls.Add(selectAll);
-            selectRow.Controls.Add(clearAll);
-            stack.Controls.Add(selectRow);
-
-            SectionGap(stack);
-
-            var buttons = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                WrapContents = false,
-                Margin = new Padding(0)
-            };
-
-            var runAll = PrimaryButton("Process Drawing", "Run every finishing stage.");
-            runAll.Click += (s, e) => RunStages(null);
-
-            var runSelected = SecondaryButton("Run Selected",
-                "Run only the ticked stages, in pipeline order.");
-            runSelected.Margin = new Padding(10, 0, 0, 0);
-            runSelected.Click += (s, e) => RunStages(SelectedStageNames());
-
-            buttons.Controls.Add(runAll);
-            buttons.Controls.Add(runSelected);
+            var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
+            var preview = SecondaryButton("Preview", "Counts what the run would create, update, skip and flag. Changes nothing.");
+            preview.Click += (s, e) => PreviewPlan();
+            var run = PrimaryButton("Process Drawing", "Runs the stages above for the families above.");
+            run.Margin = new Padding(10, 0, 0, 0);
+            run.Click += (s, e) => RunPlan(CurrentPlan());
+            buttons.Controls.Add(preview);
+            buttons.Controls.Add(run);
             stack.Controls.Add(buttons);
+
+            _processSummary = new TextBox
+            {
+                Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Width = 560, Height = 120,
+                BackColor = SystemColors.Window, Font = new Font(FontFamily.GenericMonospace, 8.5f), Margin = new Padding(0, 8, 0, 0)
+            };
+            stack.Controls.Add(_processSummary);
+
+            _preset.SelectedIndexChanged += (s, e) => OnPresetChanged();
+            _stageList.ItemCheck += (s, e) => { if (!_processLoading) BeginInvoke((Action)(() => { SaveCustom(); ShowPlan(); })); };
+            _familyList.ItemCheck += (s, e) => { if (!_processLoading) BeginInvoke((Action)(() => { SaveCustom(); ShowPlan(); })); };
+
+            FieldCodes.Annotation.ProcessPreset saved;
+            _preset.SelectedIndex = Enum.TryParse(_ui.ProcessPreset ?? string.Empty, out saved) ? (int)saved : 0;
 
             SectionGap(stack);
             SectionHeader(stack, "Cleanup");
@@ -580,6 +571,167 @@ namespace FieldCodes.Cad.Ui
             var clean = SecondaryButton("Clean FTF Output", null);
             clean.Click += (s, e) => InAutoCad("Clean", RunClean);
             stack.Controls.Add(clean);
+        }
+
+        private sealed class PresetItem
+        {
+            public readonly FieldCodes.Annotation.ProcessPreset Preset;
+            public PresetItem(FieldCodes.Annotation.ProcessPreset p) { Preset = p; }
+            public override string ToString() { return FieldCodes.Annotation.ProcessPresets.Title(Preset); }
+        }
+
+        private sealed class StageItem
+        {
+            public readonly FtfStep Step;
+            public StageItem(FtfStep step) { Step = step; }
+            public override string ToString() { return Step.Title; }
+        }
+
+        private sealed class FamilyItem
+        {
+            public readonly FieldCodes.Settings.AnnotationCategory Category;
+            public FamilyItem(FieldCodes.Settings.AnnotationCategory c) { Category = c; }
+            public override string ToString() { return FieldCodes.Annotation.AnnotationPolicy.Name(Category); }
+        }
+
+        private FieldCodes.Annotation.ProcessPreset SelectedPreset
+        {
+            get { var item = _preset.SelectedItem as PresetItem; return item != null ? item.Preset : FieldCodes.Annotation.ProcessPreset.StandardTopographic; }
+        }
+
+        /// <summary>The Label All settings of the drawing in front, or the defaults.</summary>
+        private static FieldCodes.Settings.AnnotationSettings CurrentAnnotation()
+        {
+            try
+            {
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc == null) return new FieldCodes.Settings.AnnotationSettings();
+                var rules = FtfSession.Rules(doc.Database);
+                return FtfSession.ResolveSettings(doc.Database, rules).Settings.Annotation ?? new FieldCodes.Settings.AnnotationSettings();
+            }
+            catch (System.Exception) { return new FieldCodes.Settings.AnnotationSettings(); }
+        }
+
+        private FieldCodes.Annotation.ProcessPlan CurrentPlan()
+        {
+            var ann = CurrentAnnotation();
+            if (SelectedPreset != FieldCodes.Annotation.ProcessPreset.Custom)
+                return FieldCodes.Annotation.ProcessPresets.Build(SelectedPreset, ann);
+            var stages = _stageList.CheckedItems.Cast<StageItem>().Select(i => i.Step.Name).ToList();
+            var families = _familyList.CheckedItems.Cast<FamilyItem>().Select(i => i.Category).ToList();
+            return FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.Custom, ann, stages, families);
+        }
+
+        private void OnPresetChanged()
+        {
+            var custom = SelectedPreset == FieldCodes.Annotation.ProcessPreset.Custom;
+            _stageList.Enabled = custom;
+            _familyList.Enabled = custom;
+            _presetDescription.Text = FieldCodes.Annotation.ProcessPresets.Describe(SelectedPreset);
+            _ui.ProcessPreset = SelectedPreset.ToString();
+            _ui.Save();
+
+            _processLoading = true;
+            try
+            {
+                if (custom)
+                {
+                    var stages = _ui.CustomStages ?? new List<string> { "FTFPOINTS", "FTFLABELS" };
+                    var families = _ui.CustomFamilies ?? CurrentAnnotation().Categories.Select(c => c.ToString()).ToList();
+                    for (var i = 0; i < _stageList.Items.Count; i++)
+                        _stageList.SetItemChecked(i, stages.Contains(((StageItem)_stageList.Items[i]).Step.Name));
+                    for (var i = 0; i < _familyList.Items.Count; i++)
+                        _familyList.SetItemChecked(i, families.Contains(((FamilyItem)_familyList.Items[i]).Category.ToString()));
+                }
+            }
+            finally { _processLoading = false; }
+            ShowPlan();
+        }
+
+        private void SaveCustom()
+        {
+            if (SelectedPreset != FieldCodes.Annotation.ProcessPreset.Custom) return;
+            _ui.CustomStages = _stageList.CheckedItems.Cast<StageItem>().Select(i => i.Step.Name).ToList();
+            _ui.CustomFamilies = _familyList.CheckedItems.Cast<FamilyItem>().Select(i => i.Category.ToString()).ToList();
+            _ui.Save();
+        }
+
+        /// <summary>Shows a preset's stages and families in the lists (read only unless Custom).</summary>
+        private void ShowPlan()
+        {
+            var plan = CurrentPlan();
+            if (SelectedPreset != FieldCodes.Annotation.ProcessPreset.Custom)
+            {
+                _processLoading = true;
+                try
+                {
+                    for (var i = 0; i < _stageList.Items.Count; i++)
+                        _stageList.SetItemChecked(i, plan.Runs(((StageItem)_stageList.Items[i]).Step.Name));
+                    for (var i = 0; i < _familyList.Items.Count; i++)
+                        _familyList.SetItemChecked(i, plan.LabelFamilies.Contains(((FamilyItem)_familyList.Items[i]).Category));
+                }
+                finally { _processLoading = false; }
+            }
+            _adjustments.Text = plan.Adjustments.Count == 0 ? string.Empty : string.Join(" ", plan.Adjustments.ToArray());
+        }
+
+        /// <summary>Counts what the plan would do, changing nothing.</summary>
+        private void PreviewPlan()
+        {
+            var plan = CurrentPlan();
+            InAutoCad("Preview", () =>
+            {
+                var lines = new List<string> { FieldCodes.Annotation.ProcessPresets.Title(plan.Preset) + ": " +
+                    string.Join(" > ", plan.Stages.Select(n => _pipeline.Steps.First(st => st.Name == n).Title).ToArray()) };
+                lines.AddRange(plan.Adjustments);
+                FtfSession.Run("FTF PREVIEW", (db, tr, ed) =>
+                {
+                    var cfg = FtfSession.Rules(db);
+                    var settings = FtfSession.SettingsFor(db, cfg);
+                    var scan = AnnotationScan.Read(db, tr, cfg, settings, new FieldCodeParser(cfg), CogoNotes.For(db, tr, settings));
+                    scan.KeptByHand = LabelCommands.KeepHandMovedLabels(db, tr, settings.Cleanup.MovedTolerance);
+                    var labels = plan.Runs("FTFLABELS") ? (ICollection<FieldCodes.Settings.AnnotationCategory>)plan.LabelFamilies
+                                                        : new List<FieldCodes.Settings.AnnotationCategory>();
+                    var preview = scan.Plan(settings.Annotation, labels, plan.TagFamilies, plan.Runs("FTFTAGS"));
+                    lines.AddRange(preview.Summary(plan.Runs("FTFTAGS")));
+                    lines.Add(scan.Order.Count + " COGO point(s) read. Nothing was changed.");
+                });
+                if (FtfSession.LastRunError != null) lines.Add("Preview failed: " + FtfSession.LastRunError);
+                _processSummary.Text = string.Join(Environment.NewLine, lines.ToArray());
+            });
+        }
+
+        /// <summary>Runs a plan's stages with its families in force, then summarises.</summary>
+        private void RunPlan(FieldCodes.Annotation.ProcessPlan plan)
+        {
+            if (plan.Stages.Count == 0) { Log("Nothing selected."); return; }
+            InAutoCad("Processing: " + FieldCodes.Annotation.ProcessPresets.Title(plan.Preset), () =>
+            {
+                FtfRunResult result;
+                using (FieldCodes.Annotation.AnnotationRun.Use(plan))
+                    result = _pipeline.Run(
+                        plan.Stages,
+                        step => Log(step.Title + "..."),
+                        (step, ex) => { Log(step.Title + " FAILED: " + ex.Message); return false; });
+
+                Log(string.Format("Done: {0} stage(s) completed{1}.", result.Completed,
+                    result.Failed > 0 ? ", " + result.Failed + " failed" : string.Empty));
+
+                var lines = new List<string> { DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + FieldCodes.Annotation.ProcessPresets.Title(plan.Preset) };
+                lines.AddRange(plan.Adjustments);
+                foreach (var o in result.Outcomes)
+                    lines.Add(string.Format("  {0}  {1}{2}", o.Succeeded ? "OK    " : "FAILED",
+                        _pipeline.Steps.First(st => st.Name == o.Name).Title, o.Error != null ? " - " + o.Error : string.Empty));
+                lines.Add(string.Format("{0} completed, {1} failed{2}. Families: {3}.", result.Completed, result.Failed,
+                    result.StoppedEarly ? " (stopped early)" : string.Empty,
+                    string.Join(", ", plan.LabelFamilies.Select(FieldCodes.Annotation.AnnotationPolicy.Name).ToArray())));
+                _processSummary.Text = string.Join(Environment.NewLine, lines.ToArray());
+
+                _reviewScanned = false;
+                UpdateRunSummary(result);
+                _status = FtfStatusService.Gather();
+                ShowStatus();
+            });
         }
 
         private void SetAllStages(bool value)

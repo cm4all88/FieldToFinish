@@ -353,3 +353,41 @@ public sealed class LayerCatalogTests : IClassFixture<RulesFixture>
         Assert.Equal(LayerStatus.WillBeCreated, LayerCatalog.StatusOf("Z-NEW", drawing, mappings));
     }
 }
+
+/// <summary>The schedule: trees in or out on their own switch, independent of tags.</summary>
+public sealed class ScheduleSelectionTests : IClassFixture<RulesFixture>
+{
+    private readonly RulesFixture _fx;
+    public ScheduleSelectionTests(RulesFixture fx) => _fx = fx;
+
+    private List<ParsedPoint> Points() => new()
+    {
+        _fx.Parse("CON 18 . 25", "101"), _fx.Parse("CON 12 . 20", "102"), _fx.Parse("PP 1234", "201")
+    };
+
+    [Fact]
+    public void TreesAreOutOfTheScheduleUnlessItIsOn()
+    {
+        var tags = new[]
+        {
+            new FieldCodes.Tagging.TagAssignment { PointNumber = "101", Prefix = "T", Number = 1 },
+            new FieldCodes.Tagging.TagAssignment { PointNumber = "201", Prefix = "P", Number = 1 }
+        };
+        var off = ScheduleSelection.Rows(tags, Points(), new AnnotationSettings { ScheduleTrees = false }, _fx.Config);
+        Assert.Equal(new[] { "201" }, off.Select(r => r.PointNumber));
+
+        var on = ScheduleSelection.Rows(tags, Points(), new AnnotationSettings { ScheduleTrees = true, TreeAnnotation = TreeAnnotation.TagOnly }, _fx.Config);
+        Assert.Contains(on, r => r.PointNumber == "101" && r.Text == "T1");
+    }
+
+    [Fact]
+    public void UntaggedTreesAreListedByPointNumber()
+    {
+        var rows = ScheduleSelection.Rows(new FieldCodes.Tagging.TagAssignment[0], Points(),
+            new AnnotationSettings { ScheduleTrees = true, TreeAnnotation = TreeAnnotation.DescriptionOnly }, _fx.Config);
+        Assert.Equal(new[] { "101", "102" }, rows.Select(r => r.PointNumber).OrderBy(x => x));
+        Assert.All(rows, r => Assert.True(r.Untagged && r.Text == ""));
+        var model = FieldCodes.Tagging.TagTable.Build(rows, Points(), null, "TREE SCHEDULE", 0);
+        Assert.Equal(2, model.RowCount);
+    }
+}

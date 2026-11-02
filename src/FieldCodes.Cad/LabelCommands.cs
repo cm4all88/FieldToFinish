@@ -60,30 +60,48 @@ namespace FieldCodes.Cad
                 // Labels a human has moved stay put and become obstacles.
                 var keptByHand = KeepHandMovedLabels(db, tr, settings.Cleanup.MovedTolerance);
 
-                Ownership.DeleteOwned(db, tr,
+                // A pole shot "PP" with its note in the note field is labelled from the note --
+                // unless the note is a dip measurement, which the Dip Builder labels.
+                var notes = CogoNotes.For(db, tr, settings);
+                var ann = settings.Annotation;
+                var scope = FieldCodes.Annotation.AnnotationRun.LabelScope(ann);
+                var scan = AnnotationScan.Read(db, tr, cfg, settings, parser, notes);
+                scan.KeptByHand = keptByHand;
+
+                // Only this run's families are replaced: a run limited to trees never erases
+                // a pole's label. Labels whose point is gone are cleared by any run.
+                var replaced = Ownership.DeleteOwned(db, tr,
                     s => (s.Kind == FtfEntityKind.Label ||
                           s.Kind == FtfEntityKind.Leader ||
                           s.Kind == FtfEntityKind.Mask) &&
-                         !keptByHand.Contains(s.PointNumber));
+                         !keptByHand.Contains(s.PointNumber) &&
+                         scan.InScope(s.PointNumber, scope));
 
                 var obstacles = GatherObstacles(db, tr, classifier);
 
-                // A pole shot "PP" with its note in the note field is labelled from the note.
-                var notes = CogoNotes.For(db, tr, settings);
                 var codeOnly = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var skipped = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                Action<string> skip = why => { int n; skipped[why] = skipped.TryGetValue(why, out n) ? n + 1 : 1; };
 
                 var placed = 0;
                 var leaders = 0;
                 var failed = 0;
 
-                foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
+                foreach (var number in scan.Order)
                 {
-                    var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
                     if (keptByHand.Contains(number)) continue;
 
-                    var parsed = notes.Parse(parser, cogo);
+                    var parsed = scan.Points[number];
                     if (parsed.HasErrors) continue;
                     if (string.IsNullOrEmpty(parsed.LabelText)) continue;
+
+                    var decision = FieldCodes.Annotation.AnnotationPolicy.Label(parsed, ann, scope, cfg);
+                    if (!decision.Annotate) { skip(decision.Reason); continue; }
+                    if (ann.RespectManualLabels && scan.HasHandLabel(number, parsed.LabelText))
+                    {
+                        skip("already labelled by hand");
+                        continue;
+                    }
 
                     if (parsed.RuleId == "symbol-label" && parsed.Note == null)
                     {
@@ -92,7 +110,7 @@ namespace FieldCodes.Cad
                         codeOnly[code] = codeOnly.TryGetValue(code, out seen) ? seen + 1 : 1;
                     }
 
-                    var anchor = CadUtil.Flatten(cogo.Location);
+                    var anchor = scan.Anchors[number];
 
                     // The text is created first so its real size can be measured. A
                     // character-width estimate is only right for one font; with any
@@ -177,6 +195,11 @@ namespace FieldCodes.Cad
                     "\nFTFLABELS: {0} placed, {1} leader(s), {2} kept as hand-placed, " +
                     "{3} with no clear position.\n",
                     placed, leaders, keptByHand.Count, failed);
+                foreach (var pair in skipped)
+                    ed.WriteMessage("  not labelled, {0}: {1}\n", pair.Key, pair.Value);
+                if (scan.DepthNotesKeptOut > 0)
+                    ed.WriteMessage("  {0} point(s) labelled from their code: their note is a dip measurement " +
+                                    "(Settings > Label All).\n", scan.DepthNotesKeptOut);
                 notes.Report(ed, "FTFLABELS");
                 if (codeOnly.Count > 0)
                 {
@@ -200,7 +223,7 @@ namespace FieldCodes.Cad
         /// Finds labels sitting somewhere other than where we last computed. Those were
         /// moved deliberately; we neither delete nor re-place them.
         /// </summary>
-        private static HashSet<string> KeepHandMovedLabels(Database db, Transaction tr,
+        internal static HashSet<string> KeepHandMovedLabels(Database db, Transaction tr,
                                                            double tolerance)
         {
             var kept = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

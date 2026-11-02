@@ -190,7 +190,9 @@ namespace FieldCodes.Annotation
     /// </summary>
     public static class AnnotationRun
     {
-        [ThreadStatic] private static ProcessPlan _current;
+        // AutoCAD runs commands and the window's work on its one main thread, sometimes through
+        // its application context rather than the caller's stack, so this is a plain static.
+        private static ProcessPlan _current;
 
         public static ProcessPlan Current { get { return _current; } }
 
