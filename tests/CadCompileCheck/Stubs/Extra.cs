@@ -31,6 +31,14 @@ namespace Autodesk.Windows
     public class RibbonButton : RibbonCommandItem { }
     public class RibbonRowBreak : RibbonItem { }
 
+    /// <summary>The ribbon's own tooltip: a bold title, the content, and the command underneath.</summary>
+    public class RibbonToolTip
+    {
+        public string Title { get; set; }
+        public object Content { get; set; }
+        public string Command { get; set; }
+    }
+
     public class RibbonItemCollection : List<RibbonItem> { }
 
     public class RibbonRowPanel : RibbonItem
