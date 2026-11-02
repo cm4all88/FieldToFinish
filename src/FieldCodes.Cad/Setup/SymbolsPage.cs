@@ -94,6 +94,12 @@ namespace FieldCodes.Cad.Setup
         private TextBox _meaning;
         private BlockPreview _symbolPreview;
         private TextBox _testCode;
+        private TabControl _tabs;
+
+        /// <summary>Set by a Point Features screen ("Symbol and block for this feature"): the
+        /// code whose symbol rule to show, and the rule whose inserted block to show.</summary>
+        internal static string PendingCode;
+        internal static string PendingRuleId;
         private Label _testResult;
         private NumericUpDown _confidence;
         private ComboBox _tier;
@@ -148,7 +154,7 @@ namespace FieldCodes.Cad.Setup
             root.Controls.Add(_source, 0, 0);
             root.Controls.Add(BuildLibraryRow(), 0, 1);
 
-            var tabs = new TabControl { Dock = DockStyle.Fill };
+            var tabs = _tabs = new TabControl { Dock = DockStyle.Fill };
             var symbolsTab = new TabPage("Symbol standard (Civil 3D markers)");
             symbolsTab.Controls.Add(BuildSymbolsTab());
             var blocksTab = new TabPage("Blocks FTF inserts (opt-in rules)");
@@ -955,6 +961,37 @@ namespace FieldCodes.Cad.Setup
             var current = _loading || _document == null ? _symbols[_symbolIndex] : ReadSymbolEditor(_symbols[_symbolIndex].Clone());
             _symbolPreview.ApplySymbolRule(current.ToRule());
             ShowNamedBlock(_symbolPreview, current.Block);
+        }
+
+        /// <summary>Arriving from a Point Features screen: show that feature's symbol rule (and
+        /// its inserted block, when it has one).</summary>
+        public override void OnShown()
+        {
+            var code = PendingCode;
+            var ruleId = PendingRuleId;
+            PendingCode = null;
+            PendingRuleId = null;
+            if (_testCode == null || (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(ruleId))) return;
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                _testCode.Text = code.Trim();
+                var standard = new OrientationStandard { Symbols = _symbols.Select(x => x.ToRule()).ToList() };
+                var index = standard.SymbolIndexFor(code.Trim());
+                if (index >= 0 && index < _symbolGrid.Items.Count)
+                {
+                    _symbolGrid.SelectedItems.Clear();
+                    _symbolGrid.Items[index].Selected = true;
+                    _symbolGrid.Items[index].EnsureVisible();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(ruleId))
+                foreach (ListViewItem item in _blockGrid.Items)
+                    if (string.Equals(item.Tag as string, ruleId.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        item.Selected = true;
+                        item.EnsureVisible();
+                        if (_tabs != null && _tabs.TabPages.Count > 1 && string.IsNullOrWhiteSpace(code)) _tabs.SelectedIndex = 1;
+                    }
         }
 
         /// <summary>Which rule a typed code gets, first match wins.</summary>

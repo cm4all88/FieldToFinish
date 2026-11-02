@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -65,6 +66,16 @@ namespace FieldCodes.Cad
         public void Report(string problem)
         {
             if (!string.IsNullOrWhiteSpace(problem) && _reported.Add(problem)) Problems.Add(problem);
+        }
+
+        /// <summary>A resource missing when it is used: said once, and not again when the
+        /// up-front check already named it (with where it is set).</summary>
+        private void ReportMissing(string name, string problem)
+        {
+            var quoted = "\"" + name + "\"";
+            if (Problems.Any(p => p.IndexOf(quoted, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                  p.IndexOf("not ", StringComparison.OrdinalIgnoreCase) >= 0)) return;
+            Report(problem);
         }
 
         /// <summary>Writes what was missing, once, under the command's name.</summary>
@@ -314,7 +325,7 @@ namespace FieldCodes.Cad
             id = Setup.DrawingResources.FindTextStyle(_db, _tr, name.Trim());
             _textStyles[name.Trim()] = id;
             if (id.IsNull)
-                Report("Text style \"" + name.Trim() + "\" is not in this drawing [the drawing's current text style].");
+                ReportMissing(name.Trim(), "Text style \"" + name.Trim() + "\" is not in this drawing [the drawing's current text style].");
             return id;
         }
 
@@ -326,7 +337,7 @@ namespace FieldCodes.Cad
             id = UtilityCadService.LeaderStyle(_db, _tr, name.Trim());
             _leaderStyles[name.Trim()] = id;
             if (id.IsNull)
-                Report("Multileader style \"" + name.Trim() + "\" is not in this drawing [the current multileader style].");
+                ReportMissing(name.Trim(), "Multileader style \"" + name.Trim() + "\" is not in this drawing [the current multileader style].");
             return id;
         }
 
@@ -339,7 +350,7 @@ namespace FieldCodes.Cad
             id = table.Has(name.Trim()) ? table[name.Trim()] : ObjectId.Null;
             _linetypes[name.Trim()] = id;
             if (id.IsNull)
-                Report("Linetype \"" + name.Trim() + "\" is not loaded in this drawing [the multileader style's leader linetype].");
+                ReportMissing(name.Trim(), "Linetype \"" + name.Trim() + "\" is not loaded in this drawing [the multileader style's leader linetype].");
             return id;
         }
 
@@ -376,7 +387,7 @@ namespace FieldCodes.Cad
             id = blocks.Has(key) ? blocks[key] : ObjectId.Null;
             _arrows[key] = id;
             if (id.IsNull)
-                Report("Arrowhead \"" + key + "\" is not in this drawing [the multileader style's arrow].");
+                ReportMissing(key, "Arrowhead \"" + key + "\" is not in this drawing [the multileader style's arrow].");
             return id;
         }
 

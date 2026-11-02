@@ -416,6 +416,9 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
 | `FTFORIENT` | Turns the symbols Civil 3D already drew (COGO markers) to face the way the features do; Preview, Apply or All. See "Orienting symbols" | yes (and kept: a marker turned by hand is not overwritten) |
 | `FTFORIENTRESET` | Puts every marker `FTFORIENT` turned back as it was and removes its QC graphics | yes |
+| `FTFRESTYLE` | Brings FTF's existing labels, tags and line labels up to the current text and leader styles, in place; Preview first, Apply to change. See "CAD standards and styles" | yes |
+| `FTFLAYERUPDATE` | Lists every layer FTF uses whose properties differ from its layer standard, then asks before changing anything | yes |
+| `FTFCHECKSTANDARDS` | Checks every layer, linetype, text style, multileader style and block the settings name against the drawing, with fixes on request | n/a |
 | `FTFCONTOUR` | Contour polylines at exact elevations off a TIN surface (one, a list, or a run), optionally clipped to a boundary and labelled; the surface is only read | yes (replaces its own at the same surface and elevation) |
 | `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
 | `FTFRECORDCHECK` | Drawing versus the record; flags only | yes |
@@ -705,6 +708,43 @@ families of the preset running, so a trees-only run never touches a pole's label
   output" now does what it says; before, nothing read it.
 - Tag numbers are kept in a register in the drawing, so a tree whose tag is switched off
   and on again gets its old number back.
+
+## CAD standards and styles: one configuration
+
+Everything that decides how FTF's output looks is set in Settings, in one layered
+configuration, and the drawing commands read it through one resolver each. Details are in
+the docs named below.
+
+| Area | Where | What it controls | Doc |
+|---|---|---|---|
+| Settings levels | footer of the Settings window; Administration > Where Values Come From | Built-in < Office < My defaults < Profile < Project, merged value by value. Each value shows the level it comes from and the values it hides; Inherit removes one. Saves write only differences. Office saves need confirmation and the office PIN once one is set. | `docs/settings-levels.md` |
+| Layers | FieldToFinish > Layers | Every layer FTF draws on (labels, symbols, linework labels, trees, dips, leaders, spots, contours, pavement, control, tables, easements...): the mapping to a project layer and its colour, linetype, lineweight, plot and description. Applied when FTF creates a layer. `FTFLAYERUPDATE` previews and then updates existing layers FTF uses; `FTFCHECKSTANDARDS` checks every layer, linetype, style and block the settings name and offers fixes. | `docs/layer-standards.md` |
+| Text and leader styles | FieldToFinish > Text Styles, Leader Styles, Style Assignments | Named text looks (text style, height, width, oblique, rotation, justification, colour, mask, prefix, suffix, decimals, annotative) and multileader looks (multileader style, arrowhead and size, straight or spline, colour, linetype, lineweight, landing, gap, attachment, maximum length, annotative), assigned to every feature, a family, a rule or one code, separately for point labels, tags and line labels. A tester shows every value a label will get and where it comes from. | `docs/annotation-styles.md` |
+| One feature, one screen | FieldToFinish > Point Features | Per feature: label text, label layer, leader use, tag prefix, dripline layer, **and** label on/off, label text style, leader style, offset, tag style, the effective look with a preview, and a link to the feature's symbol and block. Line features get a text style column on Line Labels. | `docs/annotation-styles.md` |
+| Symbols and blocks | FieldToFinish > Symbols and Rotations | The symbol standard FTFORIENT turns markers by (block, native zero, period, two-sided), editable, with a block preview; blocks FTF inserts (opt-in per rule): block, layer, scale, insertion point, rotation method, attributes. | `docs/symbols-and-blocks.md` |
+| Commands and workflows | Administration > Commands; FieldToFinish > Workflows | Every command, its settings pages and ribbon place; your own ribbon panel ("My Commands"); saved processing workflows that appear in Process Drawing and FTFRUN. Pages register themselves, so a new command's settings appear without editing the window. | `docs/settings-registry.md` |
+
+**Existing drawings.** New output takes the current standards on its own. For what is
+already drawn there are separate, preview-first commands: `FTFRESTYLE` (FTF's labels, tags
+and line labels, in place, hand-moved positions and hand-edited wording kept) and
+`FTFLAYERUPDATE` (layer properties only). Neither touches anything FTF did not draw.
+
+**Nothing is swapped silently.** A text style, multileader style, arrowhead block or linetype
+the settings name but the drawing lacks is listed by name at the end of the command, with
+what was used instead, and shown in red on the settings pages and in Check Standards.
+
+**Civil 3D's own point label styles** (the label a COGO point draws through its point label
+style) are not multileaders. FTF does not pretend its leader settings apply to them; edit
+those in Civil 3D's Settings tab.
+
+**Checked in Civil 3D on deploy.** Besides the existing smoke test, `deploy/smoke-test.ps1`
+runs a separate style check (`tests/LiveSmoke/StyleTestHarness.cs`): it labels four COGO
+points under test styles and checks the real MTEXT and MLEADER properties, then FTFRESTYLE
+Preview and Apply. UPDATEFTF prints `style check: PASS` or `STYLE CHECK FAILED`; while the
+style system is new, a failure there does not undo the install.
+
+**Office settings survive updates.** The Office level is `ftf-settings.json` beside the
+installed DLL; the installer now carries it into each new version.
 
 ## Contours at an exact elevation: FTFCONTOUR
 

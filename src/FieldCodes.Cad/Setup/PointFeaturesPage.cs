@@ -280,6 +280,17 @@ namespace FieldCodes.Cad.Setup
             labelled("Symbol", _symbolRow, "Civil 3D's description key draws the symbol; FTF never draws a second one.");
             _rotationRow = readOnly();
             labelled("Rotation", _rotationRow, "The field azimuth is turned against the symbol's own zero (Settings > Symbols and Rotations).");
+            var symbolLink = new LinkLabel { Text = "Edit this feature's symbol and block", AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
+            Tip(symbolLink, "Settings > Symbols and Rotations, opened at this feature's symbol rule and inserted block: block, layer, native zero, rotation, scale, insertion point, attributes, with a preview.");
+            symbolLink.LinkClicked += (s, e) =>
+            {
+                if (Context.Navigate == null || _editingId == null) return;
+                var compiled = _candidate != null ? _candidate.Codes.FirstOrDefault(c => string.Equals(c.Id, _editingId, StringComparison.OrdinalIgnoreCase)) : null;
+                SymbolsPage.PendingCode = compiled != null ? RuleDocument.LiteralCodes(compiled).FirstOrDefault() : null;
+                SymbolsPage.PendingRuleId = _editingId;
+                Context.Navigate("Symbols and Rotations");
+            };
+            full(symbolLink);
             var modifiers = readOnly();
             modifiers.Text = ModifierSummary();
             labelled("Modifiers", modifiers, null);
