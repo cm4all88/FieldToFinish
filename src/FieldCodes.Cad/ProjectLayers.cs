@@ -70,6 +70,41 @@ namespace FieldCodes.Cad
             catch (UnauthorizedAccessException) { return null; }
         }
 
+        // ------------------------------------------------------------ layer standards
+
+        private sealed class StandardsEntry
+        {
+            public int Version;
+            public LayerStandardsSettings Standards;
+        }
+
+        private static readonly ConditionalWeakTable<Database, StandardsEntry> StandardsCache = new ConditionalWeakTable<Database, StandardsEntry>();
+
+        /// <summary>
+        /// The layer standards in the drawing's settings (Settings > Layers), read the way the
+        /// mapping is and cached until the settings are saved again. Null when the settings cannot
+        /// be read; a layer is then created as before, from its family.
+        /// </summary>
+        public static LayerStandardsSettings Standards(Database db)
+        {
+            if (db == null) return null;
+            StandardsEntry entry;
+            if (StandardsCache.TryGetValue(db, out entry) && entry.Version == FtfSession.SettingsVersion) return entry.Standards;
+            LayerStandardsSettings standards = null;
+            try
+            {
+                var rules = FtfSession.Rules(db);
+                var settings = FtfSession.SettingsFor(db, rules);
+                standards = settings.LayerStandards;
+            }
+            catch (ConfigException) { standards = null; }
+            catch (System.IO.IOException) { standards = null; }
+            catch (UnauthorizedAccessException) { standards = null; }
+            StandardsCache.Remove(db);
+            StandardsCache.Add(db, new StandardsEntry { Version = FtfSession.SettingsVersion, Standards = standards });
+            return standards;
+        }
+
         private sealed class Restore : IDisposable
         {
             private readonly LayerMap _map;

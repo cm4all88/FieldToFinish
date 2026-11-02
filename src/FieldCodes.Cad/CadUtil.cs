@@ -89,10 +89,34 @@ namespace FieldCodes.Cad
         /// for a layer the user named themselves (Settings > Layers, Create Missing).</summary>
         public static ObjectId EnsureLayerExact(Database db, Transaction tr, string name, LayerLook look = null)
         {
+            return EnsureLayerExact(db, tr, name, look, null);
+        }
+
+        /// <summary>
+        /// As above, with the layer standards to apply to a layer that has to be created; null reads
+        /// them from the drawing's settings (Settings > Layers). An existing layer is returned as it
+        /// is: its properties change only through FTFLAYERUPDATE, after a preview.
+        /// </summary>
+        public static ObjectId EnsureLayerExact(Database db, Transaction tr, string name, LayerLook look,
+                                                FieldCodes.Settings.LayerStandardsSettings standards)
+        {
             if (string.IsNullOrEmpty(name)) return db.Clayer;
 
             var table = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
             if (table.Has(name)) return table[name];
+
+            // The office's layer standard for this name, when it has one and wants it on new layers.
+            // It is the user's own configuration, so it wins over the family and the settings' look.
+            var standardsInForce = standards ?? ProjectLayers.Standards(db);
+            var standard = standardsInForce != null && standardsInForce.ApplyToNewLayers ? standardsInForce.For(name) : null;
+            if (standard != null && standard.IsEmpty) standard = null;
+            if (standard != null && standard.Values.Sets(FieldCodes.Settings.LayerProperty.Linetype))
+            {
+                // Loaded before the layer table is opened for write; a linetype nobody can load is
+                // reported when the layer is made, never swapped for another.
+                string notLoaded;
+                LayerStandardsCad.EnsureLinetype(db, tr, standard.Values.Linetype, out notLoaded);
+            }
 
             // A new layer in a family the drawing already has (V-ESMT-PATT-E beside V-ESMT-E) takes that family's
             // look, so it reads as the office's rather than plain white. FTF is not deciding a standard here: it
@@ -119,6 +143,8 @@ namespace FieldCodes.Cad
                     if (weight.HasValue && Enum.IsDefined(typeof(LineWeight), weight.Value))
                         record.LineWeight = (LineWeight)weight.Value;
                 }
+                // Settings > Layers: what the office says this layer looks like, property by property.
+                if (standard != null) LayerStandardsCad.ApplyToNew(db, tr, record, standard);
                 var id = table.Add(record);
                 tr.AddNewlyCreatedDBObject(record, true);
                 return id;

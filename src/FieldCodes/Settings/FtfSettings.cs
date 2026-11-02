@@ -135,6 +135,7 @@ namespace FieldCodes.Settings
         [JsonProperty("diagnostics")] public DiagnosticsSettings Diagnostics { get; set; }
         [JsonProperty("styles")] public FieldCodes.Styles.StyleSettings Styles { get; set; }
         [JsonProperty("workflows")] public WorkflowSettings Workflows { get; set; }
+        [JsonProperty("layerStandards")] public LayerStandardsSettings LayerStandards { get; set; }
 
         /// <summary>The resolution this object was resolved into, so a save to one of its
         /// level files writes that level's differences rather than a complete copy.</summary>
@@ -167,6 +168,7 @@ namespace FieldCodes.Settings
             Diagnostics = new DiagnosticsSettings();
             Styles = new FieldCodes.Styles.StyleSettings();
             Workflows = new WorkflowSettings();
+            LayerStandards = new LayerStandardsSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -179,7 +181,7 @@ namespace FieldCodes.Settings
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
                     Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation,
-                    Styles, Workflows
+                    Styles, Workflows, LayerStandards
                 };
             }
         }
@@ -379,6 +381,8 @@ namespace FieldCodes.Settings
             if (Styles == null) Styles = new FieldCodes.Styles.StyleSettings();
             Styles.FillMissing();
             if (Workflows == null) Workflows = new WorkflowSettings();
+            if (LayerStandards == null) LayerStandards = new LayerStandardsSettings();
+            if (LayerStandards.Layers == null) LayerStandards.Layers = new List<LayerStandard>();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();
             if (DrawOrder.MaskableLayers == null) DrawOrder.MaskableLayers = new List<string>();
