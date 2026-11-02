@@ -3,31 +3,41 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace FieldCodes.Settings
 {
-    /// <summary>Which of the searched locations a settings file came from.</summary>
+    /// <summary>The highest settings level that has a file (SettingsLevel lists the whole stack).</summary>
     public enum SettingsSource
     {
         /// <summary>No file found; shipped defaults are in use.</summary>
         Defaults = 0,
-        /// <summary>Next to the drawing. Overrides everything else.</summary>
+        /// <summary>The project file beside the drawing: the highest level.</summary>
         DrawingFolder = 1,
-        /// <summary>The user's roaming profile. Applies to every drawing.</summary>
+        /// <summary>The user's own defaults (%APPDATA%). Below profiles and project files.</summary>
         UserProfile = 2,
-        /// <summary>A named drafting profile selected for the drawing.</summary>
+        /// <summary>A named project or client profile selected for the drawing.</summary>
         Profile = 4,
-        /// <summary>Shipped with the plugin. Read-only in practice: a rebuild replaces it.</summary>
+        /// <summary>The office standard in the plugin folder: the lowest file level.</summary>
         PluginFolder = 3
     }
 
-    /// <summary>Where the settings came from and where a save would go.</summary>
+    /// <summary>
+    /// The settings in force for a drawing, and where each value came from. Settings are
+    /// layered value by value -- built-in, office, my defaults, profile, project -- so
+    /// Source and LoadedFrom name the highest level that has a file, Levels lists every
+    /// level, and Provenance says, for each setting, which level supplied it.
+    /// </summary>
     public sealed class SettingsResolution
     {
+        private IDictionary<string, SettingProvenance> _provenance;
+
         public FtfSettings Settings { get; set; }
+
+        /// <summary>The highest level that has a file.</summary>
         public SettingsSource Source { get; set; }
 
-        /// <summary>File the settings were read from, or null when defaults were used.</summary>
+        /// <summary>That level's file, or null when defaults were used.</summary>
         public string LoadedFrom { get; set; }
 
         /// <summary>The drafting profile in force, when one was selected and found.</summary>
@@ -38,6 +48,48 @@ namespace FieldCodes.Settings
 
         /// <summary>True when the values came from the legacy keys in rules.json.</summary>
         public bool MigratedFromRules { get; set; }
+
+        /// <summary>Every level, lowest first, indexed by (int)SettingsLevel: whether its file
+        /// exists, where it is, and whether it is a complete (older, version 1) file.</summary>
+        public IList<SettingsLevelInfo> Levels { get; set; }
+
+        /// <summary>
+        /// For every setting (dotted JSON path, e.g. "labels.textHeightPlotted"): the value
+        /// in use, the level that supplied it, and the different values other levels hold.
+        /// Built on first use; empty for a resolution not built from the levels.
+        /// </summary>
+        public IDictionary<string, SettingProvenance> Provenance
+        {
+            get
+            {
+                if (_provenance == null) _provenance = SettingsLayers.BuildProvenance(this);
+                return _provenance;
+            }
+        }
+
+        /// <summary>One level's details, or null when this resolution has no levels.</summary>
+        public SettingsLevelInfo LevelInfo(SettingsLevel level)
+        {
+            var index = (int)level;
+            return Levels != null && index >= 0 && index < Levels.Count ? Levels[index] : null;
+        }
+
+        /// <summary>The file a level reads and saves, or null when it has none.</summary>
+        public string PathFor(SettingsLevel level)
+        {
+            var info = LevelInfo(level);
+            return info == null ? null : info.Path;
+        }
+
+        // What the resolution was built from, for saving and refreshing.
+        internal LayerInputs Inputs { get; set; }
+        internal JObject BuiltInJson { get; set; }
+        internal JObject EffectiveJson { get; set; }
+
+        internal void ResetProvenance()
+        {
+            _provenance = null;
+        }
     }
 
     /// <summary>
@@ -83,6 +135,11 @@ namespace FieldCodes.Settings
         [JsonProperty("diagnostics")] public DiagnosticsSettings Diagnostics { get; set; }
         [JsonProperty("styles")] public FieldCodes.Styles.StyleSettings Styles { get; set; }
         [JsonProperty("workflows")] public WorkflowSettings Workflows { get; set; }
+
+        /// <summary>The resolution this object was resolved into, so a save to one of its
+        /// level files writes that level's differences rather than a complete copy.</summary>
+        [JsonIgnore]
+        internal SettingsResolution Origin { get; set; }
 
         public FtfSettings()
         {
@@ -130,8 +187,10 @@ namespace FieldCodes.Settings
         // ------------------------------------------------------------------ loading
 
         /// <summary>
-        /// Locations searched, highest priority first: beside the drawing, then the
-        /// user's profile, then the plugin folder.
+        /// The settings files, highest priority first: beside the drawing (project), the
+        /// user's own defaults, then the plugin folder (office standard). A selected
+        /// profile sits between the project and the user's defaults. Every one of them
+        /// that exists is merged, value by value (SettingsLayers).
         /// </summary>
         public static IList<string> CandidatePaths(string drawingDirectory, string pluginDirectory)
         {
@@ -166,9 +225,10 @@ namespace FieldCodes.Settings
 
         /// <summary>
         /// Named drafting profiles -- "Parametrix Standard", "WSDOT", a client or a
-        /// single project. Each is a complete settings file in the profiles folder;
-        /// no name is built in or mandatory. A drawing selects one, and every FTF
-        /// tool then drafts to it.
+        /// single project. Each is a settings file in the profiles folder holding the
+        /// values that profile changes; no name is built in or mandatory. A drawing
+        /// selects one, and every FTF tool then drafts to it, with the project file
+        /// beside the drawing still on top of it.
         /// </summary>
         public static string ProfilesDirectory()
         {
@@ -199,94 +259,50 @@ namespace FieldCodes.Settings
             return path != null && SafeExists(path);
         }
 
+        /// <summary>
+        /// Writes a profile. Settings that came from a resolution are saved as the values
+        /// that differ from the office standard and the saver's own defaults (an override
+        /// file, SettingsLayers.SaveProfile); a settings object built in code is written
+        /// whole, as before.
+        /// </summary>
         public static void SaveProfile(string name, FtfSettings settings)
         {
             var path = ProfilePath(name);
             if (path == null) throw new ArgumentException("A profile needs a name.");
+            if (settings == null) throw new ArgumentNullException("settings");
             Directory.CreateDirectory(ProfilesDirectory());
+
+            if (settings.Origin != null && settings.Origin.Levels != null)
+            {
+                SettingsLayers.SaveProfile(settings.Origin, name, settings);
+                return;
+            }
             settings.Save(path);
         }
 
         /// <summary>
-        /// Resolution with a drawing's selected profile: settings beside the drawing
-        /// (a project override) still win; then the selected profile; then the
-        /// user's own settings, the plugin copy and defaults as before. A selected
-        /// profile that no longer exists is skipped, and the result says so.
+        /// Settings for a drawing: the built-in values, then the office standard (plugin
+        /// folder), the user's own defaults, the drawing's selected profile and the project
+        /// file beside the drawing, merged value by value -- a level that does not set a
+        /// value inherits it (SettingsLayers). A selected profile that does not exist is
+        /// skipped and reported in MissingProfile. A file that cannot be read is a
+        /// ConfigException, never silently skipped.
         /// </summary>
         public static SettingsResolution Resolve(string drawingDirectory, string pluginDirectory,
                                                  RulesConfig rulesForMigration, string profileName)
         {
-            if (!string.IsNullOrWhiteSpace(profileName))
-            {
-                var besideDrawing = string.IsNullOrWhiteSpace(drawingDirectory)
-                    ? null : Path.Combine(drawingDirectory, FileName);
-                if (besideDrawing == null || !SafeExists(besideDrawing))
-                {
-                    var profilePath = ProfilePath(profileName);
-                    if (profilePath != null && SafeExists(profilePath))
-                        return new SettingsResolution
-                        {
-                            Settings = Load(profilePath),
-                            Source = SettingsSource.Profile,
-                            LoadedFrom = profilePath,
-                            ProfileName = profileName
-                        };
-                }
-            }
-
-            var resolved = Resolve(drawingDirectory, pluginDirectory, rulesForMigration);
-            if (!string.IsNullOrWhiteSpace(profileName) && resolved.Source != SettingsSource.DrawingFolder)
-                resolved.MissingProfile = profileName;
-            return resolved;
+            return SettingsLayers.Resolve(drawingDirectory, pluginDirectory, rulesForMigration, profileName);
         }
 
         /// <summary>
-        /// Finds and loads settings. When no file exists anywhere, the legacy keys in
-        /// <paramref name="rulesForMigration"/> seed the result so an existing install
-        /// keeps behaving the way it did before this file existed.
+        /// Resolution without a profile. When no settings file exists anywhere, the legacy
+        /// keys in <paramref name="rulesForMigration"/> seed the result so an existing
+        /// install keeps behaving the way it did before this file existed.
         /// </summary>
         public static SettingsResolution Resolve(string drawingDirectory, string pluginDirectory,
                                                  RulesConfig rulesForMigration)
         {
-            var candidates = CandidatePaths(drawingDirectory, pluginDirectory);
-
-            for (var i = 0; i < candidates.Count; i++)
-            {
-                var path = candidates[i];
-                if (!SafeExists(path)) continue;
-
-                return new SettingsResolution
-                {
-                    Settings = Load(path),
-                    Source = SourceOf(i, drawingDirectory),
-                    LoadedFrom = path
-                };
-            }
-
-            var seeded = new FtfSettings();
-            var migrated = false;
-            if (rulesForMigration != null)
-            {
-                seeded.MigrateFrom(rulesForMigration);
-                migrated = true;
-            }
-
-            return new SettingsResolution
-            {
-                Settings = seeded,
-                Source = SettingsSource.Defaults,
-                LoadedFrom = null,
-                MigratedFromRules = migrated
-            };
-        }
-
-        private static SettingsSource SourceOf(int index, string drawingDirectory)
-        {
-            var haveDrawing = !string.IsNullOrWhiteSpace(drawingDirectory);
-            if (haveDrawing && index == 0) return SettingsSource.DrawingFolder;
-            return (haveDrawing ? index : index + 1) == 1
-                ? SettingsSource.UserProfile
-                : SettingsSource.PluginFolder;
+            return SettingsLayers.Resolve(drawingDirectory, pluginDirectory, rulesForMigration, null);
         }
 
         private static bool SafeExists(string path)
@@ -379,10 +395,26 @@ namespace FieldCodes.Settings
         /// <summary>
         /// Validates, then writes. An invalid setting is never written, so a bad value
         /// cannot be saved and then fail to load on the next command.
+        ///
+        /// When this object came from a resolution and <paramref name="path"/> is one of its
+        /// level files (project, profile, my defaults, office), the save goes through
+        /// SettingsLayers.SaveChanges: what changed is saved to that level, and the file
+        /// keeps only its real differences. Any other path gets a complete copy (an export).
         /// </summary>
         public void Save(string path)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentNullException("path");
+
+            var origin = Origin;
+            if (origin != null && origin.Levels != null)
+            {
+                var level = SettingsLayers.LevelOfPath(origin, path);
+                if (level.HasValue)
+                {
+                    SettingsLayers.SaveChanges(origin, level.Value, this);
+                    return;
+                }
+            }
 
             var problems = new List<string>();
             Validate(problems);

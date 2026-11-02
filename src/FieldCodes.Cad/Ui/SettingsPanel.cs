@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using FieldCodes.Settings;
 using FieldCodes.Cad.Setup;
@@ -257,14 +258,43 @@ namespace FieldCodes.Cad.Ui
                 TextFormatFlags.NoPrefix);
         }
 
+        /// <summary>A level the Save button writes to.</summary>
+        private sealed class SaveTarget
+        {
+            public SettingsLevel Level;
+            public string Text;
+            public override string ToString() { return Text; }
+        }
+
+        private Label _targetNote;
+
+        /// <summary>
+        /// Save target and buttons, with a line under them saying which level and file a
+        /// save goes to. Levels, lowest first: built-in, office standard, my defaults,
+        /// profile, project. Save writes only what changed, and each file keeps only what
+        /// differs from the levels below it (SettingsLayers).
+        /// </summary>
         private Control BuildFooter()
         {
+            var outer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 2,
+                Padding = new Padding(6, 6, 6, 4)
+            };
+            outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
             var footer = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 AutoSize = true,
                 WrapContents = false,
-                Padding = new Padding(6, 6, 6, 4)
+                Margin = new Padding(0)
             };
 
             footer.Controls.Add(new Label
@@ -277,16 +307,21 @@ namespace FieldCodes.Cad.Ui
             _saveTarget = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 200
+                Width = 290
             };
-            _saveTarget.Items.Add("My settings (all drawings)");
-            _saveTarget.Items.Add("This drawing's folder");
-            if (!string.IsNullOrWhiteSpace(_context.Resolution.ProfileName))
-                _saveTarget.Items.Add("Drafting profile \"" + _context.Resolution.ProfileName + "\"");
-            _saveTarget.SelectedIndex =
-                _context.Resolution.Source == SettingsSource.DrawingFolder ? 1
-                : _context.Resolution.Source == SettingsSource.Profile && _saveTarget.Items.Count > 2 ? 2 : 0;
-            if (_saveTarget.Items.Count > 2) _saveTarget.Width = 260;
+            _saveTarget.Items.Add(new SaveTarget { Level = SettingsLevel.Project, Text = "Project (this drawing's folder)" });
+            var profile = _context.Resolution.ProfileName;
+            if (!string.IsNullOrWhiteSpace(profile))
+                _saveTarget.Items.Add(new SaveTarget { Level = SettingsLevel.Profile, Text = "Project profile \"" + profile + "\"" });
+            _saveTarget.Items.Add(new SaveTarget { Level = SettingsLevel.User, Text = "My defaults (all drawings, below project)" });
+            _saveTarget.Items.Add(new SaveTarget { Level = SettingsLevel.Office, Text = "Office standard (authorization required)" });
+
+            // A saved drawing saves to its project by default; an unsaved one has no project
+            // folder yet, so to the person's own defaults.
+            var start = _context.Resolution.PathFor(SettingsLevel.Project) != null ? SettingsLevel.Project : SettingsLevel.User;
+            for (var i = 0; i < _saveTarget.Items.Count; i++)
+                if (((SaveTarget)_saveTarget.Items[i]).Level == start) _saveTarget.SelectedIndex = i;
+            _saveTarget.SelectedIndexChanged += (s, e) => UpdateTargetNote();
             footer.Controls.Add(_saveTarget);
 
             _save = new Button
@@ -318,7 +353,9 @@ namespace FieldCodes.Cad.Ui
                 Margin = new Padding(8, 2, 0, 0),
                 Enabled = false
             };
-            _discard.Click += (s, e) => DiscardChanges();
+            // Re-reads every level (not just the top file): with layered settings the top
+            // file alone holds only that level's overrides.
+            _discard.Click += (s, e) => DiscardToSaved();
             footer.Controls.Add(_discard);
 
             _dirtyNote = new Label
@@ -331,7 +368,100 @@ namespace FieldCodes.Cad.Ui
             };
             footer.Controls.Add(_dirtyNote);
 
-            return footer;
+            if (_sections.Exists(x => !x.IsGroup && string.Equals(x.Label, ProvenancePage.NavLabel, StringComparison.OrdinalIgnoreCase)))
+            {
+                var where = new LinkLabel { Text = "Where values come from", AutoSize = true, Margin = new Padding(12, 8, 0, 0) };
+                where.LinkClicked += (s, e) => SelectSection(ProvenancePage.NavLabel);
+                footer.Controls.Add(where);
+            }
+
+            outer.Controls.Add(footer, 0, 0);
+
+            _targetNote = new Label
+            {
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                MaximumSize = new Size(1000, 0),
+                Margin = new Padding(2, 4, 0, 0)
+            };
+            outer.Controls.Add(_targetNote, 0, 1);
+            UpdateTargetNote();
+
+            return outer;
+        }
+
+        private SaveTarget SelectedTarget()
+        {
+            return _saveTarget == null ? null : _saveTarget.SelectedItem as SaveTarget;
+        }
+
+        /// <summary>Which level and file the next save goes to, and what that level means.</summary>
+        private void UpdateTargetNote()
+        {
+            if (_targetNote == null) return;
+            var target = SelectedTarget();
+            if (target == null) { _targetNote.Text = string.Empty; return; }
+
+            var path = TargetPath();
+            string text;
+            switch (target.Level)
+            {
+                case SettingsLevel.Project:
+                    text = path == null
+                        ? "Project: this drawing has not been saved, so there is no project folder yet."
+                        : "Saves to Project: " + path + ". Keeps only this project's differences from the levels " +
+                          "below it, and overrides them for drawings in this folder.";
+                    break;
+                case SettingsLevel.Profile:
+                    text = "Saves to profile \"" + _context.Resolution.ProfileName + "\": " + path + ". Keeps only its " +
+                           "differences from the office standard and your defaults; a project file still overrides it.";
+                    break;
+                case SettingsLevel.User:
+                    text = "Saves to My defaults: " + path + ". Your own defaults for every drawing. They sit below " +
+                           "profiles and project files, so they never override a project's standard.";
+                    break;
+                default:
+                    text = "Saves to the Office standard: " + (path ?? "(plugin folder unknown)") + ". Written whole; " +
+                           "asks for the office PIN when one is set. An FTF update replaces the plugin folder: keep a copy " +
+                           "(docs\\settings-levels.md).";
+                    break;
+            }
+
+            var above = 0;
+            if (target.Level != SettingsLevel.Project)
+                foreach (var p in _context.Resolution.Provenance.Values)
+                    if (p.From > target.Level) above++;
+            if (above > 0)
+                text += " " + above + (above == 1 ? " value is" : " values are") +
+                        " set by a higher level and stay in force for this drawing.";
+
+            _targetNote.Text = text;
+        }
+
+        /// <summary>Throws away edits: every page goes back to the values in force, read again
+        /// from every level's file.</summary>
+        private void DiscardToSaved()
+        {
+            if (MessageBox.Show(this, "Discard the changes you have not saved?", "Settings",
+                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try
+            {
+                SettingsLayers.Refresh(_context.Resolution);
+            }
+            catch (ConfigException ex)
+            {
+                MessageBox.Show(this, ex.Message, "Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            catch (IOException ex)
+            {
+                MessageBox.Show(this, ex.Message, "Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            ReloadAll();
+            MarkClean();
+            UpdateTargetNote();
+            _log("Unsaved settings changes discarded.");
         }
 
         /// <summary>Earlier names of sections, so links from other windows keep working.</summary>
@@ -413,6 +543,12 @@ namespace FieldCodes.Cad.Ui
 
         // ------------------------------------------------------------------ saving
 
+        /// <summary>
+        /// Saves what changed in the window to the chosen level. Only the changes go to that
+        /// level -- never values that came from other levels -- and the level's file keeps
+        /// only what differs from what it inherits. The office standard asks for its PIN
+        /// (or offers to set one) and needs a writable plugin folder.
+        /// </summary>
         private void SaveAll()
         {
             var settings = _context.Resolution.Settings;
@@ -434,22 +570,52 @@ namespace FieldCodes.Cad.Ui
                 return;
             }
 
+            var target = SelectedTarget();
             var path = TargetPath();
-            if (path == null)
+            if (target == null || path == null)
             {
                 MessageBox.Show(this,
-                    "This drawing has never been saved, so there is no folder to put " +
-                    "settings in. Choose \"My settings\" instead, or save the drawing first.",
+                    target != null && target.Level == SettingsLevel.Office
+                        ? "FTF cannot tell which folder it was loaded from, so there is no office standard file to save to."
+                        : "This drawing has never been saved, so there is no project folder to put settings in. " +
+                          "Choose \"My defaults\" instead, or save the drawing and open Settings again.",
                     "Cannot save here", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
+            string pin = null, newPin = null;
+            if (target.Level == SettingsLevel.Office)
+            {
+                if (MessageBox.Show(this,
+                        "Save your changes to the OFFICE STANDARD?" + Environment.NewLine + Environment.NewLine + path +
+                        Environment.NewLine + Environment.NewLine +
+                        "Every drawing that does not set these values in its project, its profile or the user's own " +
+                        "defaults will use them.",
+                        "Office standard", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                    return;
+                if (!PinDialog.AuthorizeOffice(this, path, true, out pin, out newPin)) return;
+            }
+
             try
             {
-                settings.Save(path);
+                var result = SettingsLayers.SaveChanges(_context.Resolution, target.Level, settings, pin, newPin);
                 FtfSession.InvalidateSettings();
+                ReloadAll();        // every page shows the values now in force
                 MarkClean();
-                _log("Settings saved to " + path);
+                UpdateTargetNote();
+                _log(result.Summary());
+
+                if (result.Hidden.Count > 0)
+                {
+                    const int listed = 15;
+                    var lines = result.Hidden.Take(listed).ToList();
+                    if (result.Hidden.Count > listed) lines.Add("... and " + (result.Hidden.Count - listed) + " more");
+                    MessageBox.Show(this,
+                        "Saved to " + result.LevelName + ", but a higher level sets these, so this drawing keeps " +
+                        "the higher level's value:" + Environment.NewLine + Environment.NewLine +
+                        string.Join(Environment.NewLine, lines.ToArray()),
+                        "Saved, but not in force here", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
             catch (ConfigException ex)
             {
@@ -470,29 +636,13 @@ namespace FieldCodes.Cad.Ui
             }
         }
 
+        /// <summary>The file the chosen level reads and saves: beside the drawing, the
+        /// profile, %APPDATA%, or the plugin folder. Null when the level has none (a drawing
+        /// that was not saved when Settings opened).</summary>
         private string TargetPath()
         {
-            if (_saveTarget.SelectedIndex == 2)
-            {
-                var profile = _context.Resolution.ProfileName;
-                var path = FtfSettings.ProfilePath(profile);
-                if (path != null) Directory.CreateDirectory(Path.GetDirectoryName(path));
-                return path;
-            }
-
-            if (_saveTarget.SelectedIndex == 1)
-            {
-                var drawing = _context.Drawing != null ? _context.Drawing.DrawingPath : null;
-                if (string.IsNullOrWhiteSpace(drawing)) return null;
-
-                string dir;
-                try { dir = Path.GetDirectoryName(drawing); }
-                catch (ArgumentException) { return null; }
-
-                return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, FtfSettings.FileName);
-            }
-
-            return FtfSettings.UserProfilePath();
+            var target = SelectedTarget();
+            return target == null ? null : _context.Resolution.PathFor(target.Level);
         }
 
         private void RestoreCurrent()

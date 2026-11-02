@@ -227,9 +227,11 @@ namespace FieldCodes.Cad.Setup
     // ------------------------------------------------------------------ profiles
 
     /// <summary>
-    /// Settings > Profiles: which settings file is in force for this drawing (drawing folder,
-    /// a named project/client profile, the user's, or the office's), and import / export of a
-    /// whole configuration. Saving a profile or a project file never touches the office file.
+    /// Settings > Profiles: the settings levels in force for this drawing (project file, a named
+    /// project/client profile, the user's own defaults, the office standard, built-in), the
+    /// profiles on this computer, and import / export of a whole configuration. A profile file
+    /// keeps only what differs from the office standard and the saver's defaults. Saving a
+    /// profile or a project file never touches the office file.
     /// </summary>
     [SettingsPage(Group = "Administration", Label = "Profiles", Order = 10, Commands = "FTFPROFILE,*")]
     internal sealed class ProfilesPage : SetupPage
@@ -244,7 +246,7 @@ namespace FieldCodes.Cad.Setup
 
         protected override void BuildBody()
         {
-            Heading("In force for this drawing");
+            Heading("Settings levels for this drawing (highest first)");
             _active = LiveNote();
             _active.ForeColor = SystemColors.ControlText;
 
@@ -257,8 +259,9 @@ namespace FieldCodes.Cad.Setup
             var save = new Button { Text = "Save As Profile..." };
             save.Click += (s, e) => SaveAsProfile();
             AddWithSideButtons(_profiles, SideButtons(use, none, save));
-            Note("A profile holds a client's or project's settings (layers, labels, standards). Selecting one " +
-                 "for a drawing never changes the office or your own settings.");
+            Note("A profile holds a client's or project's settings (layers, labels, standards): only the values " +
+                 "that differ from the office standard and your defaults. It sits above your defaults and below the " +
+                 "project file. Selecting one for a drawing never changes the office or your own settings.");
 
             Heading("Import and export");
             var export = new Button { Text = "Export Settings...", AutoSize = true };
@@ -269,35 +272,20 @@ namespace FieldCodes.Cad.Setup
             row.Controls.Add(export);
             row.Controls.Add(import);
             AddFullWidth(row);
-            Note("Export writes the settings in force (as last saved) to a file. Import reads one, checks it, " +
-                 "and loads it into this window; nothing is written until you Save, to the level chosen below.");
+            Note("Export writes every setting in force (as last saved) to one complete file. Import reads one, " +
+                 "checks it, and loads it into this window: a complete file replaces every value, a file of " +
+                 "overrides changes only the values it holds. Nothing is written until you Save, to the level " +
+                 "chosen below.");
         }
 
         public override void LoadFrom(FtfSettings s)
         {
             _settings = s;
             var r = Context.Resolution;
-            _active.Text = r == null ? "Shipped defaults." :
-                string.Format("{0}{1}\n{2}", SourceName(r.Source),
-                    string.IsNullOrWhiteSpace(r.ProfileName) ? string.Empty : " \"" + r.ProfileName + "\"",
-                    r.LoadedFrom ?? "(no file: shipped defaults)") +
-                (string.IsNullOrWhiteSpace(r.MissingProfile) ? string.Empty
-                    : "\nProfile \"" + r.MissingProfile + "\" is selected but not on this computer; normal settings are in use.");
+            _active.Text = r == null ? "Shipped defaults." : ProvenancePage.DescribeLevels(r);
             _profiles.Items.Clear();
             foreach (var p in FtfSettings.ListProfiles()) _profiles.Items.Add(p);
             if (r != null && !string.IsNullOrWhiteSpace(r.ProfileName)) _profiles.SelectedItem = r.ProfileName;
-        }
-
-        private static string SourceName(SettingsSource source)
-        {
-            switch (source)
-            {
-                case SettingsSource.DrawingFolder: return "Project file beside the drawing";
-                case SettingsSource.Profile: return "Profile";
-                case SettingsSource.UserProfile: return "Your settings";
-                case SettingsSource.PluginFolder: return "Office settings (plugin folder)";
-                default: return "Shipped defaults";
-            }
         }
 
         private void UseProfile(bool clear = false)
@@ -321,11 +309,21 @@ namespace FieldCodes.Cad.Setup
         {
             var name = Prompt("Profile name (project or client):");
             if (string.IsNullOrWhiteSpace(name)) return;
+            // The drawing's own profile: the window reloads the values in force afterwards,
+            // which would lose edits not yet saved.
+            var own = string.Equals(name, Context.Resolution.ProfileName, StringComparison.OrdinalIgnoreCase);
+            if (own && !ProvenancePage.NoUnsavedEdits(_profiles)) return;
             if (FtfSettings.ProfileExists(name) &&
                 MessageBox.Show(_profiles, "Profile \"" + name + "\" exists. Replace it with the settings shown in this window (as last saved)?",
                                 "Profiles", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            FtfSettings.SaveProfile(name, _settings);
-            LoadFrom(_settings);
+            // Stored as the values that differ from the office standard and your defaults.
+            try { FtfSettings.SaveProfile(name, _settings); }
+            catch (ConfigException ex) { MessageBox.Show(_profiles, ex.Message, "Profile not saved"); return; }
+            catch (IOException ex) { MessageBox.Show(_profiles, ex.Message, "Profile not saved"); return; }
+            catch (UnauthorizedAccessException ex) { MessageBox.Show(_profiles, ex.Message, "Profile not saved"); return; }
+            FtfSession.InvalidateSettings();
+            if (own && Context.Reload != null) Context.Reload();
+            else LoadFrom(_settings);
         }
 
         private void Export()
@@ -333,8 +331,13 @@ namespace FieldCodes.Cad.Setup
             using (var dialog = new SaveFileDialog { Filter = "FTF settings (*.json)|*.json", FileName = "ftf-settings.json" })
             {
                 if (dialog.ShowDialog() != DialogResult.OK) return;
-                try { _settings.Save(dialog.FileName); MessageBox.Show(_profiles, "Exported to " + dialog.FileName, "Profiles"); }
+                // A detached copy, so an export is always one complete file -- even when the file
+                // chosen happens to be one of this drawing's level files.
+                var copy = SettingsLayers.FromJson(SettingsLayers.ToJson(_settings));
+                try { copy.Save(dialog.FileName); MessageBox.Show(_profiles, "Exported to " + dialog.FileName, "Profiles"); }
                 catch (ConfigException ex) { MessageBox.Show(_profiles, ex.Message, "Not exported"); }
+                catch (IOException ex) { MessageBox.Show(_profiles, ex.Message, "Not exported"); }
+                catch (UnauthorizedAccessException ex) { MessageBox.Show(_profiles, ex.Message, "Not exported"); }
             }
         }
 
@@ -344,8 +347,10 @@ namespace FieldCodes.Cad.Setup
             {
                 if (dialog.ShowDialog() != DialogResult.OK) return;
                 FtfSettings loaded;
-                try { loaded = FtfSettings.Load(dialog.FileName); }
+                // A complete file replaces every value; a file of overrides changes only its own.
+                try { loaded = SettingsLayers.ReadForImport(dialog.FileName, _settings); }
                 catch (ConfigException ex) { MessageBox.Show(_profiles, ex.Message, "Not imported"); return; }
+                catch (IOException ex) { MessageBox.Show(_profiles, ex.Message, "Not imported"); return; }
                 var problems = new List<string>();
                 loaded.Validate(problems);
                 if (problems.Count > 0) { MessageBox.Show(_profiles, string.Join("\n", problems.ToArray()), "Not imported"); return; }
