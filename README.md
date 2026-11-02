@@ -223,9 +223,14 @@ whole reason the swap waits for the close. `install-dev.ps1` deliberately remove
 copy and must not be replaced by one. `FTFUPDATE` reports what a machine found; the
 decision itself is `FieldCodes.Deploy.OfficeBuild`, with unit tests.
 
-Civil 3D builds FTF's two ribbon tabs at startup: **FTF** for the drawing being
-finished (Label, Finish, Dips, Review, Sheets, Clean up) and **FTF Boundary** for the
-record work written from it (Record, Easements, Exhibits).
+Civil 3D builds FTF's four ribbon tabs at startup, one per kind of work:
+**FieldToFinish** (process, points and symbols, labels, trees, utility dips, settings,
+reports), **Survey Drafting** (spot elevations, contours, line labels, drafting, sheets),
+**Boundary** (recorded surveys, calculations and closure, right of way and lots, record
+comparison) and **Easements** (create, legal descriptions, exhibits, closure
+verification). Every command keeps its name; the full table is in `docs/ribbon.md`,
+built from `FieldCodes.Commands.RibbonLayout`, which tests check against the registered
+commands.
 
 ## Build status
 
@@ -529,10 +534,30 @@ Settings > Line Labels > Driveway wording (`{type} DWY`); the label layer is the
 ## Label Everything: FTFLABELALL
 
 Once the points are imported and Civil 3D has built the linework, the **Label
-Everything** button (`FTFLABELALL`) labels the drawing in one go:
+Everything** button (`FTFLABELALL`) labels the drawing in one go -- but only the
+feature families ticked in **Settings > Label All** (trees, utilities, storm and
+sewer structures, signs, control, pavement markings, other points, line features).
+Storm and sewer structures are off by default: their dips are recorded and labelled
+by the Dip Builder. `FTFLABELALL > Preview` changes nothing and lists how many labels
+(and tree tags) would be created, updated, skipped or flagged, by family and reason.
 
-1. Every recognised line, by the whole-drawing line pass. It runs even when the
-   automatic pass is off in Settings > Line Labels; that switch only governs
+- **Trees get one annotation, never two** (Settings > Trees): description only
+  (`18" FIR`, the default), tag only (`T12`, the description goes in the schedule), or
+  none. Label All tags trees instead of labelling them when trees are set to tags.
+  The tree schedule is a separate switch (Settings > Schedule); with descriptions it
+  lists trees by point number.
+- **Dip measurements are never label text.** A crew note such as `12 RCP N 6.41`,
+  `MD 6.25`, `BOT 7.82` or `WL 6.9` is not used; the point is labelled from its code.
+- **Points marked `NOLABEL`** (after the code or in the note) are left alone.
+- **Hand labels are respected.** Text someone typed near a point that says the same
+  thing (`18in Fir` for FTF's `18" FIR`) means FTF does not label it again; labels FTF
+  placed and someone moved stay where they were put; a copy someone made of an FTF
+  label is theirs and is never replaced or erased.
+- A run replaces and erases only labels in the families it covers.
+
+1. Every recognised line (when Line features is ticked), by the whole-drawing line
+   pass, at or above the minimum length in Settings > Line Labels. It runs even when
+   the automatic pass is off in Settings > Line Labels; that switch only governs
    `FTFRUN`. A line is identified by figure name, then TrimbleName XData, then the
    notes of the survey points it was drawn through, then its layer, the same order
    `FTFLABELLINE` uses. Two shots noted with a span marker (`FGP`) along a line get
@@ -578,6 +603,84 @@ WOOD FENCE, `FRL` RAIL FENCE and `FBW` BARBED WIRE FENCE; confirm the wordings
 against the office standard. `FNC`/`FHW` share `V-SURF-FENC-E` and `FBD`/`FRL` share
 `V-SURF-FENC-WOOD-E`: a survey figure names itself (`FNC3`), a plain polyline is
 named by its shots' notes, and only when neither says does `FTFLABELLINE` ask.
+
+## Settings, layers and processing
+
+### Settings, grouped by workflow
+
+The FTF window's Settings page is grouped the way the work goes:
+
+| Group | Pages |
+|---|---|
+| FieldToFinish | General, **Layers**, Point Features, Symbols and Rotations (read only), Trees, Point Labels, Line Labels, **Label All**, Tags, Schedule, Driplines, Drawing Order |
+| Survey Drafting | Spot Elevations, Contours, Drafting Lines, Sheets, Utility Dips |
+| Boundary and Easements | Right of Way, Platted Blocks, Recorded Surveys, Survey Comparison, Strip Easements, Easement Exhibits |
+| Administration | Profiles, Advanced Settings |
+
+Every page shows "Unsaved changes" as soon as something is edited; **Save** writes to the
+level chosen at the bottom (my settings, this drawing's folder, or the drawing's
+profile -- never the office file), **Discard Changes** reads the settings back, and
+**Restore section defaults** resets one page. **Profiles** shows which settings file
+is in force for the drawing, selects or saves a project/client profile, and imports
+or exports a whole configuration (an import loads into the window; nothing is written
+until Save). Read-only pages and cells are greyed.
+
+**Point Features** is two panels: the feature list (search by code or name, filter by
+Label All family or disabled, sortable) beside the selected rule's editor. Edits are
+staged as you type, validated and previewed against a sample description, and **Save
+Rules** writes the rules file (comments and unknown properties kept, `.bak` written,
+never the factory file). Each rule's Label All family can be set there (an optional
+`"category"` in `rules.json`). **Line Labels** lists every line feature with its label
+text, label layer and side, saved to the rules file the same way.
+
+### Layers
+
+**Settings > Layers** lists every layer FTF draws on -- from the rules (each feature's
+label, dripline and block layer, symbol labels, line label layers, bench, orientation
+QC) and from every settings section (found by reflection, so a new tool's layer fields
+appear on their own) -- as *Feature | Object Type | Current Layer | New Layer | Source |
+Status*, with search and filters. **New Layer** sends a layer to the project's own: pick
+from the drawing or type a name. It is stored as the existing `layerMappings` (older
+files load unchanged) and is applied by **every** command at the one place layers are
+created (`CadUtil.EnsureLayer`, through `ProjectLayers`): labels, driplines, tags, the
+schedule, spot elevations, contours, line labels, drafting, orientation QC and the
+production tools. Before, only the dip and record tools read the mappings. A mapped
+layer is classified as the layer it replaces for masks and draw order. **Create
+Missing** makes the selected layers that are not in the drawing yet, each taking the
+colour and lineweight of its family; Status says which exist, which are mapped, which
+will be created and which have a near-namesake in the drawing. A change for one feature
+only is made on that feature's own page (**Edit Feature Layer** goes there).
+
+### Processing presets
+
+The Process page (and `FTFRUN`, which asks) offers:
+
+| Preset | Runs |
+|---|---|
+| Standard Topographic Finishing | point finishing, driplines, line labels (if selected), labels for the selected families except storm/sewer dips; tags only for trees set to Tag only; no schedule |
+| Trees and Vegetation | driplines and the tree annotation the settings choose; the schedule if it is on |
+| Annotations Only | line labels, labels, tags and the schedule; driplines and symbol rotations untouched |
+| Custom | the stages and families you tick (Orient Symbols is available here) |
+
+Stages always run in order; draw order is added after anything that draws annotation
+and is not run otherwise; a schedule without a tags stage uses the tags already in the
+drawing. **Preview** counts what a run would create, update, skip or flag; after a run
+the page shows each stage's outcome. Label and tag stages replace and erase only the
+families of the preset running, so a trees-only run never touches a pole's label.
+
+### What reprocessing can and cannot remove
+
+- FTF erases only entities carrying its own stamp. Civil 3D points, survey figures,
+  symbols, linework and anything else not drawn by FTF are never erased.
+- Every stamp records the handle of the entity it was written on. A copy of FTF output
+  (COPY, paste, ARRAY) has a new handle and is therefore the user's: never re-placed,
+  replaced or erased, and counted as a hand label.
+- Labels moved by hand are kept by every label run. `FTFCLEAN` asks before removing
+  them (kept by default) and reports copies it left alone.
+- Settings > General > "Ask before FTFCLEAN or Process Drawing removes earlier FTF
+  output" now does what it says; before, nothing read it.
+- Tag numbers are kept in a register in the drawing, so a tree whose tag is switched off
+  and on again gets its old number back.
 
 ## Contours at an exact elevation: FTFCONTOUR
 
