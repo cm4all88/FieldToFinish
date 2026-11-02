@@ -148,30 +148,3 @@ namespace Autodesk.AutoCAD.Geometry
         public Curve3d[] GetCurves() { return new Curve3d[0]; }
     }
 }
-
-namespace Autodesk.Civil.DatabaseServices
-{
-    using Autodesk.AutoCAD.DatabaseServices;
-    using Autodesk.AutoCAD.Geometry;
-
-    public abstract class Part : Entity
-    {
-        public string Name { get; set; }
-        public ObjectId NetworkId { get; }
-        public string PartSizeName { get; }
-    }
-
-    public class Pipe : Part
-    {
-        public Point3d StartPoint { get; }
-        public Point3d EndPoint { get; }
-        public double InnerDiameterOrWidth { get; }
-    }
-
-    public class Structure : Part
-    {
-        public Point3d Location { get; }
-        public Point3d Position { get; set; }
-        public double RimElevation { get; }
-    }
-}

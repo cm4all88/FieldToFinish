@@ -26,10 +26,11 @@ only Autodesk's assemblies and the Windows Runtime are.
 
 | Stub file | Stands in for |
 |---|---|
-| `Stubs/Database.cs` | AcDbMgd / AcMgd / AcCoreMgd: database, entities, symbol tables, plotting, editor and prompts, documents and their events, transient graphics; the Civil 3D (AeccDbMgd) points, styles, alignments and surfaces |
+| `Stubs/Database.cs` | AcDbMgd / AcMgd / AcCoreMgd: database, entities, symbol tables, plotting, editor and prompts, documents and their events, transient graphics |
 | `Stubs/Geometry.cs` | The Ge types (points, vectors, matrices, curves), plus `Extents2d` / `Extents3d`, which AcDbMgd declares in DatabaseServices |
-| `Stubs/Extra.cs` | The AdWindows ribbon, `ProgressMeter`, xref spatial filters, regions, `CompositeCurve3d`, Civil 3D pipes and structures |
+| `Stubs/Extra.cs` | The AdWindows ribbon, `ProgressMeter`, xref spatial filters, regions, `CompositeCurve3d` |
 | `Stubs/WinRt.cs` | The Windows 10 SDK contracts (OCR, PDF rendering) used by FTFRECORD |
+| `Stubs/Civil.cs` | Civil 3D (AeccDbMgd): the Civil document, COGO points, styles, settings, alignments, surfaces, feature lines, pipe networks. Kept apart so `tests/RealApiCompileCheck` can compile the plugin against the real AutoCAD assemblies plus this file alone |
 
 The stubs follow the real AcDbMgd / AcMgd / AcCoreMgd / AdWindows / AeccDbMgd signatures
 (namespace, declaring type, parameter types, return type, static or instance) for the
@@ -47,3 +48,11 @@ the plugin itself not compiling, and the fix belongs in `src/`.
 Whether the code works in Civil 3D. Transaction discipline, open modes, label styles, WinRT
 threading and everything else about the running product are still UNTESTED until the DLL
 is loaded into Civil 3D 2024 on Windows. A green build here is the floor, not the ceiling.
+
+## What stand-ins cannot catch
+
+A stand-in declares only what the plugin uses, so a type name that a real Autodesk namespace
+shares with System.Drawing or WinForms (`Font`, `Region`, `Image`...) is not ambiguous here and
+is in the real build. `tests/RealApiCompileCheck` compiles against Autodesk's real AutoCAD 2024
+reference assemblies and catches it; `AmbiguousTypeNameTests` in the unit tests catches the
+common case on any machine.

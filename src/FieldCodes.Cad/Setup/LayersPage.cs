@@ -6,7 +6,6 @@ using System.Linq;
 using System.Windows.Forms;
 using FieldCodes.Settings;
 using FieldCodes.Standards;
-using Autodesk.AutoCAD.DatabaseServices;
 
 namespace FieldCodes.Cad.Setup
 {
@@ -20,7 +19,7 @@ namespace FieldCodes.Cad.Setup
     /// properties are layer standards (<see cref="FtfSettings.LayerStandards"/>), both saved to the
     /// settings level chosen at the bottom of the window. Every command applies the mapping
     /// (<see cref="ProjectLayers"/>); a layer FTF creates takes its standard
-    /// (<see cref="CadUtil.EnsureLayerExact(Database, Transaction, string, CadUtil.LayerLook, LayerStandardsSettings)"/>);
+    /// (<see cref="CadUtil.EnsureLayerExact(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction, string, CadUtil.LayerLook, LayerStandardsSettings)"/>);
     /// a layer already in the drawing changes only through "Update Drawing Layers...", which
     /// previews first. Standards are kept per layer FTF draws on, after the mapping.
     /// </summary>

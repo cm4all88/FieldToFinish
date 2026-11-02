@@ -30,9 +30,11 @@ Not merged (not approved): `claude/ecstatic-bell-kr80zb` (Crew Upload / Survey S
 (superseded by the later dip work).
 
 Bringing a branch in: merge it into `integration`, resolve conflicts, and run
-`dotnet test tests/FieldCodes.Tests` and `dotnet build tests/CadCompileCheck` (which compiles the
-whole plugin against API stand-ins, so a bad merge fails before anyone builds on Windows). Then
-`UPDATEFTF` picks it up.
+`dotnet test tests/FieldCodes.Tests`, `dotnet build tests/CadCompileCheck` (which compiles the
+whole plugin against API stand-ins, so a bad merge fails before anyone builds on Windows) and
+`dotnet build tests/RealApiCompileCheck` (which compiles it against Autodesk's real AutoCAD 2024
+reference assemblies from NuGet, catching what stand-ins cannot, such as a type name that is
+ambiguous between AutoCAD and System.Drawing). Then `UPDATEFTF` picks it up.
 
 ## First time on a computer
 

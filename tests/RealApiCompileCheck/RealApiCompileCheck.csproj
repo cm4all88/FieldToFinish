@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compiles the whole of FieldCodes.Cad against the REAL AutoCAD 2024 API: Autodesk's own
+    reference assemblies from the AutoCAD.NET 24.3.0 NuGet package (AcDbMgd, AcCoreMgd, AcMgd,
+    AdWindows: the AutoCAD that Civil 3D 2024 is built on) and the real Windows SDK contracts.
+    Only Civil 3D's AeccDbMgd, which Autodesk does not publish, is stood in for
+    (../CadCompileCheck/Stubs/Civil.cs).
+
+    Catches what hand-written stand-ins cannot: a type name that is ambiguous between an
+    Autodesk namespace and System.Drawing / System.Windows.Forms (Font, Region, Image, Table,
+    Group...), a member the real API does not have or has with another signature, and a warning
+    the real build turns into an error. Same language version, target, warnings-as-errors and
+    documentation settings as src/FieldCodes.Cad.
+
+      dotnet build tests/RealApiCompileCheck
+
+    Needs nuget.org once to restore the packages; nothing from it runs or ships.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- The plugin's own name, so InternalsVisibleTo and assembly-qualified references
+         resolve as in the real build. -->
+    <AssemblyName>FieldCodes.Cad</AssemblyName>
+    <RootNamespace>FieldCodes.Cad</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- As src/FieldCodes.Cad references it. -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22621.2" />
+    <!-- Autodesk's AutoCAD 2024 (R24.3) reference assemblies: compile only. -->
+    <PackageReference Include="AutoCAD.NET" Version="24.3.0">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+    <ProjectReference Include="..\..\src\FieldCodes\FieldCodes.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\CadCompileCheck\Stubs\Civil.cs" Link="Stubs\Civil.cs" />
+    <!-- The whole plugin, every file, as CadCompileCheck takes it. -->
+    <Compile Include="..\..\src\FieldCodes.Cad\**\*.cs" Exclude="..\..\src\FieldCodes.Cad\obj\**;..\..\src\FieldCodes.Cad\bin\**" LinkBase="FieldCodes.Cad" />
+  </ItemGroup>
+</Project>
