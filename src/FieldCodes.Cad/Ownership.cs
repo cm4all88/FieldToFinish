@@ -247,7 +247,9 @@ namespace FieldCodes.Cad
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(rulesVersion)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(pointNumber)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(tagText ?? string.Empty)),
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, entity.Handle.ToString()),
+                // Not yet in a drawing (no handle): record none, so it reads as FTF's like an
+                // older stamp rather than as a copy nobody could ever clean up.
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, entity.ObjectId.IsNull ? string.Empty : entity.Handle.ToString()),
                 new TypedValue((int)DxfCode.ExtendedDataInteger16, (short)kind)
             };
 
