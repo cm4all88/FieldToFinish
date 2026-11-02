@@ -273,8 +273,12 @@ namespace FieldCodes.Cad.Setup
         {
             Heading("Text");
             Note("The text FTF places beside recognised survey points -- tree sizes, " +
-                 "control aliases. Line Labels (next section) covers text along " +
-                 "linework instead.");
+                 "control aliases. Line Labels covers text along linework instead. " +
+                 "These are the defaults every label starts from; Text Styles, Leader Styles and " +
+                 "Style Assignments change them for a family or a single code.");
+            var stylesLink = new LinkLabel { Text = "Open Style Assignments", AutoSize = true, Margin = new Padding(0, 0, 0, 6) };
+            stylesLink.LinkClicked += (s, e) => { if (Context.Navigate != null) Context.Navigate("Style Assignments"); };
+            AddFullWidth(stylesLink);
 
             var styles = new List<object> { "(drawing's current style)" };
             foreach (var name in Context.Drawing.TextStyles) styles.Add(name);
@@ -421,7 +425,7 @@ namespace FieldCodes.Cad.Setup
 
     // -------------------------------------------------------------- line labels
 
-    [SettingsPage(Group = "FieldToFinish", Label = "Line Labels", Order = 70, Sections = "lineLabels", Commands = "FTFLINELABELS,FTFLABELLINE,FTFLABELBETWEEN,FTFLABELDRIVEWAY,FTFLABELSTAIRS,FTFBENCH,FTFLABELALL,FTFLEGEND")]
+    [SettingsPage(Group = "FieldToFinish", Label = "Line Labels", Order = 70, Sections = "lineLabels,styles", Commands = "FTFLINELABELS,FTFLABELLINE,FTFLABELBETWEEN,FTFLABELDRIVEWAY,FTFLABELSTAIRS,FTFBENCH,FTFLABELALL,FTFLEGEND")]
     internal sealed class LineLabelsPage : SetupPage
     {
         private CheckBox _enabled;
@@ -440,6 +444,8 @@ namespace FieldCodes.Cad.Setup
 
         // per-feature label standards (rules.json lineFeatures)
         private DataGridView _features;
+        private StyleWorkspace _styles;
+        private bool _loadingStyles;
         private Label _featureStatus;
         private FieldCodes.Editing.RuleDocument _rulesDoc;
         private FieldCodes.Editing.RulesResolution _rulesWhere;
@@ -529,7 +535,8 @@ namespace FieldCodes.Cad.Setup
             Heading("Line features: what each label says");
             Note("One row per recognised line feature. Blank label text means the feature is identified " +
                  "but not labelled (\"labeling standard not configured yet\" on the Lines review). " +
-                 "Saved to the rules file with Save Line Features, not with the settings Save.");
+                 "Saved to the rules file with Save Line Features, not with the settings Save. " +
+                 "The Text style column picks a style from Settings > Text Styles; it is a setting and is saved with the window's Save.");
             _features = new DataGridView
             {
                 Width = 620, Height = 220, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
@@ -548,7 +555,18 @@ namespace FieldCodes.Cad.Setup
             var side = new DataGridViewComboBoxColumn { HeaderText = "Side", FillWeight = 12, FlatStyle = FlatStyle.Flat };
             side.Items.AddRange("Auto", "Left", "Right", "OnLine");
             _features.Columns.Add(side);
-            _features.CellValueChanged += (s, e) => { if (e.RowIndex >= 0) { _featuresDirty = true; _featureStatus.Text = "Unsaved line feature changes."; } };
+            var styleColumn = new DataGridViewComboBoxColumn { HeaderText = "Text style", FillWeight = 18, FlatStyle = FlatStyle.Flat };
+            styleColumn.Items.Add("(default)");
+            styleColumn.ToolTipText = "A named style from Settings > Text Styles for this feature's labels. Saved with the window's Save (settings), not Save Line Features.";
+            _features.Columns.Add(styleColumn);
+            _features.CurrentCellDirtyStateChanged += (s, e) => { if (_features.IsCurrentCellDirty && _features.CurrentCell != null && _features.CurrentCell.ColumnIndex == 5) _features.CommitEdit(DataGridViewDataErrorContexts.Commit); };
+            _features.CellValueChanged += (s, e) =>
+            {
+                if (e.RowIndex < 0) return;
+                if (e.ColumnIndex == 5) { StyleChosen(_features.Rows[e.RowIndex]); return; }
+                _featuresDirty = true;
+                _featureStatus.Text = "Unsaved line feature changes.";
+            };
             _features.DataError += (s, e) => { e.ThrowException = false; };
             AddFullWidth(_features);
 
@@ -560,6 +578,39 @@ namespace FieldCodes.Cad.Setup
             row.Controls.Add(_featureStatus);
             AddFullWidth(row);
             LoadFeatures();
+        }
+
+        /// <summary>Line features use the same styles as points: a rule-free, code-level line
+        /// label assignment (Settings > Style Assignments).</summary>
+        private void FillStyles()
+        {
+            if (_styles == null || _features == null) return;
+            _loadingStyles = true;
+            try
+            {
+                var column = (DataGridViewComboBoxColumn)_features.Columns[5];
+                column.Items.Clear();
+                column.Items.Add("(default)");
+                foreach (var t in _styles.Styles.Text) if (!string.IsNullOrWhiteSpace(t.Name)) column.Items.Add(t.Name);
+                foreach (DataGridViewRow r in _features.Rows)
+                {
+                    var code = Convert.ToString(r.Cells[0].Value);
+                    var a = _styles.Styles.FindAssignment(FieldCodes.Styles.StyledKind.LineLabel, null, null, code);
+                    var name = a != null && !string.IsNullOrWhiteSpace(a.TextStyle) && column.Items.Contains(a.TextStyle) ? a.TextStyle : "(default)";
+                    r.Cells[5].Value = name;
+                }
+            }
+            finally { _loadingStyles = false; }
+        }
+
+        private void StyleChosen(DataGridViewRow r)
+        {
+            if (_loadingStyles || _styles == null) return;
+            var code = Convert.ToString(r.Cells[0].Value);
+            var chosen = Convert.ToString(r.Cells[5].Value);
+            var a = _styles.Styles.AssignmentFor(FieldCodes.Styles.StyledKind.LineLabel, null, null, code);
+            a.TextStyle = string.IsNullOrWhiteSpace(chosen) || chosen == "(default)" ? null : chosen;
+            MarkChanged();
         }
 
         private void LoadFeatures()
@@ -580,6 +631,7 @@ namespace FieldCodes.Cad.Setup
                                            string.IsNullOrEmpty(f.Placement) ? "Auto" : f.Placement);
                 _features.Rows[i].Cells[1].ToolTipText = "Identified on layer " + f.Layer;
             }
+            FillStyles();
             _featuresDirty = false;
             _featureStatus.Text = "Rules: " + active;
         }
@@ -640,6 +692,10 @@ namespace FieldCodes.Cad.Setup
 
         public override void LoadFrom(FtfSettings s)
         {
+            if (_styles != null) _styles.NamesChanged -= FillStyles;
+            _styles = StyleWorkspace.For(s);
+            _styles.NamesChanged += FillStyles;
+            FillStyles();
             _enabled.Checked = s.LineLabels.Enabled;
             ComboHelp.SelectOrAdd(_textStyle, s.LineLabels.TextStyle, true);
             _height.Text = Fmt(s.LineLabels.TextHeightPlotted);
@@ -659,6 +715,7 @@ namespace FieldCodes.Cad.Setup
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
         {
+            if (_styles != null) _styles.WriteTo(s);
             s.LineLabels.Enabled = _enabled.Checked;
             s.LineLabels.TextStyle = _textStyle.SelectedIndex <= 0
                 ? string.Empty : Convert.ToString(_textStyle.SelectedItem);
