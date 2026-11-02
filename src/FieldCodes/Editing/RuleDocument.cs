@@ -498,6 +498,34 @@ namespace FieldCodes.Editing
             return _root["codes"] as JArray ?? new JArray();
         }
 
+        // ------------------------------------------------------------------ new rules
+
+        /// <summary>
+        /// Adds a starter rule for a code no rule handles yet (Unknown Codes > Configure Rule):
+        /// the code followed by anything, labelled with the code, on the general text layer.
+        /// It is a starting point to edit -- label text, layer, family -- and is only written
+        /// when the rules are saved. Returns the new rule's id; an existing id is not replaced.
+        /// </summary>
+        public string AddStarterRule(string code, string labelLayer)
+        {
+            var clean = (code ?? string.Empty).Trim().ToUpperInvariant();
+            if (!Regex.IsMatch(clean, "^[A-Z][A-Z0-9_-]*$"))
+                throw new ConfigException("'" + code + "' is not a field code a rule can match (letters, then letters or digits).");
+            var codes = _root["codes"] as JArray;
+            if (codes == null) { codes = new JArray(); _root["codes"] = codes; }
+            var id = clean.ToLowerInvariant();
+            var n = 2;
+            while (FindRule(id) != null) id = clean.ToLowerInvariant() + "-" + n++;
+            codes.Add(new JObject
+            {
+                ["id"] = id,
+                ["description"] = clean,
+                ["match"] = "^(?<code>" + Regex.Escape(clean) + ")(?<mods>(?:\\s+\\S+)*)\\s*$",
+                ["label"] = new JObject { ["format"] = "{code}", ["layer"] = string.IsNullOrWhiteSpace(labelLayer) ? "V-TEXT-E" : labelLayer.Trim() }
+            });
+            return id;
+        }
+
         // ------------------------------------------------------------------ line features
 
         /// <summary>The line features (lineFeatures) as the Line Labels page edits them: what

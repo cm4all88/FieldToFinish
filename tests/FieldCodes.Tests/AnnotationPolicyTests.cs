@@ -484,3 +484,22 @@ public sealed class LineFeatureEditingTests
         Assert.Contains(doc.Validate(), p => p.Contains("side must be"));
     }
 }
+
+/// <summary>Unknown Codes > Configure Rule on a code no rule handles: a starter rule to edit.</summary>
+public sealed class StarterRuleTests
+{
+    [Fact]
+    public void AStarterRuleMatchesTheCodeAndLabelsIt()
+    {
+        var doc = FieldCodes.Editing.RuleDocument.FromText(@"{ ""codes"": [ { ""id"": ""x"", ""match"": ""^X$"" } ] }");
+        var id = doc.AddStarterRule("wmt", "V-UTIL-WATR-TEXT-E");
+        Assert.Equal("wmt", id);
+        Assert.Empty(doc.Validate());
+        var cfg = doc.CompileCandidate();
+        var p = new FieldCodeParser(cfg).Parse("1", "WMT 12 BRASS");
+        Assert.Equal("wmt", p.RuleId);
+        Assert.Equal("WMT", p.LabelText);
+        Assert.Equal("wmt-2", doc.AddStarterRule("WMT", null));     // never replaces an existing rule
+        Assert.Throws<ConfigException>(() => doc.AddStarterRule("12X", null));
+    }
+}

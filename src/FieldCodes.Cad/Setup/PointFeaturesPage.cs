@@ -94,7 +94,7 @@ namespace FieldCodes.Cad.Setup
             split.Panel2.Controls.Add(BuildEditor());
 
             _stage.Tick += (s, e) => { _stage.Stop(); StageEdits(); };
-            split.HandleCreated += (s, e) => ReloadClicked(false);
+            ReloadClicked(false);
             return split;
         }
 
@@ -595,6 +595,48 @@ namespace FieldCodes.Cad.Setup
             {
                 _preview.Text = ex.Message;
             }
+        }
+
+        /// <summary>Arriving from Unknown Codes or Standards ("Configure Rule"): show the rule
+        /// asked for, or the rule that handles the code, or offer a starter rule for a code
+        /// no rule handles yet. Nothing is saved until Save Rules.</summary>
+        public override void OnShown()
+        {
+            if (!PointFeatureNavigation.HasPending) return;
+            var ruleId = PointFeatureNavigation.PendingRuleId;
+            var code = PointFeatureNavigation.PendingCode;
+            var sample = PointFeatureNavigation.PendingSample;
+            PointFeatureNavigation.Clear();
+            if (_document == null || _candidate == null) return;
+
+            _search.Text = string.Empty;
+            _familyFilter.SelectedIndex = 0;
+            var target = ruleId;
+            if (target == null && code != null)
+            {
+                var bare = FieldCodes.Orient.OrientationStandard.BaseCode(code);
+                var rule = _candidate.Codes.FirstOrDefault(r =>
+                    RuleDocument.LiteralCodes(r).Any(c => string.Equals(c, bare, StringComparison.OrdinalIgnoreCase)) ||
+                    (r.Species != null && r.Species.Keys.Any(k => string.Equals(k, bare, StringComparison.OrdinalIgnoreCase))));
+                if (rule != null) target = rule.Id;
+            }
+            if (target == null && code != null)
+            {
+                var answer = MessageBox.Show(_grid,
+                    "No rule handles the code " + code + " yet.\n\nAdd a starter rule for it? It matches " + code +
+                    " followed by anything and labels it with the code; edit the label text, layer and family, then Save Rules.",
+                    "Configure Rule", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (answer != DialogResult.Yes) { _search.Text = code; return; }
+                try
+                {
+                    target = _document.AddStarterRule(code, PmxLayers.LineLabelFallback);
+                    SetDirty(true);
+                    RefreshCandidate();
+                }
+                catch (ConfigException ex) { _problems.Text = ex.Message; return; }
+            }
+            PopulateGrid(target);
+            if (sample != null) _testInput.Text = sample;
         }
 
         public override void LoadFrom(FtfSettings s) { }

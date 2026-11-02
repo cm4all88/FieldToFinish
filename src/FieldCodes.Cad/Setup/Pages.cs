@@ -441,9 +441,6 @@ namespace FieldCodes.Cad.Setup
         private FieldCodes.Editing.RulesResolution _rulesWhere;
         private bool _featuresDirty;
 
-        /// <summary>A line feature code another screen asked to show (the Lines review's
-        /// "Edit label"); selected when the page comes into view.</summary>
-        public static string PendingFeature { get; set; }
 
         public override string Title { get { return "Line Labels"; } }
         public override string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
@@ -611,11 +608,21 @@ namespace FieldCodes.Cad.Setup
             catch (System.IO.IOException ex) { _featureStatus.Text = "Could not write: " + ex.Message; }
         }
 
+        /// <summary>Arriving from the Lines review ("Line Label Settings"): select the feature
+        /// it asked about, or say why there is none to select.</summary>
         public override void OnShown()
         {
-            var code = PendingFeature;
-            PendingFeature = null;
-            if (string.IsNullOrWhiteSpace(code) || _features == null) return;
+            if (!LineLabelNavigation.HasPending || _features == null) return;
+            var code = LineLabelNavigation.PendingFeature ??
+                       (LineLabelNavigation.PendingCandidates != null ? LineLabelNavigation.PendingCandidates.FirstOrDefault() : null);
+            var layer = LineLabelNavigation.PendingLayer;
+            LineLabelNavigation.Clear();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                _featureStatus.Text = "That line (layer " + (layer ?? "?") + ") is not a configured line feature: add it to " +
+                                      "lineFeatures in the rules file with its code and layer, then give it label text here.";
+                return;
+            }
             foreach (DataGridViewRow r in _features.Rows)
                 if (string.Equals(Convert.ToString(r.Cells[0].Value), code.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
