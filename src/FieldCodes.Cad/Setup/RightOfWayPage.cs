@@ -11,6 +11,7 @@ namespace FieldCodes.Cad.Setup
     /// themselves take the layer and annotation of a Drafting Lines type, named here;
     /// everything else FTFROW draws has its layer and wording set on this page.
     /// </summary>
+    [SettingsPage(Group = "Boundary and Easements", Label = "Right of Way", Order = 10, Sections = "rightOfWay", Commands = "FTFROW")]
     internal sealed class RightOfWayPage : SetupPage
     {
         private TextBox _lineType;

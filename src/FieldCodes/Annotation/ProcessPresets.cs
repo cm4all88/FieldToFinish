@@ -41,7 +41,10 @@ namespace FieldCodes.Annotation
         /// apply, then draw order. Driplines and symbol rotations are not touched.</summary>
         AnnotationsOnly = 2,
         /// <summary>The stages and families picked by hand.</summary>
-        Custom = 3
+        Custom = 3,
+        /// <summary>A workflow saved in Settings > Workflows (<see cref="WorkflowDefinition"/>):
+        /// its stages and families, like Custom, under its own name.</summary>
+        Workflow = 4
     }
 
     /// <summary>What one Process Drawing run will do: the stages, and which families the label
@@ -55,12 +58,23 @@ namespace FieldCodes.Annotation
         /// <summary>Stage changes made to respect dependencies, in words.</summary>
         public IList<string> Adjustments { get; set; }
 
+        /// <summary>The saved workflow's name; null for a built-in preset.</summary>
+        public string Name { get; set; }
+
+        /// <summary>Commands queued once the stages have run (a saved workflow's "then run"),
+        /// from <see cref="SettingsRegistry.WorkflowFollowUps"/> only.</summary>
+        public IList<string> ThenRun { get; set; }
+
+        /// <summary>What the run is called: the workflow's name, or the preset's title.</summary>
+        public string Title { get { return string.IsNullOrWhiteSpace(Name) ? ProcessPresets.Title(Preset) : Name; } }
+
         public ProcessPlan()
         {
             Stages = new List<string>();
             LabelFamilies = new HashSet<AnnotationCategory>();
             TagFamilies = new HashSet<AnnotationCategory>();
             Adjustments = new List<string>();
+            ThenRun = new List<string>();
         }
 
         public bool Runs(string stage) { return Stages.Contains(stage); }
@@ -80,6 +94,7 @@ namespace FieldCodes.Annotation
                 case ProcessPreset.StandardTopographic: return "Standard Topographic Finishing";
                 case ProcessPreset.TreesAndVegetation: return "Trees and Vegetation";
                 case ProcessPreset.AnnotationsOnly: return "Annotations Only";
+                case ProcessPreset.Workflow: return "Saved Workflow";
                 default: return "Custom";
             }
         }
@@ -94,6 +109,8 @@ namespace FieldCodes.Annotation
                     return "Trees only: driplines and the tree label or tag the settings choose, and the schedule if it is on.";
                 case ProcessPreset.AnnotationsOnly:
                     return "Refreshes FTF labels, tags and the schedule. Driplines and symbol rotations are not touched.";
+                case ProcessPreset.Workflow:
+                    return "A workflow saved in Settings > Workflows: its stages and feature families.";
                 default:
                     return "The stages and feature families you pick.";
             }
@@ -159,6 +176,37 @@ namespace FieldCodes.Annotation
             return plan;
         }
 
+        /// <summary>
+        /// The plan for a workflow saved in Settings > Workflows: its stages and families exactly as
+        /// a Custom selection would run them (the same dependency rules and adjustments), under the
+        /// workflow's name. No families listed means the families set on Label All. Follow-up
+        /// commands outside <see cref="SettingsRegistry.WorkflowFollowUps"/> are dropped and said so.
+        /// </summary>
+        public static ProcessPlan Build(WorkflowDefinition workflow, AnnotationSettings settings)
+        {
+            if (workflow == null) throw new ArgumentNullException("workflow");
+
+            var stages = (workflow.Stages ?? new List<string>())
+                .Where(st => !string.IsNullOrWhiteSpace(st)).Select(st => st.Trim().ToUpperInvariant()).ToList();
+            var families = workflow.Families != null && workflow.Families.Count > 0
+                ? workflow.Families.Distinct().ToList() : null;
+
+            var plan = Build(ProcessPreset.Custom, settings, stages, families);
+            plan.Preset = ProcessPreset.Workflow;
+            plan.Name = string.IsNullOrWhiteSpace(workflow.Name) ? null : workflow.Name.Trim();
+
+            foreach (var raw in workflow.ThenRun ?? new List<string>())
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var command = raw.Trim().ToUpperInvariant();
+                if (!SettingsRegistry.WorkflowFollowUps.Contains(command))
+                    plan.Adjustments.Add(command + " cannot run after a workflow; skipped.");
+                else if (!plan.ThenRun.Contains(command))
+                    plan.ThenRun.Add(command);
+            }
+            return plan;
+        }
+
         /// <summary>Known stages only, each once, in pipeline order; draw order last and only
         /// when a stage it bands runs.</summary>
         public static IList<string> Normalize(IEnumerable<string> stages, IList<string> adjustments)
@@ -196,11 +244,23 @@ namespace FieldCodes.Annotation
 
         public static ProcessPlan Current { get { return _current; } }
 
+        /// <summary>
+        /// Called when the scope of a plan with follow-up commands (<see cref="ProcessPlan.ThenRun"/>)
+        /// closes, after its stages ran, so every way of running a plan -- FTFRUN, the Process
+        /// page -- queues them the same way. The plugin sets it; null queues nothing.
+        /// </summary>
+        public static Action<ProcessPlan> FollowUp { get; set; }
+
         public static IDisposable Use(ProcessPlan plan)
         {
             var previous = _current;
             _current = plan;
-            return new Restore(() => _current = previous);
+            return new Restore(() =>
+            {
+                _current = previous;
+                var followUp = FollowUp;
+                if (plan != null && plan.ThenRun != null && plan.ThenRun.Count > 0 && followUp != null) followUp(plan);
+            });
         }
 
         public static ICollection<AnnotationCategory> LabelScope(AnnotationSettings settings)

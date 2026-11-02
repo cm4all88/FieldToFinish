@@ -31,7 +31,7 @@ public sealed class FtfSettingsTests : IClassFixture<RulesFixture>
     public void EverySectionIsExposedForTheSetupWindow()
     {
         var s = new FtfSettings();
-        Assert.Equal(20, s.Sections.Count);   // + Label All (annotation)
+        Assert.Equal(21, s.Sections.Count);   // + Label All (annotation), + Workflows
         Assert.All(s.Sections, sec =>
         {
             Assert.False(string.IsNullOrWhiteSpace(sec.Title));

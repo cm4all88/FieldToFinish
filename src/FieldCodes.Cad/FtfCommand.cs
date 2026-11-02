@@ -77,21 +77,30 @@ namespace FieldCodes.Cad
             var ed = doc.Editor;
             var pipeline = new FtfPipeline();
 
-            // Which preset: the same four as the Process page. "All" is every stage as before,
+            // The settings first: the workflows saved in them are choices too.
+            FieldCodes.Settings.FtfSettings settings = null;
+            FtfSession.Run("FTFRUN", (db, tr, e) => { settings = FtfSession.SettingsFor(db, FtfSession.Rules(db)); });
+            if (settings == null) return;
+            var ann = settings.Annotation;
+
+            // Which preset: the same as the Process page -- the four built-in choices, then each
+            // saved workflow by its keyword (Settings > Workflows). "All" is every stage as before,
             // except symbol orientation, which is its own decision (FTFORIENT).
-            var ask = new PromptKeywordOptions("\nProcess [Standard/Trees/Annotations/All] <Standard>: ") { AllowNone = true };
-            foreach (var k in new[] { "Standard", "Trees", "Annotations", "All" }) ask.Keywords.Add(k);
+            var workflows = FieldCodes.Settings.WorkflowSettings.Choices(FtfWorkflows.For(settings));
+            var keywords = FieldCodes.Settings.WorkflowSettings.BuiltInKeywords.Concat(workflows.Select(w => w.Key)).ToArray();
+            var ask = new PromptKeywordOptions("\nProcess [" + string.Join("/", keywords) + "] <Standard>: ",
+                                               string.Join(" ", keywords)) { AllowNone = true };
             ask.Keywords.Default = "Standard";
             var answer = ed.GetKeywords(ask);
             if (answer.Status != PromptStatus.OK && answer.Status != PromptStatus.None) return;
             var choice = answer.Status == PromptStatus.None ? "Standard" : answer.StringResult;
 
-            FieldCodes.Settings.AnnotationSettings ann = null;
-            FtfSession.Run("FTFRUN", (db, tr, e) => { ann = FtfSession.SettingsFor(db, FtfSession.Rules(db)).Annotation; });
-            if (ann == null) return;
-
             FieldCodes.Annotation.ProcessPlan plan;
-            switch (choice)
+            var workflow = workflows.Where(w => string.Equals(w.Key, choice, StringComparison.OrdinalIgnoreCase))
+                                    .Select(w => w.Value).FirstOrDefault();
+            if (workflow != null)
+                plan = FtfWorkflows.Plan(workflow, ann);
+            else switch (choice)
             {
                 case "Trees": plan = FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.TreesAndVegetation, ann); break;
                 case "Annotations": plan = FieldCodes.Annotation.ProcessPresets.Build(FieldCodes.Annotation.ProcessPreset.AnnotationsOnly, ann); break;
@@ -105,7 +114,9 @@ namespace FieldCodes.Cad
             var total = plan.Stages.Count;
             var index = 0;
 
-            ed.WriteMessage("\n=== Field to Finish: {0} ===\n", FieldCodes.Annotation.ProcessPresets.Title(plan.Preset));
+            ed.WriteMessage("\n=== Field to Finish: {0} ===\n", plan.Title);
+            if (workflow != null && !string.IsNullOrWhiteSpace(workflow.Description))
+                ed.WriteMessage("  {0}\n", workflow.Description.Trim());
             foreach (var note in plan.Adjustments) ed.WriteMessage("  {0}\n", note);
 
             FtfRunResult result;

@@ -783,9 +783,12 @@ namespace FieldCodes.Cad.Ui
             var presetRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 2) };
             presetRow.Controls.Add(new Label { Text = "Preset", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
             _preset = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
-            foreach (FieldCodes.Annotation.ProcessPreset p in Enum.GetValues(typeof(FieldCodes.Annotation.ProcessPreset)))
-                _preset.Items.Add(new PresetItem(p));
+            // The built-in presets, then the workflows saved in Settings > Workflows, then Custom.
+            foreach (var item in PresetItem.All(FtfWorkflows.Current())) _preset.Items.Add(item);
             presetRow.Controls.Add(_preset);
+            var editWorkflows = new LinkLabel { Text = "Workflows...", AutoSize = true, Margin = new Padding(10, 6, 0, 0) };
+            editWorkflows.LinkClicked += (s, e) => OpenSettingsSection("Workflows");
+            presetRow.Controls.Add(editWorkflows);
             stack.Controls.Add(presetRow);
             _presetDescription = Caption(stack, string.Empty);
 
@@ -822,8 +825,31 @@ namespace FieldCodes.Cad.Ui
             _stageList.ItemCheck += (s, e) => { if (!_processLoading) BeginInvoke((Action)(() => { SaveCustom(); ShowPlan(); })); };
             _familyList.ItemCheck += (s, e) => { if (!_processLoading) BeginInvoke((Action)(() => { SaveCustom(); ShowPlan(); })); };
 
-            FieldCodes.Annotation.ProcessPreset saved;
-            _preset.SelectedIndex = Enum.TryParse(_ui.ProcessPreset ?? string.Empty, out saved) ? (int)saved : 0;
+            // Workflows saved since the window opened (or another drawing's) appear when the list
+            // is opened; the choice stays selected while it still exists.
+            _preset.DropDown += (s, e) =>
+            {
+                var items = PresetItem.All(FtfWorkflows.Current());
+                if (PresetItem.Same(_preset.Items, items)) return;
+                var key = _preset.SelectedItem is PresetItem ? ((PresetItem)_preset.SelectedItem).Key : null;
+                _processLoading = true;
+                try
+                {
+                    _preset.BeginUpdate();
+                    _preset.Items.Clear();
+                    foreach (var item in items) _preset.Items.Add(item);
+                    _preset.SelectedIndex = PresetItem.IndexOf(_preset.Items, key);
+                }
+                finally
+                {
+                    _preset.EndUpdate();
+                    _processLoading = false;
+                }
+                OnPresetChanged();
+            };
+
+            // The choice last made: a built-in preset by its name, a workflow as "Workflow:<name>".
+            _preset.SelectedIndex = PresetItem.IndexOf(_preset.Items, _ui.ProcessPreset);
 
             SectionGap(stack);
             SectionHeader(stack, "Cleanup");
@@ -835,11 +861,70 @@ namespace FieldCodes.Cad.Ui
             stack.Controls.Add(clean);
         }
 
+        /// <summary>One choice in the preset list: a built-in preset, or a workflow saved in
+        /// Settings > Workflows (Preset is then Workflow).</summary>
         private sealed class PresetItem
         {
+            private const string WorkflowPrefix = "Workflow:";
+
             public readonly FieldCodes.Annotation.ProcessPreset Preset;
+            public readonly FieldCodes.Settings.WorkflowDefinition Workflow;
             public PresetItem(FieldCodes.Annotation.ProcessPreset p) { Preset = p; }
-            public override string ToString() { return FieldCodes.Annotation.ProcessPresets.Title(Preset); }
+            public PresetItem(FieldCodes.Settings.WorkflowDefinition w) { Preset = FieldCodes.Annotation.ProcessPreset.Workflow; Workflow = w; }
+
+            /// <summary>What ui-state.json remembers: the preset's name, or Workflow:name.</summary>
+            public string Key { get { return Workflow != null ? WorkflowPrefix + Workflow.Name.Trim() : Preset.ToString(); } }
+
+            public override string ToString()
+            {
+                return Workflow != null ? Workflow.Name.Trim() : FieldCodes.Annotation.ProcessPresets.Title(Preset);
+            }
+
+            /// <summary>The built-in presets, then the saved workflows, then Custom.</summary>
+            public static IList<PresetItem> All(IEnumerable<FieldCodes.Settings.WorkflowDefinition> workflows)
+            {
+                var items = new List<PresetItem>
+                {
+                    new PresetItem(FieldCodes.Annotation.ProcessPreset.StandardTopographic),
+                    new PresetItem(FieldCodes.Annotation.ProcessPreset.TreesAndVegetation),
+                    new PresetItem(FieldCodes.Annotation.ProcessPreset.AnnotationsOnly)
+                };
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var w in workflows ?? new List<FieldCodes.Settings.WorkflowDefinition>())
+                    if (w != null && !string.IsNullOrWhiteSpace(w.Name) && names.Add(w.Name.Trim()))
+                        items.Add(new PresetItem(w));
+                items.Add(new PresetItem(FieldCodes.Annotation.ProcessPreset.Custom));
+                return items;
+            }
+
+            /// <summary>The item with this key, or the first (Standard) when there is none.</summary>
+            public static int IndexOf(ComboBox.ObjectCollection items, string key)
+            {
+                for (var i = 0; i < items.Count; i++)
+                {
+                    var item = items[i] as PresetItem;
+                    if (item != null && string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)) return i;
+                }
+                return 0;
+            }
+
+            /// <summary>True when the list already shows exactly these choices.</summary>
+            public static bool Same(ComboBox.ObjectCollection items, IList<PresetItem> next)
+            {
+                if (items.Count != next.Count) return false;
+                for (var i = 0; i < next.Count; i++)
+                {
+                    var item = items[i] as PresetItem;
+                    if (item == null || item.Key != next[i].Key || !SameWorkflow(item.Workflow, next[i].Workflow)) return false;
+                }
+                return true;
+            }
+
+            private static bool SameWorkflow(FieldCodes.Settings.WorkflowDefinition a, FieldCodes.Settings.WorkflowDefinition b)
+            {
+                if (a == null || b == null) return a == b;
+                return Newtonsoft.Json.JsonConvert.SerializeObject(a) == Newtonsoft.Json.JsonConvert.SerializeObject(b);
+            }
         }
 
         private sealed class StageItem
@@ -889,6 +974,14 @@ namespace FieldCodes.Cad.Ui
         private FieldCodes.Annotation.ProcessPlan CurrentPlan()
         {
             var ann = CurrentAnnotation();
+            var item = _preset.SelectedItem as PresetItem;
+            if (item != null && item.Workflow != null)
+            {
+                // The workflow as it is saved now (Settings may have changed it since the list was filled).
+                var name = item.Workflow.Name.Trim();
+                var saved = FtfWorkflows.Current().FirstOrDefault(w => string.Equals(w.Name.Trim(), name, StringComparison.OrdinalIgnoreCase));
+                return FtfWorkflows.Plan(saved ?? item.Workflow, ann);
+            }
             if (SelectedPreset != FieldCodes.Annotation.ProcessPreset.Custom)
                 return FieldCodes.Annotation.ProcessPresets.Build(SelectedPreset, ann);
             var stages = _stageList.CheckedItems.Cast<StageItem>().Select(i => i.Step.Name).ToList();
@@ -898,11 +991,19 @@ namespace FieldCodes.Cad.Ui
 
         private void OnPresetChanged()
         {
+            // The list is being refilled; the refill calls back once it is done.
+            if (_processLoading) return;
+
             var custom = SelectedPreset == FieldCodes.Annotation.ProcessPreset.Custom;
+            var item = _preset.SelectedItem as PresetItem;
             _stageList.Enabled = custom;
             _familyList.Enabled = custom;
-            _presetDescription.Text = FieldCodes.Annotation.ProcessPresets.Describe(SelectedPreset);
-            _ui.ProcessPreset = SelectedPreset.ToString();
+            _presetDescription.Text = item != null && item.Workflow != null
+                ? (string.IsNullOrWhiteSpace(item.Workflow.Description)
+                    ? FieldCodes.Annotation.ProcessPresets.Describe(FieldCodes.Annotation.ProcessPreset.Workflow)
+                    : item.Workflow.Description.Trim())
+                : FieldCodes.Annotation.ProcessPresets.Describe(SelectedPreset);
+            _ui.ProcessPreset = item != null ? item.Key : SelectedPreset.ToString();
             _ui.Save();
 
             _processLoading = true;
@@ -946,7 +1047,9 @@ namespace FieldCodes.Cad.Ui
                 }
                 finally { _processLoading = false; }
             }
-            _adjustments.Text = plan.Adjustments.Count == 0 ? string.Empty : string.Join(" ", plan.Adjustments.ToArray());
+            var notes = new List<string>(plan.Adjustments);
+            if (plan.ThenRun.Count > 0) notes.Add("Afterwards: " + string.Join(", ", plan.ThenRun.ToArray()) + ".");
+            _adjustments.Text = string.Join(" ", notes.ToArray());
         }
 
         /// <summary>Counts what the plan would do, changing nothing.</summary>

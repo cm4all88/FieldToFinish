@@ -114,7 +114,64 @@ namespace FieldCodes.Cad
         {
             var tab = new RibbonTab { Title = layout.Title, Id = layout.Id };
             foreach (var panel in layout.Panels) tab.Panels.Add(Panel(panel));
+            if (layout.Id == RibbonLayout.FieldToFinishTabId) AddUserPanel(tab);
             return tab;
+        }
+
+        // ------------------------------------------------------------ my commands
+
+        /// <summary>
+        /// The person's own My Commands panel (Settings > Commands), last on the FieldToFinish tab.
+        /// Per user (ui-state.json), never part of <see cref="RibbonLayout"/>: the office ribbon
+        /// stays the same for everyone. A command no longer registered is left off. Nothing here
+        /// can stop the standard tab from building.
+        /// </summary>
+        private static void AddUserPanel(RibbonTab tab)
+        {
+            try
+            {
+                var chosen = Ui.UiState.Load().QuickCommands;
+                if (chosen == null || chosen.Count == 0) return;
+
+                var registered = FtfCommandCatalog.Names();
+                var commands = new System.Collections.Generic.List<string>();
+                foreach (var command in chosen)
+                    if (command != null && registered.Contains(command.Trim())) commands.Add(command.Trim());
+
+                var layout = FieldCodes.Commands.UserRibbonPanel.Build(commands, FtfCommandCatalog.Descriptions());
+                if (layout != null) tab.Panels.Add(Panel(layout));
+            }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>
+        /// Rebuilds the FieldToFinish tab in place -- the same replace-by-id a reload does, put back
+        /// where the old tab stood -- so a change to My Commands shows without restarting. False
+        /// when there is no ribbon to rebuild (the panel then appears the next time it is built).
+        /// </summary>
+        internal static bool RebuildFieldToFinishTab()
+        {
+            RibbonControl ribbon;
+            try { ribbon = ComponentManager.Ribbon; }
+            catch (System.Exception) { return false; }
+            if (ribbon == null) return false;
+
+            TabLayout layout = null;
+            foreach (var candidate in RibbonLayout.Tabs)
+                if (candidate.Id == RibbonLayout.FieldToFinishTabId) layout = candidate;
+            if (layout == null) return false;
+
+            try
+            {
+                var tab = Tab(layout);
+                var old = ribbon.FindTab(layout.Id);
+                var index = old != null ? ribbon.Tabs.IndexOf(old) : -1;
+                RemoveTab(ribbon, layout.Id);
+                if (index >= 0 && index <= ribbon.Tabs.Count) ribbon.Tabs.Insert(index, tab);
+                else ribbon.Tabs.Add(tab);
+                return true;
+            }
+            catch (System.Exception) { return false; }
         }
 
         private static RibbonPanel Panel(PanelLayout layout)

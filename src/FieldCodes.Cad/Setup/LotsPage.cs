@@ -10,6 +10,7 @@ namespace FieldCodes.Cad.Setup
     /// layer and annotation of the Drafting Lines types named here; setback, easement, lot-text,
     /// drainage and notes layers are set here, and the values the popup starts from.
     /// </summary>
+    [SettingsPage(Group = "Boundary and Easements", Label = "Platted Blocks", Order = 20, Sections = "lots", Commands = "FTFLOTS")]
     internal sealed class LotsPage : SetupPage
     {
         private TextBox _lotType;
