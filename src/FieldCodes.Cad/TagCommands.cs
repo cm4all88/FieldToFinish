@@ -55,12 +55,17 @@ namespace FieldCodes.Cad
                 var points = new List<ParsedPoint>();
                 var anchors = scan.Anchors;
                 var skipped = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var styler = new AnnotationStyler(db, tr, settings, cfg);
+                var styles = new Dictionary<string, FieldCodes.Styles.ResolvedAnnotationStyle>(StringComparer.OrdinalIgnoreCase);
                 foreach (var number in scan.Order)
                 {
                     var parsed = scan.Points[number];
                     if (string.IsNullOrEmpty(parsed.TagPrefix)) continue;
                     var decision = FieldCodes.Annotation.AnnotationPolicy.Tag(parsed, ann, scope, cfg);
-                    if (decision.Annotate) points.Add(parsed);
+                    var style = decision.Annotate ? styler.For(FieldCodes.Styles.StyledKind.Tag, parsed) : null;
+                    if (style != null && !style.Enabled)
+                        decision = new FieldCodes.Annotation.AnnotationDecision { Annotate = false, Reason = "tag turned off for the feature (" + style.OriginOf("Enabled") + ")" };
+                    if (decision.Annotate) { points.Add(parsed); styles[number] = style; }
                     else { int n; skipped[decision.Reason] = skipped.TryGetValue(decision.Reason, out n) ? n + 1 : 1; }
                 }
 
@@ -79,15 +84,6 @@ namespace FieldCodes.Cad
                 }
 
                 var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
-                var textHeight = ts.TagTextHeightPlotted * scale;
-                var styleId = Setup.DrawingResources.FindTextStyle(db, tr, ts.TagTextStyle);
-
-                var placer = new LabelPlacer
-                {
-                    BaseOffset = ts.TagOffsetPlotted * scale,
-                    RingStep = Math.Max(ts.TagOffsetPlotted, 0.01) * scale,
-                    RingCount = 4
-                };
 
                 var obstacles = GatherObstacles(db, tr, classifier);
 
@@ -102,12 +98,15 @@ namespace FieldCodes.Cad
                     if (!anchors.TryGetValue(assignment.PointNumber, out anchor)) continue;
 
                     var parsed = points.First(p => p.PointNumber == assignment.PointNumber);
-                    var layer = string.IsNullOrWhiteSpace(ts.TagLayer)
-                        ? parsed.LabelLayer
-                        : ts.TagLayer;
+                    var style = styles[assignment.PointNumber];
+                    // Settings > Tags' layer, else the feature's text layer -- unless a style
+                    // assignment names one.
+                    var layer = string.IsNullOrWhiteSpace(style.Layer) ? parsed.LabelLayer : style.Layer;
+                    var layerId = CadUtil.EnsureLayer(db, tr, layer);
+                    var contents = FieldCodes.Styles.StyleText.Compose(assignment.Text, style.Text);
+                    var key = AnnotationStyler.StyleKey(style);
 
-                    var text = NewTagText(db, tr, assignment.Text, textHeight, styleId,
-                                          layer, anchor);
+                    var text = styler.NewText(assignment.Text, style.Text, layerId, anchor, parsed.MarkerRotationDegrees);
 
                     double w, h, offsetX, offsetY;
                     if (!CadUtil.TryMeasureText(text, out w, out h, out offsetX, out offsetY))
@@ -117,6 +116,13 @@ namespace FieldCodes.Cad
                         continue;
                     }
 
+                    var step = Math.Max(ts.TagOffsetPlotted, 0.01);
+                    var placer = new LabelPlacer
+                    {
+                        BaseOffset = style.OffsetPlotted * scale,
+                        RingStep = step * scale,
+                        RingCount = FieldCodes.Styles.StyleResolver.RingsWithin(style.Leader.MaxLengthPlotted, style.OffsetPlotted, step, 4)
+                    };
                     var placement = placer.Place(anchor.X, anchor.Y, w, h, obstacles);
                     if (!placement.Placed)
                     {
@@ -134,26 +140,27 @@ namespace FieldCodes.Cad
                     // its point that nothing connects the two. Tag and leader become
                     // ONE multileader in the drawing's current style, so moving the
                     // number re-routes the leader with it.
-                    if (ts.TagLeader && placement.NeedsLeader)
+                    var wantsLeader = style.LeaderMode != LeaderMode.Never &&
+                                      (style.LeaderMode == LeaderMode.Always || placement.NeedsLeader);
+                    if (wantsLeader)
                     {
                         text.Erase();
 
-                        using (var leadered = CadUtil.NewLeaderedLabel(db, tr,
-                                   assignment.Text, textHeight, styleId,
-                                   CadUtil.EnsureLayer(db, tr, layer), target, anchor))
+                        using (var leadered = styler.NewLeadered(assignment.Text, style, layerId, target, anchor,
+                                                                 parsed.MarkerRotationDegrees))
                         {
-                            CadUtil.SizeArrow(leadered, settings.Labels, scale);
                             Ownership.Stamp(leadered, assignment.PointNumber,
                                             cfg.Version, FtfEntityKind.Tag, target,
-                                            assignment.Text);
+                                            assignment.Text, key, assignment.Text, contents);
                         }
                         leaders++;
                     }
                     else
                     {
                         text.Location = target;
+                        styler.Finish(text, style.Text);
                         Ownership.Stamp(text, assignment.PointNumber, cfg.Version,
-                                        FtfEntityKind.Tag, target, assignment.Text);
+                                        FtfEntityKind.Tag, target, assignment.Text, key, assignment.Text, contents);
                     }
 
                     obstacles.Add(new Obstacle(placement.Bounds, ObstacleClass.Hard,
@@ -171,6 +178,7 @@ namespace FieldCodes.Cad
                 if (drawn - reissued > 0 && previous.Count > 0)
                     ed.WriteMessage("Existing tag numbers were preserved; new points " +
                                     "continue past the highest number issued.\n");
+                styler.WriteProblems(ed, "FTFTAGS");
             });
         }
 
@@ -307,25 +315,6 @@ namespace FieldCodes.Cad
             }
 
             return columns.Count > 0 ? columns : TagTable.DefaultColumns();
-        }
-
-        private static MText NewTagText(Database db, Transaction tr, string content,
-                                        double height, ObjectId styleId, string layer,
-                                        Point3d anchor)
-        {
-            // MTEXT, per the office standard for label text.
-            var text = new MText();
-            text.SetDatabaseDefaults(db);
-
-            if (!styleId.IsNull) text.TextStyleId = styleId;
-
-            text.Contents = content;
-            text.TextHeight = height;
-            text.Location = anchor;
-            text.LayerId = CadUtil.EnsureLayer(db, tr, layer);
-
-            CadUtil.AddToModelSpace(db, tr, text);
-            return text;
         }
 
         private static void DrawTable(Database db, Transaction tr, TagTableModel model,

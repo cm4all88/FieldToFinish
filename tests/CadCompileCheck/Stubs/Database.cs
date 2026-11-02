@@ -1072,8 +1072,18 @@ namespace Autodesk.AutoCAD.DatabaseServices
         public ObjectId ArrowSymbolId { get; set; }
         public double ArrowSize { get; set; }
         public bool ExtendLeaderToText { get; set; }
+        public LeaderType LeaderLineType { get; set; }
+        public Autodesk.AutoCAD.Colors.Color LeaderLineColor { get; set; }
+        public ObjectId LeaderLineTypeId { get; set; }
+        public LineWeight LeaderLineWeight { get; set; }
+        public Autodesk.AutoCAD.Colors.Color TextColor { get; set; }
+        public TextAngleType TextAngleType { get; set; }
+        public bool EnableFrameText { get; set; }
         public new void SetDatabaseDefaults(Database db) { }
     }
+
+    public enum LeaderType { InVisibleLeader = 0, StraightLeader = 1, SplineLeader = 2 }
+    public enum TextAngleType { InsertAngle = 0, HorizontalAngle = 1, AlwaysRightReadingAngle = 2 }
 
     public enum ContentType { NoneContent = 0, BlockContent = 1, MTextContent = 2, ToleranceContent = 3 }
 

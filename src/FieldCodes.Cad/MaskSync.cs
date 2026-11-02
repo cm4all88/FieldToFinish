@@ -39,8 +39,16 @@ namespace FieldCodes.Cad
             foreach (var pair in labels)
             {
                 var stamp = pair.Value;
-                if (stamp.Kind == FtfEntityKind.Label && !pointMasks) continue;
-                if (stamp.Kind == FtfEntityKind.LineLabel && !lineMasks) continue;
+
+                // A label drawn with an annotation style says which mask it wants; one drawn
+                // before styles follows the Point Labels / Line Labels mask setting.
+                var mode = stamp.MaskMode;
+                if (mode == "none" || mode == "background") continue;
+                if (mode.Length == 0)
+                {
+                    if (stamp.Kind == FtfEntityKind.Label && !pointMasks) continue;
+                    if (stamp.Kind == FtfEntityKind.LineLabel && !lineMasks) continue;
+                }
 
                 var entity = tr.GetObject(pair.Key, OpenMode.ForRead, false, true)
                     as AcEntity;
@@ -51,9 +59,11 @@ namespace FieldCodes.Cad
 
                 // Point-label masks honour the configured mask layer; line-label
                 // masks sit on the label's own layer, as they always have.
+                var styledMaskLayer = StyledMaskLayer(settings, stamp);
+                var labelMaskLayer = string.IsNullOrWhiteSpace(styledMaskLayer) ? maskLayerName : styledMaskLayer;
                 var layerId = stamp.Kind == FtfEntityKind.Label &&
-                              !string.IsNullOrWhiteSpace(maskLayerName)
-                    ? CadUtil.EnsureLayer(db, tr, maskLayerName)
+                              !string.IsNullOrWhiteSpace(labelMaskLayer)
+                    ? CadUtil.EnsureLayer(db, tr, labelMaskLayer)
                     : entity.LayerId;
 
                 var maskId = MaskFor(db, tr, entity);
@@ -69,6 +79,15 @@ namespace FieldCodes.Cad
             if (rebuilt > 0)
                 ed.WriteMessage("\nMasks squared up under {0} label(s), including " +
                                 "any moved by hand.", rebuilt);
+        }
+
+        /// <summary>The mask layer of the text style the label was drawn with, if it names one.</summary>
+        private static string StyledMaskLayer(FieldCodes.Settings.FtfSettings settings, FtfStamp stamp)
+        {
+            if (settings == null || settings.Styles == null || string.IsNullOrEmpty(stamp.Style)) return null;
+            var name = stamp.Style.Split('|')[0];
+            var def = settings.Styles.FindText(name);
+            return def != null && !string.IsNullOrWhiteSpace(def.MaskLayer) ? def.MaskLayer.Trim() : null;
         }
 
         /// <summary>A mask around the entity's CURRENT geometry, whatever kind of

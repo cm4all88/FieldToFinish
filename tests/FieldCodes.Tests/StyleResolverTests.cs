@@ -341,3 +341,35 @@ public sealed class StyleCheckTests
         Assert.Equal("TICK (block)", StyleCheck.ArrowDisplayName("TICK"));
     }
 }
+
+public sealed class RestyleReportTests
+{
+    [Fact]
+    public void ThePreviewSaysWhatWouldChangeAndWhatIsKept()
+    {
+        var r = new RestyleReport { UserCopiesLeftAlone = 2 };
+        r.Saw(StyledKind.Label, new[] { "text height 0.8 to 1", "layer V-TEXT to V-UTIL-TEXT" }, false);
+        r.Saw(StyledKind.Label, new[] { "text height 0.8 to 1" }, true);
+        r.Saw(StyledKind.Label, Array.Empty<string>(), false);
+        r.Saw(StyledKind.Tag, Array.Empty<string>(), false);
+
+        Assert.Equal(4, r.Seen);
+        Assert.Equal(2, r.Changing);
+        var lines = r.Lines(false);
+        Assert.Contains("Point labels: 3 FTF entities, 2 would change.", lines);
+        Assert.Contains("    text height 0.8 to 1 x2", lines);
+        Assert.Contains(lines, l => l.Contains("1 kept their wording"));
+        Assert.Contains("Tags: 1 FTF entity, 0 would change.", lines);
+        Assert.Contains(lines, l => l.StartsWith("2 copies"));
+        Assert.Contains("Point labels: 3 FTF entities, 2 updated.", r.Lines(true));
+    }
+
+    [Fact]
+    public void ChangesAreOnlyReportedWhenValuesDiffer()
+    {
+        Assert.Null(RestyleReport.Change("layer", "V-TEXT", "v-text"));
+        Assert.Equal("layer (none) to V-TEXT", RestyleReport.Change("layer", "", "V-TEXT"));
+        Assert.Null(RestyleReport.Change("text height", 1.6, 1.60001));
+        Assert.Equal("text height 1.6 to 2", RestyleReport.Change("text height", 1.6, 2.0));
+    }
+}

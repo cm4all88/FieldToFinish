@@ -41,21 +41,12 @@ namespace FieldCodes.Cad
                 Ownership.EnsureRegApp(db, tr);
 
                 var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
-                var textHeight = lp.TextHeightPlotted * scale;
                 var padding = lp.PaddingPlotted * scale;
-                var styleId = Setup.DrawingResources.FindTextStyle(db, tr, lp.TextStyle);
 
-                if (!string.IsNullOrWhiteSpace(lp.TextStyle) && styleId.IsNull)
-                    ed.WriteMessage(
-                        "\nFTFLABELS: text style '{0}' is not in this drawing; using the " +
-                        "current style instead.", lp.TextStyle);
-
-                var placer = new LabelPlacer
-                {
-                    BaseOffset = lp.BaseOffsetPlotted * scale,
-                    RingStep = lp.RingStepPlotted * scale,
-                    RingCount = Math.Max(1, lp.RingCount)
-                };
+                // Text, leader, layer and offset per feature: Settings > Text Styles, Leader
+                // Styles and Style Assignments, falling back to Point Labels. Anything the
+                // settings name that the drawing lacks is reported at the end, by name.
+                var styler = new AnnotationStyler(db, tr, settings, cfg);
 
                 // Labels a human has moved stay put and become obstacles.
                 var keptByHand = KeepHandMovedLabels(db, tr, settings.Cleanup.MovedTolerance);
@@ -97,6 +88,8 @@ namespace FieldCodes.Cad
 
                     var decision = FieldCodes.Annotation.AnnotationPolicy.Label(parsed, ann, scope, cfg);
                     if (!decision.Annotate) { skip(decision.Reason); continue; }
+                    var style = styler.For(FieldCodes.Styles.StyledKind.Label, parsed);
+                    if (!style.Enabled) { skip("label turned off for the feature (" + style.OriginOf("Enabled") + ")"); continue; }
                     if (ann.RespectManualLabels && scan.HasHandLabel(number, parsed.LabelText))
                     {
                         skip("already labelled by hand");
@@ -115,7 +108,10 @@ namespace FieldCodes.Cad
                     // The text is created first so its real size can be measured. A
                     // character-width estimate is only right for one font; with any
                     // other style the boxes clear each other and the glyphs do not.
-                    var text = NewLabelText(db, tr, parsed, textHeight, styleId, anchor);
+                    var layerName = string.IsNullOrWhiteSpace(style.Layer) ? parsed.LabelLayer : style.Layer;
+                    var layerId = CadUtil.EnsureLayer(db, tr, layerName);
+                    var contents = FieldCodes.Styles.StyleText.Compose(parsed.LabelText, style.Text);
+                    var text = styler.NewText(parsed.LabelText, style.Text, layerId, anchor, parsed.MarkerRotationDegrees);
 
                     double w, h, offsetX, offsetY;
                     if (!CadUtil.TryMeasureText(text, out w, out h, out offsetX, out offsetY))
@@ -126,6 +122,15 @@ namespace FieldCodes.Cad
                         continue;
                     }
 
+                    // The style's offset is the first ring; its maximum leader length caps how
+                    // far out the search goes.
+                    var placer = new LabelPlacer
+                    {
+                        BaseOffset = style.OffsetPlotted * scale,
+                        RingStep = lp.RingStepPlotted * scale,
+                        RingCount = FieldCodes.Styles.StyleResolver.RingsWithin(
+                            style.Leader.MaxLengthPlotted, style.OffsetPlotted, lp.RingStepPlotted, lp.RingCount)
+                    };
                     var placement = placer.Place(anchor.X, anchor.Y,
                                                  w + padding * 2.0, h + padding * 2.0,
                                                  obstacles);
@@ -149,9 +154,12 @@ namespace FieldCodes.Cad
                         0.0);
 
                     var wantsLeader =
-                        parsed.Leader != LeaderMode.Never &&
-                        (parsed.Leader == LeaderMode.Always ||
-                         (parsed.Leader == LeaderMode.Auto && placement.NeedsLeader));
+                        style.LeaderMode != LeaderMode.Never &&
+                        (style.LeaderMode == LeaderMode.Always ||
+                         (style.LeaderMode == LeaderMode.Auto && placement.NeedsLeader));
+                    var key = AnnotationStyler.StyleKey(style);
+                    var wipeout = style.Text.Mask == FieldCodes.Styles.MaskMode.Wipeout;
+                    var maskLayer = string.IsNullOrWhiteSpace(style.Text.MaskLayer) ? null : style.Text.MaskLayer;
 
                     if (wantsLeader)
                     {
@@ -160,16 +168,13 @@ namespace FieldCodes.Cad
                         // leader re-routes with it. The measuring MText is replaced.
                         text.Erase();
 
-                        using (var leadered = CadUtil.NewLeaderedLabel(db, tr,
-                                   parsed.LabelText, textHeight, styleId,
-                                   CadUtil.EnsureLayer(db, tr, parsed.LabelLayer),
-                                   target, anchor))
+                        using (var leadered = styler.NewLeadered(parsed.LabelText, style, layerId,
+                                   target, anchor, parsed.MarkerRotationDegrees))
                         {
-                            CadUtil.SizeArrow(leadered, lp, scale);
                             Ownership.Stamp(leadered, parsed.PointNumber, cfg.Version,
-                                            FtfEntityKind.Label, target);
-                            if (lp.DrawMask)
-                                DrawMask(db, tr, parsed, placement, lp.MaskLayer,
+                                            FtfEntityKind.Label, target, null, key, parsed.LabelText, contents);
+                            if (wipeout)
+                                DrawMask(db, tr, parsed, placement, maskLayer, layerName,
                                          cfg.Version, leadered.ObjectId);
                         }
                         leaders++;
@@ -177,10 +182,11 @@ namespace FieldCodes.Cad
                     else
                     {
                         text.Location = target;
+                        styler.Finish(text, style.Text);
                         Ownership.Stamp(text, parsed.PointNumber, cfg.Version,
-                                        FtfEntityKind.Label, target);
-                        if (lp.DrawMask)
-                            DrawMask(db, tr, parsed, placement, lp.MaskLayer,
+                                        FtfEntityKind.Label, target, null, key, parsed.LabelText, contents);
+                        if (wipeout)
+                            DrawMask(db, tr, parsed, placement, maskLayer, layerName,
                                      cfg.Version, text.ObjectId);
                     }
 
@@ -201,6 +207,7 @@ namespace FieldCodes.Cad
                     ed.WriteMessage("  {0} point(s) labelled from their code: their note is a dip measurement " +
                                     "(Settings > Label All).\n", scan.DepthNotesKeptOut);
                 notes.Report(ed, "FTFLABELS");
+                styler.WriteProblems(ed, "FTFLABELS");
                 if (codeOnly.Count > 0)
                 {
                     var list = new List<string>();
@@ -345,30 +352,8 @@ namespace FieldCodes.Cad
 
         // ------------------------------------------------------------------ drawing
 
-        /// <summary>
-        /// Creates the label text at the anchor and adds it to the drawing so it can be
-        /// measured. The caller moves it once the placer has chosen a home. MTEXT, per
-        /// the office standard for label text.
-        /// </summary>
-        private static MText NewLabelText(Database db, Transaction tr, ParsedPoint parsed,
-                                          double textHeight, ObjectId styleId, Point3d anchor)
-        {
-            var text = new MText();
-            text.SetDatabaseDefaults(db);
-
-            if (!styleId.IsNull) text.TextStyleId = styleId;
-
-            text.Contents = parsed.LabelText;
-            text.TextHeight = textHeight;
-            text.Location = anchor;
-            text.LayerId = CadUtil.EnsureLayer(db, tr, parsed.LabelLayer);
-
-            CadUtil.AddToModelSpace(db, tr, text);
-            return text;
-        }
-
         private static void DrawMask(Database db, Transaction tr, ParsedPoint parsed,
-                                     LabelPlacement placement, string maskLayer,
+                                     LabelPlacement placement, string maskLayer, string labelLayer,
                                      string rulesVersion, ObjectId textId)
         {
             var b = placement.Bounds;
@@ -387,7 +372,7 @@ namespace FieldCodes.Cad
                 wipeout.SetDatabaseDefaults(db);
                 wipeout.SetFrom(points, Vector3d.ZAxis);
                 wipeout.LayerId = CadUtil.EnsureLayer(db, tr,
-                    string.IsNullOrWhiteSpace(maskLayer) ? parsed.LabelLayer : maskLayer);
+                    string.IsNullOrWhiteSpace(maskLayer) ? labelLayer : maskLayer);
 
                 CadUtil.AddToModelSpace(db, tr, wipeout);
                 Ownership.Stamp(wipeout, parsed.PointNumber, rulesVersion,

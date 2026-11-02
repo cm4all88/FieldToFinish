@@ -172,6 +172,29 @@ namespace FieldCodes.Cad
         /// earlier builds). See <see cref="FieldCodes.Stamps.StampIdentity"/>.</summary>
         public string OwnHandle { get; set; }
 
+        /// <summary>The annotation style a label or tag was drawn with: "text style|leader
+        /// style|mask" (empty on entities drawn before styles, or by other commands).</summary>
+        public string Style { get; set; }
+
+        /// <summary>The label text before the style's prefix, suffix and rounding: what
+        /// FTFRESTYLE re-formats, so it never re-words a label.</summary>
+        public string SourceText { get; set; }
+
+        /// <summary>A short hash of the contents FTF wrote. Contents that no longer match were
+        /// edited by someone, and FTFRESTYLE leaves the wording alone.</summary>
+        public string ContentsHash { get; set; }
+
+        /// <summary>The mask the style asked for: "wipeout", "background", "none"; empty
+        /// means the Point Labels / Line Labels mask setting (entities drawn before styles).</summary>
+        public string MaskMode
+        {
+            get
+            {
+                var parts = (Style ?? string.Empty).Split('|');
+                return parts.Length >= 3 ? parts[2] : string.Empty;
+            }
+        }
+
         /// <summary>Where the plugin last computed this entity should go. Labels only.
         /// If the entity is no longer here, a human moved it -- see <see cref="WasMovedByHand"/>.</summary>
         public Point3d? ComputedPosition { get; set; }
@@ -228,6 +251,15 @@ namespace FieldCodes.Cad
                                  FtfEntityKind kind, Point3d? computedPosition,
                                  string tagText = null)
         {
+            Stamp(entity, pointNumber, rulesVersion, kind, computedPosition, tagText, null, null, null);
+        }
+
+        /// <summary>As above, recording the annotation style and the text it was formatted from
+        /// (labels and tags drawn through <see cref="AnnotationStyler"/>).</summary>
+        public static void Stamp(Entity entity, string pointNumber, string rulesVersion,
+                                 FtfEntityKind kind, Point3d? computedPosition,
+                                 string tagText, string style, string sourceText, string contents)
+        {
             if (entity == null) throw new ArgumentNullException("entity");
 
             // A drawing no FTF command has touched yet has no registered application, and
@@ -249,9 +281,16 @@ namespace FieldCodes.Cad
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(tagText ?? string.Empty)),
                 // Not yet in a drawing (no handle): record none, so it reads as FTF's like an
                 // older stamp rather than as a copy nobody could ever clean up.
-                new TypedValue((int)DxfCode.ExtendedDataAsciiString, entity.ObjectId.IsNull ? string.Empty : entity.Handle.ToString()),
-                new TypedValue((int)DxfCode.ExtendedDataInteger16, (short)kind)
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, entity.ObjectId.IsNull ? string.Empty : entity.Handle.ToString())
             };
+            // Sixth to eighth: the style record, appended so older stamps still read.
+            if (style != null || sourceText != null || contents != null)
+            {
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(style ?? string.Empty)));
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(sourceText ?? string.Empty)));
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, contents == null ? string.Empty : ContentsHashOf(contents)));
+            }
+            values.Add(new TypedValue((int)DxfCode.ExtendedDataInteger16, (short)kind));
 
             // ExtendedDataXCoordinate (1010), NOT WorldXCoordinate (1011): AutoCAD
             // transforms 1011 values along with the entity, so a hand-moved label's
@@ -264,6 +303,21 @@ namespace FieldCodes.Cad
             using (var rb = new ResultBuffer(values.ToArray()))
             {
                 entity.XData = rb;
+            }
+        }
+
+        /// <summary>A short, stable hash of label contents (FNV-1a, 32 bits, hex).</summary>
+        public static string ContentsHashOf(string contents)
+        {
+            unchecked
+            {
+                var hash = 2166136261u;
+                foreach (var c in contents ?? string.Empty)
+                {
+                    hash ^= c;
+                    hash *= 16777619u;
+                }
+                return hash.ToString("x8", System.Globalization.CultureInfo.InvariantCulture);
             }
         }
 
@@ -318,6 +372,9 @@ namespace FieldCodes.Cad
                             else if (stringIndex == 2) stamp.PointNumber = s;
                             else if (stringIndex == 3) stamp.TagText = s;
                             else if (stringIndex == 4) stamp.OwnHandle = s;
+                            else if (stringIndex == 5) stamp.Style = s;
+                            else if (stringIndex == 6) stamp.SourceText = s;
+                            else if (stringIndex == 7) stamp.ContentsHash = s;
                             stringIndex++;
                             break;
 

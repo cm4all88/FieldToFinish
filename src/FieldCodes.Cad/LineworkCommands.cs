@@ -148,9 +148,10 @@ namespace FieldCodes.Cad
                 var textHeight = ls.TextHeightPlotted * scale;
                 var styleId = Setup.DrawingResources.FindTextStyle(db, tr, ls.TextStyle);
 
-                if (!string.IsNullOrWhiteSpace(ls.TextStyle) && styleId.IsNull)
-                    ed.WriteMessage("\nFTFLINELABELS: text style '{0}' is not in this " +
-                                    "drawing; using the current style.", ls.TextStyle);
+                // Line labels by feature code: Settings > Style Assignments (Line labels),
+                // falling back to Line Labels. Missing styles are listed at the end.
+                var styler = new AnnotationStyler(db, tr, settings, cfg);
+                var turnedOff = 0;
 
                 var defaultSide = LineSideParser.ParsePlacement(ls.DefaultPlacement);
                 var sideOffset = ls.SideOffsetFeet * unitsPerFoot;
@@ -252,14 +253,23 @@ namespace FieldCodes.Cad
                     // text layer that actually exists, else the configured default.
                     var layer = LabelLayerResolver.Resolve(entity.Layer, candidates,
                         layerCatalog, ls.DefaultLabelLayer).Layer;
+
+                    var lineStyle = styler.For(new FieldCodes.Styles.StyleSubject
+                    {
+                        Kind = FieldCodes.Styles.StyledKind.LineLabel,
+                        Category = FieldCodes.Settings.AnnotationCategory.Lines,
+                        Code = candidates[0].Code,
+                        BaseLayer = layer
+                    });
+                    if (!lineStyle.Enabled) { turnedOff++; continue; }
+                    if (!string.IsNullOrWhiteSpace(lineStyle.Layer)) layer = lineStyle.Layer;
                     var layerId = CadUtil.EnsureLayer(db, tr, layer);
 
                     var planned = LineLabelPlanner.Plan(path, options);
                     foreach (var plan in planned)
                     {
-                        PlaceLineLabel(db, tr, plan, labelText, textHeight, styleId,
-                                       layerId, layer, ls.DrawMask, candidates[0].Code,
-                                       cfg.Version);
+                        PlaceStyledLineLabel(db, tr, styler, lineStyle, plan, labelText,
+                                             layerId, candidates[0].Code, cfg.Version);
                         report.LabelsPlaced++;
                     }
 
@@ -276,7 +286,11 @@ namespace FieldCodes.Cad
 
                 foreach (var line in report.Lines(ls.MinLengthFeet))
                     ed.WriteMessage("\nFTFLINELABELS: " + line);
+                if (turnedOff > 0)
+                    ed.WriteMessage("\nFTFLINELABELS: {0} line(s) not labelled: their label is turned off " +
+                                    "(Settings > Style Assignments).", turnedOff);
                 ed.WriteMessage("\n");
+                styler.WriteProblems(ed, "FTFLINELABELS");
                 LastReport = report;
 
                 // Rebuild every mask around its label's actual position -- a moved
@@ -1666,6 +1680,37 @@ namespace FieldCodes.Cad
         {
             var text = value == null ? "(null)" : value.ToString();
             return text.Length <= 90 ? text : text.Substring(0, 90) + "...";
+        }
+
+        /// <summary>
+        /// A line label in its annotation style: text style, height, colour, prefix, suffix,
+        /// rounding, width and mask from the style; position and angle from the line, as
+        /// always. Stamped with the style so FTFRESTYLE can update it later.
+        /// </summary>
+        private static void PlaceStyledLineLabel(Database db, Transaction tr, AnnotationStyler styler,
+                                                 FieldCodes.Styles.ResolvedAnnotationStyle style,
+                                                 PlannedLineLabel plan, string labelText,
+                                                 ObjectId layerId, string sourceCode, string rulesVersion)
+        {
+            var position = new Point3d(plan.X, plan.Y, 0.0);
+            var t = style.Text;
+            var height = styler.ModelHeight(t);
+            var contents = FieldCodes.Styles.StyleText.Compose(labelText, t);
+
+            using (var text = styler.NewText(labelText, t, layerId, position, null))
+            {
+                text.Rotation = plan.RotationRadians;
+                text.Attachment = AttachmentPoint.MiddleCenter;
+                text.Location = position;
+
+                if (t.Mask == FieldCodes.Styles.MaskMode.Wipeout)
+                    PlaceLineMask(db, tr, text, position, plan.RotationRadians,
+                                  height, layerId, sourceCode, rulesVersion, null);
+
+                styler.Finish(text, t);
+                Ownership.Stamp(text, sourceCode, rulesVersion, FtfEntityKind.LineLabel, position,
+                                null, AnnotationStyler.StyleKey(style), labelText, contents);
+            }
         }
 
         private static void PlaceLineLabel(Database db, Transaction tr,
