@@ -585,12 +585,41 @@ namespace FieldCodes
 
         [JsonIgnore] public Regex Regex { get; set; }
 
+        // ---- how an opted-in block (insertBlock) is placed. Every one is optional, and its
+        // default is exactly what FTFPOINTS did before it existed. None of them inserts anything
+        // on its own: insertBlock still has to be turned on. See FieldCodes.Symbols.BlockInsertion.
+
+        /// <summary>Fixed block scale, used when blockScaleFrom is not set. Absent: 1.</summary>
+        [JsonProperty("blockScale")] public double BlockScale { get; set; }
+
+        /// <summary>AtPoint (default), Offset (blockOffsetX east / blockOffsetY north, drawing
+        /// units) or OffsetRotated (the offset turns with the block).</summary>
+        [JsonProperty("blockInsertion")]
+        [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public FieldCodes.Symbols.BlockPlacement BlockInsertion { get; set; }
+
+        [JsonProperty("blockOffsetX")] public double BlockOffsetX { get; set; }
+        [JsonProperty("blockOffsetY")] public double BlockOffsetY { get; set; }
+
+        /// <summary>Field (default: the rule's field rotation, as before), None, or Marker (the
+        /// point's marker rotation, as FTFPOINTS / FTFORIENT set it).</summary>
+        [JsonProperty("blockRotation")]
+        [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public FieldCodes.Symbols.BlockRotationMethod BlockRotation { get; set; }
+
+        /// <summary>Attribute tag -> text template ({point}, {number}, {elevation:0.00}...), written
+        /// into the inserted block's attributes. Absent or empty: attributes are not created, as
+        /// before. See FieldCodes.Symbols.AttributeTemplate.</summary>
+        [JsonProperty("blockAttributes")] public Dictionary<string, string> BlockAttributes { get; set; }
+
         public CodeRule()
         {
             Enabled = true;
             Species = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             BlockScaleDivisor = 1.0;
             Validate = new List<RangeCheck>();
+            BlockScale = 1.0;
+            BlockAttributes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 

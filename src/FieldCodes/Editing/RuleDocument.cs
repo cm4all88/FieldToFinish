@@ -56,6 +56,151 @@ namespace FieldCodes.Editing
     }
 
     /// <summary>
+    /// One symbol rule of the orientation standard (rules.json "orientation" > "symbols") as
+    /// Settings > Symbols and Rotations edits it: which codes, what kind of feature, the block it
+    /// is drawn with, the block's native zero and how often it repeats.
+    /// </summary>
+    public sealed class EditableSymbol
+    {
+        public EditableSymbol()
+        {
+            Codes = new List<string>();
+            Kind = FieldCodes.Orient.OrientKind.Other.ToString();
+            Period = 360;
+            SourceIndex = -1;
+        }
+
+        /// <summary>Where the entry sat in the file's list when it was read (-1: a new row, or a
+        /// built-in PMX row not yet in the file). Writing the list back starts from that entry, so
+        /// its comments and any property this build does not know survive.</summary>
+        public int SourceIndex { get; set; }
+
+        /// <summary>Point codes, wildcards * and ? allowed. First matching rule wins.</summary>
+        public List<string> Codes { get; set; }
+
+        /// <summary>An <see cref="FieldCodes.Orient.OrientKind"/> name.</summary>
+        public string Kind { get; set; }
+
+        /// <summary>The block it is drawn with, for people and the preview (wildcards allowed).</summary>
+        public string Block { get; set; }
+
+        /// <summary>Native zero: the AutoCAD direction the block's meaningful direction points at rotation 0.</summary>
+        public double ReferenceCadDegrees { get; set; }
+
+        /// <summary>360 one direction, 180 an axis, 0 never turned.</summary>
+        public double Period { get; set; }
+
+        public bool TwoSided { get; set; }
+        public bool RotateLabel { get; set; }
+        public string Meaning { get; set; }
+
+        public string CodesText { get { return string.Join(" ", (Codes ?? new List<string>()).ToArray()); } }
+
+        /// <summary>"SN*, snst wv" -> SN*, SNST, WV: codes as typed in one box.</summary>
+        public static List<string> ParseCodes(string text)
+        {
+            return (text ?? string.Empty)
+                .Split(new[] { ' ', ',', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(c => c.Trim().ToUpperInvariant())
+                .Where(c => c.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>The rule as FTFPOINTS / FTFORIENT would use it (an unknown kind reads as Other).</summary>
+        public FieldCodes.Orient.SymbolRule ToRule()
+        {
+            FieldCodes.Orient.OrientKind kind;
+            if (!Enum.TryParse(Kind ?? string.Empty, true, out kind)) kind = FieldCodes.Orient.OrientKind.Other;
+            return new FieldCodes.Orient.SymbolRule
+            {
+                Codes = (Codes ?? new List<string>()).ToList(), Kind = kind, Block = Block,
+                ReferenceCadDegrees = ReferenceCadDegrees, Period = Period, TwoSided = TwoSided,
+                RotateLabel = RotateLabel, Meaning = Meaning
+            };
+        }
+
+        public static EditableSymbol From(FieldCodes.Orient.SymbolRule rule, int sourceIndex)
+        {
+            return new EditableSymbol
+            {
+                SourceIndex = sourceIndex,
+                Codes = (rule.Codes ?? new List<string>()).ToList(),
+                Kind = rule.Kind.ToString(),
+                Block = rule.Block,
+                ReferenceCadDegrees = rule.ReferenceCadDegrees,
+                Period = rule.Period,
+                TwoSided = rule.TwoSided,
+                RotateLabel = rule.RotateLabel,
+                Meaning = rule.Meaning
+            };
+        }
+
+        public EditableSymbol Clone()
+        {
+            var copy = (EditableSymbol)MemberwiseClone();
+            copy.Codes = (Codes ?? new List<string>()).ToList();
+            return copy;
+        }
+    }
+
+    /// <summary>When FTFORIENT turns a marker, and the office's approved symbol library.</summary>
+    public sealed class EditableOrientationApply
+    {
+        /// <summary>applyMinimumConfidence, 0 to 1.</summary>
+        public double MinimumConfidence { get; set; }
+
+        /// <summary>applyWeakestTier: Measured, Relationship, Alignment or Inferred.</summary>
+        public string WeakestTier { get; set; }
+
+        /// <summary>symbolLibrary: a drawing of approved symbol blocks; blank for none.</summary>
+        public string SymbolLibrary { get; set; }
+    }
+
+    /// <summary>
+    /// How FTFPOINTS inserts a block for a code rule that opted in (insertBlock). The opt-in itself
+    /// is shown here but written only by <see cref="RuleDocument.SetInsertBlock"/>, which the editor
+    /// calls after the user confirms: a second symbol on top of Civil 3D's is never a side effect.
+    /// </summary>
+    public sealed class EditableBlockInsert
+    {
+        public EditableBlockInsert()
+        {
+            BlockScale = 1.0;
+            BlockScaleDivisor = 1.0;
+            Attributes = new List<KeyValuePair<string, string>>();
+        }
+
+        public string Id { get; set; }
+        public string Description { get; set; }
+
+        /// <summary>Read only through this object: see <see cref="RuleDocument.SetInsertBlock"/>.</summary>
+        public bool InsertBlock { get; set; }
+
+        public string Block { get; set; }
+        public string BlockLayer { get; set; }
+
+        /// <summary>Fixed scale, used when <see cref="BlockScaleFrom"/> is blank.</summary>
+        public double BlockScale { get; set; }
+
+        /// <summary>A field (named group or derived field) the scale is read from; blank for a fixed scale.</summary>
+        public string BlockScaleFrom { get; set; }
+        public double BlockScaleDivisor { get; set; }
+
+        public FieldCodes.Symbols.BlockPlacement Placement { get; set; }
+        public double OffsetX { get; set; }
+        public double OffsetY { get; set; }
+
+        public FieldCodes.Symbols.BlockRotationMethod Rotation { get; set; }
+
+        /// <summary>The field the rule reads a rotation from, or blank (read only context).</summary>
+        public string FieldRotation { get; set; }
+
+        /// <summary>Attribute tag and text template, in order.</summary>
+        public List<KeyValuePair<string, string>> Attributes { get; set; }
+    }
+
+    /// <summary>
     /// The rules file as an editable document.
     ///
     /// All edits happen on the JSON DOM, never by deserialising and re-serialising:
@@ -214,6 +359,11 @@ namespace FieldCodes.Editing
         {
             var problems = new List<string>();
 
+            // Checked on the document first: a symbol kind the enum does not know would stop the
+            // typed read below with a JSON error that names no row.
+            OrientationProblems(problems);
+            if (problems.Count > 0) return problems;
+
             RulesConfig cfg;
             try
             {
@@ -233,6 +383,8 @@ namespace FieldCodes.Editing
             }
 
             EditorChecks(cfg, problems);
+            if (!SymbolsAreBuiltIn() && cfg.Orientation != null)
+                SymbolShadowing(cfg.Orientation.Symbols, problems);
             return problems;
         }
 
@@ -317,9 +469,139 @@ namespace FieldCodes.Editing
                     CheckPlaceholders(where + "label", rule.Label.Format, valid, problems);
                     CheckPlaceholders(where + "cluster label", rule.Label.ClusterFormat, valid, problems);
                 }
+
+                CheckBlockInsertion(where, rule, valid, problems);
             }
 
             CheckConflicts(cfg, problems);
+        }
+
+        /// <summary>The opted-in block's settings: a name to insert, a scale that can be worked
+        /// out, attribute templates that name real fields.</summary>
+        private static void CheckBlockInsertion(string where, CodeRule rule, HashSet<string> valid, List<string> problems)
+        {
+            if (rule.InsertBlock && string.IsNullOrWhiteSpace(rule.Block))
+                problems.Add(where + "inserts a block (insertBlock) but names no block.");
+            CheckLayerName(where + "block layer", rule.BlockLayer, problems);
+
+            if (string.IsNullOrWhiteSpace(rule.BlockScaleFrom))
+            {
+                if (!(rule.BlockScale > 0) || double.IsInfinity(rule.BlockScale))
+                    problems.Add(where + "block scale must be a number greater than zero.");
+            }
+            else
+            {
+                if (!valid.Contains(rule.BlockScaleFrom.Trim()))
+                    problems.Add(where + "block scale reads field '" + rule.BlockScaleFrom +
+                                 "', which is neither a named group in the pattern nor a derived field.");
+                if (Math.Abs(rule.BlockScaleDivisor) < 1e-9 || double.IsNaN(rule.BlockScaleDivisor))
+                    problems.Add(where + "block scale divisor cannot be zero.");
+            }
+
+            if (double.IsNaN(rule.BlockOffsetX) || double.IsInfinity(rule.BlockOffsetX) ||
+                double.IsNaN(rule.BlockOffsetY) || double.IsInfinity(rule.BlockOffsetY))
+                problems.Add(where + "block offset must be a number.");
+
+            if (rule.BlockAttributes == null || rule.BlockAttributes.Count == 0) return;
+            var tokens = new HashSet<string>(valid, StringComparer.OrdinalIgnoreCase);
+            foreach (var t in FieldCodes.Symbols.AttributeTemplate.BuiltInTokens) tokens.Add(t);
+            tokens.Add("code");
+            tokens.Add("species");
+            foreach (var kv in rule.BlockAttributes)
+            {
+                if (kv.Key.StartsWith("//", StringComparison.Ordinal)) continue;
+                if (!FieldCodes.Symbols.AttributeTemplate.IsValidTag(kv.Key))
+                    problems.Add(where + "attribute tag '" + kv.Key + "' cannot be blank or contain spaces or braces.");
+                CheckPlaceholders(where + "attribute " + kv.Key, kv.Value, tokens, problems);
+            }
+        }
+
+        // --------------------------------------------------------- orientation checks
+
+        private static readonly double[] Periods = { 0, 180, 360 };
+
+        /// <summary>The "orientation" section as written: thresholds in range, and every symbol
+        /// row with codes, a kind the standard knows, a native zero of 0-360 and a period of 0, 180
+        /// or 360. Run on the document, so a row that would not even load is named by its number.</summary>
+        private void OrientationProblems(List<string> problems)
+        {
+            var o = _root["orientation"] as JObject;
+            if (o == null) return;
+            const string page = "Symbols and Rotations: ";
+
+            var conf = o["applyMinimumConfidence"];
+            double v;
+            if (conf != null && (!TryNumber(conf, out v) || v < 0 || v > 1))
+                problems.Add(page + "the confidence a marker needs before FTFORIENT turns it must be between 0 and 1.");
+
+            var tier = o["applyWeakestTier"];
+            if (tier != null && tier.Type != JTokenType.Null)
+            {
+                FieldCodes.Orient.OrientationTier t;
+                if (!Enum.TryParse(tier.ToString(), true, out t) || !Enum.IsDefined(typeof(FieldCodes.Orient.OrientationTier), t) ||
+                    t == FieldCodes.Orient.OrientationTier.Review || t == FieldCodes.Orient.OrientationTier.NotDirectional)
+                    problems.Add(page + "the weakest evidence applied must be Measured, Relationship, Alignment or Inferred (not '" + tier + "').");
+            }
+
+            var list = o["symbols"];
+            if (list == null || list.Type == JTokenType.Null) return;
+            var array = list as JArray;
+            if (array == null) { problems.Add(page + "\"symbols\" must be a list."); return; }
+
+            var row = 0;
+            foreach (var token in array)
+            {
+                row++;
+                var entry = token as JObject;
+                if (entry == null) { problems.Add(page + "symbol rule " + row + " is not a rule (an object with codes, kind...)."); continue; }
+                var codes = ReadCodes(entry["codes"]);
+                var where = page + "symbol rule " + row + (codes.Count > 0 ? " (" + string.Join(" ", codes.ToArray()) + ")" : string.Empty) + ": ";
+
+                if (codes.Count == 0)
+                    problems.Add(where + "needs at least one code.");
+                foreach (var c in codes.Where(c => c.IndexOfAny(new[] { ' ', '\t' }) >= 0))
+                    problems.Add(where + "code '" + c + "' has a space in it; one code per entry.");
+
+                var kind = entry["kind"];
+                if (kind != null && kind.Type != JTokenType.Null)
+                {
+                    FieldCodes.Orient.OrientKind k;
+                    if (!Enum.TryParse(kind.ToString(), true, out k) || !Enum.IsDefined(typeof(FieldCodes.Orient.OrientKind), k))
+                        problems.Add(where + "kind '" + kind + "' is not one of " +
+                                     string.Join(", ", Enum.GetNames(typeof(FieldCodes.Orient.OrientKind))) + ".");
+                }
+
+                var period = entry["period"];
+                if (period != null && (!TryNumber(period, out v) || !Periods.Any(p => Math.Abs(p - v) < 1e-9)))
+                    problems.Add(where + "repeats every '" + period + "' degrees; it must be 360 (one direction), " +
+                                 "180 (an axis, such as a valve) or 0 (looks the same at every rotation: never turned).");
+
+                var zero = entry["referenceCadDegrees"];
+                if (zero != null && (!TryNumber(zero, out v) || v < 0 || v > 360))
+                    problems.Add(where + "the native zero must be between 0 and 360 AutoCAD degrees (0 east, 90 north).");
+            }
+        }
+
+        /// <summary>First match wins, so a code listed below a rule that already matches it is
+        /// never used: almost always a specific code put under its family by mistake.</summary>
+        private static void SymbolShadowing(IList<FieldCodes.Orient.SymbolRule> symbols, List<string> problems)
+        {
+            if (symbols == null) return;
+            for (var j = 1; j < symbols.Count; j++)
+            {
+                foreach (var code in (symbols[j].Codes ?? new List<string>()).Where(c => !string.IsNullOrWhiteSpace(c) && c.IndexOfAny(new[] { '*', '?' }) < 0))
+                {
+                    for (var i = 0; i < j; i++)
+                    {
+                        var earlier = symbols[i].Codes ?? new List<string>();
+                        if (!earlier.Any(p => FieldCodes.Orient.OrientationStandard.CodeMatches(p, code.Trim()))) continue;
+                        problems.Add("Symbols and Rotations: symbol rule " + (j + 1) + " lists " + code +
+                                     ", but rule " + (i + 1) + " (" + string.Join(" ", earlier.ToArray()) +
+                                     ") matches it first, so it is never used. Move the more specific rule up.");
+                        break;
+                    }
+                }
+            }
         }
 
         private static void CheckLayerName(string where, string layer, List<string> problems)
@@ -560,6 +842,409 @@ namespace FieldCodes.Editing
             var side = (edit.Placement ?? string.Empty).Trim();
             if (side.Length == 0 || side.Equals("Auto", StringComparison.OrdinalIgnoreCase)) f.Remove("placement");
             else f["placement"] = side;
+        }
+
+        // ------------------------------------------------------------------ symbols
+
+        /// <summary>Written above a symbol list the editor copies in from the built-in standard.</summary>
+        public const string SymbolsComment =
+            "Symbol standard, edited in Settings > Symbols and Rotations (copied from the built-in PMX list on the first edit). " +
+            "Each rule: codes (wildcards * ?), kind, block (for people and the preview), referenceCadDegrees = the block's native zero " +
+            "(the AutoCAD direction its meaningful direction points at rotation 0), period (360 one direction, 180 an axis, 0 never turned). " +
+            "First match wins: a code's own rule goes above its family's. Remove this list to go back to the built-in PMX standard.";
+
+        /// <summary>True when the file names no symbol list of its own, so the built-in PMX list
+        /// (<see cref="FieldCodes.Orient.OrientationStandard.Pmx"/>) is in force.</summary>
+        public bool SymbolsAreBuiltIn()
+        {
+            var list = SymbolArray();
+            return list == null || !list.OfType<JObject>().Any();
+        }
+
+        /// <summary>
+        /// The symbol rules in force, in order (first match wins). When the file has no list of its
+        /// own these are the built-in PMX rules, every one with SourceIndex -1: call
+        /// <see cref="MaterializeSymbols"/> before editing so the list is in the file.
+        /// </summary>
+        public IList<EditableSymbol> GetSymbols()
+        {
+            if (SymbolsAreBuiltIn())
+                return FieldCodes.Orient.OrientationStandard.Pmx().Symbols.Select(r => EditableSymbol.From(r, -1)).ToList();
+
+            var result = new List<EditableSymbol>();
+            var list = SymbolArray();
+            for (var i = 0; i < list.Count; i++)
+            {
+                var entry = list[i] as JObject;
+                if (entry == null) continue;
+                result.Add(new EditableSymbol
+                {
+                    SourceIndex = i,
+                    Codes = ReadCodes(entry["codes"]),
+                    Kind = entry["kind"] != null && entry["kind"].Type != JTokenType.Null ? entry["kind"].ToString() : FieldCodes.Orient.OrientKind.Other.ToString(),
+                    Block = (string)entry["block"],
+                    ReferenceCadDegrees = Number(entry["referenceCadDegrees"], 0),
+                    Period = Number(entry["period"], 360),
+                    TwoSided = Flag(entry["twoSided"]),
+                    RotateLabel = Flag(entry["rotateLabel"]),
+                    Meaning = (string)entry["meaning"]
+                });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Copies the built-in PMX symbol list into the file ("orientation" > "symbols", the
+        /// section created if the file has none) so it can be edited: from then on the file's list,
+        /// not the built-in one, is in force. Nothing changes in behaviour -- the rules are the same
+        /// ones -- until they are edited. False when the file already has its own list.
+        /// </summary>
+        public bool MaterializeSymbols()
+        {
+            if (!SymbolsAreBuiltIn()) return false;
+            var orientation = Orientation(true);
+            var list = new JArray();
+            foreach (var rule in FieldCodes.Orient.OrientationStandard.Pmx().Symbols)
+                list.Add(WriteSymbol(new JObject(), EditableSymbol.From(rule, -1)));
+            if (orientation["//symbols"] == null) orientation["//symbols"] = SymbolsComment;
+            orientation["symbols"] = list;
+            return true;
+        }
+
+        /// <summary>
+        /// Replaces the file's symbol list with <paramref name="symbols"/>, in that order. A row read
+        /// from the file (SourceIndex) keeps that entry's comments and unknown properties; only the
+        /// properties the editor owns are written. Each row's SourceIndex is updated to its new place.
+        /// An empty list is refused: use <see cref="UseBuiltInSymbols"/> to go back to PMX's.
+        /// </summary>
+        public void SetSymbols(IList<EditableSymbol> symbols)
+        {
+            if (symbols == null) throw new ArgumentNullException("symbols");
+            if (symbols.Count == 0)
+                throw new ConfigException("A symbol list needs at least one rule. To go back to the built-in PMX standard, use the built-in list instead.");
+
+            var orientation = Orientation(true);
+            var old = orientation["symbols"] as JArray ?? new JArray();
+            var list = new JArray();
+            foreach (var s in symbols)
+            {
+                var source = s.SourceIndex >= 0 && s.SourceIndex < old.Count ? old[s.SourceIndex] as JObject : null;
+                list.Add(WriteSymbol(source != null ? (JObject)source.DeepClone() : new JObject(), s));
+            }
+            if (orientation["//symbols"] == null && orientation["symbols"] == null) orientation["//symbols"] = SymbolsComment;
+            orientation["symbols"] = list;
+            for (var i = 0; i < symbols.Count; i++) symbols[i].SourceIndex = i;
+        }
+
+        /// <summary>Removes the file's symbol list (and the editor's note above it): the built-in
+        /// PMX standard is in force again. Every other part of "orientation" stays.</summary>
+        public void UseBuiltInSymbols()
+        {
+            var orientation = Orientation(false);
+            if (orientation == null) return;
+            orientation.Remove("symbols");
+            if (string.Equals((string)orientation["//symbols"], SymbolsComment, StringComparison.Ordinal))
+                orientation.Remove("//symbols");
+        }
+
+        /// <summary>
+        /// A rule of its own for one code, put directly above the rule that covers it now (first
+        /// match wins), starting as a copy of that rule. A literal entry for the code in the family
+        /// rule is taken out, since it could never be reached under the override. Returns the new
+        /// row's index. Refused when no rule covers the code, or the rule covering it is already
+        /// that code's alone.
+        /// </summary>
+        public static int OverrideSymbolFor(IList<EditableSymbol> symbols, string code)
+        {
+            if (symbols == null) throw new ArgumentNullException("symbols");
+            var bare = FieldCodes.Orient.OrientationStandard.BaseCode(code);
+            if (bare.Length == 0) throw new ConfigException("Type the point code to give its own symbol rule.");
+
+            var index = -1;
+            for (var i = 0; i < symbols.Count && index < 0; i++)
+                if ((symbols[i].Codes ?? new List<string>()).Any(c => FieldCodes.Orient.OrientationStandard.CodeMatches(c, bare)))
+                    index = i;
+            if (index < 0)
+                throw new ConfigException("No symbol rule covers " + bare + " yet: add a new rule for it instead.");
+
+            var family = symbols[index];
+            if (family.Codes.Count == 1 && string.Equals(family.Codes[0].Trim(), bare, StringComparison.OrdinalIgnoreCase))
+                throw new ConfigException("Rule " + (index + 1) + " is already " + bare + "'s own rule: edit it directly.");
+
+            var own = family.Clone();
+            own.SourceIndex = -1;
+            own.Codes = new List<string> { bare };
+            family.Codes.RemoveAll(c => string.Equals(c.Trim(), bare, StringComparison.OrdinalIgnoreCase));
+            symbols.Insert(index, own);
+            return index;
+        }
+
+        public EditableOrientationApply GetOrientationApply()
+        {
+            var defaults = new FieldCodes.Orient.OrientationStandard();
+            var o = Orientation(false);
+            var tier = o != null && o["applyWeakestTier"] != null && o["applyWeakestTier"].Type != JTokenType.Null
+                ? o["applyWeakestTier"].ToString() : defaults.ApplyWeakestTier.ToString();
+            return new EditableOrientationApply
+            {
+                MinimumConfidence = o != null ? Number(o["applyMinimumConfidence"], defaults.ApplyMinimumConfidence) : defaults.ApplyMinimumConfidence,
+                WeakestTier = tier,
+                SymbolLibrary = o != null ? (string)o["symbolLibrary"] ?? string.Empty : string.Empty
+            };
+        }
+
+        /// <summary>Writes the thresholds and library path; a value that did not change is not rewritten.</summary>
+        public void ApplyOrientationApply(EditableOrientationApply edit)
+        {
+            if (edit == null) throw new ArgumentNullException("edit");
+            var current = GetOrientationApply();
+            var o = Orientation(false);
+            if (Math.Abs(current.MinimumConfidence - edit.MinimumConfidence) > 1e-12)
+                Orientation(true)["applyMinimumConfidence"] = edit.MinimumConfidence;
+            if (!string.Equals(current.WeakestTier, edit.WeakestTier, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(edit.WeakestTier))
+                Orientation(true)["applyWeakestTier"] = edit.WeakestTier.Trim();
+            if (!string.Equals(current.SymbolLibrary ?? string.Empty, (edit.SymbolLibrary ?? string.Empty).Trim(), StringComparison.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(edit.SymbolLibrary)) { if (o != null) o.Remove("symbolLibrary"); }
+                else Orientation(true)["symbolLibrary"] = edit.SymbolLibrary.Trim();
+            }
+        }
+
+        private JArray SymbolArray()
+        {
+            var o = Orientation(false);
+            return o != null ? o["symbols"] as JArray : null;
+        }
+
+        private JObject Orientation(bool create)
+        {
+            var o = _root["orientation"] as JObject;
+            if (o == null && create)
+            {
+                o = new JObject();
+                _root["orientation"] = o;
+            }
+            return o;
+        }
+
+        /// <summary>Only the properties the editor owns; false flags are left out, as the shipped file does.</summary>
+        private static JObject WriteSymbol(JObject entry, EditableSymbol s)
+        {
+            entry["codes"] = new JArray((s.Codes ?? new List<string>()).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Cast<object>().ToArray());
+            entry["kind"] = string.IsNullOrWhiteSpace(s.Kind) ? FieldCodes.Orient.OrientKind.Other.ToString() : s.Kind.Trim();
+            SetOrRemove(entry, "block", s.Block);
+            entry["referenceCadDegrees"] = s.ReferenceCadDegrees;
+            entry["period"] = s.Period;
+            if (s.TwoSided) entry["twoSided"] = true; else entry.Remove("twoSided");
+            if (s.RotateLabel) entry["rotateLabel"] = true; else entry.Remove("rotateLabel");
+            SetOrRemove(entry, "meaning", s.Meaning);
+            return entry;
+        }
+
+        private static List<string> ReadCodes(JToken token)
+        {
+            var array = token as JArray;
+            if (array != null)
+                return array.Where(t => t.Type == JTokenType.String).Select(t => ((string)t).Trim()).Where(c => c.Length > 0).ToList();
+            if (token != null && token.Type == JTokenType.String && !string.IsNullOrWhiteSpace((string)token))
+                return new List<string> { ((string)token).Trim() };
+            return new List<string>();
+        }
+
+        private static bool TryNumber(JToken token, out double value)
+        {
+            value = 0;
+            if (token == null) return false;
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            {
+                value = token.Value<double>();
+                return !double.IsNaN(value) && !double.IsInfinity(value);
+            }
+            return token.Type == JTokenType.String &&
+                   double.TryParse((string)token, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value);
+        }
+
+        private static double Number(JToken token, double fallback)
+        {
+            double v;
+            return TryNumber(token, out v) ? v : fallback;
+        }
+
+        private static bool Flag(JToken token)
+        {
+            return token != null && token.Type == JTokenType.Boolean && token.Value<bool>();
+        }
+
+        // ------------------------------------------------------------- inserted blocks
+
+        /// <summary>The code rules that name a block or opt in to inserting one, in file order:
+        /// the ones Settings > Symbols and Rotations lists under "Blocks FTF inserts".</summary>
+        public IList<string> BlockRuleIds()
+        {
+            return Rules().OfType<JObject>()
+                .Where(r => !string.IsNullOrWhiteSpace((string)r["block"]) || Flag(r["insertBlock"]))
+                .Select(r => (string)r["id"]).Where(id => id != null).ToList();
+        }
+
+        public EditableBlockInsert GetBlockInsert(string id)
+        {
+            var rule = FindRule(id);
+            if (rule == null) return null;
+
+            FieldCodes.Symbols.BlockPlacement placement;
+            if (!Enum.TryParse((string)rule["blockInsertion"] ?? string.Empty, true, out placement)) placement = FieldCodes.Symbols.BlockPlacement.AtPoint;
+            FieldCodes.Symbols.BlockRotationMethod rotation;
+            if (!Enum.TryParse((string)rule["blockRotation"] ?? string.Empty, true, out rotation)) rotation = FieldCodes.Symbols.BlockRotationMethod.Field;
+
+            var edit = new EditableBlockInsert
+            {
+                Id = (string)rule["id"],
+                Description = (string)rule["description"] ?? string.Empty,
+                InsertBlock = Flag(rule["insertBlock"]),
+                Block = (string)rule["block"] ?? string.Empty,
+                BlockLayer = (string)rule["blockLayer"] ?? string.Empty,
+                BlockScale = Number(rule["blockScale"], 1.0),
+                BlockScaleFrom = (string)rule["blockScaleFrom"] ?? string.Empty,
+                BlockScaleDivisor = Number(rule["blockScaleDivisor"], 1.0),
+                Placement = placement,
+                OffsetX = Number(rule["blockOffsetX"], 0),
+                OffsetY = Number(rule["blockOffsetY"], 0),
+                Rotation = rotation,
+                FieldRotation = rule["rotation"] is JObject ? (string)rule["rotation"]["from"] ?? string.Empty : string.Empty
+            };
+            var attributes = rule["blockAttributes"] as JObject;
+            if (attributes != null)
+                foreach (var p in attributes.Properties().Where(p => !p.Name.StartsWith("//", StringComparison.Ordinal)))
+                    edit.Attributes.Add(new KeyValuePair<string, string>(p.Name, p.Value.Type == JTokenType.Null ? string.Empty : p.Value.ToString()));
+            return edit;
+        }
+
+        /// <summary>
+        /// Writes how the rule's block is placed: name, layer, scale, insertion, rotation and
+        /// attribute templates. Defaults are written as absence, so an untouched rule stays as it
+        /// was. NEVER changes insertBlock: that is <see cref="SetInsertBlock"/>'s alone.
+        /// </summary>
+        public void ApplyBlockInsert(EditableBlockInsert edit)
+        {
+            if (edit == null) throw new ArgumentNullException("edit");
+            var rule = FindRule(edit.Id);
+            if (rule == null) throw new ConfigException("No rule with id '" + edit.Id + "'.");
+
+            SetOrRemove(rule, "block", edit.Block == null ? null : edit.Block.Trim());
+            SetOrRemove(rule, "blockLayer", edit.BlockLayer == null ? null : edit.BlockLayer.Trim());
+
+            if (string.IsNullOrWhiteSpace(edit.BlockScaleFrom))
+            {
+                rule.Remove("blockScaleFrom");
+                rule.Remove("blockScaleDivisor");
+                WriteNumber(rule, "blockScale", edit.BlockScale, 1.0);
+            }
+            else
+            {
+                rule["blockScaleFrom"] = edit.BlockScaleFrom.Trim();
+                WriteNumber(rule, "blockScaleDivisor", edit.BlockScaleDivisor, 1.0);
+                rule.Remove("blockScale");
+            }
+
+            if (edit.Placement == FieldCodes.Symbols.BlockPlacement.AtPoint)
+            {
+                rule.Remove("blockInsertion");
+                rule.Remove("blockOffsetX");
+                rule.Remove("blockOffsetY");
+            }
+            else
+            {
+                rule["blockInsertion"] = edit.Placement.ToString();
+                WriteNumber(rule, "blockOffsetX", edit.OffsetX, 0.0);
+                WriteNumber(rule, "blockOffsetY", edit.OffsetY, 0.0);
+            }
+
+            if (edit.Rotation == FieldCodes.Symbols.BlockRotationMethod.Field) rule.Remove("blockRotation");
+            else rule["blockRotation"] = edit.Rotation.ToString();
+
+            // Attribute templates: the editor's pairs, after any comment keys already there.
+            var existing = rule["blockAttributes"] as JObject;
+            var attributes = new JObject();
+            if (existing != null)
+                foreach (var p in existing.Properties().Where(p => p.Name.StartsWith("//", StringComparison.Ordinal)))
+                    attributes.Add(p.Name, p.Value.DeepClone());
+            var any = false;
+            foreach (var kv in edit.Attributes ?? new List<KeyValuePair<string, string>>())
+            {
+                if (string.IsNullOrWhiteSpace(kv.Key) || string.IsNullOrEmpty(kv.Value) || attributes[kv.Key.Trim()] != null) continue;
+                attributes.Add(kv.Key.Trim(), kv.Value);
+                any = true;
+            }
+            if (any || attributes.Properties().Any()) rule["blockAttributes"] = attributes;
+            else rule.Remove("blockAttributes");
+        }
+
+        /// <summary>
+        /// The opt-in itself. FTF then inserts the rule's block on every point the rule matches, on
+        /// top of whatever Civil 3D's point style draws -- so the editor asks before it calls this
+        /// with true. Off removes the property (absent is off).
+        /// </summary>
+        public void SetInsertBlock(string id, bool insert)
+        {
+            var rule = FindRule(id);
+            if (rule == null) throw new ConfigException("No rule with id '" + id + "'.");
+            if (insert) rule["insertBlock"] = true;
+            else rule.Remove("insertBlock");
+        }
+
+        /// <summary>Takes the block off a rule: insertBlock and every block property the editor
+        /// owns. Comments (such as the tree rule's "//block") stay.</summary>
+        public void RemoveBlockInsert(string id)
+        {
+            var rule = FindRule(id);
+            if (rule == null) throw new ConfigException("No rule with id '" + id + "'.");
+            foreach (var name in new[] { "insertBlock", "block", "blockLayer", "blockScale", "blockScaleFrom", "blockScaleDivisor",
+                                         "blockInsertion", "blockOffsetX", "blockOffsetY", "blockRotation", "blockAttributes" })
+                rule.Remove(name);
+        }
+
+        // ------------------------------------------------------------------ merging
+
+        // An editor page stages its edits on its own copy of the document; another page may save
+        // the same file meanwhile. Saving therefore re-reads the file and copies across only the
+        // parts this page owns, so neither page's save loses the other's work.
+
+        /// <summary>Puts this document's symbol list onto <paramref name="target"/> -- or its
+        /// absence, so the built-in list is in force there too. Entries are copied whole.</summary>
+        public void CopySymbolsTo(RuleDocument target)
+        {
+            if (target == null) throw new ArgumentNullException("target");
+            if (SymbolsAreBuiltIn()) { target.UseBuiltInSymbols(); return; }
+            var mine = Orientation(false);
+            var theirs = target.Orientation(true);
+            if (mine["//symbols"] != null && theirs["//symbols"] == null && theirs["symbols"] == null)
+                theirs["//symbols"] = mine["//symbols"].DeepClone();
+            theirs["symbols"] = SymbolArray().DeepClone();
+        }
+
+        /// <summary>Puts this document's FTFORIENT thresholds and symbol library onto <paramref name="target"/>.</summary>
+        public void CopyOrientationApplyTo(RuleDocument target)
+        {
+            if (target == null) throw new ArgumentNullException("target");
+            target.ApplyOrientationApply(GetOrientationApply());
+        }
+
+        /// <summary>Puts one rule's block settings, opt-in included, onto the same rule of
+        /// <paramref name="target"/> (the opt-in was confirmed when it was made here).</summary>
+        public void CopyBlockInsertTo(RuleDocument target, string id)
+        {
+            if (target == null) throw new ArgumentNullException("target");
+            var mine = GetBlockInsert(id);
+            if (mine == null || target.FindRule(id) == null) return;
+            // Defaults are written as absence, so a block taken off here comes off there too.
+            target.ApplyBlockInsert(mine);
+            target.SetInsertBlock(id, mine.InsertBlock);
+        }
+
+        private static void WriteNumber(JObject owner, string name, double value, double absentMeans)
+        {
+            if (Math.Abs(value - absentMeans) < 1e-12) owner.Remove(name);
+            else owner[name] = value;
         }
 
         private JObject FindRule(string id)

@@ -131,6 +131,11 @@ namespace FieldCodes.Orient
         /// <summary>Length of a QC direction arrow, inches on the sheet.</summary>
         [JsonProperty("qcArrowPlotted")] public double QcArrowPlotted { get; set; }
 
+        /// <summary>The office's approved symbol library: a drawing whose block definitions
+        /// Settings > Symbols and Rotations offers beside the drawing's own (and brings in only
+        /// when asked). Nothing reads it while a command runs. Empty: none.</summary>
+        [JsonProperty("symbolLibrary")] public string SymbolLibrary { get; set; }
+
         public OrientationStandard()
         {
             Symbols = new List<SymbolRule>();
@@ -252,6 +257,21 @@ namespace FieldCodes.Orient
             var end = first.Length;
             while (end > 1 && char.IsDigit(first[end - 1])) end--;
             return first.Substring(0, end);
+        }
+
+        /// <summary>The index of the rule <see cref="SymbolFor"/> picks for a code, or -1: what an
+        /// editor highlights as "this code's rule" (first match wins).</summary>
+        public int SymbolIndexFor(string code)
+        {
+            var rule = SymbolFor(code);
+            return rule == null ? -1 : Symbols.IndexOf(rule);
+        }
+
+        /// <summary>True when a code pattern (wildcards * and ?) matches a value, as symbol and
+        /// line rules match codes.</summary>
+        public static bool CodeMatches(string pattern, string value)
+        {
+            return Glob(pattern, value);
         }
 
         internal static bool Glob(string pattern, string value)
