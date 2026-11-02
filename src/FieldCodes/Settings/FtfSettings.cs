@@ -80,6 +80,7 @@ namespace FieldCodes.Settings
         [JsonProperty("cleanup")] public CleanupSettings Cleanup { get; set; }
         [JsonProperty("compare")] public CompareSettings Compare { get; set; }
         [JsonProperty("annotation")] public AnnotationSettings Annotation { get; set; }
+        [JsonProperty("diagnostics")] public DiagnosticsSettings Diagnostics { get; set; }
 
         public FtfSettings()
         {
@@ -104,6 +105,7 @@ namespace FieldCodes.Settings
             Cleanup = new CleanupSettings();
             Compare = new CompareSettings();
             Annotation = new AnnotationSettings();
+            Diagnostics = new DiagnosticsSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -352,6 +354,7 @@ namespace FieldCodes.Settings
             if (Annotation == null) Annotation = new AnnotationSettings();
             if (Annotation.Categories == null) Annotation.Categories = new List<AnnotationCategory>(AnnotationSettings.DefaultCategories());
             if (Annotation.NoLabelWords == null) Annotation.NoLabelWords = new List<string>();
+            if (Diagnostics == null) Diagnostics = new DiagnosticsSettings();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();
             if (DrawOrder.MaskableLayers == null) DrawOrder.MaskableLayers = new List<string>();
@@ -450,6 +453,7 @@ namespace FieldCodes.Settings
             rules.ProtectedLayers = new List<string>(DrawOrder.ProtectedLayers ?? new List<string>());
             rules.MaskableLayers = new List<string>(DrawOrder.MaskableLayers ?? new List<string>());
             rules.ActiveLayerMappings = new List<LayerMapping>(General.LayerMappings ?? new List<LayerMapping>());
+            if (Diagnostics != null) Diagnostics.ApplyTo(rules);
         }
     }
 }

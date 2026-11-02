@@ -273,6 +273,17 @@ namespace FieldCodes.Cad.Ui
 
         // ============================================================ line features
 
+        private static readonly string[] LineFilters =
+        {
+            "All lines", "Needs attention", "Ready to label", "Below minimum length",
+            "Not line features"
+        };
+
+        private ComboBox _lineFilter;
+        private TextBox _lineDetail;
+        private ListViewSorting _lineSort;
+        private FtfLineworkResult _linework;
+
         private void BuildLineFeaturesPage()
         {
             var page = NewPage("Line Features");
@@ -281,47 +292,55 @@ namespace FieldCodes.Cad.Ui
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            var top = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.TopDown,
-                AutoSize = true,
-                WrapContents = false
-            };
+            var top = TopStack();
             PageHeader(top, "Lines");
-            Caption(top, "Civil 3D creates the survey figures and linework from the field " +
-                         "codes; FTF labels the existing lines. To place a label, run " +
-                         "FTFLABELLINE: click the line, slide the preview to where the " +
-                         "label belongs, click to place. This inventory shows what each " +
-                         "line was identified as and what its label would say. Read-only: " +
-                         "scanning changes nothing.");
+            Caption(top, "Civil 3D creates the figures and linework; FTF labels the existing " +
+                         "lines. Label one with FTFLABELLINE: click the line, slide the " +
+                         "preview, click to place. Select a line to see why it has its " +
+                         "status and which settings govern its label. Scanning is read-only.");
 
             _lineSummary = Caption(top, "...");
 
-            var toolbar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-            var rescan = SecondaryButton("Scan Drawing (read-only)", null);
+            var toolbar = ToolRow();
+            _lineFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+            foreach (var f in LineFilters) _lineFilter.Items.Add(f);
+            _lineFilter.SelectedIndex = 0;
+            _lineFilter.SelectedIndexChanged += (s, e) => ApplyLineFilter();
+            toolbar.Controls.Add(_lineFilter);
+
+            var rescan = ToolButton("Scan Drawing (read-only)", null, true);
             rescan.Click += (s, e) => { _lineworkScanned = false; EnsureLineworkScanned(); };
             toolbar.Controls.Add(rescan);
-            top.Controls.Add(toolbar);
 
+            var labelLine = ToolButton("Label a Line...",
+                "Starts FTFLABELLINE in the drawing: click a line, slide the label where it " +
+                "belongs, click to place.", true);
+            labelLine.Click += (s, e) => StartLabelLine();
+            toolbar.Controls.Add(labelLine);
+
+            var settings = ToolButton("Line Label Settings...",
+                "Opens Settings > Line Labels at the selected line's feature.", false);
+            settings.Click += (s, e) => OpenLineLabelSettings();
+            toolbar.Controls.Add(settings);
+
+            top.Controls.Add(toolbar);
             grid.Controls.Add(top, 0, 0);
 
-            _lineGrid = new ListView
-            {
-                View = View.Details,
-                FullRowSelect = true,
-                HideSelection = false,
-                MultiSelect = false,
-                Dock = DockStyle.Fill
-            };
-            _lineGrid.Columns.Add("Civil 3D object", 100);
-            _lineGrid.Columns.Add("Figure", 70);
+            _lineGrid = DetailsList();
+            _lineGrid.Columns.Add("Status", 120);
+            _lineGrid.Columns.Add("Reason", 260);
+            _lineGrid.Columns.Add("Feature", 115);
+            _lineGrid.Columns.Add("Code", 55);
+            _lineGrid.Columns.Add("Length", 60);
             _lineGrid.Columns.Add("Layer", 150);
-            _lineGrid.Columns.Add("Feature", 140);
-            _lineGrid.Columns.Add("Code", 70);
-            _lineGrid.Columns.Add("Length", 65);
-            _lineGrid.Columns.Add("Label layer", 200);
-            _lineGrid.Columns.Add("Proposed FTF action", 260);
-            grid.Controls.Add(_lineGrid, 0, 1);
+            _lineGrid.Columns.Add("Figure", 65);
+            _lineGrid.Columns.Add("Civil 3D object", 95);
+            _lineSort = ListViewSorting.Attach(_lineGrid);
+            _lineGrid.SelectedIndexChanged += (s, e) => ShowLineDetail();
+            _lineGrid.DoubleClick += (s, e) => OpenLineLabelSettings();
+
+            _lineDetail = DetailBox();
+            grid.Controls.Add(ListAndDetail(_lineGrid, _lineDetail, 170), 0, 1);
 
             page.Controls.Add(grid);
         }
@@ -332,49 +351,159 @@ namespace FieldCodes.Cad.Ui
         /// </summary>
         private void EnsureLineworkScanned()
         {
-            if (_lineworkScanned) return;
+            if (_lineworkScanned || _busy) return;
             _lineworkScanned = true;
 
             InAutoCad(null, () =>
             {
                 var result = FtfLineworkService.Scan();
+                _linework = result;
 
                 if (result.RulesError != null)
                     Log("Rules problem: " + result.RulesError);
 
-                _lineGrid.BeginUpdate();
-                _lineGrid.Items.Clear();
+                ApplyLineFilter();
 
-                foreach (var row in result.Rows)
-                {
-                    var item = new ListViewItem(row.EntityType);
-                    item.SubItems.Add(string.IsNullOrEmpty(row.FigureName) ? "-" : row.FigureName);
-                    item.SubItems.Add(row.Layer);
-                    item.SubItems.Add(row.FeatureName);
-                    item.SubItems.Add(row.Codes);
-                    item.SubItems.Add(row.LengthText);
-                    item.SubItems.Add(string.IsNullOrEmpty(row.LabelLayerText)
-                        ? "-" : row.LabelLayerText);
-                    item.SubItems.Add(row.ProposedAction);
-
-                    if (row.Source == FieldCodes.Linework.LineIdentitySource.None)
-                        item.ForeColor = CaptionGray;
-                    else if (row.Codes != null && row.Codes.IndexOf('/') >= 0)
-                        item.ForeColor = Color.FromArgb(178, 108, 0);
-
-                    _lineGrid.Items.Add(item);
-                }
-
-                _lineGrid.EndUpdate();
-
+                var counts = FieldCodes.Review.LineDiagnostics.Count(
+                    result.Items.Select(i => i.Status));
+                var own = result.FtfOwnedByKind.Values.Sum();
                 _lineSummary.Text = string.Format(
-                    "{0} line object(s): {1} identified, {2} ambiguous (shared layer), " +
-                    "{3} not configured as line features.",
-                    result.Rows.Count, result.Identified, result.Ambiguous, result.Unidentified);
+                    "{0} line object(s): {1}{2}",
+                    result.Items.Count, FieldCodes.Review.LineDiagnostics.Summary(counts),
+                    own > 0
+                        ? string.Format(" FTF's own curves ({0}: driplines, leaders...) are not listed.", own)
+                        : string.Empty);
             });
         }
 
+        private void ApplyLineFilter()
+        {
+            if (_lineGrid == null || _linework == null) return;
+
+            var filter = _lineFilter.SelectedIndex < 0
+                ? LineFilters[0]
+                : (string)_lineFilter.SelectedItem;
+
+            var items = new List<ListViewItem>();
+            foreach (var line in _linework.Items)
+            {
+                if (!MatchesLineFilter(line.Status, filter)) continue;
+
+                var row = line.Row;
+                var item = new ListViewItem(line.Status.Short);
+                item.SubItems.Add(line.Status.Reason);
+                item.SubItems.Add(string.IsNullOrEmpty(row.FeatureName) ? "-" : row.FeatureName);
+                item.SubItems.Add(string.IsNullOrEmpty(row.Codes) ? "-" : row.Codes);
+                item.SubItems.Add(row.LengthText);
+                item.SubItems.Add(row.Layer);
+                item.SubItems.Add(string.IsNullOrEmpty(row.FigureName) ? "-" : row.FigureName);
+                item.SubItems.Add(row.EntityType);
+                item.Tag = line;
+
+                if (line.Status.NeedsAttention)
+                    item.ForeColor = Amber;
+                else if (line.Status.Kind != FieldCodes.Review.LineStatusKind.Ready)
+                    item.ForeColor = CaptionGray;
+
+                items.Add(item);
+            }
+
+            _lineGrid.BeginUpdate();
+            _lineGrid.Items.Clear();
+            _lineGrid.Items.AddRange(items.ToArray());
+            _lineGrid.EndUpdate();
+
+            _lineDetail.Text = string.Format(
+                "{0} line(s) shown - {1}. Select a line to see what decides its label; " +
+                "double-click to open its label settings.", items.Count, filter);
+        }
+
+        private static bool MatchesLineFilter(FieldCodes.Review.LineStatus status, string filter)
+        {
+            switch (filter)
+            {
+                case "Needs attention": return status.NeedsAttention;
+                case "Ready to label": return status.Kind == FieldCodes.Review.LineStatusKind.Ready;
+                case "Below minimum length": return status.Kind == FieldCodes.Review.LineStatusKind.TooShort;
+                case "Not line features":
+                    return status.Kind == FieldCodes.Review.LineStatusKind.NotConfigured ||
+                           status.Kind == FieldCodes.Review.LineStatusKind.IgnoredName;
+                default: return true;
+            }
+        }
+
+        private FtfLineItem SelectedLine()
+        {
+            return _lineGrid != null && _lineGrid.SelectedItems.Count > 0
+                ? _lineGrid.SelectedItems[0].Tag as FtfLineItem
+                : null;
+        }
+
+        private void ShowLineDetail()
+        {
+            var line = SelectedLine();
+            if (line == null) return;
+
+            var row = line.Row;
+            var lines = new List<string>();
+            lines.Add(string.Format("{0}{1} - {2}{3}, layer {4}, length {5}",
+                string.IsNullOrEmpty(row.FeatureName) || row.FeatureName == "-" ? "Unidentified line" : row.FeatureName,
+                string.IsNullOrEmpty(row.Codes) || row.Codes == "-" ? string.Empty : " (" + row.Codes + ")",
+                row.EntityType,
+                string.IsNullOrEmpty(row.FigureName) ? string.Empty : " " + row.FigureName,
+                row.Layer, row.LengthText));
+            lines.Add(line.Status.Short + ": " + line.Status.Reason);
+            lines.Add("Next: " + line.Status.Action);
+            if (row.Source != FieldCodes.Linework.LineIdentitySource.None)
+                lines.Add("Identified by " + row.SourceText + ".");
+            if (!string.IsNullOrEmpty(row.TrimbleName))
+                lines.Add("TBC name: " + row.TrimbleName);
+
+            lines.Add(string.Empty);
+            lines.Add("WHAT DECIDES THIS LINE'S LABEL (current value - where it is set)");
+            foreach (var setting in line.Settings)
+                lines.Add(string.Format("  {0}: {1}   [{2}]", setting.Name, setting.Value, setting.Where));
+
+            _lineDetail.Text = string.Join(Environment.NewLine, lines.ToArray());
+        }
+
+        /// <summary>Settings > Line Labels, told which feature the person picked.
+        /// Never places or changes a label: FTFLABELLINE stays the way to label.</summary>
+        private void OpenLineLabelSettings()
+        {
+            var line = SelectedLine();
+            if (line != null)
+            {
+                var codes = line.Candidates.Select(c => c.Code).ToList();
+                LineLabelNavigation.Request(codes.FirstOrDefault(), codes,
+                                            line.Row.FigureName, line.Row.Layer);
+            }
+            else
+            {
+                LineLabelNavigation.Clear();
+            }
+
+            OpenSettingsSection("Line Labels");
+        }
+
         // ================================================================ overview
+
+        // Value labels of the two status columns, by row name.
+        private readonly Dictionary<string, Label> _drawingStats =
+            new Dictionary<string, Label>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Label> _sessionStats =
+            new Dictionary<string, Label>(StringComparer.Ordinal);
+        private Label _overviewConfig;
+
+        // This session: what this window has done since it opened -- kept apart from
+        // what the drawing already held when it was opened.
+        private readonly DateTime _sessionOpened = DateTime.Now;
+        private int _sessionRuns;
+        private FieldCodes.Reporting.ProcessingRecord _sessionLastRun;
+        private readonly Dictionary<string, int> _sessionOwnedChange =
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private bool _sessionOwnedMeasured;
+        private IDictionary<string, int> _ownedBeforeRun;
 
         private void BuildOverviewPage()
         {
@@ -383,32 +512,22 @@ namespace FieldCodes.Cad.Ui
 
             PageHeader(stack, "Overview");
 
-            stack.Controls.Add(new Label
-            {
-                Text = "CURRENT DRAWING",
-                Font = new Font(SystemFonts.DefaultFont.FontFamily, 7.5f, FontStyle.Bold),
-                ForeColor = CaptionGray,
-                AutoSize = true,
-                Margin = new Padding(1, 2, 0, 0)
-            });
+            stack.Controls.Add(SmallCaps("CURRENT DRAWING", new Padding(1, 2, 0, 0)));
 
             _overviewDrawing = new Label
             {
                 Text = "...",
                 Font = new Font(SystemFonts.DefaultFont.FontFamily, 11f, FontStyle.Bold),
                 AutoSize = true,
-                Margin = new Padding(0, 0, 0, 14)
+                Margin = new Padding(0, 0, 0, 6)
             };
             stack.Controls.Add(_overviewDrawing);
 
-            // One plain sentence instead of a dashboard: what is in the drawing and
-            // whether anything needs a decision. The numbers live on the Review
-            // pages for whoever wants them.
             _overviewSummary = new Label
             {
                 Text = "...",
                 AutoSize = true,
-                MaximumSize = new Size(560, 0),
+                MaximumSize = new Size(620, 0),
                 Margin = new Padding(0, 0, 0, 2)
             };
             stack.Controls.Add(_overviewSummary);
@@ -417,23 +536,102 @@ namespace FieldCodes.Cad.Ui
             {
                 Text = string.Empty,
                 AutoSize = true,
-                MaximumSize = new Size(560, 0),
-                LinkColor = Color.FromArgb(178, 108, 0),
+                MaximumSize = new Size(620, 0),
+                LinkColor = Amber,
                 Margin = new Padding(0, 2, 0, 0),
                 Visible = false
             };
-            _overviewAttention.LinkClicked += (s, e) => ShowPage("Unknown Codes");
+            _overviewAttention.LinkClicked += (s, e) =>
+                JumpToUnknownCodes(_status != null && _status.Errors > 0 ? UnknownErrors : UnknownAttention);
             stack.Controls.Add(_overviewAttention);
 
             _rulesProblem = new Label
             {
                 Text = string.Empty,
                 AutoSize = true,
-                MaximumSize = new Size(560, 0),
-                ForeColor = Color.FromArgb(170, 0, 0),
-                Margin = new Padding(0, 2, 0, 8)
+                MaximumSize = new Size(620, 0),
+                ForeColor = ErrorRed,
+                Margin = new Padding(0, 2, 0, 4)
             };
             stack.Controls.Add(_rulesProblem);
+
+            // Two columns: what the drawing holds (including earlier sessions' work)
+            // beside what this window has done since it opened.
+            var columns = new TableLayoutPanel
+            {
+                ColumnCount = 2,
+                RowCount = 1,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(0, 4, 0, 4)
+            };
+            columns.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            columns.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            columns.Controls.Add(StatsBlock("IN THIS DRAWING",
+                "Read from the drawing now, including earlier sessions' work.", _drawingStats,
+                new[]
+                {
+                    "COGO points", "Eligible for FTF", "  processed", "  errors",
+                    "Need configuration", "Skipped on purpose", "FTF objects",
+                    "Last processed", "Last outcome"
+                }), 0, 0);
+            columns.Controls.Add(StatsBlock("THIS SESSION",
+                "What this window has done since it opened.", _sessionStats,
+                new[] { "Window opened", "Processing runs", "Last run", "FTF objects", "Review scan" }),
+                1, 0);
+            stack.Controls.Add(columns);
+
+            WireJump(_drawingStats["errors"], UnknownErrors);
+            WireJump(_drawingStats["Need configuration"], UnknownConfiguration);
+            WireJump(_drawingStats["Skipped on purpose"], UnknownInformational);
+
+            _overviewConfig = new Label
+            {
+                Text = string.Empty,
+                AutoSize = true,
+                MaximumSize = new Size(620, 0),
+                ForeColor = CaptionGray,
+                Margin = new Padding(0, 0, 0, 6)
+            };
+            stack.Controls.Add(_overviewConfig);
+
+            // The three things a surveyor actually opens this window to do.
+            var actions = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                WrapContents = false,
+                Margin = new Padding(0, 4, 0, 2)
+            };
+
+            var run = PrimaryButton("Process Drawing",
+                "Runs every finishing stage, in order: point handling, driplines, labels, " +
+                "tags, the schedule and draw order.");
+            run.Click += (s, e) => RunStages(null);
+            actions.Controls.Add(run);
+
+            var labelLine = SecondaryButton("Label a Line",
+                "Starts FTFLABELLINE in the drawing: click a line, slide the label where it " +
+                "belongs, click to place.");
+            labelLine.Margin = new Padding(8, 0, 0, 0);
+            labelLine.Click += (s, e) => StartLabelLine();
+            actions.Controls.Add(labelLine);
+
+            var review = SecondaryButton("Review What FTF Will Do",
+                "A read-only preview of every point -- nothing in the drawing changes.");
+            review.Margin = new Padding(8, 0, 0, 0);
+            review.Click += (s, e) => ShowPage("Feature Review");
+            actions.Controls.Add(review);
+
+            stack.Controls.Add(actions);
+
+            var refresh = LinkButton("Refresh Status");
+            refresh.Margin = new Padding(0, 4, 0, 0);
+            refresh.Click += (s, e) => RefreshStatus();
+            stack.Controls.Add(refresh);
+
+            Caption(stack, "Process Drawing runs all the automatic finishing. Label a Line " +
+                           "starts FTFLABELLINE: click a line, slide the label, click to place. " +
+                           "The review is read-only.");
 
             // Which FTF this is, and -- the one thing worth interrupting for -- that a newer one
             // from the office will install itself at close. Nothing to answer either way.
@@ -441,40 +639,104 @@ namespace FieldCodes.Cad.Ui
             {
                 Text = string.Empty,
                 AutoSize = true,
-                MaximumSize = new Size(560, 0),
+                MaximumSize = new Size(620, 0),
                 ForeColor = CaptionGray,
                 Margin = new Padding(0, 0, 0, 6)
             };
             stack.Controls.Add(_buildNote);
+        }
 
-            SectionGap(stack);
+        /// <summary>A titled two-column block of "name  value" rows. The value labels
+        /// are returned through <paramref name="values"/>, keyed by the trimmed name;
+        /// a name starting with spaces is indented under the row above.</summary>
+        private static Control StatsBlock(string title, string note, IDictionary<string, Label> values,
+                                          string[] rows)
+        {
+            var grid = new TableLayoutPanel
+            {
+                ColumnCount = 2,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(0, 0, 18, 0)
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 122));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-            // The three things a surveyor actually opens this window to do.
-            var run = PrimaryButton("Process Drawing",
-                "Run every finishing stage, in order.");
-            run.Click += (s, e) => RunStages(null);
-            stack.Controls.Add(run);
-            Caption(stack, "Runs all the automatic finishing: point handling, " +
-                           "driplines, labels, tags, the schedule and draw order.");
+            var header = SmallCaps(title, new Padding(0, 4, 0, 0));
+            grid.Controls.Add(header, 0, 0);
+            grid.SetColumnSpan(header, 2);
 
-            var labelLine = SecondaryButton("Label a Line", null);
-            labelLine.Margin = new Padding(0, 10, 0, 0);
-            labelLine.Click += (s, e) => StartLabelLine();
-            stack.Controls.Add(labelLine);
-            Caption(stack, "Starts FTFLABELLINE in the drawing: click a line, slide " +
-                           "the label where it belongs, click to place.");
+            var caption = new Label
+            {
+                Text = note,
+                AutoSize = true,
+                MaximumSize = new Size(300, 0),
+                ForeColor = CaptionGray,
+                Font = new Font(SystemFonts.DefaultFont.FontFamily, 7.5f),
+                Margin = new Padding(0, 0, 0, 4)
+            };
+            grid.Controls.Add(caption, 0, 1);
+            grid.SetColumnSpan(caption, 2);
 
-            var review = SecondaryButton("Review What FTF Will Do", null);
-            review.Margin = new Padding(0, 10, 0, 0);
-            review.Click += (s, e) => ShowPage("Feature Review");
-            stack.Controls.Add(review);
-            Caption(stack, "A read-only preview of every point and line -- nothing " +
-                           "in the drawing changes.");
+            var r = 2;
+            foreach (var name in rows)
+            {
+                var indented = name.StartsWith(" ", StringComparison.Ordinal);
+                var key = name.Trim();
 
-            SectionGap(stack);
-            var refresh = SecondaryButton("Refresh Status", null);
-            refresh.Click += (s, e) => RefreshStatus();
-            stack.Controls.Add(refresh);
+                grid.Controls.Add(new Label
+                {
+                    Text = key,
+                    AutoSize = true,
+                    ForeColor = CaptionGray,
+                    Margin = new Padding(indented ? 12 : 0, 2, 4, 2)
+                }, 0, r);
+
+                var value = new Label
+                {
+                    Text = "-",
+                    AutoSize = true,
+                    MaximumSize = new Size(190, 0),
+                    Margin = new Padding(0, 2, 0, 2)
+                };
+                grid.Controls.Add(value, 1, r);
+                values[key] = value;
+                r++;
+            }
+
+            return grid;
+        }
+
+        private static Label SmallCaps(string text, Padding margin)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font(SystemFonts.DefaultFont.FontFamily, 7.5f, FontStyle.Bold),
+                ForeColor = CaptionGray,
+                AutoSize = true,
+                Margin = margin
+            };
+        }
+
+        /// <summary>Makes a status value open Unknown Codes at a category.</summary>
+        private void WireJump(Label value, string filter)
+        {
+            value.Cursor = Cursors.Hand;
+            value.Click += (s, e) => JumpToUnknownCodes(filter);
+        }
+
+        private static void SetStat(IDictionary<string, Label> values, string key, string text, Color color)
+        {
+            Label label;
+            if (!values.TryGetValue(key, out label)) return;
+            label.Text = text;
+            label.ForeColor = color;
+        }
+
+        private static string N(int value)
+        {
+            return value.ToString("#,0", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>Hands control to the interactive line-label command: the window
@@ -815,6 +1077,10 @@ namespace FieldCodes.Cad.Ui
 
         private ListView _standardsGrid;
         private bool _standardsBuilt;
+        private TextBox _standardsDetail;
+        private Label _standardsSource;
+        private Button _standardsEdit;
+        private ListViewSorting _standardsSort;
 
         private void BuildStandardsPage()
         {
@@ -824,38 +1090,51 @@ namespace FieldCodes.Cad.Ui
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            var top = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.TopDown,
-                AutoSize = true,
-                WrapContents = false
-            };
+            var top = TopStack();
             PageHeader(top, "Standards");
-            Caption(top, "Civil 3D creates the survey points, symbols and linework. FTF " +
-                         "applies finishing standards to the Civil 3D result. This page " +
-                         "shows those standards and where each one is defined; anything " +
-                         "not yet governed by a setting is marked Planned rather than " +
-                         "invented. Editing happens in Settings.");
+            Caption(top, "What FTF applies to the Civil 3D result, and where each value is " +
+                         "defined. Settings and Point Features rows change the output when " +
+                         "edited -- double-click one to open its section. Rules-file rows are " +
+                         "edited in the rules file; Built-in, Civil 3D and Drawing rows are " +
+                         "fixed or inherited; \"Not available yet\" means nothing changes it today.");
 
-            var refresh = SecondaryButton("Reload Standards", null);
+            _standardsSource = new Label
+            {
+                Text = string.Empty,
+                AutoSize = true,
+                MaximumSize = new Size(620, 0),
+                ForeColor = CaptionGray,
+                Margin = new Padding(0, 0, 0, 4)
+            };
+            top.Controls.Add(_standardsSource);
+
+            var toolbar = ToolRow();
+            var refresh = ToolButton("Reload Standards", null, true);
             refresh.Click += (s, e) => { _standardsBuilt = false; EnsureStandardsBuilt(); };
-            top.Controls.Add(refresh);
+            toolbar.Controls.Add(refresh);
+
+            _standardsEdit = ToolButton("Edit in Settings...",
+                "Opens the Settings section that changes the selected standard.", false);
+            _standardsEdit.Enabled = false;
+            _standardsEdit.Click += (s, e) => EditSelectedStandard();
+            toolbar.Controls.Add(_standardsEdit);
+            top.Controls.Add(toolbar);
 
             grid.Controls.Add(top, 0, 0);
 
-            _standardsGrid = new ListView
-            {
-                View = View.Details,
-                FullRowSelect = true,
-                HideSelection = false,
-                MultiSelect = false,
-                Dock = DockStyle.Fill,
-                ShowGroups = true
-            };
-            _standardsGrid.Columns.Add("Standard", 210);
-            _standardsGrid.Columns.Add("Value", 330);
-            _standardsGrid.Columns.Add("Defined by", 110);
-            grid.Controls.Add(_standardsGrid, 0, 1);
+            _standardsGrid = DetailsList();
+            _standardsGrid.ShowGroups = true;
+            _standardsGrid.ShowItemToolTips = true;
+            _standardsGrid.Columns.Add("Standard", 190);
+            _standardsGrid.Columns.Add("Value", 250);
+            _standardsGrid.Columns.Add("Defined by", 105);
+            _standardsGrid.Columns.Add("Edit in", 110);
+            _standardsSort = ListViewSorting.Attach(_standardsGrid);
+            _standardsGrid.SelectedIndexChanged += (s, e) => ShowStandardDetail();
+            _standardsGrid.DoubleClick += (s, e) => EditSelectedStandard();
+
+            _standardsDetail = DetailBox();
+            grid.Controls.Add(ListAndDetail(_standardsGrid, _standardsDetail, 92), 0, 1);
 
             page.Controls.Add(grid);
         }
@@ -866,7 +1145,7 @@ namespace FieldCodes.Cad.Ui
         /// </summary>
         private void EnsureStandardsBuilt()
         {
-            if (_standardsBuilt) return;
+            if (_standardsBuilt || _busy) return;
             _standardsBuilt = true;
 
             InAutoCad(null, () =>
@@ -876,10 +1155,13 @@ namespace FieldCodes.Cad.Ui
 
                 FieldCodes.RulesConfig rules;
                 FieldCodes.Settings.FtfSettings settings;
+                string settingsText;
                 try
                 {
                     rules = FtfSession.Rules(doc.Database);
                     settings = FtfSession.SettingsFor(doc.Database, rules);
+                    settingsText = ConfigurationSummary.DescribeSettings(
+                        FtfSession.ResolveSettings(doc.Database, rules));
                 }
                 catch (FieldCodes.ConfigException ex)
                 {
@@ -888,12 +1170,17 @@ namespace FieldCodes.Cad.Ui
                     return;
                 }
 
+                _standardsSource.Text =
+                    "Settings in force: " + settingsText + Environment.NewLine +
+                    "Rules in force: " + ConfigurationSummary.DescribeRules(FtfSession.ResolveRules(doc.Database));
+
                 var sections = new FieldCodes.Standards.StandardsViewBuilder(rules, settings).Build();
 
                 _standardsGrid.BeginUpdate();
                 _standardsGrid.Groups.Clear();
                 _standardsGrid.Items.Clear();
 
+                var items = new List<ListViewItem>();
                 foreach (var section in sections)
                 {
                     var group = new ListViewGroup(section.Title.Replace("&", "&&"));
@@ -901,27 +1188,74 @@ namespace FieldCodes.Cad.Ui
 
                     foreach (var entry in section.Items)
                     {
-                        var item = new ListViewItem(entry.Name) { Group = group };
+                        var item = new ListViewItem(entry.Name) { Group = group, Tag = entry };
                         item.SubItems.Add(entry.Value);
                         item.SubItems.Add(entry.Source);
+                        item.SubItems.Add(entry.SettingsSection ?? "-");
+                        item.ToolTipText = entry.EditHint;
 
-                        if (entry.Source == FieldCodes.Standards.StandardsViewBuilder.Planned)
-                            item.ForeColor = CaptionGray;
+                        if (!entry.Operational) item.ForeColor = CaptionGray;
 
-                        _standardsGrid.Items.Add(item);
+                        items.Add(item);
                     }
                 }
 
+                _standardsGrid.Items.AddRange(items.ToArray());
                 _standardsGrid.EndUpdate();
+                _standardsDetail.Text = "Select a standard to see where it is defined and how to change it.";
+                _standardsEdit.Enabled = false;
             });
+        }
+
+        private FieldCodes.Standards.StandardsItem SelectedStandard()
+        {
+            return _standardsGrid != null && _standardsGrid.SelectedItems.Count > 0
+                ? _standardsGrid.SelectedItems[0].Tag as FieldCodes.Standards.StandardsItem
+                : null;
+        }
+
+        private void ShowStandardDetail()
+        {
+            var entry = SelectedStandard();
+            _standardsEdit.Enabled = entry != null && entry.SettingsSection != null;
+            if (entry == null) return;
+
+            var lines = new List<string>
+            {
+                entry.Name + ": " + entry.Value,
+                "Defined by: " + entry.Source,
+                "How to change it: " + (entry.EditHint ?? "-")
+            };
+            if (!entry.Operational)
+                lines.Add("Not available yet: shown so you know the behaviour is fixed. No setting changes it.");
+            else if (entry.SettingsSection != null)
+                lines.Add("Double-click, or Edit in Settings..., to open Settings > " + entry.SettingsSection + ".");
+
+            _standardsDetail.Text = string.Join(Environment.NewLine, lines.ToArray());
+        }
+
+        private void EditSelectedStandard()
+        {
+            var entry = SelectedStandard();
+            if (entry == null || entry.SettingsSection == null) return;
+            OpenSettingsSection(entry.SettingsSection);
         }
 
         private static readonly string[] ReviewFilters =
         {
             "All recognized", "Trees", "Power / Utility", "Signs", "Control",
-            "Other point features", "Unknown / not configured", "Warnings & errors",
-            "Everything"
+            "Other point features", "Errors", "Warnings", "Needs configuration",
+            "Informational (skipped)", "Everything"
         };
+
+        private static readonly Color ErrorRed = Color.FromArgb(170, 0, 0);
+        private static readonly Color Amber = Color.FromArgb(178, 108, 0);
+
+        // review scan shared by Points, Unknown Codes and Reports
+        private FtfReviewResult _review;
+        private readonly Dictionary<ReviewRow, CodeIssue> _reviewIssues =
+            new Dictionary<ReviewRow, CodeIssue>();
+        private ListViewSorting _reviewSort;
 
         private void BuildFeatureReviewPage()
         {
@@ -929,75 +1263,77 @@ namespace FieldCodes.Cad.Ui
 
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1 };
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // header + toolbar
-            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 62f));  // list
-            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 38f));  // detail
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // list + detail
 
-            var top = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.TopDown,
-                AutoSize = true,
-                WrapContents = false
-            };
+            var top = TopStack();
             PageHeader(top, "Points");
             Caption(top, "A read-only preview of the finishing FTF plans for this drawing. " +
                          "Scanning changes nothing: Civil 3D's points, symbols and linework " +
-                         "are only read.");
+                         "are only read. Click a column heading to sort.");
 
-            var toolbar = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+            var toolbar = ToolRow();
             _reviewFilter = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 200
+                Width = 180
             };
             foreach (var f in ReviewFilters) _reviewFilter.Items.Add(f);
             _reviewFilter.SelectedIndex = 0;
             _reviewFilter.SelectedIndexChanged += (s, e) => ApplyReviewFilter();
             toolbar.Controls.Add(_reviewFilter);
 
-            var rescan = SecondaryButton("Scan Drawing (read-only)", null);
-            rescan.Margin = new Padding(8, 0, 0, 0);
+            var rescan = ToolButton("Scan Drawing (read-only)", null, true);
             rescan.Click += (s, e) => { _reviewScanned = false; EnsureReviewScanned(); };
             toolbar.Controls.Add(rescan);
             top.Controls.Add(toolbar);
 
             grid.Controls.Add(top, 0, 0);
 
-            _reviewGrid = new ListView
-            {
-                View = View.Details,
-                FullRowSelect = true,
-                HideSelection = false,
-                MultiSelect = false,
-                Dock = DockStyle.Fill
-            };
-            _reviewGrid.Columns.Add("Point", 60);
-            _reviewGrid.Columns.Add("Raw Description", 170);
-            _reviewGrid.Columns.Add("Feature", 100);
+            _reviewGrid = DetailsList();
+            _reviewGrid.Columns.Add("Point", 55);
+            _reviewGrid.Columns.Add("Raw Description", 165);
+            _reviewGrid.Columns.Add("Status", 110);
+            _reviewGrid.Columns.Add("Feature", 95);
             _reviewGrid.Columns.Add("Rule", 80);
             _reviewGrid.Columns.Add("Planned Actions", 260);
-            _reviewGrid.Columns.Add("Status", 90);
+            _reviewSort = ListViewSorting.Attach(_reviewGrid);
+            ListViewSorting.StretchLastColumn(_reviewGrid, 220);
             _reviewGrid.SelectedIndexChanged += (s, e) =>
             {
-                _reviewDetail.Text = _reviewGrid.SelectedItems.Count == 0
-                    ? string.Empty
-                    : FeatureReviewBuilder.DetailText(
-                        _reviewGrid.SelectedItems[0].Tag as ReviewRow);
+                if (_reviewGrid.SelectedItems.Count == 0) return;
+                var row = _reviewGrid.SelectedItems[0].Tag as ReviewRow;
+                var detail = FeatureReviewBuilder.DetailText(row);
+                CodeIssue issue;
+                if (row != null && _reviewIssues.TryGetValue(row, out issue) &&
+                    issue.Category != CodeIssueCategory.None)
+                    detail = CodeDiagnostics.CategoryText(issue.Category) + " - " + issue.Label +
+                             ": " + issue.Action + Environment.NewLine + detail;
+                _reviewDetail.Text = detail;
             };
-            grid.Controls.Add(_reviewGrid, 0, 1);
 
-            _reviewDetail = new TextBox
-            {
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(250, 250, 252),
-                Margin = new Padding(0, 6, 0, 0)
-            };
-            grid.Controls.Add(_reviewDetail, 0, 2);
+            _reviewDetail = DetailBox();
+            grid.Controls.Add(ListAndDetail(_reviewGrid, _reviewDetail, 130), 0, 1);
 
             page.Controls.Add(grid);
         }
+
+        // ------------------------------------------------------------- unknown codes
+
+        private const string UnknownAttention = "Needs attention";
+        private const string UnknownErrors = "Errors";
+        private const string UnknownConfiguration = "Needs configuration";
+        private const string UnknownInformational = "Informational";
+        private const string UnknownAll = "All";
+
+        private ListViewSorting _unknownSort;
+        private TextBox _unknownDetail;
+        private readonly Dictionary<string, RadioButton> _unknownFilters =
+            new Dictionary<string, RadioButton>(StringComparer.Ordinal);
+        private string _unknownFilter = UnknownAttention;
+        private IList<CodeIssueGroup> _unknownGroups = new List<CodeIssueGroup>();
+        private Button _configureRule;
+        private Button _markIgnored;
+        private Button _stopIgnoring;
 
         private void BuildUnknownCodesPage()
         {
@@ -1008,49 +1344,106 @@ namespace FieldCodes.Cad.Ui
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            var top = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.TopDown,
-                AutoSize = true,
-                WrapContents = false
-            };
+            var top = TopStack();
             PageHeader(top, "Unknown Codes");
             _unknownSummary = Caption(top, "...");
-            grid.Controls.Add(top, 0, 0);
 
-            _unknownGrid = new ListView
-            {
-                View = View.Details,
-                FullRowSelect = true,
-                HideSelection = false,
-                MultiSelect = false,
-                Dock = DockStyle.Fill
-            };
-            _unknownGrid.Columns.Add("Code / Description", 170);
-            _unknownGrid.Columns.Add("Count", 55);
-            _unknownGrid.Columns.Add("Example Point(s)", 110);
-            _unknownGrid.Columns.Add("Reason", 330);
-            grid.Controls.Add(_unknownGrid, 0, 1);
-
-            var buttons = new FlowLayoutPanel
+            // One button per category, with its count: real problems apart from
+            // setup decisions apart from normal conditions.
+            var strip = new FlowLayoutPanel
             {
                 AutoSize = true,
                 WrapContents = false,
-                Margin = new Padding(0, 6, 0, 0)
+                Margin = new Padding(0, 0, 0, 2)
+            };
+            foreach (var name in new[]
+                     {
+                         UnknownAttention, UnknownErrors, UnknownConfiguration,
+                         UnknownInformational, UnknownAll
+                     })
+            {
+                var filter = name;
+                var button = new RadioButton
+                {
+                    Text = filter,
+                    Appearance = Appearance.Button,
+                    AutoSize = true,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    MinimumSize = new Size(0, 26),
+                    Margin = new Padding(0, 0, 4, 0),
+                    Checked = filter == _unknownFilter
+                };
+                if (filter == UnknownErrors) button.ForeColor = ErrorRed;
+                else if (filter == UnknownConfiguration) button.ForeColor = Amber;
+                button.CheckedChanged += (s, e) =>
+                {
+                    if (!button.Checked) return;
+                    _unknownFilter = filter;
+                    PopulateUnknownGrid();
+                };
+                _unknownFilters[filter] = button;
+                strip.Controls.Add(button);
+            }
+            top.Controls.Add(strip);
+            grid.Controls.Add(top, 0, 0);
+
+            _unknownGrid = DetailsList();
+            _unknownGrid.Columns.Add("Category", 115);
+            _unknownGrid.Columns.Add("Code", 65);
+            _unknownGrid.Columns.Add("Points", 50);
+            _unknownGrid.Columns.Add("Kind", 115);
+            _unknownGrid.Columns.Add("Example", 150);
+            _unknownGrid.Columns.Add("Reason", 300);
+            _unknownSort = ListViewSorting.Attach(_unknownGrid);
+            ListViewSorting.StretchLastColumn(_unknownGrid, 240);
+            _unknownGrid.SelectedIndexChanged += (s, e) => ShowUnknownDetail();
+            _unknownGrid.DoubleClick += (s, e) =>
+            {
+                var g = SelectedGroup();
+                if (g != null && CanConfigure(g)) ConfigureRuleFor(g);
             };
 
-            var rescan = SecondaryButton("Scan Drawing (read-only)", null);
+            _unknownDetail = DetailBox();
+            grid.Controls.Add(ListAndDetail(_unknownGrid, _unknownDetail, 110), 0, 1);
+
+            var buttons = ToolRow();
+            buttons.Margin = new Padding(0, 6, 0, 0);
+
+            _configureRule = ToolButton("Configure Rule...",
+                "Opens Settings > Point Features with a new rule started for the selected " +
+                "code -- or, for an error, the rule the point matched.", false);
+            _configureRule.Click += (s, e) =>
+            {
+                var g = SelectedGroup();
+                if (g != null && CanConfigure(g)) ConfigureRuleFor(g);
+            };
+            buttons.Controls.Add(_configureRule);
+
+            _markIgnored = ToolButton("Mark Ignored",
+                "This code never needs finishing: stop reporting it. Saved in settings " +
+                "(diagnostics.ignoredCodes); a rule added later still wins.", false);
+            _markIgnored.Click += (s, e) =>
+            {
+                var g = SelectedGroup();
+                if (g != null && g.Kind == CodeIssueKind.NoRule) SetCodeIgnored(g.Code, true);
+            };
+            buttons.Controls.Add(_markIgnored);
+
+            _stopIgnoring = ToolButton("Stop Ignoring",
+                "Report this code again under Needs Configuration.", false);
+            _stopIgnoring.Click += (s, e) =>
+            {
+                var g = SelectedGroup();
+                if (g != null && g.Kind == CodeIssueKind.IgnoredByUser) SetCodeIgnored(g.Code, false);
+            };
+            buttons.Controls.Add(_stopIgnoring);
+
+            var rescan = ToolButton("Scan Drawing (read-only)", null, true);
+            rescan.Margin = new Padding(16, 0, 0, 0);
             rescan.Click += (s, e) => { _reviewScanned = false; EnsureReviewScanned(); };
             buttons.Controls.Add(rescan);
 
-            var configure = SecondaryButton("Configure Rules...",
-                "Opens Settings at Point Features, where the configured rules live.");
-            configure.Margin = new Padding(8, 0, 0, 0);
-            configure.Click += (s, e) => OpenSettingsSection("Point Features");
-            buttons.Controls.Add(configure);
-
-            var csv = SecondaryButton("Open CSV Report", null);
-            csv.Margin = new Padding(8, 0, 0, 0);
+            var csv = ToolButton("Open CSV Report", null, true);
             csv.Click += (s, e) => OpenReport(
                 _status != null ? _status.UnhandledReportPath : null,
                 "No unknown-code report yet. Run Point Finishing first.");
@@ -1058,74 +1451,152 @@ namespace FieldCodes.Cad.Ui
 
             grid.Controls.Add(buttons, 0, 2);
             page.Controls.Add(grid);
+            UpdateUnknownButtons();
         }
+
+        // ------------------------------------------------------------------ reports
+
+        private static readonly string[] IssueFilters =
+        {
+            "Errors and warnings", "Errors", "Warnings", "Needs configuration", "All issues"
+        };
+
+        private ComboBox _issueFilter;
+        private ListView _issueGrid;
+        private ListViewSorting _issueSort;
+        private Label _reportCounts;
+        private Label _reportConfig;
+        private IList<PointIssue> _issues = new List<PointIssue>();
+        private readonly Dictionary<string, ReviewRow> _rowsByPoint =
+            new Dictionary<string, ReviewRow>(StringComparer.OrdinalIgnoreCase);
 
         private void BuildReportsPage()
         {
             var page = NewPage("Reports");
-            var stack = PageStack(page);
 
-            PageHeader(stack, "Reports");
-            Caption(stack, "The CSV reports are written next to the drawing on every Point " +
-                           "Finishing run; the summary reflects processing started from " +
-                           "this window.");
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1 };
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            SectionHeader(stack, "Exception report");
-            Caption(stack, "Points that matched a rule and failed inside it -- the ones " +
-                           "worth fixing in the field data.");
-            var exceptions = SecondaryButton("Open Exception Report", null);
+            var top = TopStack();
+            PageHeader(top, "Reports");
+            _reportCounts = new Label
+            {
+                Text = "...",
+                AutoSize = true,
+                MaximumSize = new Size(620, 0),
+                Margin = new Padding(0, 0, 0, 2)
+            };
+            top.Controls.Add(_reportCounts);
+            _reportConfig = new Label
+            {
+                Text = string.Empty,
+                AutoSize = true,
+                MaximumSize = new Size(620, 0),
+                ForeColor = CaptionGray,
+                Margin = new Padding(0, 0, 0, 4)
+            };
+            top.Controls.Add(_reportConfig);
+
+            var toolbar = ToolRow();
+            _issueFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+            foreach (var f in IssueFilters) _issueFilter.Items.Add(f);
+            _issueFilter.SelectedIndex = 0;
+            _issueFilter.SelectedIndexChanged += (s, e) => PopulateIssues();
+            toolbar.Controls.Add(_issueFilter);
+            var rescan = ToolButton("Scan Drawing (read-only)", null, true);
+            rescan.Click += (s, e) => { _reviewScanned = false; EnsureReviewScanned(); };
+            toolbar.Controls.Add(rescan);
+            top.Controls.Add(toolbar);
+            grid.Controls.Add(top, 0, 0);
+
+            _issueGrid = DetailsList();
+            _issueGrid.Columns.Add("Severity", 85);
+            _issueGrid.Columns.Add("Point", 55);
+            _issueGrid.Columns.Add("Code", 60);
+            _issueGrid.Columns.Add("Kind", 110);
+            _issueGrid.Columns.Add("Description", 150);
+            _issueGrid.Columns.Add("Reason", 300);
+            _issueSort = ListViewSorting.Attach(_issueGrid);
+            ListViewSorting.StretchLastColumn(_issueGrid, 220);
+            _issueGrid.SelectedIndexChanged += (s, e) => ShowIssueDetail();
+
+            _runSummary = DetailBox();
+            _runSummary.Text = "No processing has been run from this window yet.";
+            grid.Controls.Add(ListAndDetail(_issueGrid, _runSummary, 140), 0, 1);
+
+            var buttons = ToolRow();
+            buttons.Margin = new Padding(0, 6, 0, 0);
+            var exceptions = ToolButton("Open Exception Report (CSV)",
+                "Points that matched a rule and failed inside it, written beside the drawing " +
+                "by Point Finishing.", true);
             exceptions.Click += (s, e) => OpenReport(
                 _status != null ? _status.ExceptionReportPath : null,
                 "No exception report yet. Run Point Finishing first.");
-            stack.Controls.Add(exceptions);
-
-            SectionGap(stack);
-            SectionHeader(stack, "Unknown codes report");
-            Caption(stack, "The same information as the Unknown Codes page, as a CSV with " +
-                           "sample descriptions per code.");
-            var unknown = SecondaryButton("Open Unknown Codes Report", null);
+            buttons.Controls.Add(exceptions);
+            var unknown = ToolButton("Open Unknown Codes Report (CSV)",
+                "Each unconfigured code with sample descriptions, written beside the drawing " +
+                "by Point Finishing.", true);
             unknown.Click += (s, e) => OpenReport(
                 _status != null ? _status.UnhandledReportPath : null,
                 "No unknown-code report yet. Run Point Finishing first.");
-            stack.Controls.Add(unknown);
+            buttons.Controls.Add(unknown);
+            grid.Controls.Add(buttons, 0, 2);
 
-            SectionGap(stack);
-            SectionHeader(stack, "Processing summary");
-            _runSummary = new TextBox
-            {
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Width = 560,
-                Height = 150,
-                BackColor = Color.FromArgb(250, 250, 252),
-                Text = "No processing has been run from this window yet."
-            };
-            stack.Controls.Add(_runSummary);
+            page.Controls.Add(grid);
+
+            // The list comes from the same read-only scan as Points and Unknown Codes.
+            page.VisibleChanged += (s, e) => { if (page.Visible) EnsureReviewScanned(); };
         }
 
         // ========================================================== review scanning
 
         /// <summary>
-        /// Fills Feature Review and Unknown Codes from one read-only scan. Nothing in
-        /// this path creates, erases, rotates, labels or tags anything.
+        /// Fills Feature Review, Unknown Codes and Reports from one read-only scan.
+        /// Nothing in this path creates, erases, rotates, labels or tags anything.
         /// </summary>
         private void EnsureReviewScanned()
         {
-            if (_reviewScanned) return;
+            // While AutoCAD is busy the scan would be refused; leave it for the next visit.
+            if (_reviewScanned || _busy) return;
             _reviewScanned = true;
 
-            InAutoCad(null, () =>
-            {
-                var result = FtfReviewService.Scan();
-                _reviewRows = result.Rows;
+            InAutoCad(null, ScanReviewNow);
+        }
 
-                if (result.RulesError != null)
-                    Log("Rules problem: " + result.RulesError);
+        /// <summary>The scan itself; runs inside an AutoCAD call already under way.</summary>
+        private void ScanReviewNow()
+        {
+            var result = FtfReviewService.Scan();
+            _review = result;
+            _reviewRows = result.Rows;
+            _reviewScanned = true;
 
-                ApplyReviewFilter();
-                PopulateUnknownGrid();
-            });
+            _reviewIssues.Clear();
+            _rowsByPoint.Clear();
+            if (result.Diagnostics != null)
+                foreach (var row in result.Rows)
+                {
+                    if (row == null || row.Parsed == null) continue;
+                    _reviewIssues[row] = result.Diagnostics.Classify(row.Parsed);
+                    if (!string.IsNullOrEmpty(row.PointNumber)) _rowsByPoint[row.PointNumber] = row;
+                }
+
+            _unknownGroups = result.Diagnostics != null
+                ? result.Diagnostics.Group(result.Points())
+                : new List<CodeIssueGroup>();
+            _issues = result.Diagnostics != null
+                ? result.Diagnostics.Issues(result.Points())
+                : new List<PointIssue>();
+
+            if (result.RulesError != null)
+                Log("Rules problem: " + result.RulesError);
+
+            ApplyReviewFilter();
+            PopulateUnknownGrid();
+            PopulateIssues();
+            ShowSession();
         }
 
         private void ApplyReviewFilter()
@@ -1136,36 +1607,44 @@ namespace FieldCodes.Cad.Ui
                 ? ReviewFilters[0]
                 : (string)_reviewFilter.SelectedItem;
 
-            _reviewGrid.BeginUpdate();
-            _reviewGrid.Items.Clear();
-
+            var items = new List<ListViewItem>();
             foreach (var row in _reviewRows)
             {
-                if (!MatchesFilter(row, filter)) continue;
+                CodeIssue issue;
+                _reviewIssues.TryGetValue(row, out issue);
+                if (!MatchesFilter(row, issue, filter)) continue;
 
                 var item = new ListViewItem(row.PointNumber);
                 item.SubItems.Add(row.RawDescription);
+                item.SubItems.Add(issue == null || issue.Category == CodeIssueCategory.None
+                    ? row.StatusText
+                    : issue.Label);
                 item.SubItems.Add(CategoryName(row.Category));
                 item.SubItems.Add(row.RuleId ?? "-");
                 item.SubItems.Add(row.ActionsSummary);
-                item.SubItems.Add(row.StatusText);
                 item.Tag = row;
 
                 if (row.Status == ReviewStatus.Error)
-                    item.ForeColor = Color.FromArgb(170, 0, 0);
-                else if (row.Status == ReviewStatus.Warning)
-                    item.ForeColor = Color.FromArgb(178, 108, 0);
+                    item.ForeColor = ErrorRed;
+                else if (row.Status == ReviewStatus.Warning || row.Status == ReviewStatus.NotConfigured)
+                    item.ForeColor = Amber;
+                else if (issue != null && issue.Category == CodeIssueCategory.Informational)
+                    item.ForeColor = CaptionGray;
 
-                _reviewGrid.Items.Add(item);
+                items.Add(item);
             }
 
+            _reviewGrid.BeginUpdate();
+            _reviewGrid.Items.Clear();
+            _reviewGrid.Items.AddRange(items.ToArray());
             _reviewGrid.EndUpdate();
             _reviewDetail.Text = string.Format("{0} point(s) shown - {1}",
                 _reviewGrid.Items.Count, filter);
         }
 
-        private static bool MatchesFilter(ReviewRow row, string filter)
+        private static bool MatchesFilter(ReviewRow row, CodeIssue issue, string filter)
         {
+            var category = issue != null ? issue.Category : CodeIssueCategory.None;
             switch (filter)
             {
                 case "Trees": return row.Category == ReviewCategory.Tree;
@@ -1173,9 +1652,10 @@ namespace FieldCodes.Cad.Ui
                 case "Signs": return row.Category == ReviewCategory.Sign;
                 case "Control": return row.Category == ReviewCategory.Control;
                 case "Other point features": return row.Category == ReviewCategory.OtherFeature;
-                case "Unknown / not configured": return row.Status == ReviewStatus.NotConfigured;
-                case "Warnings & errors":
-                    return row.Status == ReviewStatus.Warning || row.Status == ReviewStatus.Error;
+                case "Errors": return category == CodeIssueCategory.Error;
+                case "Warnings": return row.Status == ReviewStatus.Warning;
+                case "Needs configuration": return category == CodeIssueCategory.NeedsConfiguration;
+                case "Informational (skipped)": return category == CodeIssueCategory.Informational;
                 case "Everything": return true;
                 default:    // All recognized
                     return row.Category == ReviewCategory.Tree ||
@@ -1201,31 +1681,278 @@ namespace FieldCodes.Cad.Ui
             }
         }
 
+        // ------------------------------------------------------------- unknown codes
+
+        private static bool InFilter(CodeIssueGroup group, string filter)
+        {
+            switch (filter)
+            {
+                case UnknownErrors: return group.Category == CodeIssueCategory.Error;
+                case UnknownConfiguration: return group.Category == CodeIssueCategory.NeedsConfiguration;
+                case UnknownInformational: return group.Category == CodeIssueCategory.Informational;
+                case UnknownAll: return true;
+                default:
+                    return group.Category == CodeIssueCategory.Error ||
+                           group.Category == CodeIssueCategory.NeedsConfiguration;
+            }
+        }
+
         private void PopulateUnknownGrid()
         {
-            if (_unknownGrid == null || _reviewRows == null) return;
+            if (_unknownGrid == null) return;
+            var groups = _unknownGroups ?? new List<CodeIssueGroup>();
 
-            var groups = CodeGrouping.BuildUnknownView(_reviewRows);
+            // Counts on the filter buttons: points, with codes in brackets.
+            foreach (var pair in _unknownFilters)
+            {
+                var inFilter = groups.Where(g => InFilter(g, pair.Key)).ToList();
+                pair.Value.Text = string.Format("{0} ({1})", pair.Key, N(inFilter.Sum(g => g.Count)));
+            }
+
+            var items = new List<ListViewItem>();
+            foreach (var group in groups)
+            {
+                if (!InFilter(group, _unknownFilter)) continue;
+
+                var item = new ListViewItem(CodeDiagnostics.CategoryText(group.Category));
+                item.SubItems.Add(group.Code);
+                item.SubItems.Add(group.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                item.SubItems.Add(group.Label);
+                item.SubItems.Add(group.Example);
+                item.SubItems.Add(group.Reason);
+                item.Tag = group;
+
+                if (group.Category == CodeIssueCategory.Error) item.ForeColor = ErrorRed;
+                else if (group.Category == CodeIssueCategory.NeedsConfiguration) item.ForeColor = Amber;
+                else item.ForeColor = CaptionGray;
+
+                items.Add(item);
+            }
 
             _unknownGrid.BeginUpdate();
             _unknownGrid.Items.Clear();
+            _unknownGrid.Items.AddRange(items.ToArray());
+            _unknownGrid.EndUpdate();
 
-            foreach (var group in groups)
+            var errors = groups.Where(g => g.Category == CodeIssueCategory.Error).ToList();
+            var config = groups.Where(g => g.Category == CodeIssueCategory.NeedsConfiguration).ToList();
+            var info = groups.Where(g => g.Category == CodeIssueCategory.Informational).ToList();
+            // Before the first scan the summary comes from the status (ShowStatus).
+            if (_review != null)
+                _unknownSummary.Text = string.Format(
+                    "Errors: {0} point(s) FTF could not finish. Needs configuration: {1} point(s) " +
+                    "in {2} code(s) carry data no rule handles. Informational: {3} point(s) " +
+                    "skipped on purpose (Civil 3D linework, never-draw and ignored codes, bare " +
+                    "codes) -- nothing to do.",
+                    N(errors.Sum(g => g.Count)), N(config.Sum(g => g.Count)), config.Count,
+                    N(info.Sum(g => g.Count)));
+
+            _unknownDetail.Text = items.Count == 0
+                ? (_review == null ? "Scan the drawing to list its codes." : "Nothing in this category.")
+                : "Select a code to see why it is listed and what to do. Double-click a code " +
+                  "that needs configuration to start its rule.";
+            UpdateUnknownButtons();
+        }
+
+        private CodeIssueGroup SelectedGroup()
+        {
+            return _unknownGrid != null && _unknownGrid.SelectedItems.Count > 0
+                ? _unknownGrid.SelectedItems[0].Tag as CodeIssueGroup
+                : null;
+        }
+
+        private static bool CanConfigure(CodeIssueGroup group)
+        {
+            return group.Kind == CodeIssueKind.NoRule ||
+                   (group.Category == CodeIssueCategory.Error && !string.IsNullOrEmpty(group.RuleId));
+        }
+
+        private void UpdateUnknownButtons()
+        {
+            var group = SelectedGroup();
+            if (_configureRule != null) _configureRule.Enabled = group != null && CanConfigure(group);
+            if (_markIgnored != null) _markIgnored.Enabled = group != null && group.Kind == CodeIssueKind.NoRule;
+            if (_stopIgnoring != null) _stopIgnoring.Enabled = group != null && group.Kind == CodeIssueKind.IgnoredByUser;
+        }
+
+        private void ShowUnknownDetail()
+        {
+            UpdateUnknownButtons();
+            var group = SelectedGroup();
+            if (group == null) return;
+
+            var lines = new List<string>
             {
-                var item = new ListViewItem(group.Example);
-                item.SubItems.Add(group.Count.ToString());
-                item.SubItems.Add(string.Join(", ", group.ExamplePoints.ToArray()));
-                item.SubItems.Add(group.Reason);
+                CodeDiagnostics.CategoryText(group.Category) + ": " + group.Label + " - " + group.Code +
+                    (string.IsNullOrEmpty(group.RuleId) ? string.Empty : "  (rule " + group.RuleId + ")"),
+                group.Reason,
+                "What to do: " + group.Action,
+                string.Format("{0} point(s): {1}{2}", group.Count,
+                    string.Join(", ", group.ExamplePoints.ToArray()),
+                    group.Count > group.ExamplePoints.Count ? ", ..." : string.Empty)
+            };
+            if (group.Samples.Count > 0)
+                lines.Add("Descriptions: " + string.Join("  |  ", group.Samples.ToArray()));
 
-                if (group.Status == ReviewStatus.Error)
-                    item.ForeColor = Color.FromArgb(170, 0, 0);
-                else if (group.Status == ReviewStatus.NotConfigured)
-                    item.ForeColor = Color.FromArgb(178, 108, 0);
+            _unknownDetail.Text = string.Join(Environment.NewLine, lines.ToArray());
+        }
 
-                _unknownGrid.Items.Add(item);
+        /// <summary>Settings > Point Features, told which code (and sample) to start a
+        /// rule for -- or, for an error, which rule the point matched.</summary>
+        private void ConfigureRuleFor(CodeIssueGroup group)
+        {
+            PointFeatureNavigation.Request(
+                group.Code == CodeDiagnostics.BlankCode ? null : group.Code,
+                group.Example, group.RuleId);
+            OpenSettingsSection("Point Features");
+        }
+
+        /// <summary>
+        /// Marks a code ignored (or not) and saves it: to the settings file in force
+        /// when that is the drawing's folder, a profile or your own settings, otherwise
+        /// to your own settings. Then rescans so the lists move it at once.
+        /// </summary>
+        private void SetCodeIgnored(string code, bool ignore)
+        {
+            InAutoCad(null, () =>
+            {
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc == null) return;
+
+                var rules = FtfSession.Rules(doc.Database);
+                var resolution = FtfSession.ResolveSettings(doc.Database, rules);
+                var settings = resolution.Settings;
+                if (settings.Diagnostics == null)
+                    settings.Diagnostics = new FieldCodes.Settings.DiagnosticsSettings();
+
+                var changed = ignore ? settings.Diagnostics.Ignore(code) : settings.Diagnostics.Unignore(code);
+                if (!changed)
+                {
+                    Log(ignore ? code + " is already ignored." : code + " was not ignored.");
+                    return;
+                }
+
+                var path = FieldCodes.Settings.DiagnosticsSettings.SavePathFor(resolution);
+                string failure = null;
+                try
+                {
+                    settings.Save(path);
+                }
+                catch (FieldCodes.ConfigException ex) { failure = ex.Message; }
+                catch (IOException ex) { failure = ex.Message; }
+                catch (UnauthorizedAccessException ex) { failure = ex.Message; }
+
+                if (failure != null)
+                {
+                    // Put the in-memory settings back the way the file still has them.
+                    if (ignore) settings.Diagnostics.Unignore(code);
+                    else settings.Diagnostics.Ignore(code);
+                    Log("Could not save the ignored codes to " + path + ": " + failure);
+                    return;
+                }
+
+                // A save to a different file than the one in force changes which file
+                // wins next time; let the session find it.
+                if (!string.Equals(path, resolution.LoadedFrom, StringComparison.OrdinalIgnoreCase))
+                    FtfSession.InvalidateSettings();
+
+                Log((ignore ? "Ignoring " : "No longer ignoring ") + code + " - saved to " + path);
+
+                ScanReviewNow();
+                _status = FtfStatusService.Gather();
+                ShowStatus();
+            });
+        }
+
+        /// <summary>Opens Unknown Codes at a category.</summary>
+        private void JumpToUnknownCodes(string filter)
+        {
+            RadioButton button;
+            if (_unknownFilters.TryGetValue(filter, out button)) button.Checked = true;
+            ShowPage("Unknown Codes");
+        }
+
+        // ------------------------------------------------------------------ reports
+
+        private void PopulateIssues()
+        {
+            if (_issueGrid == null) return;
+
+            var filter = _issueFilter.SelectedIndex < 0 ? IssueFilters[0] : (string)_issueFilter.SelectedItem;
+            var items = new List<ListViewItem>();
+            foreach (var issue in _issues ?? new List<PointIssue>())
+            {
+                var show =
+                    filter == "Errors" ? issue.Severity == CodeDiagnostics.ErrorSeverity :
+                    filter == "Warnings" ? issue.Severity == CodeDiagnostics.WarningSeverity :
+                    filter == "Needs configuration" ? issue.Severity == CodeDiagnostics.ConfigurationSeverity :
+                    filter == "All issues" ||
+                        issue.Severity == CodeDiagnostics.ErrorSeverity ||
+                        issue.Severity == CodeDiagnostics.WarningSeverity;
+                if (!show) continue;
+
+                var item = new ListViewItem(issue.Severity);
+                item.SubItems.Add(issue.PointNumber);
+                item.SubItems.Add(issue.Code);
+                item.SubItems.Add(issue.Kind);
+                item.SubItems.Add(issue.Description);
+                item.SubItems.Add(issue.Reason);
+                item.Tag = issue;
+                if (issue.Severity == CodeDiagnostics.ErrorSeverity) item.ForeColor = ErrorRed;
+                else item.ForeColor = Amber;
+                items.Add(item);
             }
 
-            _unknownGrid.EndUpdate();
+            _issueGrid.BeginUpdate();
+            _issueGrid.Items.Clear();
+            _issueGrid.Items.AddRange(items.ToArray());
+            _issueGrid.EndUpdate();
+
+            ShowReportSummary();
+        }
+
+        private void ShowIssueDetail()
+        {
+            if (_issueGrid.SelectedItems.Count == 0) { ShowReportSummary(); return; }
+            var issue = _issueGrid.SelectedItems[0].Tag as PointIssue;
+            if (issue == null) return;
+
+            var text = string.Format("{0} - {1}: point {2}, code {3}{4}{5}{6}",
+                issue.Severity, issue.Kind, issue.PointNumber, issue.Code,
+                string.IsNullOrEmpty(issue.RuleId) ? string.Empty : ", rule " + issue.RuleId,
+                Environment.NewLine, issue.Reason);
+
+            ReviewRow row;
+            if (issue.PointNumber != null && _rowsByPoint.TryGetValue(issue.PointNumber, out row))
+                text += Environment.NewLine + Environment.NewLine + FeatureReviewBuilder.DetailText(row);
+
+            _runSummary.Text = text;
+        }
+
+        /// <summary>The detail pane with nothing selected: the last run stored in the
+        /// drawing, then what this session did.</summary>
+        private void ShowReportSummary()
+        {
+            if (_runSummary == null) return;
+            if (_issueGrid != null && _issueGrid.SelectedItems.Count > 0) return;   // keep the issue shown
+
+            var lines = new List<string>();
+            lines.Add("LAST PROCESSING RUN (stored in this drawing)");
+            var record = _status != null ? _status.LastRun : null;
+            lines.Add(record != null
+                ? record.Describe()
+                : "No run recorded in this drawing. Runs from this window are recorded; " +
+                  "FTFRUN and single commands at the command line are not.");
+
+            lines.Add(string.Empty);
+            lines.Add("THIS SESSION");
+            lines.Add(string.Format("{0} processing run(s) from this window since {1}.",
+                _sessionRuns, FtfStatusService.When(_sessionOpened)));
+            if (_review != null)
+                lines.Add(string.Format("Review scanned at {0}: {1} issue(s) listed above.",
+                    FtfStatusService.When(_review.ScannedLocal), _issueGrid != null ? _issueGrid.Items.Count : 0));
+
+            _runSummary.Text = string.Join(Environment.NewLine, lines.ToArray());
         }
 
         private void OpenSettingsSection(string section)
@@ -1240,6 +1967,100 @@ namespace FieldCodes.Cad.Ui
                 _settingsPanel.SelectSection(section);
                 _pendingSettingsSection = null;
             }
+        }
+
+        // ------------------------------------------------------- page building blocks
+
+        private static FlowLayoutPanel TopStack()
+        {
+            return new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.TopDown,
+                AutoSize = true,
+                WrapContents = false
+            };
+        }
+
+        private static FlowLayoutPanel ToolRow()
+        {
+            return new FlowLayoutPanel
+            {
+                AutoSize = true,
+                WrapContents = false,
+                Margin = new Padding(0, 2, 0, 2)
+            };
+        }
+
+        /// <summary>A compact toolbar button. <paramref name="locksWhileBusy"/> puts it
+        /// with the buttons that disable while AutoCAD works; selection-driven buttons
+        /// manage their own Enabled state instead.</summary>
+        private Button ToolButton(string text, string hint, bool locksWhileBusy)
+        {
+            var button = new Button
+            {
+                Text = text,
+                AutoSize = true,
+                MinimumSize = new Size(90, 28),
+                Margin = new Padding(0, 0, 6, 0)
+            };
+            if (!string.IsNullOrEmpty(hint)) new ToolTip().SetToolTip(button, hint);
+            if (locksWhileBusy) _actionButtons.Add(button);
+            return button;
+        }
+
+        private static ListView DetailsList()
+        {
+            return new ListView
+            {
+                View = View.Details,
+                FullRowSelect = true,
+                HideSelection = false,
+                MultiSelect = false,
+                Dock = DockStyle.Fill
+            };
+        }
+
+        private static TextBox DetailBox()
+        {
+            return new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(250, 250, 252)
+            };
+        }
+
+        /// <summary>A list above its detail with a draggable split; the detail keeps
+        /// its height when the window grows, so the list gets the new room.</summary>
+        private static SplitContainer ListAndDetail(Control list, Control detail, int detailHeight)
+        {
+            var split = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Horizontal,
+                FixedPanel = FixedPanel.Panel2,
+                SplitterWidth = 6,
+                Margin = new Padding(0, 4, 0, 0)
+            };
+            split.Panel1.Controls.Add(list);
+            split.Panel2.Controls.Add(detail);
+
+            // The splitter can only be placed once the container has its real height.
+            var placed = false;
+            split.SizeChanged += (s, e) =>
+            {
+                if (placed || split.Height < detailHeight + 120) return;
+                placed = true;
+                try
+                {
+                    split.SplitterDistance = split.Height - detailHeight - split.SplitterWidth;
+                }
+                catch (ArgumentException) { }
+                catch (InvalidOperationException) { }
+            };
+            return split;
         }
 
         /// <summary>The command reference, in the product where it belongs: what FTF
@@ -1708,44 +2529,162 @@ namespace FieldCodes.Cad.Ui
                 _overviewSummary.Text = "Open a drawing to see where it stands.";
                 _overviewAttention.Visible = false;
                 _unknownSummary.Text = "No drawing open.";
+                foreach (var label in _drawingStats.Values) { label.Text = "-"; label.ForeColor = SystemColors.ControlText; }
+                if (_reportCounts != null) _reportCounts.Text = "No drawing open.";
+                ShowSession();
                 ShowBuild();
                 return;
             }
 
+            var t = _status.Tally;
             _overviewDrawing.Text = _status.DrawingName;
 
             _overviewSummary.Text = string.Format(
-                "{0} survey point(s); {1} get FTF finishing. FTF has {2} entit{3} " +
+                "{0} survey point(s); {1} eligible for FTF finishing. FTF has {2} object(s) " +
                 "in this drawing.",
-                _status.TotalPoints, _status.Recognized,
-                _status.OwnedEntities, _status.OwnedEntities == 1 ? "y" : "ies");
+                N(t.Total), N(t.Eligible), N(_status.OwnedEntities));
 
-            // Amber for configuration gaps, red for actual parse errors -- and only
-            // shown at all when there is something to decide.
-            var attention = _status.Unconfigured + _status.Errors;
+            // Amber for configuration gaps, red for points that could not be finished --
+            // and only shown at all when there is something to decide.
+            var attention = t.NeedsConfiguration + t.Errors;
             _overviewAttention.Visible = attention > 0;
             if (attention > 0)
             {
-                _overviewAttention.LinkColor = _status.Errors > 0
-                    ? Color.FromArgb(170, 0, 0)
-                    : Color.FromArgb(178, 108, 0);
-                _overviewAttention.Text = _status.Errors > 0
-                    ? string.Format("{0} point(s) failed to parse and {1} carry data " +
+                _overviewAttention.LinkColor = t.Errors > 0 ? ErrorRed : Amber;
+                _overviewAttention.Text = t.Errors > 0
+                    ? string.Format("{0} point(s) could not be finished and {1} carry data " +
                                     "no rule handles -- see Unknown Codes.",
-                                    _status.Errors, _status.Unconfigured)
-                    : string.Format("{0} point(s) carry data no rule handles yet -- " +
-                                    "see Unknown Codes.", _status.Unconfigured);
+                                    N(t.Errors), N(t.NeedsConfiguration))
+                    : string.Format("{0} point(s) in {1} code(s) carry data no rule handles " +
+                                    "yet -- see Unknown Codes.", N(t.NeedsConfiguration), t.UnknownCodes);
             }
 
             _rulesProblem.Text = _status.RulesError ?? string.Empty;
 
+            // ---- in this drawing
+            var normal = SystemColors.ControlText;
+            SetStat(_drawingStats, "COGO points", N(t.Total), normal);
+            SetStat(_drawingStats, "Eligible for FTF", N(t.Eligible), normal);
+            SetStat(_drawingStats, "processed",
+                N(t.Processed) + (t.ProcessedWithWarnings > 0
+                    ? " (" + N(t.ProcessedWithWarnings) + " with warnings)" : string.Empty), normal);
+            SetStat(_drawingStats, "errors",
+                t.Errors == 0
+                    ? "0"
+                    : N(t.Errors) + " (" + Parts(
+                          Part(t.BlankDescriptions, "blank"), Part(t.ParseFailures, "unreadable"),
+                          Part(t.InvalidData, "invalid value")) + ")",
+                t.Errors > 0 ? ErrorRed : normal);
+            SetStat(_drawingStats, "Need configuration",
+                t.NeedsConfiguration == 0
+                    ? "0"
+                    : N(t.NeedsConfiguration) + " point(s), " + t.UnknownCodes + " unknown code(s)",
+                t.NeedsConfiguration > 0 ? Amber : normal);
+            SetStat(_drawingStats, "Skipped on purpose",
+                t.SkippedIntentionally == 0
+                    ? "0"
+                    : N(t.SkippedIntentionally) + " (" + Parts(
+                          Part(t.Linework, "linework"), Part(t.IgnoredByRules, "never-draw"),
+                          Part(t.IgnoredByUser, "ignored by you"), Part(t.BareCodes, "bare codes")) + ")",
+                normal);
+            SetStat(_drawingStats, "FTF objects",
+                _status.OwnedEntities == 0
+                    ? "None"
+                    : N(_status.OwnedEntities) + ": " +
+                      FieldCodes.Reporting.OwnedObjects.Describe(_status.OwnedByKind, 3),
+                normal);
+
+            var record = _status.LastRun;
+            SetStat(_drawingStats, "Last processed",
+                record == null
+                    ? "Not recorded"
+                    : record.FinishedLocalText() + (string.IsNullOrEmpty(record.User) ? string.Empty : " by " + record.User),
+                record == null ? CaptionGray : normal);
+            SetStat(_drawingStats, "Last outcome",
+                record == null ? "-" : record.OutcomeText,
+                record == null ? normal
+                    : record.Outcome == FieldCodes.Reporting.ProcessingOutcome.Succeeded ? normal
+                    : ErrorRed);
+
+            _overviewConfig.Text = "Settings: " + (_status.SettingsText ?? "-") + Environment.NewLine +
+                                   "Rules: " + (_status.RulesText ?? "-");
+
+            ShowSession();
             ShowBuild();
 
-            _unknownSummary.Text = string.Format(
-                "{0} point(s) carry data no rule handles yet{1}. The report lists each code " +
-                "with real sample descriptions.",
-                _status.Unconfigured,
-                _status.Errors > 0 ? ", and " + _status.Errors + " failed to parse" : string.Empty);
+            // Before a scan, Unknown Codes and Reports summarise from the status.
+            if (_review == null)
+                _unknownSummary.Text = string.Format(
+                    "{0} point(s) could not be finished; {1} carry data no rule handles; {2} " +
+                    "are skipped on purpose. Scan to list them by code.",
+                    N(t.Errors), N(t.NeedsConfiguration), N(t.SkippedIntentionally));
+
+            if (_reportCounts != null)
+            {
+                _reportCounts.Text = string.Format(
+                    "In this drawing: {0} point(s) - {1} processed{2}, {3} error(s), {4} needing " +
+                    "configuration, {5} skipped on purpose. Last processed: {6}.",
+                    N(t.Total), N(t.Processed),
+                    t.ProcessedWithWarnings > 0 ? " (" + N(t.ProcessedWithWarnings) + " with warnings)" : string.Empty,
+                    N(t.Errors), N(t.NeedsConfiguration), N(t.SkippedIntentionally),
+                    record == null ? "not recorded" : record.FinishedLocalText() + ", " + record.OutcomeText);
+                _reportConfig.Text = "Settings: " + (_status.SettingsText ?? "-");
+            }
+            ShowReportSummary();
+        }
+
+        /// <summary>The This Session column: only what this window did.</summary>
+        private void ShowSession()
+        {
+            if (_sessionStats.Count == 0) return;
+            var normal = SystemColors.ControlText;
+
+            SetStat(_sessionStats, "Window opened", FtfStatusService.When(_sessionOpened), normal);
+            SetStat(_sessionStats, "Processing runs", _sessionRuns == 0 ? "None yet" : N(_sessionRuns), normal);
+            SetStat(_sessionStats, "Last run",
+                _sessionLastRun == null
+                    ? "-"
+                    : FtfStatusService.When(_sessionLastRun.FinishedUtc.ToLocalTime()) + " - " + _sessionLastRun.OutcomeText,
+                _sessionLastRun == null ||
+                _sessionLastRun.Outcome == FieldCodes.Reporting.ProcessingOutcome.Succeeded ? normal : ErrorRed);
+            SetStat(_sessionStats, "FTF objects", SessionObjectsText(), normal);
+            SetStat(_sessionStats, "Review scan",
+                _review == null
+                    ? "Not scanned"
+                    : FtfStatusService.When(_review.ScannedLocal) + " - " + N(_review.Rows.Count) + " point(s)",
+                normal);
+        }
+
+        private string SessionObjectsText()
+        {
+            if (_sessionRuns == 0) return "-";
+            if (!_sessionOwnedMeasured) return "Not measured";
+
+            var net = _sessionOwnedChange.Values.Sum();
+            if (_sessionOwnedChange.Count == 0) return "No change";
+
+            var parts = _sessionOwnedChange
+                .Where(kv => kv.Value != 0)
+                .OrderByDescending(kv => Math.Abs(kv.Value))
+                .Take(3)
+                .Select(kv => Signed(kv.Value) + " " + FieldCodes.Reporting.OwnedObjects.NameOf(kv.Key))
+                .ToArray();
+            return Signed(net) + " net (" + string.Join(", ", parts) + ")";
+        }
+
+        private static string Signed(int value)
+        {
+            return (value > 0 ? "+" : string.Empty) + N(value);
+        }
+
+        private static string Part(int count, string what)
+        {
+            return count > 0 ? N(count) + " " + what : null;
+        }
+
+        private static string Parts(params string[] parts)
+        {
+            return string.Join(", ", parts.Where(p => p != null).ToArray());
         }
 
         /// <summary>
@@ -1799,25 +2738,55 @@ namespace FieldCodes.Cad.Ui
                 UpdateRunSummary(result);
                 _status = FtfStatusService.Gather();
                 ShowStatus();
+                RecordSessionRun(result);
             });
         }
 
         private void UpdateRunSummary(FtfRunResult result)
         {
-            if (_runSummary == null) return;
+            // Called straight after a run, before the status is gathered again: what FTF
+            // owned beforehand is what this run's additions are measured against. The
+            // Reports detail is rebuilt from the stored record in RecordSessionRun.
+            _ownedBeforeRun = _status != null
+                ? new Dictionary<string, int>(_status.OwnedByKind, StringComparer.OrdinalIgnoreCase)
+                : null;
 
-            var lines = new List<string>();
-            lines.Add("Last run: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-            foreach (var outcome in result.Outcomes)
-                lines.Add(string.Format("  {0}  {1}",
-                    outcome.Succeeded ? "OK    " : "FAILED",
-                    outcome.Name + (outcome.Error != null ? " - " + outcome.Error : string.Empty)));
+            if (_runSummary != null && result != null)
+                _runSummary.Text = string.Format("Run finished: {0} completed, {1} failed{2}.",
+                    result.Completed, result.Failed,
+                    result.StoppedEarly ? " (stopped early)" : string.Empty);
+        }
 
-            lines.Add(string.Format("{0} completed, {1} failed{2}.",
-                result.Completed, result.Failed,
-                result.StoppedEarly ? " (stopped early)" : string.Empty));
+        /// <summary>
+        /// After a run, with the fresh status: stores the run in the drawing (when, what
+        /// ran, how it ended), adds it to this session's tally, and rescans the review
+        /// if a review page is open so it never shows the pre-run drawing.
+        /// </summary>
+        private void RecordSessionRun(FtfRunResult result)
+        {
+            var record = FtfStatusService.RecordRun(result, _status, "FTF window", Log);
+            if (_status != null) _status.LastRun = record;
 
-            _runSummary.Text = string.Join(Environment.NewLine, lines.ToArray());
+            _sessionRuns++;
+            _sessionLastRun = record;
+
+            if (_ownedBeforeRun != null && _status != null)
+            {
+                foreach (var change in FieldCodes.Reporting.OwnedObjects.Difference(_ownedBeforeRun, _status.OwnedByKind))
+                {
+                    int n;
+                    _sessionOwnedChange.TryGetValue(change.Key, out n);
+                    _sessionOwnedChange[change.Key] = n + change.Value;
+                }
+                _sessionOwnedMeasured = true;
+            }
+            _ownedBeforeRun = null;
+
+            if (_currentPage == "Feature Review" || _currentPage == "Unknown Codes" ||
+                _currentPage == "Reports")
+                ScanReviewNow();
+
+            ShowStatus();
         }
 
         // =================================================================== tools

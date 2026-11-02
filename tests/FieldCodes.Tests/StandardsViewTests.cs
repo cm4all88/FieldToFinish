@@ -24,10 +24,14 @@ public sealed class StandardsViewTests : IClassFixture<RulesFixture>
     // ------------------------------------------------------------------ structure
 
     [Fact]
-    public void AllSixSectionsArePresent_InOrder()
+    public void AllSectionsArePresent_InOrder()
     {
         Assert.Equal(
-            new[] { "Layers", "Labels", "Tags", "Tables", "Drawing Order", "Feature Defaults" },
+            new[]
+            {
+                "Layers", "Point Labels", "Line Labels", "Tags", "Tables", "Drawing Order",
+                "Feature Defaults", "Field Codes"
+            },
             Build().Select(s => s.Title));
     }
 
@@ -96,7 +100,7 @@ public sealed class StandardsViewTests : IClassFixture<RulesFixture>
         settings.Labels.TextStyle = "PMX-ROMANS";
         settings.Labels.TextHeightPlotted = 0.1;
 
-        var labels = Section("Labels", settings);
+        var labels = Section("Point Labels", settings);
 
         Assert.Contains(labels.Items, i => i.Name == "Text style" && i.Value == "PMX-ROMANS");
         Assert.Contains(labels.Items, i => i.Name == "Text height (plotted)" && i.Value == "0.1");
@@ -105,7 +109,7 @@ public sealed class StandardsViewTests : IClassFixture<RulesFixture>
     [Fact]
     public void MissingStandardsAreMarkedPlanned_NotInvented()
     {
-        var labels = Section("Labels");
+        var labels = Section("Point Labels");
 
         var justification = labels.Items.Single(i => i.Name == "Justification");
         Assert.Equal(StandardsViewBuilder.Planned, justification.Source);
@@ -117,7 +121,7 @@ public sealed class StandardsViewTests : IClassFixture<RulesFixture>
     [Fact]
     public void MeasuredCollisionBoxesAreABuiltInGuarantee()
     {
-        var item = Section("Labels").Items.Single(i => i.Name == "Collision boxes");
+        var item = Section("Point Labels").Items.Single(i => i.Name == "Collision boxes");
         Assert.Equal(StandardsViewBuilder.BuiltIn, item.Source);
         Assert.Contains("never estimated", item.Value);
     }
@@ -204,5 +208,134 @@ public sealed class StandardsViewTests : IClassFixture<RulesFixture>
             .Single(i => i.Name == "Dripline trimming");
 
         Assert.Contains("drawn whole", item.Value);
+    }
+
+    // ------------------------------------------------- accuracy and navigation
+
+    [Fact]
+    public void EverySettingsRowNamesTheSectionThatEditsIt()
+    {
+        var known = new[]
+        {
+            StandardsViewBuilder.GeneralSection, StandardsViewBuilder.PointFeaturesSection,
+            StandardsViewBuilder.TreesSection, StandardsViewBuilder.PointLabelsSection,
+            StandardsViewBuilder.LineLabelsSection, StandardsViewBuilder.TagsSection,
+            StandardsViewBuilder.ScheduleSection, StandardsViewBuilder.DrawOrderSection,
+            StandardsViewBuilder.AdvancedSection
+        };
+
+        foreach (var item in Build().SelectMany(s => s.Items))
+        {
+            Assert.False(string.IsNullOrWhiteSpace(item.EditHint), item.Name);
+            if (item.SettingsSection != null)
+                Assert.Contains(item.SettingsSection, known);
+            if (item.Source == StandardsViewBuilder.Settings && item.Name != "Codes ignored by you")
+                Assert.NotNull(item.SettingsSection);
+        }
+    }
+
+    [Fact]
+    public void NotAvailableRowsAreNeverOperational_OrEditable()
+    {
+        var planned = Build().SelectMany(s => s.Items)
+            .Where(i => i.Source == StandardsViewBuilder.Planned)
+            .ToList();
+
+        Assert.NotEmpty(planned);
+        Assert.All(planned, i =>
+        {
+            Assert.False(i.Operational);
+            Assert.Null(i.SettingsSection);
+            Assert.Contains("Not available yet", i.EditHint);
+        });
+    }
+
+    [Fact]
+    public void RulesFileOnlyRowsSayWhereToEditThem()
+    {
+        var suffixes = Section("Drawing Order").Items.Single(i => i.Name == "Modifier suffix handling");
+        Assert.Null(suffixes.SettingsSection);
+        Assert.Contains("rules.json", suffixes.EditHint);
+
+        // The suffixes listed are the ones the rules file really has.
+        foreach (var suffix in _fx.Config.Modifiers.Where(m => !string.IsNullOrEmpty(m.LayerSuffix)))
+            Assert.Contains(suffix.LayerSuffix, suffixes.Value);
+    }
+
+    [Fact]
+    public void PerFeatureRuleValuesOpenPointFeatures()
+    {
+        var item = Section("Layers").Items.Single(i => i.Name == "V-SURF-VEGE-TEXT-E");
+        Assert.Equal(StandardsViewBuilder.PointFeaturesSection, item.SettingsSection);
+    }
+
+    [Fact]
+    public void InheritedValuesSayWhereTheyComeFrom()
+    {
+        var symbols = Section("Feature Defaults").Items.Single(i => i.Name == "Symbol ownership");
+        Assert.Equal(StandardsViewBuilder.Civil3D, symbols.Source);
+        Assert.Contains("description key", symbols.EditHint);
+
+        var tableStyle = Section("Tables").Items.Single(i => i.Name == "Table style");
+        Assert.Equal(StandardsViewBuilder.Drawing, tableStyle.Source);
+    }
+
+    [Fact]
+    public void LabelMasksSayOnlyPointLabelsUseTheMaskLayer()
+    {
+        var mask = Section("Layers").Items.Single(i => i.Value.StartsWith("Point-label masks"));
+        Assert.Contains("line-label masks sit on the line label's own layer", mask.Value);
+    }
+
+    [Fact]
+    public void HandMovedToleranceIsClaimedOnlyForPointLabels()
+    {
+        var settings = new FtfSettings();
+        settings.Cleanup.MovedTolerance = 0.5;
+        var item = Section("Feature Defaults", settings).Items.Single(i => i.Name == "Hand-moved point labels");
+        Assert.Contains("0.5", item.Value);
+        Assert.Contains("FTFLABELS", item.Value);
+        Assert.Equal(StandardsViewBuilder.AdvancedSection, item.SettingsSection);
+    }
+
+    [Fact]
+    public void BareCodesMentionTheSymbolLabelException()
+    {
+        var item = Section("Field Codes").Items.Single(i => i.Name == "Bare codes");
+        Assert.Contains("labelled with the code itself", item.Value);
+        Assert.Contains("CB", item.Value);
+    }
+
+    [Fact]
+    public void LineLabelSpacingIsMarkedAutomaticPassOnly()
+    {
+        var settings = new FtfSettings();
+        settings.LineLabels.MinLengthFeet = 12;
+        var lines = Section("Line Labels", settings);
+
+        var min = lines.Items.Single(i => i.Name.StartsWith("Minimum length"));
+        Assert.Contains("automatic pass only", min.Name);
+        Assert.Equal("12 ft", min.Value);
+        Assert.Equal(StandardsViewBuilder.LineLabelsSection, min.SettingsSection);
+        Assert.Contains(lines.Items, i => i.Name == "Duplicate prevention" && i.Source == StandardsViewBuilder.BuiltIn);
+    }
+
+    [Fact]
+    public void CodesYouIgnoredAreListed()
+    {
+        var settings = new FtfSettings();
+        settings.Diagnostics.Ignore("QZ");
+        var item = Section("Field Codes", settings).Items.Single(i => i.Name == "Codes ignored by you");
+        Assert.Contains("QZ", item.Value);
+        Assert.Contains("Unknown Codes", item.EditHint);
+    }
+
+    [Fact]
+    public void BuildingTheViewChangesNothingInTheSettings()
+    {
+        var settings = new FtfSettings();
+        var before = Newtonsoft.Json.JsonConvert.SerializeObject(settings);
+        Build(settings);
+        Assert.Equal(before, Newtonsoft.Json.JsonConvert.SerializeObject(settings));
     }
 }

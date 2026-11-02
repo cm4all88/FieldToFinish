@@ -8,10 +8,28 @@ using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
 
 namespace FieldCodes.Cad
 {
+    /// <summary>One inventory row with what the Lines page needs to make it
+    /// actionable: the candidate features, the status and the governing settings.</summary>
+    public sealed class FtfLineItem
+    {
+        public LineworkRow Row { get; set; }
+        public IList<FieldCodes.LineFeatureRule> Candidates { get; set; }
+        public FieldCodes.Review.LineStatus Status { get; set; }
+        public IList<FieldCodes.Review.LineSetting> Settings { get; set; }
+
+        /// <summary>Where its label would go, for identified lines (also those of
+        /// unknown length, which the row itself leaves blank).</summary>
+        public string LabelLayerText { get; set; }
+    }
+
     public sealed class FtfLineworkResult
     {
         public IList<LineworkRow> Rows { get; set; }
         public string RulesError { get; set; }
+
+        /// <summary>The same lines as <see cref="Rows"/>, in the same order, with
+        /// status and governing settings.</summary>
+        public IList<FtfLineItem> Items { get; set; }
 
         public int Identified { get; set; }
         public int Ambiguous { get; set; }
@@ -24,6 +42,7 @@ namespace FieldCodes.Cad
         public FtfLineworkResult()
         {
             Rows = new List<LineworkRow>();
+            Items = new List<FtfLineItem>();
             FtfOwnedByKind = new Dictionary<string, int>();
         }
     }
@@ -141,13 +160,15 @@ namespace FieldCodes.Cad
                     var row = catalog.Identify(entityType, figureName, entity.Layer,
                                                LengthOf(entity), trimbleName);
 
+                    var candidates = row.Source != LineIdentitySource.None
+                        ? catalog.Candidates(figureName, trimbleName, entity.Layer)
+                        : (IList<FieldCodes.LineFeatureRule>)new List<FieldCodes.LineFeatureRule>();
+
                     // Preview exactly what FTFLINELABELS would do: label text from the
                     // configured standard, count, spacing and side from the same maths
                     // and the same precedence the engine uses.
                     if (row.Source != LineIdentitySource.None && row.Length.HasValue)
                     {
-                        var candidates = catalog.Candidates(figureName, trimbleName,
-                                                            entity.Layer);
                         var label = LineworkCatalog.UnanimousLabel(candidates);
                         var side = LineSideParser.Resolve(row.SourceSide, candidates,
                             LineSideParser.ParsePlacement(ls.DefaultPlacement));
@@ -166,6 +187,19 @@ namespace FieldCodes.Cad
                     }
 
                     result.Rows.Add(row);
+
+                    var layerText = row.LabelLayerText;
+                    if (string.IsNullOrEmpty(layerText) && candidates.Count > 0)
+                        layerText = LabelLayerResolver.Resolve(entity.Layer, candidates,
+                            layerCatalog, ls.DefaultLabelLayer).Describe();
+                    result.Items.Add(new FtfLineItem
+                    {
+                        Row = row,
+                        Candidates = candidates,
+                        LabelLayerText = layerText,
+                        Status = FieldCodes.Review.LineDiagnostics.Classify(row, candidates, ls, unitsPerFoot),
+                        Settings = FieldCodes.Review.LineDiagnostics.GoverningSettings(row, candidates, ls, layerText)
+                    });
 
                     if (row.Source == LineIdentitySource.None) result.Unidentified++;
                     else if (row.Codes != null && row.Codes.IndexOf('/') >= 0) result.Ambiguous++;
