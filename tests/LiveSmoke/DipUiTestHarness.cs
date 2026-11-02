@@ -903,44 +903,45 @@ namespace FtfUiTest
             Action<string, Action, int> add = (name, run, delay) => s.Add(new Step { Name = name, Run = run, Delay = delay });
 
             // ------------------------------------------------ the ribbon, in both suites
-            // Two tabs: the drawing being finished, and the record work written from it. A
-            // button whose command was renamed away would look fine and do nothing, so every
-            // one of them is checked against the commands FTF really registers.
-            add("the ribbon has an FTF tab and an FTF Boundary tab", () =>
+            // Four tabs by kind of work (FieldCodes.Commands.RibbonLayout). A button whose
+            // command was renamed away would look fine and do nothing, so every one of them is
+            // checked against the commands FTF really registers.
+            add("the ribbon has the four FTF tabs, each with its own work", () =>
             {
                 var ribbon = Autodesk.Windows.ComponentManager.Ribbon;
                 Check(ribbon != null, "Civil 3D has a ribbon for FTF to add to");
                 if (ribbon == null) return;
 
-                var drawing = ribbon.FindTab("FTF_RIBBON_TAB");
-                var boundary = ribbon.FindTab("FTF_BOUNDARY_RIBBON_TAB");
-                Check(drawing != null && drawing.Title == "FTF", "the drawing's own work is on the FTF tab");
-                Check(boundary != null && boundary.Title == "FTF Boundary", "the record work has a tab of its own");
-                if (drawing == null || boundary == null) return;
-
-                Log("   FTF panels: " + string.Join(", ", drawing.Panels.Select(p => p.Source.Title).ToArray()));
-                Log("   FTF Boundary panels: " + string.Join(", ", boundary.Panels.Select(p => p.Source.Title).ToArray()));
-
-                var mine = RibbonCommands(drawing);
-                var record = RibbonCommands(boundary);
-                Log("   FTF: " + string.Join(" ", mine.ToArray()));
-                Log("   FTF Boundary: " + string.Join(" ", record.ToArray()));
-
-                Check(mine.Count > 0 && record.Count > 0, "both tabs have buttons (" + mine.Count + ", " + record.Count + ")");
-                Check(!mine.Intersect(record).Any(), "no button sits on both tabs");
-                Check(mine.Contains("FTFDIP") && mine.Contains("FTFLABELLINE") && mine.Contains("FTFRUN") && mine.Contains("FTFCLEAN"),
-                      "the FTF tab keeps labelling, finishing, dips and clean up");
-                var strayed = mine.Where(c => c.Contains("EASEMENT") || c.Contains("RECORD") || c.Contains("EXHIBIT")).ToList();
-                Check(strayed.Count == 0, "and none of the record work (" + string.Join(", ", strayed.ToArray()) + ")");
-                Check(record.Contains("FTFRECORD") && record.Contains("STRIPEASEMENT") &&
-                      record.Contains("FTFEXHIBIT") && record.Contains("FTFEASEMENTLEGAL"),
-                      "the FTF Boundary tab holds the recorded survey, the easements and the exhibits");
-                Check(!record.Contains("FTFDIP") && !record.Contains("FTFLABELLINE"), "and none of the drawing's own finishing");
-
                 var known = PluginCommands();
                 Log("   commands FTF registers: " + known.Count);
-                var unknown = mine.Concat(record).Where(c => !known.Contains(c)).ToList();
-                Check(unknown.Count == 0, "every button runs a command FTF really has (" + string.Join(", ", unknown.ToArray()) + ")");
+                var commandsByTab = new Dictionary<string, List<string>>();
+                foreach (var layout in FieldCodes.Commands.RibbonLayout.Tabs)
+                {
+                    var tab = ribbon.FindTab(layout.Id);
+                    Check(tab != null && tab.Title == layout.Title, "the " + layout.Title + " tab is on the ribbon");
+                    if (tab == null) continue;
+                    Log("   " + layout.Title + " panels: " + string.Join(", ", tab.Panels.Select(p => p.Source.Title).ToArray()));
+                    var commands = RibbonCommands(tab);
+                    commandsByTab[layout.Id] = commands;
+                    Log("   " + layout.Title + ": " + string.Join(" ", commands.ToArray()));
+                    var expected = layout.Buttons.Select(b => b.Command).Distinct().ToList();
+                    var missing = expected.Where(c => !commands.Contains(c)).ToList();
+                    Check(missing.Count == 0, layout.Title + " has every button its layout lists (" + string.Join(", ", missing.ToArray()) + ")");
+                    var unknown = commands.Where(c => !known.Contains(c)).ToList();
+                    Check(unknown.Count == 0, layout.Title + ": every button runs a command FTF really has (" + string.Join(", ", unknown.ToArray()) + ")");
+                }
+
+                List<string> ftf, easements;
+                if (commandsByTab.TryGetValue("FTF_RIBBON_TAB", out ftf))
+                {
+                    Check(ftf.Contains("FTFDIP") && ftf.Contains("FTFRUN") && ftf.Contains("FTFCLEAN") && ftf.Contains("FTFLABELALL"),
+                          "the FieldToFinish tab keeps finishing, labels, dips and clean up");
+                    var strayed = ftf.Where(c => c.Contains("EASEMENT") || c.Contains("RECORD") || c.Contains("EXHIBIT")).ToList();
+                    Check(strayed.Count == 0, "and none of the boundary or easement work (" + string.Join(", ", strayed.ToArray()) + ")");
+                }
+                if (commandsByTab.TryGetValue("FTF_EASEMENTS_RIBBON_TAB", out easements))
+                    Check(easements.Contains("STRIPEASEMENT") && easements.Contains("FTFEXHIBIT") && easements.Contains("FTFEASEMENTLEGAL"),
+                          "the Easements tab holds the easements, legal descriptions and exhibits");
             }, 500);
 
             // What UISEED actually left in the drawing, and what the view is looking at. A pick
