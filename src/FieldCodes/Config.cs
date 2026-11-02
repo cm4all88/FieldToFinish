@@ -534,6 +534,11 @@ namespace FieldCodes
         /// <summary>Optional human note shown in the rule editor.</summary>
         [JsonProperty("description")] public string Description { get; set; }
 
+        /// <summary>Optional family for Label All and Process Drawing (Trees, Utilities,
+        /// StormSewer, Signs, Control, Pavement, OtherPoints). Absent: worked out from the
+        /// rule id and code (FieldCodes.Annotation.AnnotationPolicy).</summary>
+        [JsonProperty("category")] public string Category { get; set; }
+
         /// <summary>
         /// Regex with named groups. Recognised group names: code, species, trunk, drip,
         /// rotation, mods. Any other named group is available to label templates.
