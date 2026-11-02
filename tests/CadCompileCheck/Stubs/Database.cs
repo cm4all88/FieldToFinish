@@ -82,7 +82,14 @@ namespace Autodesk.AutoCAD.Colors
         public string ColorNameForDisplay { get { return ColorIndex.ToString(); } }
     }
 
-    public struct Transparency { }
+    public struct Transparency
+    {
+        public Transparency(byte alpha) { Alpha = alpha; IsByAlpha = true; IsByLayer = false; IsByBlock = false; }
+        public byte Alpha { get; }
+        public bool IsByAlpha { get; }
+        public bool IsByLayer { get; }
+        public bool IsByBlock { get; }
+    }
 }
 
 namespace Autodesk.AutoCAD.DatabaseServices

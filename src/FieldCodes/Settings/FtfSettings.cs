@@ -81,6 +81,7 @@ namespace FieldCodes.Settings
         [JsonProperty("compare")] public CompareSettings Compare { get; set; }
         [JsonProperty("annotation")] public AnnotationSettings Annotation { get; set; }
         [JsonProperty("diagnostics")] public DiagnosticsSettings Diagnostics { get; set; }
+        [JsonProperty("layerStandards")] public LayerStandardsSettings LayerStandards { get; set; }
 
         public FtfSettings()
         {
@@ -106,6 +107,7 @@ namespace FieldCodes.Settings
             Compare = new CompareSettings();
             Annotation = new AnnotationSettings();
             Diagnostics = new DiagnosticsSettings();
+            LayerStandards = new LayerStandardsSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -117,7 +119,8 @@ namespace FieldCodes.Settings
                 return new List<ISettingsSection>
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
-                    Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation
+                    Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation,
+                    LayerStandards
                 };
             }
         }
@@ -355,6 +358,8 @@ namespace FieldCodes.Settings
             if (Annotation.Categories == null) Annotation.Categories = new List<AnnotationCategory>(AnnotationSettings.DefaultCategories());
             if (Annotation.NoLabelWords == null) Annotation.NoLabelWords = new List<string>();
             if (Diagnostics == null) Diagnostics = new DiagnosticsSettings();
+            if (LayerStandards == null) LayerStandards = new LayerStandardsSettings();
+            if (LayerStandards.Layers == null) LayerStandards.Layers = new List<LayerStandard>();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();
             if (DrawOrder.MaskableLayers == null) DrawOrder.MaskableLayers = new List<string>();
