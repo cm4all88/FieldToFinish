@@ -677,6 +677,17 @@ namespace FieldCodes.Cad.Setup
             }
             try
             {
+                // The Symbols and Rotations page edits the same file and may have saved since this
+                // page loaded it: carry its parts (symbol standard, FTFORIENT thresholds, inserted
+                // blocks) over from disk, so this save never undoes that one.
+                if (System.IO.File.Exists(target))
+                {
+                    var onDisk = RuleDocument.Load(target);
+                    onDisk.CopySymbolsTo(_document);
+                    onDisk.CopyOrientationApplyTo(_document);
+                    foreach (var id in onDisk.RuleIds()) onDisk.CopyBlockInsertTo(_document, id);
+                }
+
                 // Never the factory file: SaveTarget is the office configuration, or a
                 // drawing override when one is active.
                 _document.Save(target);

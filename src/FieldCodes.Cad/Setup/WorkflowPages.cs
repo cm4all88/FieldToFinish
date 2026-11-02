@@ -166,64 +166,6 @@ namespace FieldCodes.Cad.Setup
         }
     }
 
-    // ------------------------------------------------------------------ symbols
-
-    /// <summary>
-    /// Settings > Symbols and Rotations: how FTFORIENT and FTFPOINTS turn the symbols Civil 3D
-    /// draws. READ ONLY here: the standard lives in the rules file's "orientation" section
-    /// (office standard), so the page shows what is in force and says where to change it.
-    /// </summary>
-    [SettingsPage(Group = "FieldToFinish", Label = "Symbols and Rotations", Order = 40, Commands = "FTFORIENT,FTFORIENTRESET,FTFPOINTS")]
-    internal sealed class SymbolsPage : SetupPage
-    {
-        private ListView _symbols;
-
-        public override string Title { get { return "Symbols and Rotations"; } }
-        public override string AffectedCommands { get { return "FTFORIENT, FTFORIENTRESET, FTFPOINTS (field azimuths)"; } }
-        public override bool IsReadOnly { get { return true; } }
-
-        protected override void BuildBody()
-        {
-            Note("Read only: the symbol standard is the office's, in rules.json > \"orientation\". " +
-                 "Each symbol's zero is the direction its block points at rotation 0; a marker is turned by " +
-                 "the facing direction minus that zero. Symmetric symbols (period 0) are never turned.");
-            _symbols = new ListView
-            {
-                View = View.Details, FullRowSelect = true, GridLines = true, Width = 620, Height = 230,
-                HeaderStyle = ColumnHeaderStyle.Clickable
-            };
-            _symbols.Columns.Add("Codes", 120);
-            _symbols.Columns.Add("Kind", 90);
-            _symbols.Columns.Add("Block", 90);
-            _symbols.Columns.Add("Zero (CAD deg)", 90);
-            _symbols.Columns.Add("Repeats", 60);
-            _symbols.Columns.Add("Meaning", 170);
-            AddFullWidth(_symbols);
-
-            var o = Context.Rules != null ? Context.Rules.Orientation : null;
-            if (o != null)
-            {
-                ReadOnlyRow("Turned at or above confidence", o.ApplyMinimumConfidence.ToString("0.00", CultureInfo.InvariantCulture));
-                ReadOnlyRow("Weakest evidence applied", o.ApplyWeakestTier.ToString());
-                ReadOnlyRow("QC layers (not plotted)", o.QcLayer + ", " + o.QcInferredLayer);
-                foreach (var r in o.Symbols ?? new List<FieldCodes.Orient.SymbolRule>())
-                    _symbols.Items.Add(new ListViewItem(new[]
-                    {
-                        string.Join(" ", (r.Codes ?? new List<string>()).ToArray()), r.Kind.ToString(), r.Block ?? string.Empty,
-                        r.ReferenceCadDegrees.ToString("0", CultureInfo.InvariantCulture),
-                        r.Period <= 0 ? "never turned" : r.Period.ToString("0", CultureInfo.InvariantCulture),
-                        r.Meaning ?? string.Empty
-                    }));
-            }
-            Note("Run FTFORIENT > Preview to see every decision and its evidence before anything turns; " +
-                 "FTFORIENTRESET puts every marker back. A marker someone turned by hand is kept.");
-        }
-
-        public override void LoadFrom(FtfSettings s) { }
-        public override void SaveTo(FtfSettings s, ICollection<string> problems) { }
-        public override void RestoreDefaults(FtfSettings s) { }
-    }
-
     // ------------------------------------------------------------------ profiles
 
     /// <summary>

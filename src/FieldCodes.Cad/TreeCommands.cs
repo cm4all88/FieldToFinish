@@ -312,34 +312,66 @@ namespace FieldCodes.Cad
             }
         }
 
+        /// <summary>
+        /// Inserts the block of a rule that opted in (insertBlock). How it is placed is the rule's
+        /// (FieldCodes.Symbols.BlockInsertion): scale fixed or from a field, rotation from the field
+        /// azimuth (the default: the standard's zero belongs to its own block, so an opted-in block of
+        /// another name keeps the angle as the rule gave it), none, or the point's marker; on the
+        /// point or offset from it. With every block setting absent this is exactly what it always
+        /// did. Attributes are created only when the rule has attribute templates.
+        /// </summary>
         private static void PlaceBlock(Database db, Transaction tr, CogoPoint cogo,
                                        ParsedPoint parsed, ObjectId blockId, string rulesVersion,
                                        FieldCodes.Orient.OrientationStandard orient)
         {
+            var rule = RuleOf(db, parsed.RuleId);
             var layerId = CadUtil.EnsureLayer(db, tr, parsed.BlockLayer);
-            var position = CadUtil.Flatten(cogo.Location);
+            var point = new FieldCodes.Easements.P2(cogo.Location.X, cogo.Location.Y);
 
-            using (var br = new BlockReference(position, blockId))
+            // The marker as it stands now: RotateMarker may have just turned it in this transaction.
+            double? marker = null;
+            if (rule != null && rule.BlockRotation == FieldCodes.Symbols.BlockRotationMethod.Marker)
+            {
+                var current = (CogoPoint)tr.GetObject(cogo.ObjectId, OpenMode.ForRead);
+                marker = FieldCodes.Geometry.Angles.ToDegrees(current.MarkerRotation);
+            }
+
+            var degrees = FieldCodes.Symbols.BlockInsertion.RotationDegrees(rule, parsed, orient, parsed.BlockName, marker);
+            var at = FieldCodes.Symbols.BlockInsertion.Position(rule, point, degrees ?? 0.0);
+
+            using (var br = new BlockReference(new Point3d(at.X, at.Y, 0.0), blockId))
             {
                 br.LayerId = layerId;
 
-                var scale = parsed.BlockScale > 0 ? parsed.BlockScale : 1.0;
+                var scale = FieldCodes.Symbols.BlockInsertion.Scale(rule, parsed);
                 br.ScaleFactors = new Scale3d(scale, scale, scale);
 
-                // The standard's zero belongs to its own block; an opted-in block of another
-                // name keeps the angle as the rule gave it.
-                if (parsed.RotationDegrees.HasValue)
-                {
-                    var symbol = orient.SymbolFor(parsed.Code);
-                    var degrees = symbol != null && symbol.DrawnWith(parsed.BlockName)
-                        ? parsed.MarkerRotationDegrees ?? parsed.RotationDegrees.Value
-                        : parsed.RotationDegrees.Value;
-                    br.Rotation = CadUtil.DegreesToRadians(degrees);
-                }
+                if (degrees.HasValue)
+                    br.Rotation = CadUtil.DegreesToRadians(degrees.Value);
 
                 CadUtil.AddToModelSpace(db, tr, br);
 
                 Ownership.Stamp(br, parsed.PointNumber, rulesVersion, FtfEntityKind.Block, null);
+
+                if (rule != null && rule.BlockAttributes != null && rule.BlockAttributes.Count > 0)
+                    InsertedBlocks.FillAttributes(tr, br, blockId, rule.BlockAttributes,
+                        FieldCodes.Symbols.AttributeTemplate.Values(parsed, cogo.Easting, cogo.Northing, cogo.Elevation));
+            }
+        }
+
+        /// <summary>The code rule a parsed point came from (the rules are cached per file, so this
+        /// is the same object FTFPOINTS parsed with); null when it cannot be found.</summary>
+        private static CodeRule RuleOf(Database db, string ruleId)
+        {
+            if (string.IsNullOrEmpty(ruleId)) return null;
+            try
+            {
+                return FtfSession.Rules(db).Codes.FirstOrDefault(
+                    c => string.Equals(c.Id, ruleId, StringComparison.OrdinalIgnoreCase));
+            }
+            catch (ConfigException)
+            {
+                return null;
             }
         }
 

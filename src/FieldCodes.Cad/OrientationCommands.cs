@@ -125,6 +125,10 @@ namespace FieldCodes.Cad
                 var result = new OrientationEngine(std).Run(scene);
                 var outcomes = Apply(db, tr, std, result, points, preview, overwriteExisting);
                 var qc = DrawQc(db, tr, cfg.Version, std, result);
+                // Blocks FTF inserted whose rule says "follow the marker" turn with it now, not
+                // only on the next FTFPOINTS.
+                var followed = preview ? 0 : InsertedBlocks.FollowMarkers(db, tr);
+                if (followed > 0) ed.WriteMessage("\nFTFORIENT: {0} inserted block(s) turned with their marker.", followed);
 
                 ed.WriteMessage("\nFTFORIENT{0}: {1} road/utility line(s) read.", preview ? " (preview: nothing rotated)" : "",
                                 scene.Lines.Count);
