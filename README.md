@@ -1055,6 +1055,29 @@ label -- manual drafting wins -- and `FTFCLEAN` still removes everything FTF
 owns. Every label-and-mask pair displays as source geometry, then mask, then
 text, enforced at creation with `DrawOrderTable.MoveBelow`.
 
+### Fence heights written on the shots (FNC B 3.5)
+
+A crew writes a fence's height after its code: `FNC B 3.5` is the fence code, `B`
+(begin line) and a 3.5 ft height; `FNC B 5` starts a 5 ft fence. FTF reads the
+height off the shots the fence was drawn through (the same vertex-to-shot match as
+point notes above) and carries it along the fence until a later shot records a
+different one, so a fence that steps from 3.5 to 5 ft gets `3.5' FENCE` labels up
+to that shot and `5' FENCE` after it.
+
+- The line codes (B, E, C, CLS, BC, EC, PC, PT, OC and the rest) are skipped, and a
+  number fused to the code (`FNC1`) is a figure number, not a height. Numbers that
+  follow `R`, `OFF` and other parameter codes are theirs, not heights.
+- A number that cannot be a fence height (over the configured highest height, or
+  under 0.5 ft), or two different heights on one shot, is reported on the command
+  line as `Check: ...` and never used.
+- Any feature whose name or label says FENCE reads heights; `"readHeight": true` on
+  a line feature in `rules.json` turns it on for others (a wall), `false` turns it off.
+- `FTFLABELLINE` shows the height in force where the cursor is while you drag; the
+  automatic pass and Label All write each label with the height at its own spot.
+- Settings > Line Labels > Fence heights: the wording (`{height}' {label}`, empty to
+  leave heights out), decimals (-1 keeps what the crew wrote) and the highest height
+  believed (20 ft by default).
+
 ## Directional line labels: the TBC export limitation
 
 Directional field intent is supported by FTF, but it can only be applied when the

@@ -403,6 +403,23 @@ namespace FieldCodes.Settings
         [JsonProperty("leaveMarkedLinetypesToLegend")]
         public bool LeaveMarkedLinetypesToLegend { get; set; }
 
+        /// <summary>
+        /// The wording of a fence label with its height, read from the shots ("FNC B 3.5"):
+        /// {height} and {label}. "{height}' {label}" makes "3.5' FENCE". Empty: heights are not
+        /// put in labels.
+        /// </summary>
+        [JsonProperty("heightFormat")]
+        public string HeightFormat { get; set; }
+
+        /// <summary>Decimal places for the height; -1 keeps it as written (5 stays 5, 3.5 stays 3.5).</summary>
+        [JsonProperty("heightDecimals")]
+        public int HeightDecimals { get; set; }
+
+        /// <summary>The tallest height believed, ft. A bigger number on a fence shot is reported
+        /// for review and not used (a "35" that was meant as 3.5).</summary>
+        [JsonProperty("heightMaxFeet")]
+        public double HeightMaxFeet { get; set; }
+
         public LineLabelSettings() { RestoreDefaults(); }
 
         public void RestoreDefaults()
@@ -426,6 +443,9 @@ namespace FieldCodes.Settings
             DrawMask = true;
             DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
             LeaveMarkedLinetypesToLegend = true;
+            HeightFormat = FieldCodes.Linework.LineHeights.DefaultFormat;
+            HeightDecimals = -1;
+            HeightMaxFeet = 20;
         }
 
         public void Validate(ICollection<string> problems)
@@ -446,6 +466,13 @@ namespace FieldCodes.Settings
                 DrivewayFormat = FieldCodes.Linework.DrivewayWording.DefaultFormat;
             else if (DrivewayFormat.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)
                 problems.Add("Line labels: the driveway wording must contain {type} (the surface type read from the edge's layer), e.g. \"{type} DWY\".");
+            if (!string.IsNullOrWhiteSpace(HeightFormat) &&
+                (HeightFormat.IndexOf("{height}", StringComparison.OrdinalIgnoreCase) < 0 || HeightFormat.IndexOf("{label}", StringComparison.OrdinalIgnoreCase) < 0))
+                problems.Add("Line labels: the fence height wording must contain {height} and {label}, e.g. \"{height}' {label}\".");
+            if (HeightDecimals < -1 || HeightDecimals > 4)
+                problems.Add("Line labels: fence height decimals must be -1 (as written) to 4.");
+            if (!(HeightMaxFeet >= 1 && HeightMaxFeet <= 100))
+                problems.Add("Line labels: the tallest fence height believed must be 1 to 100 ft.");
         }
     }
 

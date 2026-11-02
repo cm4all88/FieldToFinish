@@ -441,6 +441,9 @@ namespace FieldCodes.Cad.Setup
         private CheckBox _mask;
         private TextBox _drivewayFormat;
         private CheckBox _legendLinetypes;
+        private TextBox _heightFormat;
+        private TextBox _heightDecimals;
+        private TextBox _heightMax;
 
         // per-feature label standards (rules.json lineFeatures)
         private DataGridView _features;
@@ -514,6 +517,20 @@ namespace FieldCodes.Cad.Setup
                 "ByLayer). Gate labels on such a line are still placed, and FTFLABELLINE " +
                 "still labels one you click. Features marked alwaysLabel in rules.json " +
                 "(every fence) are labelled anyway.");
+
+            Heading("Fence heights");
+            Note("A fence shot written with a height after its code -- \"FNC B 3.5\", \"FNC B 5\" -- " +
+                 "gives the fence that height from that shot on, until another shot records a " +
+                 "new one. B, E, C and the other line codes are skipped; a number fused to the " +
+                 "code (FNC1) is a figure number, not a height. A number that cannot be a fence " +
+                 "height is reported, never used.");
+            _heightFormat = TextRow("Fence label with a height",
+                "{height} and {label}: \"{height}' {label}\" labels 3.5' FENCE. Leave empty to " +
+                "label fences without their height.", 160);
+            _heightDecimals = TextRow("Height decimals",
+                "-1 writes the height as the crew did (5 stays 5, 3.5 stays 3.5); 0 to 4 rounds.");
+            _heightMax = TextRow("Highest fence height (ft)",
+                "A larger number on a fence shot is reported for review, not used as a height.");
 
             Heading("Driveways (FTFLABELDRIVEWAY)");
             _drivewayFormat = TextRow("Driveway wording",
@@ -711,6 +728,9 @@ namespace FieldCodes.Cad.Setup
             _endClearance.Text = Fmt(s.LineLabels.EndClearanceFeet);
             _drivewayFormat.Text = s.LineLabels.DrivewayFormat;
             _legendLinetypes.Checked = s.LineLabels.LeaveMarkedLinetypesToLegend;
+            _heightFormat.Text = s.LineLabels.HeightFormat;
+            _heightDecimals.Text = s.LineLabels.HeightDecimals.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _heightMax.Text = Fmt(s.LineLabels.HeightMaxFeet);
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
@@ -753,6 +773,24 @@ namespace FieldCodes.Cad.Setup
             s.LineLabels.EndClearanceFeet = clearance;
 
             s.LineLabels.LeaveMarkedLinetypesToLegend = _legendLinetypes.Checked;
+
+            var heightFormat = (_heightFormat.Text ?? string.Empty).Trim();
+            if (heightFormat.Length > 0 &&
+                (heightFormat.IndexOf("{height}", StringComparison.OrdinalIgnoreCase) < 0 ||
+                 heightFormat.IndexOf("{label}", StringComparison.OrdinalIgnoreCase) < 0))
+                problems.Add("Line labels: the fence height wording must contain {height} and {label}, e.g. \"{height}' {label}\".");
+            else
+                s.LineLabels.HeightFormat = heightFormat;
+            int decimals;
+            if (int.TryParse((_heightDecimals.Text ?? string.Empty).Trim(), System.Globalization.NumberStyles.Integer,
+                             System.Globalization.CultureInfo.InvariantCulture, out decimals) && decimals >= -1 && decimals <= 4)
+                s.LineLabels.HeightDecimals = decimals;
+            else
+                problems.Add("Line labels: height decimals must be -1 (as written) or 0 to 4.");
+            var maxHeight = s.LineLabels.HeightMaxFeet;
+            ReadDouble(_heightMax, "Line labels: highest fence height", v => v >= 1 && v <= 100,
+                       "must be 1 to 100 ft", problems, ref maxHeight);
+            s.LineLabels.HeightMaxFeet = maxHeight;
 
             var driveway = (_drivewayFormat.Text ?? string.Empty).Trim();
             if (driveway.Length > 0 && driveway.IndexOf("{type}", StringComparison.OrdinalIgnoreCase) < 0)

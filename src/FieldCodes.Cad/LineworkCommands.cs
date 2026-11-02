@@ -266,9 +266,15 @@ namespace FieldCodes.Cad
                     var layerId = CadUtil.EnsureLayer(db, tr, layer);
 
                     var planned = LineLabelPlanner.Plan(path, options);
+                    // A fence's height, read off its shots ("FNC B 3.5") and carried along it until
+                    // another shot records a different one: each label says the height where it sits.
+                    var heights = string.IsNullOrWhiteSpace(ls.HeightFormat) || !LineHeights.Applies(candidates[0])
+                        ? null : RecordedHeights(curve, candidates, noteIndex, ls.HeightMaxFeet, report.Problems);
                     foreach (var plan in planned)
                     {
-                        PlaceStyledLineLabel(db, tr, styler, lineStyle, plan, labelText,
+                        var text = heights == null || heights.Count == 0 ? labelText
+                            : LineHeights.Compose(ls.HeightFormat, labelText, LineHeights.At(heights, plan.Distance), ls.HeightDecimals);
+                        PlaceStyledLineLabel(db, tr, styler, lineStyle, plan, text,
                                              layerId, candidates[0].Code, cfg.Version);
                         report.LabelsPlaced++;
                     }
@@ -583,6 +589,24 @@ namespace FieldCodes.Cad
 
                 var jig = new LineLabelJig(preview, curve, db, sideOffset, onLineBand,
                                            ls.AlignToLine, wordings);
+
+                // A fence with heights on its shots ("FNC B 3.5"): the label says the height
+                // in force where the cursor is, carried from the last shot that recorded one.
+                if (typedWording == null && candidates.Count > 0 && !string.IsNullOrWhiteSpace(ls.HeightFormat) &&
+                    LineHeights.Applies(candidates[0]))
+                {
+                    var heightProblems = new List<string>();
+                    var heights = RecordedHeights(curve, candidates, BuildNoteIndex(db, tr), ls.HeightMaxFeet, heightProblems);
+                    foreach (var problem in heightProblems) ed.WriteMessage("\nCheck: {0}.", problem);
+                    if (heights.Count > 0)
+                    {
+                        ed.WriteMessage("\nFence height(s) recorded along this line: {0}.",
+                                        string.Join(", ", heights.OrderBy(h => h.Station)
+                                                                  .Select(h => h.Written + "'").Distinct().ToArray()));
+                        jig.TextAt = (wording, station) => LineHeights.Compose(ls.HeightFormat, wording,
+                            LineHeights.At(heights, station), ls.HeightDecimals);
+                    }
+                }
                 var dragged = ed.Drag(jig);
 
                 // A wording switch ends the drag with a keyword; keep jigging until
@@ -595,7 +619,7 @@ namespace FieldCodes.Cad
                     ed.WriteMessage("\nCancelled; nothing was placed.");
                     return false;
                 }
-                labelText = jig.CurrentWording;
+                labelText = jig.CurrentText ?? jig.CurrentWording;
 
                 var layerName = resolution.Layer;
                 var layerId = CadUtil.EnsureLayer(db, tr, layerName);
@@ -1345,6 +1369,43 @@ namespace FieldCodes.Cad
             return placedTotal;
         }
 
+        /// <summary>
+        /// The heights a line's own shots record, by distance along it: at each vertex, the shot
+        /// there whose code is this feature's ("FNC B 3.5" on a fence). A number that cannot be a
+        /// height is added to <paramref name="problems"/> and not used.
+        /// </summary>
+        private static IList<RecordedHeight> RecordedHeights(Curve curve, IList<LineFeatureRule> features,
+                                                             Dictionary<string, List<string>> index, double maxFeet,
+                                                             IList<string> problems)
+        {
+            var codes = new HashSet<string>(features.SelectMany(f => new[] { f.Code }.Concat(f.Aliases ?? new List<string>()))
+                                                    .Where(c => !string.IsNullOrWhiteSpace(c)), StringComparer.OrdinalIgnoreCase);
+            var heights = new List<RecordedHeight>();
+            foreach (var vertex in VerticesOf(curve))
+            {
+                List<string> shots;
+                if (index == null || !index.TryGetValue(Bucket(vertex), out shots)) continue;
+                foreach (var description in shots)
+                {
+                    var code = LineHeights.CodeOf(description);
+                    if (!codes.Contains(code)) continue;
+                    string written, problem;
+                    var feet = LineHeights.Read(description, maxFeet, out written, out problem);
+                    if (problem != null)
+                    {
+                        problems.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture, "fence height at {0:0.00}, {1:0.00}: {2}", vertex.X, vertex.Y, problem));
+                        continue;
+                    }
+                    if (!feet.HasValue) continue;
+                    double station;
+                    try { station = curve.GetDistAtPoint(vertex); }
+                    catch (Autodesk.AutoCAD.Runtime.Exception) { continue; }
+                    heights.Add(new RecordedHeight { Station = station, Feet = feet.Value, Written = written, Description = description });
+                }
+            }
+            return heights;
+        }
+
         private static string Bucket(Point3d p)
         {
             return Math.Round(p.X, 2).ToString("0.##",
@@ -1357,6 +1418,21 @@ namespace FieldCodes.Cad
         /// parameter; anything else contributes its two ends.</summary>
         private static IEnumerable<Point3d> VerticesOf(Curve curve)
         {
+            // A survey figure or feature line: every point it was built from, not only its ends,
+            // so a shot part way along it (a new fence height, a gate post) is found.
+            var featureLine = curve as Autodesk.Civil.DatabaseServices.FeatureLine;
+            if (featureLine != null)
+            {
+                Point3dCollection points = null;
+                try { points = featureLine.GetPoints(Autodesk.Civil.FeatureLinePointType.AllPoints); }
+                catch (System.Exception) { points = null; }
+                if (points != null && points.Count > 0)
+                {
+                    foreach (Point3d p in points) yield return p;
+                    yield break;
+                }
+            }
+
             var isPolyline = curve is Polyline || curve is Polyline2d ||
                              curve is Polyline3d;
             double start, end;
@@ -1411,6 +1487,13 @@ namespace FieldCodes.Cad
                 get { return _wordings[_wordingIndex % _wordings.Count]; }
             }
 
+            /// <summary>Optional: the text for a wording at a distance along the line (a fence's
+            /// height where the cursor is). Null shows the wording as it is.</summary>
+            public Func<string, double, string> TextAt { get; set; }
+
+            /// <summary>The text on the cursor now, height included -- what a click places.</summary>
+            public string CurrentText { get; private set; }
+
             public LineLabelJig(MText preview, Curve curve, Database db,
                                 double sideOffset, double onLineBand, bool alignToLine,
                                 IList<string> wordings)
@@ -1458,7 +1541,7 @@ namespace FieldCodes.Cad
 
             protected override bool Update()
             {
-                double x, y, direction, dx, dy;
+                double x, y, direction, dx, dy, station;
                 try
                 {
                     // Nearest point on the source geometry and the tangent there --
@@ -1467,6 +1550,7 @@ namespace FieldCodes.Cad
                     var closest = _curve.GetClosestPointTo(flat, false);
                     var parameter = _curve.GetParameterAtPoint(closest);
                     var derivative = _curve.GetFirstDerivative(parameter);
+                    station = _curve.GetDistanceAtParameter(parameter);
 
                     direction = Math.Atan2(derivative.Y, derivative.X);
                     x = closest.X;
@@ -1485,10 +1569,12 @@ namespace FieldCodes.Cad
                 Side = LineSideParser.FromCursor(direction, dx, dy, _onLineBand);
                 Plan = LineLabelPlanner.PlaceAt(x, y, direction, Side, _sideOffset,
                                                 _alignToLine);
+                Plan.Distance = station;
 
+                CurrentText = TextAt == null ? CurrentWording : TextAt(CurrentWording, station);
                 var text = (MText)Entity;
-                if (!string.Equals(text.Contents, CurrentWording, StringComparison.Ordinal))
-                    text.Contents = CurrentWording;
+                if (!string.Equals(text.Contents, CurrentText, StringComparison.Ordinal))
+                    text.Contents = CurrentText;
                 text.Location = new Point3d(Plan.X, Plan.Y, 0.0);
                 text.Rotation = Plan.RotationRadians;
                 return true;

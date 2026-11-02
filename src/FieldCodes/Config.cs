@@ -517,6 +517,14 @@ namespace FieldCodes
         /// </summary>
         [JsonProperty("alwaysLabel")] public bool AlwaysLabel { get; set; }
 
+        /// <summary>
+        /// Read a height from this feature's shots ("FNC B 3.5": 3.5 ft) and put it in the label,
+        /// carried along the line until another shot records a different one. Absent: every feature
+        /// whose name or label says FENCE does, others do not (Settings > Line Labels sets the
+        /// wording).
+        /// </summary>
+        [JsonProperty("readHeight", NullValueHandling = NullValueHandling.Ignore)] public bool? ReadHeight { get; set; }
+
         public LineFeatureRule()
         {
             Enabled = true;

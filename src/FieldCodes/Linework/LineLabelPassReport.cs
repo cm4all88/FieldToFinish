@@ -16,6 +16,12 @@ namespace FieldCodes.Linework
         private readonly Dictionary<string, int> _ambiguous = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _legend = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>What the drafter has to look at: a fence height that cannot be read, a gate
+        /// post with no partner. Each is also put on the drawing's review list.</summary>
+        public IList<string> Problems { get; private set; }
+
+        public LineLabelPassReport() { Problems = new List<string>(); }
+
         public int LabelsPlaced { get; set; }
         public int FeaturesLabelled { get; set; }
         public int GateLabels { get; set; }
@@ -93,6 +99,7 @@ namespace FieldCodes.Linework
                 lines.Add(string.Format(CultureInfo.InvariantCulture, "Not labelled: {0} ({1} line(s)).", kv.Key, kv.Value));
             foreach (var kv in _ambiguous.OrderByDescending(k => k.Value).ThenBy(k => k.Key, StringComparer.Ordinal))
                 lines.Add(string.Format(CultureInfo.InvariantCulture, "Not labelled: {0} ({1} line(s)).", kv.Key, kv.Value));
+            foreach (var p in Problems) lines.Add("Check: " + p);
             return lines;
         }
     }
