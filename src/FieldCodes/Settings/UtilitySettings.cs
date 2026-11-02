@@ -267,6 +267,33 @@ namespace FieldCodes.Settings
         [JsonProperty("textHeightPlotted")] public double TextHeightPlotted { get; set; }
         [JsonProperty("pipeLabelOffsetPlotted")] public double PipeLabelOffsetPlotted { get; set; }
 
+        // ---------------------------------------------------------------- field notes PDF (Save Field Notes PDF)
+
+        /// <summary>
+        /// Where the field notes PDF is saved. Relative (the default, Survey\Field Notes\Utility Dips): under the
+        /// project folder, which is found from the drawing -- the folder above a "Survey" folder the drawing sits in,
+        /// or the nearest folder beside one, else the drawing's own folder. An absolute folder is used as it is.
+        /// </summary>
+        [JsonProperty("fieldNotesFolder")] public string FieldNotesFolder { get; set; }
+
+        /// <summary>
+        /// Save the field notes PDF automatically when a structure is finished in the Dip Builder -- its label is
+        /// placed -- and its observation is complete. Saves a new revision only when the record changed. Off by default.
+        /// </summary>
+        [JsonProperty("fieldNotesAutoGenerate")] public bool FieldNotesAutoGenerate { get; set; }
+
+        /// <summary>Open the PDF after Save Field Notes PDF (never after an automatic save).</summary>
+        [JsonProperty("fieldNotesOpenAfterSave")] public bool FieldNotesOpenAfterSave { get; set; }
+
+        /// <summary>
+        /// Replace the newest field notes PDF of the same name instead of saving the next revision (_R1, _R2...).
+        /// Off by default, so issued field notes are never overwritten unless the office chooses this.
+        /// </summary>
+        [JsonProperty("fieldNotesOverwrite")] public bool FieldNotesOverwrite { get; set; }
+
+        /// <summary>Draw a plan sketch of each structure and its pipes in the field notes.</summary>
+        [JsonProperty("fieldNotesSketches")] public bool FieldNotesSketches { get; set; }
+
         public UtilitySettings() { RestoreDefaults(); }
 
         public void RestoreDefaults()
@@ -361,6 +388,12 @@ namespace FieldCodes.Settings
             LeaderStyle = "xPMX SURV Text Arrow Anno";
             TextHeightPlotted = 0.08;
             PipeLabelOffsetPlotted = 0.06;
+
+            FieldNotesFolder = FieldCodes.Utilities.FieldNotes.FieldNotesFiles.DefaultFolder;
+            FieldNotesAutoGenerate = false;
+            FieldNotesOpenAfterSave = true;
+            FieldNotesOverwrite = false;
+            FieldNotesSketches = true;
         }
 
         private static StructureCodeRule Code(string code, string type, UtilitySystem system, StructureShape shape)
@@ -543,6 +576,14 @@ namespace FieldCodes.Settings
                 problems.Add("Dips: elevation decimals must be between 0 and 4.");
             if (SlopeDecimals < 0 || SlopeDecimals > 4)
                 problems.Add("Dips: slope decimals must be between 0 and 4.");
+
+            // Settings saved before the field notes existed get the default folder.
+            if (string.IsNullOrWhiteSpace(FieldNotesFolder))
+                FieldNotesFolder = FieldCodes.Utilities.FieldNotes.FieldNotesFiles.DefaultFolder;
+            var folder = FieldNotesFolder.Trim();
+            if (folder.IndexOfAny(new[] { '<', '>', '"', '|', '?', '*' }) >= 0 || folder.IndexOf(':') > 1 ||
+                folder.Any(ch => ch < 32))
+                problems.Add("Dips: the field notes folder \"" + folder + "\" is not a valid folder name.");
 
             foreach (var s in Systems)
             {
