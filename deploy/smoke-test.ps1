@@ -201,4 +201,101 @@ $commands = @($outcome | Where-Object { $_ -like 'COMMANDS *' }) | Select-Object
 $passes = @($logLines | Where-Object { $_ -match '\[PASS\]' }).Count
 Say ("PASS: {0} checks; build {1}; {2}; stages {3}" -f $passes, $Commit.Substring(0, 7), $commands, ($required -join ', '))
 Say "log: $log"
+
+# --- 6. annotation styles: reported, not required -------------------------------------
+# A second, separate run on a fresh drawing: Settings > Text Styles / Leader Styles / Style
+# Assignments must control what FTFLABELS draws (text style, height, colour, prefix, mask, layer,
+# spline leader, arrowhead, landing), a feature turned off must stay unlabelled, and FTFRESTYLE
+# must update the labels in place (preview first, a hand-moved label kept where it was put).
+# New with the style system, so it reports loudly but never undoes the install on its own.
+function Invoke-StyleCheck {
+    $styleFolder = Join-Path $WorkFolder 'styles'
+    New-Item -ItemType Directory -Force -Path $styleFolder | Out-Null
+    $styleSource = Join-Path $repo 'tests\LiveSmoke\StyleTestHarness.cs'
+    if (-not (Test-Path -LiteralPath $styleSource)) { Say 'style check: harness not in this build; skipped'; return }
+    $styleHarness = Join-Path $styleFolder 'FtfStyleHarness.dll'
+    $out = & $csc /nologo /target:library "/out:$styleHarness" $styleSource `
+        "/r:$C3D2024\accoremgd.dll" "/r:$C3D2024\acdbmgd.dll" "/r:$C3D2024\acmgd.dll" `
+        "/r:$C3D2024\C3D\AeccDbMgd.dll" "/r:$C3D2024\AecBaseMgd.dll" /r:System.Core.dll 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $styleHarness)) {
+        Write-Host '   STYLE CHECK could not compile its harness (not blocking):' -ForegroundColor Yellow
+        $out | Where-Object { "$_" -match 'error' } | Select-Object -First 8 | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+        return
+    }
+    $styleDrawing = Join-Path $styleFolder 'styles.dwg'
+    Copy-Item -LiteralPath $Template -Destination $styleDrawing -Force
+    $settings = @(
+        '{',
+        '  "version": "1",',
+        '  "styles": {',
+        '    "text": [',
+        '      { "name": "Smoke text", "textStyle": "FTFSMOKE", "heightPlotted": 0.12, "color": "3", "prefix": "S-", "mask": "Background" }',
+        '    ],',
+        '    "leaders": [',
+        '      { "name": "Smoke leader", "lineType": "Spline", "arrowBlock": "_Dot", "arrowSizePlotted": 0.05, "color": "1", "landing": false }',
+        '    ],',
+        '    "assignments": [',
+        '      { "kind": "Label", "category": "Utilities", "textStyle": "Smoke text", "layer": "FTF-SMOKE-UTIL" },',
+        '      { "kind": "Label", "code": "FH", "leaderStyle": "Smoke leader", "leader": "Always" },',
+        '      { "kind": "Label", "code": "MB", "enabled": false }',
+        '    ]',
+        '  }',
+        '}')
+    [IO.File]::WriteAllLines((Join-Path $styleFolder 'ftf-settings.json'), [string[]]$settings, [Text.Encoding]::ASCII)
+    $styleScript = Join-Path $styleFolder 'styles.scr'
+    $styleLines = @(
+        "NETLOAD `"$PluginDll`"",
+        "NETLOAD `"$styleHarness`"",
+        'STYLESEED',
+        'ZOOM', 'E',
+        'FTFLABELS',
+        'STYLEVERIFY', 'STYLED',
+        'STYLEMOVE',
+        'STYLEEDIT',
+        'FTFRESTYLE', 'Preview',
+        'STYLEVERIFY', 'PREVIEW',
+        'FTFRESTYLE', 'Apply',
+        'STYLEVERIFY', 'RESTYLED',
+        'STYLEEND',
+        'SAVEAS', '2018', ('"' + (Join-Path $styleFolder 'styles-out.dwg') + '"')
+    )
+    [IO.File]::WriteAllLines($styleScript, [string[]]$styleLines, [Text.Encoding]::ASCII)
+
+    $styleResult = Join-Path $styleFolder 'result.txt'
+    $styleRaw = Join-Path $styleFolder 'accore.raw.txt'
+    Remove-Item $styleResult, $styleRaw -Force -ErrorAction SilentlyContinue
+    $env:FTF_STYLE_RESULT = $styleResult
+    $styleArgs = '/i "' + $styleDrawing + '" /s "' + $styleScript + '" /product C3D /language en-US'
+    Say 'style check: running accoreconsole (up to 240 s)...'
+    $p = Start-Process -FilePath $accore -ArgumentList $styleArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $styleRaw
+    $until = (Get-Date).AddSeconds(240)
+    $why = $null
+    while (-not $p.HasExited) {
+        Start-Sleep -Milliseconds 500
+        $t = Read-Console $styleRaw
+        $u = [regex]::Match($t, 'Unknown command\s*"?([A-Za-z0-9_\-]+)')
+        if ($u.Success) { $why = 'Unknown command ' + $u.Groups[1].Value; break }
+        if ((Get-Date) -gt $until) { $why = 'no result after 240 s (a prompt waited for input)'; break }
+    }
+    if (-not $p.HasExited) {
+        if ($env:OS -eq 'Windows_NT') { & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null } else { try { $p.Kill() } catch { } }
+        Start-Sleep -Milliseconds 500
+    }
+    Remove-Item Env:\FTF_STYLE_RESULT -ErrorAction SilentlyContinue
+    $styleLog = Join-Path $styleFolder 'styles.log'
+    (Read-Console $styleRaw) | Set-Content -Path $styleLog -Encoding utf8
+    $r = if (Test-Path -LiteralPath $styleResult) { @(Get-Content -LiteralPath $styleResult) } else { @() }
+    $fails = @($r | Where-Object { $_ -like 'FAIL *' } | ForEach-Object { $_.Substring(5) })
+    $pass = @($r | Where-Object { $_ -like 'PASS *' }).Count
+    if (-not $why -and ($r -contains 'COMPLETE') -and $fails.Count -eq 0) {
+        Say ("style check: PASS ({0} checks: styles control the labels FTF draws; FTFRESTYLE updates them in place)" -f $pass)
+    } else {
+        Write-Host ("   STYLE CHECK FAILED (not blocking; the install stands): {0} passed, {1} failed{2}" -f $pass, $fails.Count, $(if ($why) { "; $why" } else { '' })) -ForegroundColor Yellow
+        $fails | Select-Object -First 12 | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+        if (-not ($r -contains 'COMPLETE')) { Write-Host '     the style run stopped before its end' -ForegroundColor Yellow }
+    }
+    Say "style log: $styleLog"
+}
+try { Invoke-StyleCheck }
+catch { Write-Host ('   style check could not run (not blocking): ' + $_.Exception.Message) -ForegroundColor Yellow }
 exit 0
