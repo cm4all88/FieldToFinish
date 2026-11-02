@@ -27,6 +27,10 @@ namespace FieldCodes.Editing
         public string Leader { get; set; }
         public string TagPrefix { get; set; }
 
+        /// <summary>Label All family (Trees, Utilities, StormSewer, Signs, Control, Pavement,
+        /// OtherPoints); blank means worked out from the rule and code.</summary>
+        public string Category { get; set; }
+
         /// <summary>Editable only when the rule already has a dripline.</summary>
         public bool HasDripline { get; set; }
         public string DripLayer { get; set; }
@@ -108,6 +112,7 @@ namespace FieldCodes.Editing
                 LabelLayer = label != null ? (string)label["layer"] ?? string.Empty : string.Empty,
                 Leader = label != null ? (string)label["leader"] ?? "Auto" : "Auto",
                 TagPrefix = (string)rule["tagPrefix"] ?? string.Empty,
+                Category = (string)rule["category"] ?? string.Empty,
                 HasDripline = drip != null,
                 DripLayer = drip != null ? (string)drip["layer"] ?? string.Empty : string.Empty
             };
@@ -147,6 +152,7 @@ namespace FieldCodes.Editing
             SetOrRemove(rule, "description", edit.Description);
             if (!string.IsNullOrWhiteSpace(edit.Match)) rule["match"] = edit.Match;
             SetOrRemove(rule, "tagPrefix", edit.TagPrefix);
+            SetOrRemove(rule, "category", edit.Category);
 
             // Label: created when text is set on a rule that had none; the object is
             // only removed when it would carry nothing at all, so a clusterFormat or
@@ -244,6 +250,12 @@ namespace FieldCodes.Editing
                     rule.Label != null ? rule.Label.Layer : null, problems);
                 CheckLayerName(where + "dripline layer",
                     rule.DripLine != null ? rule.DripLine.Layer : null, problems);
+
+                FieldCodes.Settings.AnnotationCategory family;
+                if (!string.IsNullOrWhiteSpace(rule.Category) &&
+                    (!Enum.TryParse(rule.Category.Trim(), true, out family) || family == FieldCodes.Settings.AnnotationCategory.Lines))
+                    problems.Add(where + "category '" + rule.Category + "' is not a point family " +
+                                 "(Trees, Utilities, StormSewer, Signs, Control, Pavement, OtherPoints).");
 
                 if (!string.IsNullOrEmpty(rule.TagPrefix) &&
                     !Regex.IsMatch(rule.TagPrefix, "^[A-Za-z_-]+$"))

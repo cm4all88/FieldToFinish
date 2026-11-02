@@ -406,3 +406,40 @@ public sealed class StampIdentityTests
         Assert.Equal(copy, FieldCodes.Stamps.StampIdentity.IsCopy(stamped, actual));
     }
 }
+
+/// <summary>Point Features editor: a rule's Label All family is edited in rules.json and validated.</summary>
+public sealed class RuleCategoryEditingTests
+{
+    private const string Rules = @"{
+  // office comment kept
+  ""codes"": [ { ""id"": ""mb"", ""description"": ""Mailbox"", ""match"": ""^(?<code>MB)\\s+(?<number>[0-9]+)$"",
+                ""label"": { ""format"": ""MAILBOX {number}"", ""layer"": ""V-SURF-MBOX-TEXT-E"" }, ""unknownThing"": 1 } ] }";
+
+    [Fact]
+    public void TheCategoryRoundTripsAndKeepsEverythingElse()
+    {
+        var doc = FieldCodes.Editing.RuleDocument.FromText(Rules);
+        var edit = doc.GetEditable("mb")!;
+        Assert.Equal("", edit.Category);
+        edit.Category = "Utilities";
+        doc.ApplyEdit(edit);
+        Assert.Empty(doc.Validate());
+        var text = doc.Render();
+        Assert.Contains("\"category\": \"Utilities\"", text);
+        Assert.Contains("unknownThing", text);
+        var cfg = doc.CompileCandidate();
+        Assert.Equal("Utilities", cfg.Codes[0].Category);
+        Assert.Equal(AnnotationCategory.Utilities,
+            AnnotationPolicy.CategoryOf(new FieldCodeParser(cfg).Parse("1", "MB 4"), cfg));
+    }
+
+    [Fact]
+    public void AnUnknownCategoryIsRefused()
+    {
+        var doc = FieldCodes.Editing.RuleDocument.FromText(Rules);
+        var edit = doc.GetEditable("mb")!;
+        edit.Category = "Lines";
+        doc.ApplyEdit(edit);
+        Assert.Contains(doc.Validate(), p => p.Contains("not a point family"));
+    }
+}
