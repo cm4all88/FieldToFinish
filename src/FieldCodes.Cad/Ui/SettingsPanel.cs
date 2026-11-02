@@ -417,6 +417,7 @@ namespace FieldCodes.Cad.Ui
 
             foreach (Control child in _host.Controls) child.Visible = false;
             control.Visible = true;
+            section.Page.OnShown();
 
             _restore.Enabled = !section.Page.IsReadOnly;
         }

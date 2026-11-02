@@ -41,6 +41,20 @@ namespace FieldCodes.Editing
         public bool InTable { get { return !string.IsNullOrEmpty(TagPrefix); } }
     }
 
+    /// <summary>One line feature as the Line Labels page edits it.</summary>
+    public sealed class EditableLineFeature
+    {
+        public string Code { get; set; }
+        public string Name { get; set; }
+        /// <summary>The layer the figure is identified on (read only here).</summary>
+        public string Layer { get; set; }
+        /// <summary>What the label says; blank means "identified, not labelled".</summary>
+        public string Label { get; set; }
+        public string LabelLayer { get; set; }
+        /// <summary>Left, Right, OnLine, or blank for Auto.</summary>
+        public string Placement { get; set; }
+    }
+
     /// <summary>
     /// The rules file as an editable document.
     ///
@@ -234,6 +248,14 @@ namespace FieldCodes.Editing
                 .SelectMany(m => m.Regex.GetGroupNames())
                 .Where(NotNumeric)
                 .ToList();
+
+            foreach (var lf in cfg.LineFeatures ?? new List<LineFeatureRule>())
+            {
+                CheckLayerName("Line feature '" + lf.Code + "': label layer", lf.LabelLayer, problems);
+                if (!string.IsNullOrWhiteSpace(lf.Placement) &&
+                    !new[] { "Left", "Right", "OnLine" }.Contains(lf.Placement.Trim(), StringComparer.OrdinalIgnoreCase))
+                    problems.Add("Line feature '" + lf.Code + "': side must be Left, Right or OnLine (or blank for Auto).");
+            }
 
             foreach (var rule in cfg.Codes)
             {
@@ -474,6 +496,42 @@ namespace FieldCodes.Editing
         private JArray Rules()
         {
             return _root["codes"] as JArray ?? new JArray();
+        }
+
+        // ------------------------------------------------------------------ line features
+
+        /// <summary>The line features (lineFeatures) as the Line Labels page edits them: what
+        /// the label says, its layer and side. The figure code and the layer it is identified
+        /// on are read only (they come from the office figure prefix database).</summary>
+        public IList<EditableLineFeature> GetLineFeatures()
+        {
+            var list = new List<EditableLineFeature>();
+            foreach (var f in (_root["lineFeatures"] as JArray ?? new JArray()).OfType<JObject>())
+                list.Add(new EditableLineFeature
+                {
+                    Code = (string)f["code"] ?? string.Empty,
+                    Name = (string)f["name"] ?? string.Empty,
+                    Layer = (string)f["layer"] ?? string.Empty,
+                    Label = (string)f["label"] ?? string.Empty,
+                    LabelLayer = (string)f["labelLayer"] ?? string.Empty,
+                    Placement = (string)f["placement"] ?? string.Empty
+                });
+            return list;
+        }
+
+        /// <summary>Writes one line feature's label text, layer and side back; every other
+        /// property of the entry (aliases, alwaysLabel, comments) is kept.</summary>
+        public void ApplyLineFeature(EditableLineFeature edit)
+        {
+            if (edit == null) throw new ArgumentNullException("edit");
+            var f = (_root["lineFeatures"] as JArray ?? new JArray()).OfType<JObject>()
+                .FirstOrDefault(x => string.Equals((string)x["code"], edit.Code, StringComparison.OrdinalIgnoreCase));
+            if (f == null) throw new ConfigException("No line feature with code '" + edit.Code + "'.");
+            SetOrRemove(f, "label", edit.Label);
+            SetOrRemove(f, "labelLayer", edit.LabelLayer);
+            var side = (edit.Placement ?? string.Empty).Trim();
+            if (side.Length == 0 || side.Equals("Auto", StringComparison.OrdinalIgnoreCase)) f.Remove("placement");
+            else f["placement"] = side;
         }
 
         private JObject FindRule(string id)

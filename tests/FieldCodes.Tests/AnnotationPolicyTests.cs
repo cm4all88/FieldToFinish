@@ -443,3 +443,44 @@ public sealed class RuleCategoryEditingTests
         Assert.Contains(doc.Validate(), p => p.Contains("not a point family"));
     }
 }
+
+/// <summary>Line Labels page: a line feature's label text, layer and side are edited in rules.json.</summary>
+public sealed class LineFeatureEditingTests
+{
+    private const string Rules = @"{
+  ""codes"": [ { ""id"": ""x"", ""match"": ""^X$"" } ],
+  ""lineFeatures"": [ { ""code"": ""FNC"", ""name"": ""Fence"", ""layer"": ""V-SURF-FENC-E"", ""alwaysLabel"": true },
+                      { ""code"": ""EP"", ""name"": ""Edge of pavement"", ""layer"": ""V-SURF-ASPH-E"", ""label"": ""EP"" } ] }";
+
+    [Fact]
+    public void ALineFeaturesLabelIsEditedAndTheRestKept()
+    {
+        var doc = FieldCodes.Editing.RuleDocument.FromText(Rules);
+        var fence = doc.GetLineFeatures().First(f => f.Code == "FNC");
+        Assert.Equal("", fence.Label);       // identified, not labelled yet
+        fence.Label = "CHAIN LINK FENCE";
+        fence.LabelLayer = "V-SURF-FENC-TEXT-E";
+        fence.Placement = "Left";
+        doc.ApplyLineFeature(fence);
+        Assert.Empty(doc.Validate());
+        var cfg = doc.CompileCandidate();
+        var f = cfg.LineFeatures.First(x => x.Code == "FNC");
+        Assert.Equal("CHAIN LINK FENCE", f.Label);
+        Assert.Equal("Left", f.Placement);
+        Assert.Contains("alwaysLabel", doc.Render());
+
+        fence.Placement = "Auto";
+        doc.ApplyLineFeature(fence);
+        Assert.Null(doc.CompileCandidate().LineFeatures.First(x => x.Code == "FNC").Placement);
+    }
+
+    [Fact]
+    public void ABadSideIsRefused()
+    {
+        var doc = FieldCodes.Editing.RuleDocument.FromText(Rules);
+        var ep = doc.GetLineFeatures().First(f => f.Code == "EP");
+        ep.Placement = "Upside";
+        doc.ApplyLineFeature(ep);
+        Assert.Contains(doc.Validate(), p => p.Contains("side must be"));
+    }
+}

@@ -138,6 +138,10 @@ namespace FieldCodes.Cad.Setup
         /// <summary>Recompute any derived text after an edit. Optional.</summary>
         public virtual void Refresh() { }
 
+        /// <summary>Called each time the page is brought into view (a link from another screen
+        /// may have asked it to show something particular). Optional.</summary>
+        public virtual void OnShown() { }
+
         // ------------------------------------------------------------ row builders
 
         protected Label Heading(string text)

@@ -434,6 +434,17 @@ namespace FieldCodes.Cad.Setup
         private TextBox _drivewayFormat;
         private CheckBox _legendLinetypes;
 
+        // per-feature label standards (rules.json lineFeatures)
+        private DataGridView _features;
+        private Label _featureStatus;
+        private FieldCodes.Editing.RuleDocument _rulesDoc;
+        private FieldCodes.Editing.RulesResolution _rulesWhere;
+        private bool _featuresDirty;
+
+        /// <summary>A line feature code another screen asked to show (the Lines review's
+        /// "Edit label"); selected when the page comes into view.</summary>
+        public static string PendingFeature { get; set; }
+
         public override string Title { get { return "Line Labels"; } }
         public override string AffectedCommands { get { return "FTFLINELABELS, FTFLABELLINE, FTFLABELBETWEEN, FTFLABELDRIVEWAY, FTFBENCH"; } }
 
@@ -452,8 +463,8 @@ namespace FieldCodes.Cad.Setup
                 "short features, repeated labels on long ones. Off by default because " +
                 "line annotation is usually a judgement call -- FTFLABELLINE works " +
                 "either way, and labels placed with it are never touched by this pass. " +
-                "This switch is for FTFRUN; the Label Everything button (FTFLABELALL) " +
-                "always labels the lines, because that is what it was pressed for.");
+                "This switch is for FTFRUN; Label All (FTFLABELALL) labels the lines " +
+                "whenever Line features is ticked in Settings > Label All.");
 
             Heading("Text");
             var styles = new List<object> { "(drawing's current style)" };
@@ -513,6 +524,107 @@ namespace FieldCodes.Cad.Setup
                 "200 ft spacing gets 2 evenly spaced labels.");
             _endClearance = TextRow("End clearance",
                 "Labels keep this far from the feature's ends.");
+
+            Heading("Line features: what each label says");
+            Note("One row per recognised line feature. Blank label text means the feature is identified " +
+                 "but not labelled (\"labeling standard not configured yet\" on the Lines review). " +
+                 "Saved to the rules file with Save Line Features, not with the settings Save.");
+            _features = new DataGridView
+            {
+                Width = 620, Height = 220, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, BackgroundColor = SystemColors.Window,
+                Tag = FieldCodes.Cad.Ui.SettingsPanel.ViewOnly
+            };
+            var ro = Color.FromArgb(246, 246, 248);
+            _features.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Code", FillWeight = 10, ReadOnly = true, DefaultCellStyle = { BackColor = ro } });
+            _features.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Feature", FillWeight = 22, ReadOnly = true, DefaultCellStyle = { BackColor = ro } });
+            _features.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Label text", FillWeight = 26 });
+            var layerColumn = new DataGridViewComboBoxColumn { HeaderText = "Label layer", FillWeight = 26, FlatStyle = FlatStyle.Flat };
+            layerColumn.Items.Add("(default)");
+            foreach (var name in Context.Drawing.Layers) layerColumn.Items.Add(name);
+            _features.Columns.Add(layerColumn);
+            var side = new DataGridViewComboBoxColumn { HeaderText = "Side", FillWeight = 12, FlatStyle = FlatStyle.Flat };
+            side.Items.AddRange("Auto", "Left", "Right", "OnLine");
+            _features.Columns.Add(side);
+            _features.CellValueChanged += (s, e) => { if (e.RowIndex >= 0) { _featuresDirty = true; _featureStatus.Text = "Unsaved line feature changes."; } };
+            _features.DataError += (s, e) => { e.ThrowException = false; };
+            AddFullWidth(_features);
+
+            var saveFeatures = new Button { Text = "Save Line Features", AutoSize = true };
+            saveFeatures.Click += (s, e) => SaveFeatures();
+            _featureStatus = new Label { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(8, 6, 0, 0) };
+            var row = new FlowLayoutPanel { AutoSize = true };
+            row.Controls.Add(saveFeatures);
+            row.Controls.Add(_featureStatus);
+            AddFullWidth(row);
+            LoadFeatures();
+        }
+
+        private void LoadFeatures()
+        {
+            _features.Rows.Clear();
+            _rulesWhere = Context.RulesResolution == null ? null
+                : FieldCodes.Editing.RulesStore.Resolve(Context.RulesResolution.DrawingDirectory, Context.RulesResolution.PluginDirectory);
+            var active = _rulesWhere != null ? _rulesWhere.ActivePath : Context.RulesPath;
+            try { _rulesDoc = string.IsNullOrEmpty(active) ? null : FieldCodes.Editing.RuleDocument.Load(active); }
+            catch (ConfigException ex) { _rulesDoc = null; _featureStatus.Text = ex.Message; return; }
+            if (_rulesDoc == null) return;
+            var layerColumn = (DataGridViewComboBoxColumn)_features.Columns[3];
+            foreach (var f in _rulesDoc.GetLineFeatures())
+            {
+                if (!string.IsNullOrEmpty(f.LabelLayer) && !layerColumn.Items.Contains(f.LabelLayer)) layerColumn.Items.Add(f.LabelLayer);
+                var i = _features.Rows.Add(f.Code, string.IsNullOrEmpty(f.Name) ? f.Code : f.Name, f.Label,
+                                           string.IsNullOrEmpty(f.LabelLayer) ? "(default)" : f.LabelLayer,
+                                           string.IsNullOrEmpty(f.Placement) ? "Auto" : f.Placement);
+                _features.Rows[i].Cells[1].ToolTipText = "Identified on layer " + f.Layer;
+            }
+            _featuresDirty = false;
+            _featureStatus.Text = "Rules: " + active;
+        }
+
+        private void SaveFeatures()
+        {
+            if (_rulesDoc == null || _rulesWhere == null || string.IsNullOrEmpty(_rulesWhere.SaveTarget)) return;
+            _features.EndEdit();
+            if (!_featuresDirty) { _featureStatus.Text = "No line feature changes to save."; return; }
+            foreach (DataGridViewRow r in _features.Rows)
+            {
+                var layer = Convert.ToString(r.Cells[3].Value);
+                _rulesDoc.ApplyLineFeature(new FieldCodes.Editing.EditableLineFeature
+                {
+                    Code = Convert.ToString(r.Cells[0].Value),
+                    Label = (Convert.ToString(r.Cells[2].Value) ?? string.Empty).Trim(),
+                    LabelLayer = layer == "(default)" ? string.Empty : layer,
+                    Placement = Convert.ToString(r.Cells[4].Value)
+                });
+            }
+            var problems = _rulesDoc.Validate();
+            if (problems.Count > 0) { _featureStatus.Text = "Not saved: " + string.Join("; ", problems.ToArray()); return; }
+            try
+            {
+                _rulesDoc.Save(_rulesWhere.SaveTarget);
+                _featuresDirty = false;
+                _featureStatus.Text = "Saved to " + _rulesWhere.SaveTarget + " (previous kept as .bak).";
+            }
+            catch (ConfigException ex) { _featureStatus.Text = ex.Message; }
+            catch (System.IO.IOException ex) { _featureStatus.Text = "Could not write: " + ex.Message; }
+        }
+
+        public override void OnShown()
+        {
+            var code = PendingFeature;
+            PendingFeature = null;
+            if (string.IsNullOrWhiteSpace(code) || _features == null) return;
+            foreach (DataGridViewRow r in _features.Rows)
+                if (string.Equals(Convert.ToString(r.Cells[0].Value), code.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    _features.ClearSelection();
+                    r.Selected = true;
+                    _features.CurrentCell = r.Cells[2];
+                    _features.FirstDisplayedScrollingRowIndex = r.Index;
+                    return;
+                }
         }
 
         public override void LoadFrom(FtfSettings s)
