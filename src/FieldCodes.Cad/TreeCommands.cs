@@ -195,21 +195,65 @@ namespace FieldCodes.Cad
         {
             FtfSession.Run("FTFCLEAN", (db, tr, ed) =>
             {
+                var settings = FtfSession.SettingsFor(db, FtfSession.Rules(db));
+                Func<FtfStamp, bool> pipelineOutput = s =>
+                    !(s.Kind == FtfEntityKind.DraftLine || s.Kind == FtfEntityKind.DraftAnnotation ||
+                      s.Kind == FtfEntityKind.DraftMask || s.Kind >= FtfEntityKind.UtilityPipe);
+
+                // Labels moved by hand are the drafter's adjustments: never removed without asking.
+                var handMoved = LabelCommands.KeepHandMovedLabels(db, tr, settings.Cleanup.MovedTolerance);
+                var keepHandMoved = false;
+                if (handMoved.Count > 0)
+                {
+                    var ask = new PromptKeywordOptions(string.Format(CultureInfo.InvariantCulture,
+                        "\n{0} label(s) were moved by hand after FTF placed them. Remove those too? [Yes/No/Cancel] <No>: ",
+                        handMoved.Count)) { AllowNone = true };
+                    ask.Keywords.Add("Yes"); ask.Keywords.Add("No"); ask.Keywords.Add("Cancel");
+                    ask.Keywords.Default = "No";
+                    var answer = ed.GetKeywords(ask);
+                    if (answer.Status == PromptStatus.Cancel ||
+                        (answer.Status == PromptStatus.OK && answer.StringResult == "Cancel"))
+                    {
+                        ed.WriteMessage("\nFTFCLEAN: cancelled; nothing removed.\n");
+                        return;
+                    }
+                    keepHandMoved = !(answer.Status == PromptStatus.OK && answer.StringResult == "Yes");
+                }
+                Func<FtfStamp, bool> keep = s => keepHandMoved && handMoved.Contains(s.PointNumber ?? string.Empty) &&
+                    (s.Kind == FtfEntityKind.Label || s.Kind == FtfEntityKind.Leader || s.Kind == FtfEntityKind.Mask);
+
+                var count = Ownership.FindOwned(db, tr, s => pipelineOutput(s) && !keep(s)).Count;
+                if (settings.General.ConfirmBeforeDelete && count > 0)
+                {
+                    var sure = new PromptKeywordOptions(string.Format(CultureInfo.InvariantCulture,
+                        "\nRemove {0} FTF-drawn object(s)? [Yes/No] <No>: ", count)) { AllowNone = true };
+                    sure.Keywords.Add("Yes"); sure.Keywords.Add("No");
+                    sure.Keywords.Default = "No";
+                    var ok = ed.GetKeywords(sure);
+                    if (ok.Status != PromptStatus.OK || ok.StringResult != "Yes")
+                    {
+                        ed.WriteMessage("\nFTFCLEAN: nothing removed.\n");
+                        return;
+                    }
+                }
+
                 var drafted = 0;
                 var removed = Ownership.DeleteOwned(db, tr, s =>
                 {
-                    if (s.Kind == FtfEntityKind.DraftLine ||
-                        s.Kind == FtfEntityKind.DraftAnnotation ||
-                        s.Kind == FtfEntityKind.DraftMask ||
-                        s.Kind >= FtfEntityKind.UtilityPipe)
+                    if (!pipelineOutput(s))
                     {
                         drafted++;
                         return false;
                     }
-                    return true;
+                    return !keep(s);
                 });
 
                 ed.WriteMessage("\nFTFCLEAN: removed {0} plugin-owned entities.", removed);
+                if (keepHandMoved)
+                    ed.WriteMessage("\nFTFCLEAN: kept {0} label(s) moved by hand, with their masks and leaders.", handMoved.Count);
+                var copies = CountUserCopies(db, tr);
+                if (copies > 0)
+                    ed.WriteMessage("\nFTFCLEAN: {0} copy(ies) of FTF output made by hand (COPY, paste, ARRAY) are yours and were left alone.", copies);
                 if (drafted > 0)
                     ed.WriteMessage("\nFTFCLEAN: left {0} production drafting entities " +
                                     "alone (drafted lines, dip pipes and structure labels, " +
@@ -217,6 +261,20 @@ namespace FieldCodes.Cad
                                     drafted);
                 ed.WriteMessage("\n");
             });
+        }
+
+        /// <summary>Copies of FTF output someone made: stamped, but on another entity.</summary>
+        private static int CountUserCopies(Database db, Transaction tr)
+        {
+            var count = 0;
+            var ms = CadUtil.ModelSpace(db, tr, OpenMode.ForRead);
+            foreach (ObjectId id in ms)
+            {
+                if (id.IsErased) continue;
+                var e = tr.GetObject(id, OpenMode.ForRead, false, true) as Autodesk.AutoCAD.DatabaseServices.Entity;
+                if (e != null && Ownership.IsUserCopy(e)) count++;
+            }
+            return count;
         }
 
         // ------------------------------------------------------------------ placement

@@ -391,3 +391,18 @@ public sealed class ScheduleSelectionTests : IClassFixture<RulesFixture>
         Assert.Equal(2, model.RowCount);
     }
 }
+
+/// <summary>A copy someone makes of FTF output is theirs: FTF never re-places or erases it.</summary>
+public sealed class StampIdentityTests
+{
+    [Theory]
+    [InlineData("2A3F", "2A3F", false)]   // the entity FTF stamped
+    [InlineData("2A3F", "2a3f", false)]
+    [InlineData("2A3F", "2B10", true)]    // COPY / paste / ARRAY: new handle, same XData
+    [InlineData("", "2B10", false)]       // stamped by an earlier build: still FTF's
+    [InlineData(null, "2B10", false)]
+    public void ACopyIsTheUsers(string stamped, string actual, bool copy)
+    {
+        Assert.Equal(copy, FieldCodes.Stamps.StampIdentity.IsCopy(stamped, actual));
+    }
+}

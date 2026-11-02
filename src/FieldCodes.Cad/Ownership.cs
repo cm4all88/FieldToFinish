@@ -168,6 +168,10 @@ namespace FieldCodes.Cad
 
         public FtfEntityKind Kind { get; set; }
 
+        /// <summary>The handle of the entity the stamp was written on (empty on stamps from
+        /// earlier builds). See <see cref="FieldCodes.Stamps.StampIdentity"/>.</summary>
+        public string OwnHandle { get; set; }
+
         /// <summary>Where the plugin last computed this entity should go. Labels only.
         /// If the entity is no longer here, a human moved it -- see <see cref="WasMovedByHand"/>.</summary>
         public Point3d? ComputedPosition { get; set; }
@@ -232,8 +236,10 @@ namespace FieldCodes.Cad
             var top = db != null ? db.TransactionManager.TopTransaction : null;
             if (top != null) EnsureRegApp(db, top);
 
-            // String order is the read order in Read(); a fourth string is appended
-            // rather than inserted, so entities stamped by an earlier build still parse.
+            // String order is the read order in Read(); new strings are appended rather
+            // than inserted, so entities stamped by an earlier build still parse. The fifth
+            // is the entity's own handle: a copy someone makes keeps the XData but gets a new
+            // handle, and is then the user's, never FTF's to replace or erase.
             var values = new List<TypedValue>
             {
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, AppName),
@@ -241,6 +247,7 @@ namespace FieldCodes.Cad
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(rulesVersion)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(pointNumber)),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, Clip(tagText ?? string.Empty)),
+                new TypedValue((int)DxfCode.ExtendedDataAsciiString, entity.Handle.ToString()),
                 new TypedValue((int)DxfCode.ExtendedDataInteger16, (short)kind)
             };
 
@@ -267,8 +274,24 @@ namespace FieldCodes.Cad
 
         // ------------------------------------------------------------------ reading
 
-        /// <summary>Reads our stamp, or null if the entity is not ours.</summary>
+        /// <summary>Reads our stamp, or null if the entity is not ours -- including a copy of
+        /// FTF output that someone made (COPY, paste, ARRAY): that is theirs.</summary>
         public static FtfStamp Read(Entity entity)
+        {
+            var stamp = ReadIncludingCopies(entity);
+            if (stamp == null) return null;
+            return FieldCodes.Stamps.StampIdentity.IsCopy(stamp.OwnHandle, entity.Handle.ToString()) ? null : stamp;
+        }
+
+        /// <summary>True for a copy of FTF output made by someone: stamped, but on another entity.</summary>
+        public static bool IsUserCopy(Entity entity)
+        {
+            var stamp = ReadIncludingCopies(entity);
+            return stamp != null && FieldCodes.Stamps.StampIdentity.IsCopy(stamp.OwnHandle, entity.Handle.ToString());
+        }
+
+        /// <summary>The stamp as written, whether or not this entity is the one it was written on.</summary>
+        public static FtfStamp ReadIncludingCopies(Entity entity)
         {
             if (entity == null) return null;
 
@@ -292,6 +315,7 @@ namespace FieldCodes.Cad
                             else if (stringIndex == 1) stamp.RulesVersion = s;
                             else if (stringIndex == 2) stamp.PointNumber = s;
                             else if (stringIndex == 3) stamp.TagText = s;
+                            else if (stringIndex == 4) stamp.OwnHandle = s;
                             stringIndex++;
                             break;
 

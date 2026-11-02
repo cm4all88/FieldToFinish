@@ -51,8 +51,9 @@ namespace FieldCodes.Cad.Setup
                 "Leaving this on means an old report can never be mistaken for the current run.");
 
             Heading("Safety");
-            _confirmDelete = CheckRow("Ask before a re-run erases the previous run's work",
-                "Every command deletes only what it drew before redrawing.");
+            _confirmDelete = CheckRow("Ask before FTFCLEAN or Process Drawing removes earlier FTF output",
+                "FTF only ever removes what it drew itself (never points, figures, symbols, or copies you made); " +
+                "with this on it asks first. Labels moved by hand are always asked about.");
 
             Heading("Layers");
             Note("Every layer FTF draws on, and the project layer to use instead, is set on the " +

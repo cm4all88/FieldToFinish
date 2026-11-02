@@ -599,6 +599,18 @@ namespace FieldCodes.Cad.Ui
             get { var item = _preset.SelectedItem as PresetItem; return item != null ? item.Preset : FieldCodes.Annotation.ProcessPreset.StandardTopographic; }
         }
 
+        /// <summary>Settings > General: ask before a run replaces earlier FTF output.</summary>
+        private static bool ConfirmBeforeReplacing()
+        {
+            try
+            {
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc == null) return false;
+                return FtfSession.ResolveSettings(doc.Database, FtfSession.Rules(doc.Database)).Settings.General.ConfirmBeforeDelete;
+            }
+            catch (System.Exception) { return false; }
+        }
+
         /// <summary>The Label All settings of the drawing in front, or the defaults.</summary>
         private static FieldCodes.Settings.AnnotationSettings CurrentAnnotation()
         {
@@ -705,6 +717,9 @@ namespace FieldCodes.Cad.Ui
         private void RunPlan(FieldCodes.Annotation.ProcessPlan plan)
         {
             if (plan.Stages.Count == 0) { Log("Nothing selected."); return; }
+            if (ConfirmBeforeReplacing() &&
+                MessageBox.Show(this, "These stages replace FTF's earlier output for the families shown (labels moved by hand are kept). Continue?",
+                                "Process Drawing", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
             InAutoCad("Processing: " + FieldCodes.Annotation.ProcessPresets.Title(plan.Preset), () =>
             {
                 FtfRunResult result;
