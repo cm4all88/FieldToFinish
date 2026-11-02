@@ -895,6 +895,35 @@ Per feature:
 - **Arrows and painted words**: the direction of travel in their lane — stop bar, inbound
   intersection approach, one-way line, or keep-right of the road's middle.
 
+### Pavement arrows with a written direction of travel
+
+`ASTO N` and `ASTO S` (STRAIGHT ARROW N / S) used to point the same way: with no stop bar or
+intersection, both arrows took the keep-right lane direction of the road beside them. Now a
+direction the crew writes after an arrow or pavement-word code is the direction of travel:
+`N`, `S`, `E`, `W`, `NE`...`NNW`, `NB`/`SB`/`EB`/`WB`, `S/B`, `SOUTHBOUND`, `SOUTH BOUND`, read
+from the raw description, the full description (`STRAIGHT ARROW S`) and the note. Straight,
+left, right and combined arrows (`ASTO`, `ALTO`, `ARTO`, `ASLT`, `ASRT`, `ASLR`) all work this way.
+
+- **Which way:** the written direction. **Exact angle:** the road line beside the arrow whose
+  direction is closest to what was written. The angle is taken where the arrow stands, so a curve
+  is followed. At an intersection this picks the street the arrow is on, not the cross street,
+  even when the cross street is nearer.
+- **No road line within reach:** the arrow points the written compass direction on the drawing's
+  grid. North is +Y in world coordinates, whatever way the view is turned.
+- **Road too far off what was written** (an `E` arrow on a north-south road): listed for review,
+  never guessed.
+- **Precedence:** a measured azimuth (`AZ 197`, `POINTS SSW`) still wins. When stop-bar or
+  keep-right reasoning disagrees with the crew, the crew's direction is used and the report says so.
+- **The block's own zero is taken off:** a PMX arrow travels north at rotation 0. A different
+  block's zero is set per code on Settings > Symbols and Rotations (Override for Code).
+- **Re-running:** FTFORIENT only changes the marker rotation. Nothing is inserted and no point
+  moves. A marker someone turned by hand is kept; `FTFORIENT All` overrides that.
+- **Settings > Symbols and Rotations:**
+  - read a written direction of travel (on);
+  - follow the lane's road line (on);
+  - road line within 40 ft;
+  - review beyond 60 degrees.
+
 ### The symbols' own zero (PMX)
 
 A marker rotation turns the block about its insertion point, so the rotation that points a

@@ -109,6 +109,10 @@ namespace FieldCodes.Cad
                         Location = new P2(cogo.Location.X, cogo.Location.Y), Elevation = cogo.Location.Z,
                         Description = raw, Note = notes.NoteOf(cogo), CurrentRotation = cogo.MarkerRotation
                     };
+                    // "ASTO S" may reach Civil 3D's full description as "STRAIGHT ARROW S": a
+                    // written direction of travel is read from either.
+                    try { f.FullDescription = cogo.FullDescription; }
+                    catch (Autodesk.AutoCAD.Runtime.Exception) { }
 
                     // The office sign rule reads its number as the field azimuth ("SN 135").
                     var parsed = notes.Parse(parser, cogo);

@@ -147,4 +147,60 @@ namespace FieldCodes.Orient
             return null;
         }
     }
+
+    /// <summary>
+    /// The direction of travel a crew writes on a pavement marking: "ASTO S", "ASTO SB",
+    /// "ASTO S/B", "ASLT NORTHBOUND", "ARTO SOUTH BOUND", "ASTO NE". A bare compass word counts
+    /// only on a marking (on a sign "N" could be anything), and "W/" (with) is not west.
+    /// </summary>
+    public static class TravelWords
+    {
+        private static readonly Dictionary<string, double> Compass = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "N", 0 }, { "NNE", 22.5 }, { "NE", 45 }, { "ENE", 67.5 }, { "E", 90 }, { "ESE", 112.5 }, { "SE", 135 },
+            { "SSE", 157.5 }, { "S", 180 }, { "SSW", 202.5 }, { "SW", 225 }, { "WSW", 247.5 }, { "W", 270 },
+            { "WNW", 292.5 }, { "NW", 315 }, { "NNW", 337.5 },
+            { "NORTH", 0 }, { "NORTHEAST", 45 }, { "EAST", 90 }, { "SOUTHEAST", 135 }, { "SOUTH", 180 },
+            { "SOUTHWEST", 225 }, { "WEST", 270 }, { "NORTHWEST", 315 }
+        };
+
+        // Longest first, so NNE is not read as N. "NB", "N/B", "N B" (bound), "NORTHBOUND",
+        // "NORTH BOUND", "NORTH-BOUND"; a bare "S" not followed by "/" (W/ = with).
+        private static readonly Regex Word = new Regex(
+            @"(?<![A-Z0-9/])(?:" +
+            @"(?<d>NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|NORTH|SOUTH|EAST|WEST)\s*-?\s*BOUND" +
+            @"|(?<d>NE|NW|SE|SW|N|S|E|W)\s*/?\s*B(?:OUND|ND)?(?![A-Z0-9])" +
+            @"|(?<d>NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|NORTH|SOUTH|EAST|WEST|NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NE|NW|SE|SW|N|S|E|W)(?![A-Z0-9/])" +
+            @")",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// The first direction written after the code in the raw description, else anywhere in
+        /// the full description, else in the note. Null when none.
+        /// </summary>
+        public static double? Read(string rawDescription, string fullDescription, string note, out string words)
+        {
+            words = null;
+            var raw = (rawDescription ?? string.Empty).Trim();
+            var space = raw.IndexOfAny(new[] { ' ', '\t' });
+            var afterCode = space < 0 ? string.Empty : raw.Substring(space + 1);
+            foreach (var text in new[] { afterCode, fullDescription, note })
+            {
+                if (string.IsNullOrWhiteSpace(text)) continue;
+                var m = Word.Match(text.ToUpperInvariant());
+                if (!m.Success) continue;
+                words = m.Value.Trim();
+                return Compass[m.Groups["d"].Value];
+            }
+            return null;
+        }
+
+        /// <summary>"S" to "southbound" for reports.</summary>
+        public static string Describe(double azimuth)
+        {
+            var names = new[] { "northbound", "north-eastbound", "eastbound", "south-eastbound", "southbound", "south-westbound", "westbound", "north-westbound" };
+            var i = (int)Math.Round(Angles.NormalizeDegrees(azimuth) / 45.0) % 8;
+            return names[i];
+        }
+    }
 }

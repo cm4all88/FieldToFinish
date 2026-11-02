@@ -103,6 +103,10 @@ namespace FieldCodes.Cad.Setup
         private Label _testResult;
         private NumericUpDown _confidence;
         private ComboBox _tier;
+        private CheckBox _markingWords;
+        private CheckBox _markingFollow;
+        private NumericUpDown _markingFeet;
+        private NumericUpDown _markingTurn;
 
         // ---- inserted blocks
         private ListView _blockGrid;
@@ -289,6 +293,29 @@ namespace FieldCodes.Cad.Setup
                        "Inferred (nearest-road reasoning). Anything weaker is listed for review and left alone.");
             _confidence.ValueChanged += (s, e) => { if (!_loading) StageApply(); };
             _tier.SelectedIndexChanged += (s, e) => { if (!_loading) StageApply(); };
+
+            // Pavement arrows and words: the direction of travel the crew wrote ("ASTO S").
+            _markingWords = new CheckBox { Text = "Pavement markings: read a written direction of travel (ASTO S, SB, SOUTHBOUND)", AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+            Tip(_markingWords, "Read from the raw description, the full description (STRAIGHT ARROW S) and the note. A measured azimuth (AZ 197) still wins. " +
+                               "Off: arrows are turned by stop bars, intersection approaches and keep-right only.");
+            _markingFollow = new CheckBox { Text = "...and follow the lane's road line (curves, the approach street at intersections)", AutoSize = true };
+            Tip(_markingFollow, "The arrow takes the direction of the road line beside it that is closest to what was written. Off: it points exactly the compass " +
+                                "direction written, on the drawing's grid (north is +Y, whatever way the view is turned).");
+            _markingFeet = new NumericUpDown { Minimum = 1, Maximum = 500, DecimalPlaces = 0, Increment = 5, Width = 64 };
+            _markingTurn = new NumericUpDown { Minimum = 0, Maximum = 90, DecimalPlaces = 0, Increment = 5, Width = 64 };
+            apply.Controls.Add(_markingWords, 0, 2);
+            apply.SetColumnSpan(_markingWords, 2);
+            apply.Controls.Add(_markingFollow, 0, 3);
+            apply.SetColumnSpan(_markingFollow, 2);
+            apply.Controls.Add(new Label { Text = "Road line within (ft)", AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, 0, 4);
+            apply.Controls.Add(_markingFeet, 1, 4);
+            apply.Controls.Add(new Label { Text = "Review if the road is further off the written direction than (deg)", AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, 0, 5);
+            apply.Controls.Add(_markingTurn, 1, 5);
+            Tip(_markingTurn, "An E arrow on a north-south road is listed for review instead of being guessed. Crews write the nearest compass point, so 45 to 60 suits most offices.");
+            _markingWords.CheckedChanged += (s, e) => { if (!_loading) StageApply(); };
+            _markingFollow.CheckedChanged += (s, e) => { if (!_loading) StageApply(); };
+            _markingFeet.ValueChanged += (s, e) => { if (!_loading) StageApply(); };
+            _markingTurn.ValueChanged += (s, e) => { if (!_loading) StageApply(); };
             left.Controls.Add(apply, 0, 3);
             split.Panel1.Controls.Add(left);
 
@@ -498,6 +525,11 @@ namespace FieldCodes.Cad.Setup
                 var tier = _tier.Items.Cast<object>().FirstOrDefault(o => string.Equals(o.ToString(), apply.WeakestTier, StringComparison.OrdinalIgnoreCase));
                 _tier.SelectedItem = tier ?? "Inferred";
                 _library.Text = apply.SymbolLibrary ?? string.Empty;
+                var defaults = new OrientationStandard();
+                _markingWords.Checked = _document != null ? apply.MarkingDirectionWords : defaults.MarkingDirectionWords;
+                _markingFollow.Checked = _document != null ? apply.MarkingFollowRoad : defaults.MarkingFollowRoad;
+                _markingFeet.Value = Math.Max(_markingFeet.Minimum, Math.Min(_markingFeet.Maximum, (decimal)(_document != null ? apply.MarkingRoadFeet : defaults.MarkingRoadFeet)));
+                _markingTurn.Value = Math.Max(_markingTurn.Minimum, Math.Min(_markingTurn.Maximum, (decimal)(_document != null ? apply.MarkingMaxTurnDegrees : defaults.MarkingMaxTurnDegrees)));
             }
             finally { _loading = false; }
 
@@ -949,6 +981,10 @@ namespace FieldCodes.Cad.Setup
             apply.MinimumConfidence = (double)_confidence.Value;
             apply.WeakestTier = Convert.ToString(_tier.SelectedItem);
             apply.SymbolLibrary = (_library.Text ?? string.Empty).Trim();
+            apply.MarkingDirectionWords = _markingWords.Checked;
+            apply.MarkingFollowRoad = _markingFollow.Checked;
+            apply.MarkingRoadFeet = (double)_markingFeet.Value;
+            apply.MarkingMaxTurnDegrees = (double)_markingTurn.Value;
             _document.ApplyOrientationApply(apply);
             _applyTouched = true;
             SetDirty(true);

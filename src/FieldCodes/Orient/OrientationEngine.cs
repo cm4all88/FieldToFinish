@@ -49,6 +49,18 @@ namespace FieldCodes.Orient
                         foreach (var extra in read.Skip(1)) f.ExtraMeasuredAzimuths.Add(extra);
                     }
                 }
+                // "ASTO S": the direction of travel, matched to the lane in Marking().
+                if (!f.MeasuredAzimuth.HasValue && !f.StatedTravelAzimuth.HasValue && _std.MarkingDirectionWords &&
+                    (f.Kind == OrientKind.PavementArrow || f.Kind == OrientKind.PavementWord))
+                {
+                    string words;
+                    var stated = TravelWords.Read(f.Description, f.FullDescription, f.Note, out words);
+                    if (stated.HasValue)
+                    {
+                        f.StatedTravelAzimuth = stated;
+                        f.StatedTravelWords = words;
+                    }
+                }
             }
 
             var features = scene.Features.Where(f => f.Kind != OrientKind.Other).ToList();
@@ -405,6 +417,84 @@ namespace FieldCodes.Orient
             var d = Start(f, symbol);
             var what = f.Kind == OrientKind.PavementWord ? "reads to traffic heading" : "points";
             if (f.MeasuredAzimuth.HasValue) return Measured(d, f.MeasuredAzimuth.Value, "marking " + what + " " + Deg(f.MeasuredAzimuth.Value) + ", " + f.MeasuredFrom);
+            if (f.StatedTravelAzimuth.HasValue) return StatedTravel(f, symbol, roads, arrows);
+            return InferMarking(f, symbol, roads, arrows);
+        }
+
+        /// <summary>
+        /// A marking whose direction of travel the crew wrote ("ASTO S"). The written compass
+        /// direction settles which way along the road; the road settles the exact angle. Of the
+        /// road lines within reach, the one whose direction (at the point nearest the arrow, so a
+        /// curve is followed) is closest to the written direction is used -- at an intersection
+        /// that is the street the arrow is on, not the one crossing it. With no road near, the
+        /// arrow points the written direction on the drawing's grid. A road that would turn the
+        /// written direction by more than the setting allows is put up for review.
+        /// </summary>
+        private OrientationDecision StatedTravel(OrientFeature f, SymbolRule symbol, RoadModel roads, IList<OrientFeature> arrows)
+        {
+            var d = Start(f, symbol);
+            var stated = f.StatedTravelAzimuth.Value;
+            var written = "\"" + f.StatedTravelWords + "\" (" + TravelWords.Describe(stated) + ")";
+
+            if (_std.MarkingFollowRoad)
+            {
+                var candidates = roads.LinesNear(f.Location, _std.MarkingRoadFeet)
+                    .Select(x =>
+                    {
+                        var az = SymbolRotation.AzimuthOf(x.Item2);
+                        var along = SymbolRotation.Difference(az, stated) <= 90 ? az : SymbolRotation.Reverse(az);
+                        return new { Line = x.Item1, Azimuth = along, Turn = SymbolRotation.Difference(along, stated), Distance = x.Item3 };
+                    })
+                    .ToList();
+                if (candidates.Count > 0)
+                {
+                    // Lines running the same way (lane lines, centre line, edges of one street) are
+                    // all equally right; of those the nearest gives the angle at this spot.
+                    var bestTurn = candidates.Min(c => c.Turn);
+                    var best = candidates.Where(c => c.Turn <= bestTurn + 10).OrderBy(c => c.Distance).First();
+                    if (best.Turn > _std.MarkingMaxTurnDegrees)
+                        return Review(d, string.Format(CultureInfo.InvariantCulture,
+                            "the crew wrote {0}, but the road here runs {1} / {2} ({3:0} degrees off); check the description",
+                            written, Deg(best.Azimuth), Deg(SymbolRotation.Reverse(best.Azimuth)), best.Turn), stated, best.Azimuth);
+                    d.Tier = OrientationTier.Measured;
+                    d.Confidence = 0.9;
+                    d.Azimuth = best.Azimuth;
+                    d.Association = best.Line.Id;
+                    d.Evidence.Add(new Evidence(OrientationTier.Measured, 0.9, string.Format(CultureInfo.InvariantCulture,
+                        "the crew wrote {0}; along {1} ({2:0.0} ft away) that is {3}", written, best.Line.Id, best.Distance, Deg(best.Azimuth))));
+                    NoteDisagreement(d, f, symbol, roads, arrows);
+                    return d;
+                }
+            }
+
+            d.Tier = OrientationTier.Measured;
+            d.Confidence = 0.85;
+            d.Azimuth = stated;
+            d.Evidence.Add(new Evidence(OrientationTier.Measured, 0.85, _std.MarkingFollowRoad
+                ? string.Format(CultureInfo.InvariantCulture, "the crew wrote {0}; no road line within {1:0} ft, so it points {2} on the drawing's grid",
+                                written, _std.MarkingRoadFeet, Deg(stated))
+                : "the crew wrote " + written + "; it points " + Deg(stated) + " as written (matching to the road is off)"));
+            NoteDisagreement(d, f, symbol, roads, arrows);
+            return d;
+        }
+
+        /// <summary>Says so when the lane reasoning (stop bar, approach, keep right) points the
+        /// other way: the crew's direction is used, and the report shows the conflict.</summary>
+        private void NoteDisagreement(OrientationDecision d, OrientFeature f, SymbolRule symbol, RoadModel roads, IList<OrientFeature> arrows)
+        {
+            var inferred = InferMarking(f, symbol, roads, arrows);
+            if (!inferred.Azimuth.HasValue || inferred.Tier == OrientationTier.Review || !d.Azimuth.HasValue) return;
+            if (SymbolRotation.Difference(inferred.Azimuth.Value, d.Azimuth.Value) <= 90) return;
+            var why = inferred.Evidence.Count > 0 ? inferred.Evidence[0].Text : "the lane";
+            d.Evidence.Add(new Evidence(OrientationTier.Inferred, 0, "note: " + why + " suggests " + Deg(inferred.Azimuth.Value) +
+                                                                     "; the crew's direction was used"));
+        }
+
+        /// <summary>A marking with no direction recorded: the stop bar it approaches, the
+        /// intersection leg it is on, else the lane it is in (traffic keeps right).</summary>
+        private OrientationDecision InferMarking(OrientFeature f, SymbolRule symbol, RoadModel roads, IList<OrientFeature> arrows)
+        {
+            var d = Start(f, symbol);
 
             // Approaching a stop bar or an intersection: inbound traffic.
             var bar = roads.StopBars.Where(b => b.Travel.HasValue && b.Mid.DistanceTo(f.Location) <= 60 && Upstream(f.Location, b.Mid, b.Travel.Value) > -5)

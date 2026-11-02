@@ -310,6 +310,34 @@ public sealed class SymbolStandardEditingTests
     // ------------------------------------------------------------------ thresholds and library
 
     [Fact]
+    public void ThePavementMarkingSettingsReadWriteAndReachTheCommand()
+    {
+        var doc = Shipped();
+        var apply = doc.GetOrientationApply();
+        Assert.True(apply.MarkingDirectionWords);
+        Assert.True(apply.MarkingFollowRoad);
+        Assert.Equal(40, apply.MarkingRoadFeet, 6);
+        Assert.Equal(60, apply.MarkingMaxTurnDegrees, 6);
+        Assert.DoesNotContain("markingDirectionWords", doc.Render());       // defaults are not written
+
+        apply.MarkingFollowRoad = false;
+        apply.MarkingMaxTurnDegrees = 45;
+        doc.ApplyOrientationApply(apply);
+        Assert.Empty(doc.Validate());
+        var cfg = doc.CompileCandidate();
+        Assert.False(cfg.Orientation.MarkingFollowRoad);
+        Assert.True(cfg.Orientation.MarkingDirectionWords);
+        Assert.Equal(45, cfg.Orientation.MarkingMaxTurnDegrees, 6);
+
+        apply.MarkingMaxTurnDegrees = 120;
+        apply.MarkingRoadFeet = 0;
+        doc.ApplyOrientationApply(apply);
+        var problems = doc.Validate();
+        Assert.Contains(problems, p => p.Contains("between 0 and 90 degrees"));
+        Assert.Contains(problems, p => p.Contains("at most 500 ft"));
+    }
+
+    [Fact]
     public void TheThresholdsAndLibraryReadAndWrite()
     {
         var doc = Shipped();

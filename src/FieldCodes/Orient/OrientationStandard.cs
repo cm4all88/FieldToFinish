@@ -113,6 +113,32 @@ namespace FieldCodes.Orient
         [JsonProperty("panelSnapFeet")] public double PanelSnapFeet { get; set; }
         [JsonProperty("luminaireSearchFeet")] public double LuminaireSearchFeet { get; set; }
 
+        // ------------------------------------------------------------ pavement markings
+
+        /// <summary>
+        /// Pavement arrows and words: a direction written after the code is the direction of
+        /// travel -- "ASTO S", "ASTO SB", "ASLT NORTHBOUND", "ASTO S/B", "ARTO NE". Read from the
+        /// raw description, the full description and the note. A measured azimuth ("AZ 197",
+        /// "POINTS SSW") still wins. Off: arrows are turned by the road and stop bars only.
+        /// </summary>
+        [JsonProperty("markingDirectionWords")] public bool MarkingDirectionWords { get; set; }
+
+        /// <summary>
+        /// Match the written direction to the lane: the arrow follows the road line near it
+        /// (centre line, lane line or edge, the tangent where it stands, so curves are followed)
+        /// whose direction is closest to what was written; at an intersection that picks the
+        /// approach street, not the cross street. Off: the arrow points exactly the compass
+        /// direction written, on the drawing's grid (north is +Y, whatever the view shows).
+        /// </summary>
+        [JsonProperty("markingFollowRoad")] public bool MarkingFollowRoad { get; set; }
+
+        /// <summary>How far from the arrow a road line may be to be matched, feet.</summary>
+        [JsonProperty("markingRoadFeet")] public double MarkingRoadFeet { get; set; }
+
+        /// <summary>The most the road may turn the written direction, degrees. A road further
+        /// off than this (an "E" arrow on a north-south road) is put up for review, not guessed.</summary>
+        [JsonProperty("markingMaxTurnDegrees")] public double MarkingMaxTurnDegrees { get; set; }
+
         // ------------------------------------------------------------ applying
 
         /// <summary>FTFORIENT rotates a marker only at or above this confidence...</summary>
@@ -157,6 +183,10 @@ namespace FieldCodes.Orient
             QcLayer = "FTF-QC-ORIENT";
             QcInferredLayer = "FTF-QC-ORIENT-INFERRED";
             QcArrowPlotted = 0.3;
+            MarkingDirectionWords = true;
+            MarkingFollowRoad = true;
+            MarkingRoadFeet = 40;
+            MarkingMaxTurnDegrees = 60;
         }
 
         /// <summary>PMX's standard, as the blocks in its template are drawn.</summary>

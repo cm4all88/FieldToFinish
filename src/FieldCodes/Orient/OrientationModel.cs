@@ -60,6 +60,9 @@ namespace FieldCodes.Orient
         /// <summary>The raw description and the crew's note, for measured directions and for
         /// telling a stop sign from another sign.</summary>
         public string Description { get; set; }
+        /// <summary>Civil 3D's full description (the description key's wording, e.g. "STRAIGHT
+        /// ARROW S"); a written direction is looked for here too.</summary>
+        public string FullDescription { get; set; }
         public string Note { get; set; }
 
         /// <summary>A direction the crew recorded, as a survey azimuth (degrees clockwise from
@@ -67,6 +70,12 @@ namespace FieldCodes.Orient
         /// arm, a pipe axis. Null when none.</summary>
         public double? MeasuredAzimuth { get; set; }
         public string MeasuredFrom { get; set; }
+
+        /// <summary>A pavement marking's direction of travel as the crew wrote it ("ASTO S":
+        /// 180), before it is matched to the lane; null when none was written.</summary>
+        public double? StatedTravelAzimuth { get; set; }
+        /// <summary>The words it was read from ("S", "SOUTHBOUND", "S/B").</summary>
+        public string StatedTravelWords { get; set; }
 
         /// <summary>Further measured directions (a second arm, a second pipe).</summary>
         public IList<double> ExtraMeasuredAzimuths { get; set; }

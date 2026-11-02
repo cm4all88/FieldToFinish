@@ -351,6 +351,21 @@ namespace FieldCodes.Orient
         /// traffic beside it. Edges alone give it the same way from the nearest edge, with less
         /// confidence (a one-way road would break the assumption). Null when no road is near.
         /// </summary>
+        /// <summary>Every road line (centre lines, one-way lines, lane lines, edges) within
+        /// <paramref name="reach"/> of the point: the line, its direction at the nearest point
+        /// (as drawn), and the distance.</summary>
+        public IList<Tuple<OrientLine, P2, double>> LinesNear(P2 p, double reach)
+        {
+            var found = new List<Tuple<OrientLine, P2, double>>();
+            foreach (var line in Axes.Concat(Edges))
+            {
+                P2 foot, tangent; double d, s;
+                line.Nearest(p, out foot, out tangent, out d, out s);
+                if (d <= reach) found.Add(Tuple.Create(line, tangent, d));
+            }
+            return found;
+        }
+
         public TravelAt TravelAtPoint(P2 p, bool insideRoad = false)
         {
             P2 foot, tangent; double d;

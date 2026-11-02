@@ -155,6 +155,18 @@ namespace FieldCodes.Editing
 
         /// <summary>symbolLibrary: a drawing of approved symbol blocks; blank for none.</summary>
         public string SymbolLibrary { get; set; }
+
+        /// <summary>markingDirectionWords: read "ASTO S" / "SB" / "SOUTHBOUND" as the direction of travel.</summary>
+        public bool MarkingDirectionWords { get; set; }
+
+        /// <summary>markingFollowRoad: match the written direction to the lane's road line.</summary>
+        public bool MarkingFollowRoad { get; set; }
+
+        /// <summary>markingRoadFeet: how far a road line may be to be matched.</summary>
+        public double MarkingRoadFeet { get; set; }
+
+        /// <summary>markingMaxTurnDegrees: the most the road may turn the written direction.</summary>
+        public double MarkingMaxTurnDegrees { get; set; }
     }
 
     /// <summary>
@@ -533,6 +545,13 @@ namespace FieldCodes.Editing
             double v;
             if (conf != null && (!TryNumber(conf, out v) || v < 0 || v > 1))
                 problems.Add(page + "the confidence a marker needs before FTFORIENT turns it must be between 0 and 1.");
+
+            var roadFeet = o["markingRoadFeet"];
+            if (roadFeet != null && (!TryNumber(roadFeet, out v) || v <= 0 || v > 500))
+                problems.Add(page + "the distance a road line may be from a pavement marking must be more than 0 and at most 500 ft.");
+            var maxTurn = o["markingMaxTurnDegrees"];
+            if (maxTurn != null && (!TryNumber(maxTurn, out v) || v < 0 || v > 90))
+                problems.Add(page + "the most the road may turn a marking's written direction must be between 0 and 90 degrees.");
 
             var tier = o["applyWeakestTier"];
             if (tier != null && tier.Type != JTokenType.Null)
@@ -989,8 +1008,18 @@ namespace FieldCodes.Editing
             {
                 MinimumConfidence = o != null ? Number(o["applyMinimumConfidence"], defaults.ApplyMinimumConfidence) : defaults.ApplyMinimumConfidence,
                 WeakestTier = tier,
-                SymbolLibrary = o != null ? (string)o["symbolLibrary"] ?? string.Empty : string.Empty
+                SymbolLibrary = o != null ? (string)o["symbolLibrary"] ?? string.Empty : string.Empty,
+                MarkingDirectionWords = Flag(o, "markingDirectionWords", defaults.MarkingDirectionWords),
+                MarkingFollowRoad = Flag(o, "markingFollowRoad", defaults.MarkingFollowRoad),
+                MarkingRoadFeet = o != null ? Number(o["markingRoadFeet"], defaults.MarkingRoadFeet) : defaults.MarkingRoadFeet,
+                MarkingMaxTurnDegrees = o != null ? Number(o["markingMaxTurnDegrees"], defaults.MarkingMaxTurnDegrees) : defaults.MarkingMaxTurnDegrees
             };
+        }
+
+        private static bool Flag(JObject o, string name, bool absentMeans)
+        {
+            var t = o != null ? o[name] : null;
+            return t != null && t.Type == JTokenType.Boolean ? (bool)t : absentMeans;
         }
 
         /// <summary>Writes the thresholds and library path; a value that did not change is not rewritten.</summary>
@@ -1008,6 +1037,10 @@ namespace FieldCodes.Editing
                 if (string.IsNullOrWhiteSpace(edit.SymbolLibrary)) { if (o != null) o.Remove("symbolLibrary"); }
                 else Orientation(true)["symbolLibrary"] = edit.SymbolLibrary.Trim();
             }
+            if (current.MarkingDirectionWords != edit.MarkingDirectionWords) Orientation(true)["markingDirectionWords"] = edit.MarkingDirectionWords;
+            if (current.MarkingFollowRoad != edit.MarkingFollowRoad) Orientation(true)["markingFollowRoad"] = edit.MarkingFollowRoad;
+            if (Math.Abs(current.MarkingRoadFeet - edit.MarkingRoadFeet) > 1e-12) Orientation(true)["markingRoadFeet"] = edit.MarkingRoadFeet;
+            if (Math.Abs(current.MarkingMaxTurnDegrees - edit.MarkingMaxTurnDegrees) > 1e-12) Orientation(true)["markingMaxTurnDegrees"] = edit.MarkingMaxTurnDegrees;
         }
 
         private JArray SymbolArray()
