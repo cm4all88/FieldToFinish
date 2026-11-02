@@ -34,8 +34,8 @@ public sealed class AuditRegressionTests
             var loaded = FtfSettings.Load(path);
 
             Assert.Equal(7, loaded.Tags.TableColumns.Count);
-            Assert.Equal(4, loaded.DrawOrder.ProtectedLayers.Count);
-            Assert.Equal(3, loaded.DrawOrder.MaskableLayers.Count);
+            Assert.Equal(PmxLayers.Protected.Length, loaded.DrawOrder.ProtectedLayers.Count);
+            Assert.Equal(PmxLayers.Maskable.Length, loaded.DrawOrder.MaskableLayers.Count);
 
             loaded.Save(path);
         }

@@ -318,8 +318,10 @@ namespace FieldCodes.Settings
 
         public void RestoreDefaults()
         {
-            ProtectedLayers = new List<string> { "V-SIGN", "V-UTIL-*", "V-STRC-*", "C-STRM-STRC" };
-            MaskableLayers = new List<string> { "V-TREE-DRIP", "C-TOPO-*", "V-ROAD-*" };
+            // The PMX template's names (see PmxLayers); a file saved with the old
+            // shipped lists is upgraded when it loads.
+            ProtectedLayers = new List<string>(PmxLayers.Protected);
+            MaskableLayers = new List<string>(PmxLayers.Maskable);
         }
 
         public void Validate(ICollection<string> problems)
@@ -414,7 +416,7 @@ namespace FieldCodes.Settings
             TextHeightPlotted = 0.08;
             RowWidthTextPlotted = 0.10;
             RowWidthDecimals = 2;
-            DefaultLabelLayer = "V-LINE-TEXT";
+            DefaultLabelLayer = PmxLayers.LineLabelFallback;
             AlignToLine = true;
             RepeatIntervalFeet = 200.0;
             MinLengthFeet = 10.0;
@@ -503,7 +505,7 @@ namespace FieldCodes.Settings
 
         public void RestoreDefaults()
         {
-            TagLayer = "V-TREE-TAG";
+            TagLayer = PmxLayers.TagLayer;   // blank: each tag on its feature's text layer
             TagTextStyle = string.Empty;
             TagTextHeightPlotted = 0.08;
             TagOffsetPlotted = 0.04;
@@ -511,7 +513,7 @@ namespace FieldCodes.Settings
             TagLeader = true;
 
             TableTitle = "TREE SCHEDULE";
-            TableLayer = "V-TREE-TABL";
+            TableLayer = PmxLayers.TableLayer;
             TableTextHeightPlotted = 0.08;
             TableColumns = new List<string>
             {

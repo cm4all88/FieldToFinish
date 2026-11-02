@@ -53,20 +53,22 @@ public sealed class StandardsViewTests : IClassFixture<RulesFixture>
     {
         var layers = Section("Layers");
 
-        Assert.Contains(layers.Items, i => i.Name == "V-TREE-TEXT" && i.Source == "Rules: tree");
-        Assert.Contains(layers.Items, i => i.Name == "V-TREE-DRIP" && i.Value.StartsWith("Driplines"));
-        Assert.Contains(layers.Items, i => i.Name == "V-CTRL-TEXT");
+        Assert.Contains(layers.Items, i => i.Name == "V-SURF-VEGE-TEXT-E" && i.Source == "Rules: tree");
+        Assert.Contains(layers.Items, i => i.Name == "V-SURF-VEGE-E" && i.Value.StartsWith("Driplines"));
+        Assert.Contains(layers.Items, i => i.Name == "V-CTRL-TEXT-E");
     }
 
     [Fact]
     public void SharedLabelLayersListEveryRuleUsingThem()
     {
-        // Pole, junction box, light pole and guy anchor all label on V-UTIL-POWR-TEXT.
-        var item = Section("Layers").Items.Single(i => i.Name == "V-UTIL-POWR-TEXT");
+        // Pole, junction box and guy anchor all label on V-UTIL-POWR-TEXT-E (light poles
+        // have PMX's own illumination layer).
+        var item = Section("Layers").Items.Single(i => i.Name == "V-UTIL-POWR-TEXT-E");
 
         Assert.Contains("pole", item.Value);
         Assert.Contains("junction-box", item.Value);
-        Assert.Contains("light-pole", item.Value);
+        Assert.Contains("guy-anchor", item.Value);
+        Assert.DoesNotContain("light-pole", item.Value);
     }
 
     [Fact]

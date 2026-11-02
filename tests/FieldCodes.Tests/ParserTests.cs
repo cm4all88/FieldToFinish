@@ -42,10 +42,10 @@ public sealed class ParserTests : IClassFixture<RulesFixture>
         Assert.Null(p.BlockName);
         Assert.Null(p.BlockLayer);
 
-        Assert.Equal("V-TREE-DRIP", p.DripLayer);
+        Assert.Equal("V-SURF-VEGE-E", p.DripLayer);
         Assert.True(p.DripUnify);
         Assert.Equal("18\" CONIFER", p.LabelText);
-        Assert.Equal("V-TREE-TEXT", p.LabelLayer);
+        Assert.Equal("V-SURF-VEGE-TEXT-E", p.LabelLayer);
         Assert.Equal(LeaderMode.Auto, p.Leader);
         Assert.Equal("T", p.TagPrefix);
         Assert.True(p.HasDripLine);
@@ -290,8 +290,8 @@ public sealed class ParserTests : IClassFixture<RulesFixture>
         Assert.Null(p.BlockName);
 
         // dead contributes a layer suffix to every layer it touches
-        Assert.Equal("V-TREE-TEXT-DEAD", p.LabelLayer);
-        Assert.Equal("V-TREE-DRIP-DEAD", p.DripLayer);
+        Assert.Equal("V-SURF-VEGE-TEXT-E-DEAD", p.LabelLayer);
+        Assert.Equal("V-SURF-VEGE-E-DEAD", p.DripLayer);
 
         // dead is flagged for review
         Assert.Contains(p.Diagnostics, d => d.Code == "FLAG" && d.Severity == Severity.Warning);

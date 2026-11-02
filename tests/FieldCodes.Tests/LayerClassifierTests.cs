@@ -22,9 +22,9 @@ public sealed class LayerClassifierTests : IClassFixture<RulesFixture>
 
     // The bug this class exists to fix: a modified sign must stay protected.
     [Theory]
-    [InlineData("V-SIGN")]
-    [InlineData("V-SIGN-DEAD")]
-    [InlineData("V-SIGN-RMV-PROT")]
+    [InlineData("V-SURF-SIGN-SYMB-E")]
+    [InlineData("V-SURF-SIGN-SYMB-E-DEAD")]
+    [InlineData("V-SURF-SIGN-SYMB-E-RMV-PROT")]
     public void ModifiedSignLayerIsStillASymbol(string layer)
     {
         Assert.Equal(LayerRole.Symbol, _c.Classify(layer));
@@ -32,9 +32,9 @@ public sealed class LayerClassifierTests : IClassFixture<RulesFixture>
     }
 
     [Theory]
-    [InlineData("V-TREE-DRIP")]
-    [InlineData("V-TREE-DRIP-DEAD")]
-    [InlineData("V-TREE-DRIP-DEAD-RMV-PROT")]
+    [InlineData("V-SURF-VEGE-E")]
+    [InlineData("V-SURF-VEGE-E-DEAD")]
+    [InlineData("V-SURF-VEGE-E-DEAD-RMV-PROT")]
     public void ModifiedDripLayerIsStillMaskableLinework(string layer)
     {
         Assert.Equal(LayerRole.MaskableLinework, _c.Classify(layer));
@@ -43,10 +43,10 @@ public sealed class LayerClassifierTests : IClassFixture<RulesFixture>
     }
 
     [Theory]
-    [InlineData("V-TREE-TEXT")]
-    [InlineData("V-TREE-TEXT-DEAD")]
-    [InlineData("V-SIGN-TEXT")]        // was in neither config list; derived from the rule
-    [InlineData("V-SIGN-TEXT-DEAD")]
+    [InlineData("V-SURF-VEGE-TEXT-E")]
+    [InlineData("V-SURF-VEGE-TEXT-E-DEAD")]
+    [InlineData("V-SURF-SIGN-TEXT-E")]      // also matches V-SURF-SIGN-*: the rule's label layer wins
+    [InlineData("V-SURF-SIGN-TEXT-E-DEAD")]
     public void LabelLayersAreDerivedFromCodeRules_AndAreHardObstacles(string layer)
     {
         Assert.Equal(LayerRole.Label, _c.Classify(layer));
@@ -55,9 +55,9 @@ public sealed class LayerClassifierTests : IClassFixture<RulesFixture>
     }
 
     [Theory]
-    [InlineData("V-SIGN")]             // derived from the sign rule's blockLayer
-    [InlineData("V-SIGN-DEAD")]
-    public void BlockLayersNamedByACodeRuleAreSymbols(string layer)
+    [InlineData("V-SURF-POST-SYMB-E")]       // any PMX surface-feature symbol layer
+    [InlineData("V-SURF-MBOX-SYMB-E-DEAD")]
+    public void PmxSymbolLayersAreSymbols(string layer)
     {
         Assert.Equal(LayerRole.Symbol, _c.Classify(layer));
         Assert.Equal(DrawOrderBand.Symbol, LayerClassifier.BandOf(_c.Classify(layer)));
@@ -76,14 +76,18 @@ public sealed class LayerClassifierTests : IClassFixture<RulesFixture>
     }
 
     [Theory]
-    [InlineData("V-UTIL-WATR")]
-    [InlineData("V-STRC-FNDN")]
-    [InlineData("C-STRM-STRC")]
+    [InlineData("V-UTIL-WATR-SYMB-E")]
+    [InlineData("V-SIGL-EQPM-SYMB-E")]
+    [InlineData("V-CTRL-PMX_-SYMB-E")]
+    [InlineData("V-PROP-BNDY-SYMB")]
     public void ProtectedGlobsMatch(string layer)
         => Assert.Equal(LayerRole.Symbol, _c.Classify(layer));
 
     [Theory]
-    [InlineData("C-TOPO-MAJR")]
+    [InlineData("V-TOPO-CONT-E")]
+    [InlineData("V-TOPO-CONT-MAJR-E")]
+    [InlineData("V-TOPO-MINR-E")]
+    [InlineData("V-TINN-BRKL-E")]
     [InlineData("V-ROAD-CNTR")]
     public void MaskableGlobsMatch(string layer)
         => Assert.Equal(LayerRole.MaskableLinework, _c.Classify(layer));
@@ -103,14 +107,14 @@ public sealed class LayerClassifierTests : IClassFixture<RulesFixture>
     public void LabelLayerIsNoLongerListedAsMaskable()
     {
         // The config contradiction: step 7 makes labels hard obstacles.
-        Assert.DoesNotContain("V-TREE-TEXT", new LayerClassifierConfigProbe().MaskableLayers);
+        Assert.DoesNotContain("V-SURF-VEGE-TEXT-E", new LayerClassifierConfigProbe().MaskableLayers);
     }
 
     [Fact]
     public void ClassificationIsCaseInsensitive()
     {
-        Assert.Equal(LayerRole.Symbol, _c.Classify("v-sign-dead"));
-        Assert.Equal(LayerRole.MaskableLinework, _c.Classify("v-tree-drip"));
+        Assert.Equal(LayerRole.Symbol, _c.Classify("v-surf-sign-symb-e-dead"));
+        Assert.Equal(LayerRole.MaskableLinework, _c.Classify("v-surf-vege-e"));
     }
 
     [Fact]

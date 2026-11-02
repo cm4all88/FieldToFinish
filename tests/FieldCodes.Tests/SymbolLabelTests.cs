@@ -23,7 +23,7 @@ public sealed class SymbolLabelTests : IClassFixture<RulesFixture>
         Assert.True(p.Recognized);
         Assert.Equal("symbol-label", p.RuleId);
         Assert.Equal("CB", p.LabelText);
-        Assert.Equal("V-UTIL-STRM-TEXT", p.LabelLayer);
+        Assert.Equal("V-UTIL-STRM-TEXT-E", p.LabelLayer);
         Assert.Equal(LeaderMode.Auto, p.Leader);
     }
 
@@ -43,7 +43,7 @@ public sealed class SymbolLabelTests : IClassFixture<RulesFixture>
 
         Assert.True(p.Recognized);
         Assert.Equal("CB2", p.LabelText);
-        Assert.Equal("V-UTIL-STRM-TEXT", p.LabelLayer);
+        Assert.Equal("V-UTIL-STRM-TEXT-E", p.LabelLayer);
     }
 
     [Fact]

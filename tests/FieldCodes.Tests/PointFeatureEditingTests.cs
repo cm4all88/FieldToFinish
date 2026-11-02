@@ -49,7 +49,7 @@ public sealed class PointFeatureEditingTests
 
         var parsed = Parse(RulesConfig.Load(Resolve().ActivePath), "PP 1234");
         Assert.Equal("UTILITY POLE 1234", parsed.LabelText);
-        Assert.Equal("V-UTIL-POWR-TEXT", parsed.LabelLayer);
+        Assert.Equal("V-UTIL-POWR-TEXT-E", parsed.LabelLayer);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public sealed class PointFeatureEditingTests
         Assert.Contains("Civil 3D symbol: Existing", preview);
         Assert.Contains("FTF action: Label", preview);
         Assert.Contains("Label: POLE 1234", preview);
-        Assert.Contains("Layer: V-UTIL-POWR-TEXT", preview);
+        Assert.Contains("Layer: V-UTIL-POWR-TEXT-E", preview);
         Assert.Contains("Tag: P#", preview);
         Assert.Contains("Rotation: None", preview);
     }

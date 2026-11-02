@@ -4,10 +4,10 @@
   "trunkDecimals": 0,
   "multiStemAverage": "Arithmetic",
 
-  "protectedLayers": [ "V-SIGN", "V-UTIL-*", "V-STRC-*", "C-STRM-STRC" ],
+  "protectedLayers": [ "V-UTIL-*", "V-SIGL-*", "V-CTRL-*", "V-SURF-SIGN-*", "V-SURF-*-SYMB-E", "V-PROP-*-SYMB*" ],
 
   "//maskableLayers": "Label layers are NOT listed here: labels are hard obstacles and never overlap each other. Layers named by a code rule's blockLayer or label.layer are classified automatically, so they do not need listing either. Modifier suffixes (-DEAD, -RMV, -PROT) are stripped before matching.",
-  "maskableLayers":  [ "V-TREE-DRIP", "C-TOPO-*", "V-ROAD-*" ],
+  "maskableLayers":  [ "V-TOPO-CONT-*", "V-TOPO-MAJR-E", "V-TOPO-MINR-E", "V-SURF-VEGE-E", "V-TINN-*", "V-ROAD-*" ],
 
   "//ignoreCodes": "NEVER-DRAW list only: codes that will never produce drawing content no matter how complete the setup gets. Ground shots are surface data for the TIN; notes are notes. Keep this list SHORT. A code that simply has no rule yet must NOT go here - it belongs in the unhandled report, which is how anyone finds out what still needs configuring. Silence is worse than noise once this is deployed: a surveyor who sees nothing assumes the poles were handled. A trailing sequence number is matched automatically, so GS covers GS2.",
   "ignoreCodes": [ "GS", "INFO", "INFOL", "NOTE", "ZK", "CONS" ],
@@ -96,8 +96,8 @@
   "//bench": "FTFBENCH. A bench is shot as two points, one at the middle of each end, with its depth (and height) in the notes: 'BENCH D1.5 H1.5', 'BENCH 1.5D', 'BENCH DEPTH 18IN'. The outline is the line between the shots offset half the depth to each side with the ends closed; nothing is adjusted. A number with no D or H beside it is shown and asked about, never guessed. codes only identify bench shots for the messages: any two points can be picked. labelFormat: {length} (between the shots), {depth}, {height}, in feet, with a number format after the colon; [ ] and \\P as in point labels. The layer is a starting point: set it to the office's site furniture layer.",
   "bench": {
     "codes": [ "BENCH", "BNCH", "BENCHL" ],
-    "layer": "V-SITE-FURN-E",
-    "labelLayer": "V-SITE-TEXT",
+    "layer": "V-SURF-LAND-E",
+    "labelLayer": "V-SURF-LAND-TEXT-E",
     "labelFormat": "BENCH {length:0.#}'x{depth:0.#}'"
   },
 
@@ -108,24 +108,24 @@
 
   "//symbolLabels": "Bare symbol codes that get labelled with the code itself, verbatim as shot, on that feature family's text layer -- the code list on the plan. The office rule that a bare code does nothing still stands for every code NOT listed here. Meanings are confirmed against the office code sheet (PMX Field Code rev 2025-01-13); layers are inherited from each family's data-carrying rule. SSCO (sewer cleanout), UCO (generic cleanout) and MW (monitor well) are confirmed codes but have no family text layer yet, so they stay absent. Spot-elevation codes (ASPH, CONC, GRV, LS, BLFF) are elevations, not symbols, and are deliberately not labelled with their code.",
   "symbolLabels": [
-    { "code": "CB",   "layer": "V-UTIL-STRM-TEXT" },
-    { "code": "CBS",  "layer": "V-UTIL-STRM-TEXT" },
-    { "code": "SDAD", "layer": "V-UTIL-STRM-TEXT" },
-    { "code": "GVL",  "layer": "V-UTIL-NGAS-TEXT" },
-    { "code": "PVT",  "layer": "V-UTIL-POWR-TEXT" },
-    { "code": "PPU",  "layer": "V-UTIL-POWR-TEXT" },
-    { "code": "PPX",  "layer": "V-UTIL-POWR-TEXT" },
-    { "code": "SSMH", "layer": "V-UTIL-STRC-TEXT" },
-    { "code": "SDMH", "layer": "V-UTIL-STRC-TEXT" },
-    { "code": "WFH",  "layer": "V-UTIL-WATR-TEXT" },
-    { "code": "WVL",  "layer": "V-UTIL-WATR-TEXT" },
-    { "code": "PP",   "layer": "V-UTIL-POWR-TEXT" },
-    { "code": "LT",   "layer": "V-UTIL-POWR-TEXT" },
-    { "code": "PJB",  "layer": "V-UTIL-POWR-TEXT" },
-    { "code": "SN",   "layer": "V-SIGN-TEXT" },
-    { "code": "SNNP", "layer": "V-SIGN-TEXT" },
-    { "code": "MB",   "layer": "V-SITE-TEXT" },
-    { "code": "POST", "layer": "V-SITE-TEXT" }
+    { "code": "CB",   "layer": "V-UTIL-STRM-TEXT-E" },
+    { "code": "CBS",  "layer": "V-UTIL-STRM-TEXT-E" },
+    { "code": "SDAD", "layer": "V-UTIL-STRM-TEXT-E" },
+    { "code": "GVL",  "layer": "V-UTIL-NGAS-TEXT-E" },
+    { "code": "PVT",  "layer": "V-UTIL-POWR-TEXT-E" },
+    { "code": "PPU",  "layer": "V-UTIL-POWR-TEXT-E" },
+    { "code": "PPX",  "layer": "V-UTIL-POWR-TEXT-E" },
+    { "code": "SSMH", "layer": "V-UTIL-STRC-TEXT-E" },
+    { "code": "SDMH", "layer": "V-UTIL-STRC-TEXT-E" },
+    { "code": "WFH",  "layer": "V-UTIL-WATR-TEXT-E" },
+    { "code": "WVL",  "layer": "V-UTIL-WATR-TEXT-E" },
+    { "code": "PP",   "layer": "V-UTIL-POWR-TEXT-E" },
+    { "code": "LT",   "layer": "V-UTIL-LITG-TEXT-E" },
+    { "code": "PJB",  "layer": "V-UTIL-POWR-TEXT-E" },
+    { "code": "SN",   "layer": "V-SURF-SIGN-TEXT-E" },
+    { "code": "SNNP", "layer": "V-SURF-SIGN-TEXT-E" },
+    { "code": "MB",   "layer": "V-SURF-MBOX-TEXT-E" },
+    { "code": "POST", "layer": "V-SURF-POST-TEXT-E" }
   ],
 
   "//SETTINGS-MOVED": "unitsPerFoot, trunkDecimals, multiStemAverage, protectedLayers, maskableLayers and labelPlacement below are SEED VALUES ONLY. They are read once, to create ftf-settings.json the first time FTFSETUP runs on a machine that has none. After that the settings file wins and editing them here has no effect - use FTFSETUP. This file is never written by the plugin; it is the office grammar standard and ships with it.",
@@ -178,7 +178,7 @@
       "label": {
         "//format": "Read top to bottom: [ ] parts appear only when they have a value, \\P starts a new line, an empty line is dropped. PP 1234 PSE XFMR TEL -> 'POLE 1234 PSE' / 'W/ XFMR, TEL'. A modifier's suffix goes on the first line: 'POLE 1234 (DEAD)'.",
         "format": "POLE[ {number}][ {owner}][ {material}][ {height}]\\P[W/ {attach}]\\P[{other}]",
-        "layer": "V-UTIL-POWR-TEXT",
+        "layer": "V-UTIL-POWR-TEXT-E",
         "leader": "Auto"
       },
 
@@ -219,7 +219,7 @@
       "//block": "DELIBERATELY ABSENT. Civil 3D description keys already apply a point style that draws the tree symbol, so inserting a block here would put a second symbol on top of the first. The plugin does only what point styles cannot: trimmed drip lines, collision-avoided labels, draw-order banding. To hand the symbol back to the plugin, restore: block TREE-{species}, blockLayer V-TREE, blockScaleFrom trunk.exact (NOT trunk - that one is rounded for labels), blockScaleDivisor 12; and turn the symbol off in the point style so they do not double up.",
 
       "dripLine": {
-        "layer": "V-TREE-DRIP",
+        "layer": "V-SURF-VEGE-E",
         "radiusFrom": "drip",
         "unify": true
       },
@@ -227,7 +227,7 @@
       "label": {
         "format": "{trunk}\" {species}",
         "clusterFormat": "CLUSTER OF {trunk.count} STEMS, AVG {trunk}\" {species}",
-        "layer": "V-TREE-TEXT",
+        "layer": "V-SURF-VEGE-TEXT-E",
         "leader": "Auto"
       },
 
@@ -252,7 +252,7 @@
 
       "label": {
         "format": "{type} SIGN",
-        "layer": "V-SIGN-TEXT",
+        "layer": "V-SURF-SIGN-TEXT-E",
         "leader": "Always"
       },
 
@@ -293,7 +293,7 @@
           { "match": "ON\\s+(?:PP|POLE)", "text": "ON POLE", "group": "post" }
         ]
       },
-      "label": { "format": "[{message} ]SIGN[ ({post})]", "layer": "V-SIGN-TEXT", "leader": "Auto" },
+      "label": { "format": "[{message} ]SIGN[ ({post})]", "layer": "V-SURF-SIGN-TEXT-E", "leader": "Auto" },
       "tagPrefix": "S",
       "validate": [
         { "field": "rotation", "min": 0, "max": 360, "severity": "Warning",
@@ -305,14 +305,14 @@
       "id": "hydrant",
       "description": "Fire Hydrant",
       "match": "^(?<code>WFH|FH)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "HYDRANT {number}", "layer": "V-UTIL-WATR-TEXT", "leader": "Auto" }
+      "label": { "format": "HYDRANT {number}", "layer": "V-UTIL-WATR-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "water-valve",
       "description": "Water Valve",
       "match": "^(?<code>WVL|WV)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "WATER VALVE {number}", "layer": "V-UTIL-WATR-TEXT", "leader": "Auto" }
+      "label": { "format": "WATER VALVE {number}", "layer": "V-UTIL-WATR-TEXT-E", "leader": "Auto" }
     },
 
     {
@@ -320,21 +320,21 @@
       "id": "gas-valve",
       "description": "Gas Valve",
       "match": "^(?<code>GVL)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "GAS VALVE {number}", "layer": "V-UTIL-NGAS-TEXT", "leader": "Auto" }
+      "label": { "format": "GAS VALVE {number}", "layer": "V-UTIL-NGAS-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "manhole",
       "description": "Manhole",
       "match": "^(?<code>S[SD]MH)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "{code} {number}", "layer": "V-UTIL-STRC-TEXT", "leader": "Auto" }
+      "label": { "format": "{code} {number}", "layer": "V-UTIL-STRC-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "catch-basin",
       "description": "Catch Basin",
       "match": "^(?<code>CBS?)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "{code} {number}", "layer": "V-UTIL-STRM-TEXT", "leader": "Auto" }
+      "label": { "format": "{code} {number}", "layer": "V-UTIL-STRM-TEXT-E", "leader": "Auto" }
     },
 
     {
@@ -342,35 +342,35 @@
       "id": "vault",
       "description": "Utility Vault",
       "match": "^(?<code>UVLT)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "VAULT {number}", "layer": "V-UTIL-STRC-TEXT", "leader": "Auto" }
+      "label": { "format": "VAULT {number}", "layer": "V-UTIL-STRC-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "junction-box",
       "description": "Junction Box",
       "match": "^(?<code>PJB|JB)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "JUNCTION BOX {number}", "layer": "V-UTIL-POWR-TEXT", "leader": "Auto" }
+      "label": { "format": "JUNCTION BOX {number}", "layer": "V-UTIL-POWR-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "mailbox",
       "description": "Mailbox",
       "match": "^(?<code>MB)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "MAILBOX {number}", "layer": "V-SITE-TEXT", "leader": "Auto" }
+      "label": { "format": "MAILBOX {number}", "layer": "V-SURF-MBOX-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "bollard",
       "description": "Bollard / Post",
       "match": "^(?<code>POST|BOL)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "POST {number}", "layer": "V-SITE-TEXT", "leader": "Auto" }
+      "label": { "format": "POST {number}", "layer": "V-SURF-POST-TEXT-E", "leader": "Auto" }
     },
 
     {
       "id": "light-pole",
       "description": "Light Pole",
       "match": "^(?<code>LT|LP)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "LIGHT POLE {number}", "layer": "V-UTIL-POWR-TEXT", "leader": "Auto" },
+      "label": { "format": "LIGHT POLE {number}", "layer": "V-UTIL-LITG-TEXT-E", "leader": "Auto" },
       "tagPrefix": "L"
     },
 
@@ -379,7 +379,7 @@
       "id": "guy-anchor",
       "description": "Guy Anchor",
       "match": "^(?<code>GYA)\\s+(?<number>[0-9][0-9A-Z.-]*)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
-      "label": { "format": "GUY ANCHOR {number}", "layer": "V-UTIL-POWR-TEXT", "leader": "Auto" }
+      "label": { "format": "GUY ANCHOR {number}", "layer": "V-UTIL-POWR-TEXT-E", "leader": "Auto" }
     },
 
     {
@@ -387,7 +387,7 @@
       "id": "control",
       "description": "Survey Control",
       "match": "^(?<code>XMAG|XHT|XNL|FMAG)\\s+(?<aka>AKA\\s+[0-9](?:[0-9 &]*[0-9])?)\\s*$",
-      "label": { "format": "{aka}", "layer": "V-CTRL-TEXT", "leader": "Auto" }
+      "label": { "format": "{aka}", "layer": "V-CTRL-TEXT-E", "leader": "Auto" }
     }
   ],
 

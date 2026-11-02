@@ -36,7 +36,7 @@ public sealed class RuleEditingTests
         Assert.Equal("pole", pole.Id);
         Assert.True(pole.Enabled);
         Assert.Equal(ShippedPoleFormat, pole.LabelFormat);
-        Assert.Equal("V-UTIL-POWR-TEXT", pole.LabelLayer);
+        Assert.Equal("V-UTIL-POWR-TEXT-E", pole.LabelLayer);
         Assert.Equal("P", pole.TagPrefix);
         Assert.Equal("None", pole.RotationSummary);
         Assert.Contains("Civil 3D", pole.SymbolSummary);

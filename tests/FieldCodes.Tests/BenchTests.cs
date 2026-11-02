@@ -176,7 +176,7 @@ public sealed class BenchTests
     public void TheShippedRulesCarryABenchStandard()
     {
         var cfg = RulesConfig.Load(Path.Combine(AppContext.BaseDirectory, "rules.json"));
-        Assert.Equal("V-SITE-TEXT", cfg.Bench.LabelLayer);
+        Assert.Equal("V-SURF-LAND-TEXT-E", cfg.Bench.LabelLayer);
         Assert.Contains("BENCH", cfg.Bench.Codes);
         Assert.Equal("BENCH {length:0.#}'x{depth:0.#}'", cfg.Bench.LabelFormat);
     }

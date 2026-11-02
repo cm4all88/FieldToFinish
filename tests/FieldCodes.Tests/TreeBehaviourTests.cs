@@ -97,7 +97,7 @@ public sealed class TreeBehaviourTests : IClassFixture<RulesFixture>
         var p = _fx.Parse(desc);
         Assert.Equal(radius, p.DripRadius);
         Assert.True(p.HasDripLine);
-        Assert.Equal("V-TREE-DRIP", p.DripLayer);
+        Assert.Equal("V-SURF-VEGE-E", p.DripLayer);
         Assert.True(p.DripUnify);
     }
 
@@ -118,7 +118,7 @@ public sealed class TreeBehaviourTests : IClassFixture<RulesFixture>
     {
         var p = _fx.Parse("CON 18 . 25");
         Assert.Equal("18\" CONIFER", p.LabelText);
-        Assert.Equal("V-TREE-TEXT", p.LabelLayer);
+        Assert.Equal("V-SURF-VEGE-TEXT-E", p.LabelLayer);
         Assert.Equal(LeaderMode.Auto, p.Leader);
     }
 
@@ -130,9 +130,9 @@ public sealed class TreeBehaviourTests : IClassFixture<RulesFixture>
     }
 
     [Theory]
-    [InlineData("CON 18 . 25 DEAD", " (DEAD)", "V-TREE-TEXT-DEAD", "V-TREE-DRIP-DEAD")]
-    [InlineData("CON 18 . 25 REM", " (REMOVE)", "V-TREE-TEXT-RMV", "V-TREE-DRIP-RMV")]
-    [InlineData("CON 18 . 25 PROT", " (PROTECTED)", "V-TREE-TEXT-PROT", "V-TREE-DRIP-PROT")]
+    [InlineData("CON 18 . 25 DEAD", " (DEAD)", "V-SURF-VEGE-TEXT-E-DEAD", "V-SURF-VEGE-E-DEAD")]
+    [InlineData("CON 18 . 25 REM", " (REMOVE)", "V-SURF-VEGE-TEXT-E-RMV", "V-SURF-VEGE-E-RMV")]
+    [InlineData("CON 18 . 25 PROT", " (PROTECTED)", "V-SURF-VEGE-TEXT-E-PROT", "V-SURF-VEGE-E-PROT")]
     public void ModifiersSuffixTheLabelAndEveryLayer(
         string desc, string suffix, string labelLayer, string dripLayer)
     {

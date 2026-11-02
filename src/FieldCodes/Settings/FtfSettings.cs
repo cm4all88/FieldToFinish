@@ -353,6 +353,9 @@ namespace FieldCodes.Settings
             if (Tags.TableColumns == null || Tags.TableColumns.Count == 0)
                 Tags.RestoreDefaults();
             if (string.IsNullOrEmpty(Version)) Version = "1";
+
+            // Layers an earlier build shipped that are not in the PMX template.
+            PmxLayers.Upgrade(this);
         }
 
         // ------------------------------------------------------------------ saving

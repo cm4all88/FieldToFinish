@@ -31,7 +31,7 @@ public sealed class FeatureReviewTests : IClassFixture<RulesFixture>
 
         Assert.Equal(ReviewCategory.Tree, row.Category);
         Assert.Equal(ReviewStatus.Ok, row.Status);
-        Assert.Contains("Dripline r=25 on V-TREE-DRIP", row.Actions);
+        Assert.Contains("Dripline r=25 on V-SURF-VEGE-E", row.Actions);
         Assert.Contains("Label \"18\" CONIFER\"", row.Actions);
         Assert.Contains("Leader if needed", row.Actions);
         Assert.Contains("Tag T#", row.Actions);
@@ -149,7 +149,7 @@ public sealed class FeatureReviewTests : IClassFixture<RulesFixture>
         Assert.Contains("Rule: tree", detail);
         Assert.Contains("trunk=10", detail);
         Assert.Contains("Modifiers (priority order): dead", detail);
-        Assert.Contains("V-TREE-TEXT-DEAD", detail);
+        Assert.Contains("V-SURF-VEGE-TEXT-E-DEAD", detail);
         Assert.Contains("Dripline: radius 28", detail);
         Assert.Contains("never reissued", detail);
     }

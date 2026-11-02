@@ -26,7 +26,7 @@ public sealed class GenericFeatureTests : IClassFixture<RulesFixture>
         Assert.Equal("pole", p.RuleId);
         Assert.Equal("PP", p.Code);
         Assert.Equal("POLE 1234", p.LabelText);
-        Assert.Equal("V-UTIL-POWR-TEXT", p.LabelLayer);
+        Assert.Equal("V-UTIL-POWR-TEXT-E", p.LabelLayer);
         Assert.Equal("P", p.TagPrefix);
     }
 
@@ -54,7 +54,7 @@ public sealed class GenericFeatureTests : IClassFixture<RulesFixture>
 
         Assert.False(p.HasErrors);
         Assert.Equal("POLE 1234 (DEAD)", p.LabelText);
-        Assert.Equal("V-UTIL-POWR-TEXT-DEAD", p.LabelLayer);
+        Assert.Equal("V-UTIL-POWR-TEXT-E-DEAD", p.LabelLayer);
     }
 
     [Fact]
@@ -106,19 +106,19 @@ public sealed class GenericFeatureTests : IClassFixture<RulesFixture>
     // ------------------------------------------- the wider point-feature set
 
     [Theory]
-    [InlineData("WFH 6", "hydrant", "HYDRANT 6", "V-UTIL-WATR-TEXT")]
-    [InlineData("WVL 8", "water-valve", "WATER VALVE 8", "V-UTIL-WATR-TEXT")]
-    [InlineData("GVL 2", "gas-valve", "GAS VALVE 2", "V-UTIL-NGAS-TEXT")]
-    [InlineData("SSMH 1042", "manhole", "SSMH 1042", "V-UTIL-STRC-TEXT")]
-    [InlineData("SDMH 17", "manhole", "SDMH 17", "V-UTIL-STRC-TEXT")]
-    [InlineData("CB 4", "catch-basin", "CB 4", "V-UTIL-STRM-TEXT")]
-    [InlineData("CBS 9", "catch-basin", "CBS 9", "V-UTIL-STRM-TEXT")]
-    [InlineData("UVLT 3", "vault", "VAULT 3", "V-UTIL-STRC-TEXT")]
-    [InlineData("PJB 12", "junction-box", "JUNCTION BOX 12", "V-UTIL-POWR-TEXT")]
-    [InlineData("MB 1408", "mailbox", "MAILBOX 1408", "V-SITE-TEXT")]
-    [InlineData("POST 2", "bollard", "POST 2", "V-SITE-TEXT")]
-    [InlineData("LT 7", "light-pole", "LIGHT POLE 7", "V-UTIL-POWR-TEXT")]
-    [InlineData("GYA 1", "guy-anchor", "GUY ANCHOR 1", "V-UTIL-POWR-TEXT")]
+    [InlineData("WFH 6", "hydrant", "HYDRANT 6", "V-UTIL-WATR-TEXT-E")]
+    [InlineData("WVL 8", "water-valve", "WATER VALVE 8", "V-UTIL-WATR-TEXT-E")]
+    [InlineData("GVL 2", "gas-valve", "GAS VALVE 2", "V-UTIL-NGAS-TEXT-E")]
+    [InlineData("SSMH 1042", "manhole", "SSMH 1042", "V-UTIL-STRC-TEXT-E")]
+    [InlineData("SDMH 17", "manhole", "SDMH 17", "V-UTIL-STRC-TEXT-E")]
+    [InlineData("CB 4", "catch-basin", "CB 4", "V-UTIL-STRM-TEXT-E")]
+    [InlineData("CBS 9", "catch-basin", "CBS 9", "V-UTIL-STRM-TEXT-E")]
+    [InlineData("UVLT 3", "vault", "VAULT 3", "V-UTIL-STRC-TEXT-E")]
+    [InlineData("PJB 12", "junction-box", "JUNCTION BOX 12", "V-UTIL-POWR-TEXT-E")]
+    [InlineData("MB 1408", "mailbox", "MAILBOX 1408", "V-SURF-MBOX-TEXT-E")]
+    [InlineData("POST 2", "bollard", "POST 2", "V-SURF-POST-TEXT-E")]
+    [InlineData("LT 7", "light-pole", "LIGHT POLE 7", "V-UTIL-LITG-TEXT-E")]
+    [InlineData("GYA 1", "guy-anchor", "GUY ANCHOR 1", "V-UTIL-POWR-TEXT-E")]
     public void PointFeatures_AreConfigurationOnly(string desc, string rule,
                                                    string label, string layer)
     {
@@ -164,7 +164,7 @@ public sealed class GenericFeatureTests : IClassFixture<RulesFixture>
         var p = _fx.Parse("CB 4 DEAD");
         Assert.False(p.HasErrors);
         Assert.Equal("CB 4 (DEAD)", p.LabelText);
-        Assert.Equal("V-UTIL-STRM-TEXT-DEAD", p.LabelLayer);
+        Assert.Equal("V-UTIL-STRM-TEXT-E-DEAD", p.LabelLayer);
     }
 
     [Fact]

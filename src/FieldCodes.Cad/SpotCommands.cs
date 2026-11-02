@@ -434,7 +434,7 @@ namespace FieldCodes.Cad
                     table.Columns[c].Width = textHeight * (widest * 0.9 + 2);
                 }
 
-                table.LayerId = CadUtil.EnsureLayer(db, tr, "V-CTRL-TABL");
+                table.LayerId = CadUtil.EnsureLayer(db, tr, FieldCodes.Settings.PmxLayers.TableLayer);
                 table.GenerateLayout();
                 CadUtil.AddToModelSpace(db, tr, table);
                 Ownership.EnsureRegApp(db, tr);

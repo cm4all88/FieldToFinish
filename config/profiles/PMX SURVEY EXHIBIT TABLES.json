@@ -43,7 +43,7 @@
     "enabled": false,
     "textStyle": "",
     "textHeightPlotted": 0.08,
-    "defaultLabelLayer": "V-LINE-TEXT",
+    "defaultLabelLayer": "V-TEXT-E",
     "alignToLine": true,
     "repeatIntervalFeet": 200.0,
     "minLengthFeet": 10.0,
@@ -213,14 +213,14 @@
   "tags": {
     "Title": "Tags & Table",
     "AffectedCommands": "FTFTAGS, FTFTABLE",
-    "tagLayer": "V-TREE-TAG",
+    "tagLayer": "",
     "tagTextStyle": "",
     "tagTextHeightPlotted": 0.08,
     "tagOffsetPlotted": 0.04,
     "startNumber": 1,
     "tagLeader": true,
     "tableTitle": "TREE SCHEDULE",
-    "tableLayer": "V-TREE-TABL",
+    "tableLayer": "V-TEXT-TABL",
     "tableTextHeightPlotted": 0.08,
     "tableColumns": [
       "Tag",
@@ -236,14 +236,19 @@
     "Title": "Draw Order",
     "AffectedCommands": "FTFORDER, FTFLABELS",
     "protectedLayers": [
-      "V-SIGN",
       "V-UTIL-*",
-      "V-STRC-*",
-      "C-STRM-STRC"
+      "V-SIGL-*",
+      "V-CTRL-*",
+      "V-SURF-SIGN-*",
+      "V-SURF-*-SYMB-E",
+      "V-PROP-*-SYMB*"
     ],
     "maskableLayers": [
-      "V-TREE-DRIP",
-      "C-TOPO-*",
+      "V-TOPO-CONT-*",
+      "V-TOPO-MAJR-E",
+      "V-TOPO-MINR-E",
+      "V-SURF-VEGE-E",
+      "V-TINN-*",
       "V-ROAD-*"
     ]
   },

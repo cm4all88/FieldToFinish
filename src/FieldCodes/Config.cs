@@ -160,6 +160,10 @@ namespace FieldCodes
         /// </summary>
         public void Compile()
         {
+            // A rules file saved by an earlier build still names FTF's retired label layers;
+            // move those to the PMX standard before anything reads them.
+            FieldCodes.Settings.PmxLayers.Upgrade(this);
+
             var problems = new List<string>();
 
             if (UnitsPerFoot <= 0)
@@ -393,8 +397,8 @@ namespace FieldCodes
         public BenchRule()
         {
             Codes = new List<string> { "BENCH", "BNCH", "BENCHL" };
-            Layer = "V-SITE-FURN-E";
-            LabelLayer = "V-SITE-TEXT";
+            Layer = FieldCodes.Settings.PmxLayers.BenchLayer;
+            LabelLayer = FieldCodes.Settings.PmxLayers.BenchLabelLayer;
             LabelFormat = "BENCH {length:0.#}'x{depth:0.#}'";
         }
     }

@@ -68,7 +68,7 @@ public sealed class SeparateNoteTests : IClassFixture<RulesFixture>
         var p = Parse("CB", "TYPE 1 RIM 245.3");
         Assert.Equal("symbol-label", p.RuleId);
         Assert.Equal("TYPE 1 RIM 245.3", p.LabelText);
-        Assert.Equal("V-UTIL-STRM-TEXT", p.LabelLayer);
+        Assert.Equal("V-UTIL-STRM-TEXT-E", p.LabelLayer);
         Assert.Equal("TYPE 1 RIM 245.3", p.Note);
         Assert.Equal("CB TYPE 1 RIM 245.3", p.RawDescription);
         Assert.Equal(new[] { "TYPE 1 RIM 245.3" }, p.LabelLines);

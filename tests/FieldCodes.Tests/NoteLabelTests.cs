@@ -29,7 +29,7 @@ public sealed class NoteLabelTests : IClassFixture<RulesFixture>
         Assert.Equal(new[] { "POLE 1234 PSE", "W/ XFMR, TEL, CATV" }, p.LabelLines);
         Assert.Equal("POLE 1234 PSE\\PW/ XFMR, TEL, CATV", p.LabelText);
         Assert.Equal("POLE 1234 PSE / W/ XFMR, TEL, CATV", p.LabelDisplay);
-        Assert.Equal("V-UTIL-POWR-TEXT", p.LabelLayer);
+        Assert.Equal("V-UTIL-POWR-TEXT-E", p.LabelLayer);
     }
 
     [Theory]
@@ -58,7 +58,7 @@ public sealed class NoteLabelTests : IClassFixture<RulesFixture>
         var p = _fx.Parse("PP 1234 XFMR DEAD");
         Assert.False(p.HasErrors);
         Assert.Equal(new[] { "POLE 1234 (DEAD)", "W/ XFMR" }, p.LabelLines);
-        Assert.Equal("V-UTIL-POWR-TEXT-DEAD", p.LabelLayer);
+        Assert.Equal("V-UTIL-POWR-TEXT-E-DEAD", p.LabelLayer);
         Assert.Contains(p.Modifiers, m => m.Id == "dead");
     }
 
@@ -138,7 +138,7 @@ public sealed class NoteLabelTests : IClassFixture<RulesFixture>
     {
         var p = _fx.Parse("SN 270 DEAD END");
         Assert.Empty(p.Modifiers);
-        Assert.Equal("V-SIGN-TEXT", p.LabelLayer);
+        Assert.Equal("V-SURF-SIGN-TEXT-E", p.LabelLayer);
     }
 
     // ----------------------------------------------------------------- policies (synthetic rules)

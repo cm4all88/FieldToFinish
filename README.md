@@ -324,6 +324,42 @@ recording the prior value alongside the ownership stamp so cleanup can restore i
 and deciding what happens when someone has since changed it by hand. **Not solved.
 Recorded so it is not forgotten.**
 
+## Layers: the PMX template
+
+FTF draws to the PMX layer template, read from a completed PMX Civil 3D drawing (588 layers):
+`V-<GROUP>-<FEATURE>-E`, `-E` meaning existing, each family with `-PNTS-E`, `-SYMB-E` and
+`-TEXT-E` companions (`V-UTIL-POWR-E`, `V-UTIL-POWR-SYMB-E`, `V-UTIL-POWR-TEXT-E`).
+
+| What FTF draws | Layer |
+|---|---|
+| Pole, junction box, guy anchor labels | `V-UTIL-POWR-TEXT-E` |
+| Light pole labels | `V-UTIL-LITG-TEXT-E` |
+| Hydrant, water valve / gas valve labels | `V-UTIL-WATR-TEXT-E` / `V-UTIL-NGAS-TEXT-E` |
+| Catch basin, area drain / manhole, vault labels | `V-UTIL-STRM-TEXT-E` / `V-UTIL-STRC-TEXT-E` |
+| Sign / mailbox / post labels | `V-SURF-SIGN-TEXT-E` / `V-SURF-MBOX-TEXT-E` / `V-SURF-POST-TEXT-E` |
+| Control labels | `V-CTRL-TEXT-E` |
+| Tree labels / drip lines | `V-SURF-VEGE-TEXT-E` / `V-SURF-VEGE-E` |
+| Bench outline / label | `V-SURF-LAND-E` / `V-SURF-LAND-TEXT-E` |
+| Line labels | the line's own family text layer when the drawing has it, else `V-TEXT-E` |
+| Tag numbers | the feature's own label layer |
+| Tree schedule, control table | `V-TEXT-TABL` |
+| Contours / spot elevations | `V-TOPO-CONT-E`, `V-TOPO-CONT-TEXT-E` / `V-TOPO-SPOT-PNTS-E`, `V-TOPO-SPOT-TEXT-E` |
+
+Draw order and label placement use the same template. **Protected** (labels never cover):
+`V-UTIL-*`, `V-SIGL-*`, `V-CTRL-*`, `V-SURF-SIGN-*`, `V-SURF-*-SYMB-E`, `V-PROP-*-SYMB*`.
+**Maskable** (labels may sit on and mask): `V-TOPO-CONT-*`, `V-TOPO-MAJR-E`, `V-TOPO-MINR-E`,
+`V-SURF-VEGE-E`, `V-TINN-*`, `V-ROAD-*`.
+
+Earlier builds used names the template does not have (`V-UTIL-POWR-TEXT`, `V-SIGN-TEXT`,
+`V-SITE-TEXT`, `V-TREE-TEXT`, `V-TREE-DRIP`, `V-CTRL-TEXT`, `V-LINE-TEXT`, `V-TREE-TAG`,
+`V-TREE-TABL`, and the old draw-order lists). A settings file or a rules file saved by an
+earlier build is upgraded as it loads (`FieldCodes.Settings.PmxLayers`): only those exact
+names, and a draw-order list only when it is still exactly the old default, so anything the
+office chose itself is kept. In a drawing labelled by an earlier build, the next FTFLABELALL
+(or FTFLABELS, FTFTAGS, FTFDRIP) redraws its labels on the new layers; labels moved by hand are
+kept where they are, on their old layer, and the emptied old layers can be purged. Easement,
+exhibit, record-survey and sheet layers are unchanged.
+
 ## Who draws the tree symbol
 
 **Civil 3D does.** Description keys match the raw description and apply a point
@@ -476,8 +512,8 @@ feet, `[ ]` and `\P` as above).
 - The outline and label are deliberate drafting: `FTFCLEAN` leaves them alone,
   `FTFDRAFTCLEAN` manages them with the drafted lines, and running `FTFBENCH` again
   on the same two shots replaces that bench rather than drawing a second.
-- `bench.layer` ships as `V-SITE-FURN-E` as a starting point; set it to the office's
-  site furniture layer.
+- The outline goes on `V-SURF-LAND-E` and the label on `V-SURF-LAND-TEXT-E` (PMX keeps
+  benches with landscape features); `bench.layer` / `bench.labelLayer` change them.
 
 ## Driveways: FTFLABELDRIVEWAY
 
