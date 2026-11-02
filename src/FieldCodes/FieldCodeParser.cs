@@ -552,9 +552,11 @@ namespace FieldCodes
 
             // Survey azimuth runs clockwise from north; AutoCAD runs counter-clockwise
             // from east. Getting this backwards leaves every sign in the plan cocked.
-            p.RotationDegrees = rule.Rotation.Mode == RotationMode.Azimuth
+            p.RotationIsAzimuth = rule.Rotation.Mode == RotationMode.Azimuth;
+            p.RotationDegrees = p.RotationIsAzimuth
                 ? Geometry.Angles.AzimuthToCadDegrees(deg)
                 : Geometry.Angles.NormalizeDegrees(deg);
+            p.MarkerRotationDegrees = Orient.SymbolRotation.MarkerDegreesFor(_cfg.Orientation, p);
         }
 
         private void ResolveDrawing(ParsedPoint p, CodeRule rule)

@@ -99,6 +99,8 @@ namespace FieldCodes.Cad
                 Large("Process\nDrawing", "FTFRUN",
                     "Every finishing stage, in order.", FtfIcons.Run),
                 Small("Points", "FTFPOINTS", FtfIcons.Points),
+                Small("Orient Symbols", "FTFORIENT", FtfIcons.Orient),
+                Small("Reset Orient", "FTFORIENTRESET", FtfIcons.Clean),
                 Small("Driplines", "FTFDRIP", FtfIcons.Drip),
                 Small("Labels", "FTFLABELS", FtfIcons.Labels),
                 Small("Tags", "FTFTAGS", FtfIcons.Tags),
@@ -424,6 +426,18 @@ namespace FieldCodes.Cad
                 dc.DrawEllipse(Blue, null, new Point(9, 10), 3.2, 3.2);
                 dc.DrawEllipse(Blue, null, new Point(23, 8), 3.2, 3.2);
                 dc.DrawEllipse(Blue, null, new Point(16, 23), 3.2, 3.2);
+            });
+        }
+
+        /// <summary>A symbol turned to face its way: a point with a direction arrow.</summary>
+        public static ImageSource Orient(int px)
+        {
+            return Render(px, dc =>
+            {
+                dc.DrawEllipse(Gray, null, new Point(10, 22), 3.4, 3.4);
+                dc.DrawLine(BluePen(2.6), new Point(10, 22), new Point(25, 7));
+                dc.DrawLine(BluePen(2.6), new Point(25, 7), new Point(16, 8));
+                dc.DrawLine(BluePen(2.6), new Point(25, 7), new Point(24, 16));
             });
         }
 

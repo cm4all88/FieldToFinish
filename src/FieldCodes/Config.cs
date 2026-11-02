@@ -109,6 +109,11 @@ namespace FieldCodes
         [JsonProperty("bench")]
         public BenchRule Bench { get; set; }
 
+        /// <summary>FTFORIENT: how each symbol is drawn at rotation zero and which linework is
+        /// road, stop bar or utility. Missing parts fall back to PMX's standard.</summary>
+        [JsonProperty("orientation")]
+        public FieldCodes.Orient.OrientationStandard Orientation { get; set; }
+
         public RulesConfig()
         {
             UnitsPerFoot = 1.0;
@@ -130,6 +135,7 @@ namespace FieldCodes
             StairsLabelFormat = "{count} STEPS";
             ControlCodes = new List<string>();
             Bench = new BenchRule();
+            Orientation = FieldCodes.Orient.OrientationStandard.Pmx();
         }
 
         public static RulesConfig Load(string path)
@@ -163,6 +169,15 @@ namespace FieldCodes
             // A rules file saved by an earlier build still names FTF's retired label layers;
             // move those to the PMX standard before anything reads them.
             FieldCodes.Settings.PmxLayers.Upgrade(this);
+
+            // An orientation section that names only some parts keeps PMX's for the rest.
+            var pmx = FieldCodes.Orient.OrientationStandard.Pmx();
+            if (Orientation == null) Orientation = pmx;
+            if (Orientation.Symbols == null || Orientation.Symbols.Count == 0) Orientation.Symbols = pmx.Symbols;
+            if (Orientation.Lines == null || Orientation.Lines.Count == 0) Orientation.Lines = pmx.Lines;
+            if (Orientation.StopSignCodes == null || Orientation.StopSignCodes.Count == 0) Orientation.StopSignCodes = pmx.StopSignCodes;
+            if (Orientation.StopSignWords == null || Orientation.StopSignWords.Count == 0) Orientation.StopSignWords = pmx.StopSignWords;
+            if (Orientation.LuminaireCodes == null || Orientation.LuminaireCodes.Count == 0) Orientation.LuminaireCodes = pmx.LuminaireCodes;
 
             var problems = new List<string>();
 

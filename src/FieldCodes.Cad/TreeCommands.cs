@@ -35,6 +35,7 @@ namespace FieldCodes.Cad
                 var cfg = FtfSession.Rules(db);
                 var settings = FtfSession.SettingsFor(db, cfg);
                 var parser = new FieldCodeParser(cfg);
+                var orient = cfg.Orientation ?? FieldCodes.Orient.OrientationStandard.Pmx();
 
                 Ownership.EnsureRegApp(db, tr);
 
@@ -85,9 +86,11 @@ namespace FieldCodes.Cad
                         rows.Add(RowFor(cogo, parsed, "Warning"));
 
                     // Point finishing, not point creation. Civil 3D's description keys
-                    // already placed the symbol; rotating it is polish FTF adds.
+                    // already placed the symbol; rotating it is polish FTF adds. A field
+                    // azimuth is the way the feature faces, turned against the symbol's own
+                    // zero (a PMX sign is drawn facing north).
                     if (parsed.RotationDegrees.HasValue &&
-                        RotateMarker(tr, cogo, parsed.RotationDegrees.Value))
+                        RotateMarker(tr, cogo, parsed.MarkerRotationDegrees ?? parsed.RotationDegrees.Value))
                         rotated++;
 
                     if (!parsed.InsertBlock || string.IsNullOrEmpty(parsed.BlockName))
@@ -109,7 +112,7 @@ namespace FieldCodes.Cad
                         continue;
                     }
 
-                    PlaceBlock(db, tr, cogo, parsed, blockId, cfg.Version);
+                    PlaceBlock(db, tr, cogo, parsed, blockId, cfg.Version, orient);
                     placed++;
                 }
 
@@ -252,7 +255,8 @@ namespace FieldCodes.Cad
         }
 
         private static void PlaceBlock(Database db, Transaction tr, CogoPoint cogo,
-                                       ParsedPoint parsed, ObjectId blockId, string rulesVersion)
+                                       ParsedPoint parsed, ObjectId blockId, string rulesVersion,
+                                       FieldCodes.Orient.OrientationStandard orient)
         {
             var layerId = CadUtil.EnsureLayer(db, tr, parsed.BlockLayer);
             var position = CadUtil.Flatten(cogo.Location);
@@ -264,8 +268,16 @@ namespace FieldCodes.Cad
                 var scale = parsed.BlockScale > 0 ? parsed.BlockScale : 1.0;
                 br.ScaleFactors = new Scale3d(scale, scale, scale);
 
+                // The standard's zero belongs to its own block; an opted-in block of another
+                // name keeps the angle as the rule gave it.
                 if (parsed.RotationDegrees.HasValue)
-                    br.Rotation = CadUtil.DegreesToRadians(parsed.RotationDegrees.Value);
+                {
+                    var symbol = orient.SymbolFor(parsed.Code);
+                    var degrees = symbol != null && symbol.DrawnWith(parsed.BlockName)
+                        ? parsed.MarkerRotationDegrees ?? parsed.RotationDegrees.Value
+                        : parsed.RotationDegrees.Value;
+                    br.Rotation = CadUtil.DegreesToRadians(degrees);
+                }
 
                 CadUtil.AddToModelSpace(db, tr, br);
 

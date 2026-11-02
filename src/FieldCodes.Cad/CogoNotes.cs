@@ -57,13 +57,27 @@ namespace FieldCodes.Cad
         public ParsedPoint Parse(FieldCodeParser parser, CogoPoint cogo)
         {
             var number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture);
-            PointRecord record;
-            if (!_records.TryGetValue(cogo.ObjectId, out record))
+            if (!_records.ContainsKey(cogo.ObjectId))
                 return parser.Parse(number, cogo.RawDescription);
+            return parser.Parse(number, cogo.RawDescription, NoteOf(cogo));
+        }
 
-            string from;
-            var note = _reader.NoteFor(record, out from);
-            return parser.Parse(number, cogo.RawDescription, note);
+        private readonly Dictionary<ObjectId, string> _notes = new Dictionary<ObjectId, string>();
+
+        /// <summary>The crew's note for a point read from outside its raw description (point
+        /// property or full description), or null. Read once per point.</summary>
+        public string NoteOf(CogoPoint cogo)
+        {
+            string note;
+            if (_notes.TryGetValue(cogo.ObjectId, out note)) return note;
+            PointRecord record;
+            if (_records.TryGetValue(cogo.ObjectId, out record))
+            {
+                string from;
+                note = _reader.NoteFor(record, out from);
+            }
+            _notes[cogo.ObjectId] = note;
+            return note;
         }
 
         /// <summary>One line saying where notes were read from, when any were.</summary>

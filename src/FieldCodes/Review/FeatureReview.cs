@@ -196,8 +196,10 @@ namespace FieldCodes.Review
 
             if (p.RotationDegrees.HasValue)
                 actions.Add("Rotate existing marker to " +
-                            p.RotationDegrees.Value.ToString("0.#", CultureInfo.InvariantCulture) +
-                            " deg");
+                            (p.MarkerRotationDegrees ?? p.RotationDegrees.Value).ToString("0.#", CultureInfo.InvariantCulture) +
+                            " deg" + (p.RotationIsAzimuth
+                                ? " (faces " + Geometry.Angles.NormalizeDegrees(90.0 - p.RotationDegrees.Value).ToString("0.#", CultureInfo.InvariantCulture) + " az)"
+                                : ""));
 
             if (p.HasDripLine && p.DripRadius.HasValue)
                 actions.Add("Dripline r=" +
@@ -250,7 +252,7 @@ namespace FieldCodes.Review
 
                 if (p.RotationDegrees.HasValue)
                     lines.Add("Marker rotation: " +
-                              p.RotationDegrees.Value.ToString("0.##", CultureInfo.InvariantCulture) +
+                              (p.MarkerRotationDegrees ?? p.RotationDegrees.Value).ToString("0.##", CultureInfo.InvariantCulture) +
                               " deg (rotates the Civil 3D marker; no block is inserted)");
 
                 if (p.HasDripLine && p.DripRadius.HasValue)

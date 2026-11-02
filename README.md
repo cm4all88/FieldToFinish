@@ -306,23 +306,20 @@ duplicated symbols look almost right — which is how they reach a plan set.
 No shipped rule sets it. `BlockInsertionSafeguardTests` asserts that, and that a
 modifier cannot smuggle a block in either.
 
-### Reversing modifications — OPEN PRODUCTION REQUIREMENT
+### Reversing modifications — PARTLY SOLVED
 
-FTF does two different things, and only one of them is currently reversible:
+FTF does two different things:
 
 | | Reversible? |
 |---|---|
 | **Entities FTF creates** (labels, driplines, tags, masks, the schedule) | Yes — XData ownership, `FTFCLEAN` erases them |
-| **Properties FTF modifies on Civil 3D objects** (`MarkerRotation` today) | **No** — there is no entity to erase |
+| **Marker rotations set by `FTFORIENT`** | Yes — the rotation before FTF's first change is kept on the point (XData `FTF_ORIENT`), `FTFORIENTRESET` puts it back, and a marker turned by hand since is kept, not overwritten |
+| **Marker rotations set by `FTFPOINTS` from a field azimuth (`SN 135`)** | **No** — the prior value is not recorded |
 
-Re-running is safe because a modification is idempotent: the same rotation is written
-again. But `FTFCLEAN` cannot put a rotated marker back, because it never recorded what
-the value was before FTF touched it.
-
-Before this goes to production, modifications need a reversible strategy — most likely
-recording the prior value alongside the ownership stamp so cleanup can restore it,
-and deciding what happens when someone has since changed it by hand. **Not solved.
-Recorded so it is not forgotten.**
+Re-running `FTFPOINTS` is safe because the rotation is idempotent: the same value is
+written again. But nothing can put a marker it turned back. The same record `FTFORIENT`
+keeps would solve it; until then, `FTFORIENT` (which also reads `SN 135` as a measured
+direction, and turns it to the same value) is the reversible way to orient signs.
 
 ## Layers: the PMX template
 
@@ -412,6 +409,8 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
+| `FTFORIENT` | Turns the symbols Civil 3D already drew (COGO markers) to face the way the features do; Preview, Apply or All. See "Orienting symbols" | yes (and kept: a marker turned by hand is not overwritten) |
+| `FTFORIENTRESET` | Puts every marker `FTFORIENT` turned back as it was and removes its QC graphics | yes |
 | `FTFCONTOUR` | Contour polylines at exact elevations off a TIN surface (one, a list, or a run), optionally clipped to a boundary and labelled; the surface is only read | yes (replaces its own at the same surface and elevation) |
 | `FTFRECORD` | Recorded plat / Record of Survey in, reviewed calls, reconstructed geometry out — see "Recorded surveys" | yes (FTFRECORDREBUILD) |
 | `FTFRECORDCHECK` | Drawing versus the record; flags only | yes |
@@ -661,6 +660,150 @@ prompts on a real drawing. The elevation parsing, the tracer, clipping, label sp
 the before/after comparison and the report are unit tested
 (`tests/FieldCodes.Tests/ContourTests.cs`), and a source guard fails the build's tests
 if the command ever calls a surface-editing API.
+
+## Orienting symbols: FTFORIENT
+
+Civil 3D draws every survey symbol at rotation zero unless something turns it. `FTFORIENT`
+turns the ones that mean a direction — signs, hydrant nozzles, light and signal arms, valve
+pipe axes, pavement arrows and words — from what was surveyed around them.
+
+**What it changes:** each COGO point's `MarkerRotation`, and for painted words the label
+rotation too. Nothing else. No block is inserted, no point moves, no elevation or line is
+touched, and nothing is drawn as utility linework. The rotation before FTF's first change
+is kept on the point (XData `FTF_ORIENT`), so `FTFORIENTRESET` puts every symbol back.
+
+**Run it**
+
+1. `UPDATEFTF` (the approved build), open the drawing.
+2. `FTFORIENT` → `Preview`. Nothing is rotated; the QC arrows are drawn (non-plotting) and
+   the report is written. Look at the red rings first: those are the review list.
+3. `FTFORIENT` → `Apply` (the default). Turns every decision at or above the office's
+   confidence (0.6 and Inferred or stronger, `rules.json` → `orientation`).
+   A marker someone already turned by hand is **kept** (listed as "kept as turned by
+   hand"); a measured direction still replaces it. `All` replaces those too.
+4. `FTFORIENTRESET` puts everything back and removes the QC.
+
+The ribbon has both on the Finish panel (Orient Symbols, Reset Orient).
+
+### How it decides
+
+Strongest evidence first; a stronger tier always wins, and only *measured* features are
+used to orient others, so one wrong guess cannot set off a chain of confident wrong ones.
+
+| Tier | From | Examples |
+|---|---|---|
+| **Measured** | What the crew recorded | `SN 135` (the office sign rule's azimuth), `AZ 135`, `FACES NE`, `NOZ E`, `STEAMER 270`, `ARM W`, `ARMS N S`, a valve `N-S`; a shot sign panel line; in the description or the crew's note |
+| **Relationship** | Surveyed features around it | the stop bar a stop sign stands beside; the intersection approach a sign is on the right of; a side road (edges only) a stop sign stands on; a luminaire shot at the end of an arm; a hydrant and its valve tee; a measured arrow in the lane beside a sign |
+| **Alignment** | Surveyed road or utility linework | traffic keeps right of a two-way centre line (0.7) or an edge with no centre line (0.55); a one-way line drawn in its direction (0.85); a valve on a surveyed main (0.85) |
+| **Inferred** | A feature rule the surroundings support | a hydrant's pumper nozzle faces the nearest road (0.7 within 15 ft, 0.6 to 40 ft); a lone valve between a hydrant and the road |
+| **Review** | Two answers equally good, or nothing to go on | left alone, ringed red, listed with a suggestion where there is one |
+
+Per feature:
+
+- **Signs** face the traffic they are meant for. A sign on the right of a two-way road faces
+  the drivers coming toward it. At an intersection the approach is chosen by where the sign
+  stands (about a lane and a shoulder off the centre line, before the junction), not by the
+  nearest road — at a corner both are near. **Stop signs** take a stop bar first, then an
+  approach, then a side road drawn by its edges only. A stop sign with none of those is
+  **not** faced at through traffic: it goes to review with that as the suggestion. Several
+  signs on one post, street-name blades (read from both sides) and signs between two roads
+  that would face different ways all go to review.
+- **Side roads with no centre line** (common on rural surveys, where only the main road's
+  stripe is shot): a point much nearer an edge that runs *across* the main centre line than
+  to the centre line itself belongs to that side road.
+- **Lights**: a round light is never rotated. An arm points to the luminaire shot if there is
+  one within 40 ft, else over the road (0.65).
+- **Signal poles**: the mast arm spans the intersection approach it stands beside; unsure →
+  review.
+- **Hydrants**: the pumper nozzle faces the street (fire engine access). Two streets at
+  similar distance in different directions → review.
+- **Water valves** (axis symbols: 90° and 270° are the same): on a surveyed main, along it.
+  Three valves at a hydrant are read as a tee — two on the main, one on the lateral
+  toward the hydrant — scored on how well they line up; a probable main and lateral are
+  drawn on the QC layer `FTF-QC-ORIENT-INFERRED` only, labelled inferred, never as
+  utility linework. Two in line along the road are both on the main. Anything else →
+  review.
+- **Gas valves**: on a surveyed gas main, along it; several in a line along the road, along
+  the road (0.6); otherwise review. (No hydrant tee: that is water only.)
+- **Arrows and painted words**: the direction of travel in their lane — stop bar, inbound
+  intersection approach, one-way line, or keep-right of the road's middle.
+
+### The symbols' own zero (PMX)
+
+A marker rotation turns the block about its insertion point, so the rotation that points a
+symbol is the direction's AutoCAD angle **minus the direction the block itself points at
+zero**. Read from the blocks in a completed PMX drawing:
+
+| Block | At rotation 0 | Reference | Repeats every |
+|---|---|---|---|
+| `SSV-SN*` (signs) | post at the insertion point, panel to its north: faces north | 90° | 360° |
+| `SSV-WFH` (hydrant) | nozzles to the east | 0° | 360° |
+| `SSV-WVL` (water valve) | bowtie on a north–south pipe | 90° | 180° |
+| `SSV-GV` (gas valve) | pipe east–west — **assumed, confirm against the block** | 0° | 180° |
+| `SSV-LTARM`, `PPL*` (arm) | arm to the north | 90° | 360° |
+| `SSV-LT` (round light), `SSV-WVT` (a letter W) | symmetric | — | never rotated |
+| `SSV-TSP` (signal pole) | **not inspected; assumed arm north** | 90° | 360° |
+| `SSV-AS*`/`AL*`/`AR*` (arrows) | tip at the insertion point, travelling north | 90° | 360° |
+| `BART` (painted word) | label reads with north as up; label rotated with the marker | 90° | 360° |
+
+Each is a row in `rules.json` → `orientation` → `symbols` (left out, the built-in PMX list
+applies; name the list to replace it).
+
+**This fixes FTFPOINTS' sign rotation.** It used to set a sign's marker to the azimuth's
+AutoCAD angle as is, which is right only for a block drawn facing east. PMX signs face
+north at zero, so every `SN <azimuth>` sign was 90° off: `SN 135` faced 45°. It now takes
+the block's zero off (`SN 135` → marker 225°, facing 135°), for any code the orientation
+standard knows; other codes and rules that give a plain AutoCAD angle are unchanged.
+
+### QC and the report
+
+- `FTF-QC-ORIENT` (not plotted): an arrow per decision, coloured by tier (green measured,
+  cyan relationship, blue alignment, yellow inferred, red review), both-way arrows for
+  axis symbols, a grey line to what it was oriented by, the tier and confidence as text,
+  each intersection found with its inbound approaches.
+- `FTF-QC-ORIENT-INFERRED` (not plotted): the probable main and hydrant lateral read from a
+  valve tee, labelled as inferred.
+- `<drawing>.ftf-orientation.csv` beside the drawing (or in the report folder): point, code,
+  kind, tier, confidence, facing azimuth, the alternative where there was one, rotation
+  before and after, outcome (rotated, already right, kept as turned by hand, left — not
+  sure enough, review, symmetric), what it was associated with, every piece of evidence,
+  and the review reason.
+
+### Checked on a real drawing
+
+Run (outside Civil 3D, through the same engine) on a completed PMX rural topo — 1,115
+points, the main road's double yellow, edges of asphalt, no centre lines on the side roads —
+with the symbol points identified from the drawing's own point database:
+
+- 24 directional symbols (20 signs, 1 hydrant, 3 valves); 11 would be turned at the default
+  threshold, 7 left (edge-only roads at 0.55), 6 for review.
+- Every sign along the striped road faced its oncoming traffic; the side-road stop sign faced
+  the side road's traffic, and the side road's other sign followed the side road, not the
+  main road's stripe 60 ft away. Both came from adding the side-road rule after the first
+  run had faced them at the main road.
+- Stop signs with no stop bar, approach or side road found (3) went to review rather than
+  being faced at through traffic. The hydrant nozzle turned to the road 7 ft away. The three
+  valves had no main surveyed near them (one stands right beside the hydrant) and went to
+  review.
+
+The drawing has no recorded marker rotations to compare with: this checks that decisions
+are sensible, not that they match the drafter's.
+
+### Limits
+
+- **Point style orientation reference is assumed World.** A style set to View or Object
+  turns markers relative to the view; check one symbol after the first Apply.
+- Civil 3D Alignment objects are not read — only lines (centre lines, stripes, edges, stop
+  bars, crosswalks, mains) by layer or survey figure name (`rules.json` → `orientation` →
+  `lines`). An alignment's polyline on `V-ALGN-CNTR-E` is read.
+- Two-way roads are assumed to keep right. One-way roads must be drawn as one-way lines
+  (`V-ROAD-ONEWAY*`) in their direction, or a measured arrow must be nearby.
+- Edge-only roads stay at 0.55 — below the 0.6 default — because a one-way road would break
+  keep-right. Lower `applyMinimumConfidence` to 0.55 to turn them.
+- Nothing is learnt from a drawing's existing rotations, and nothing comes from aerials or
+  point clouds: survey linework and points only.
+- The gas valve axis and the signal pole block's zero are assumptions until checked against
+  the blocks (above).
 
 ## Line labelling: the primary workflow is interactive
 

@@ -141,7 +141,15 @@ namespace FieldCodes.Cad
         /// <summary>The elevation label on a contour.</summary>
         ContourLabel = 50,
         /// <summary>The wipeout under a contour label.</summary>
-        ContourMask = 51
+        ContourMask = 51,
+
+        // Symbol orientation (FTFORIENT). The command rotates existing COGO markers in place and
+        // never draws symbols; this kind marks only its non-plot QC graphics (direction arrows,
+        // review circles, inferred connections). FTFORIENTRESET and each re-run remove them.
+        // PointNumber = the point, or "node"/"link" for intersections and inferred connections.
+
+        /// <summary>FTFORIENT QC graphic on a non-plot layer.</summary>
+        OrientQc = 52
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

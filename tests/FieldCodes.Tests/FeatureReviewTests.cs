@@ -44,7 +44,8 @@ public sealed class FeatureReviewTests : IClassFixture<RulesFixture>
         var row = Review("SN 135");
 
         Assert.Equal(ReviewCategory.Sign, row.Category);
-        Assert.Contains("Rotate existing marker to 315 deg", row.Actions);
+        // The PMX sign faces north at rotation zero: facing 135 is a 225 degree marker.
+        Assert.Contains("Rotate existing marker to 225 deg (faces 135 az)", row.Actions);
         Assert.DoesNotContain(row.Actions, a => a.Contains("Insert block"));
         Assert.DoesNotContain(row.Actions, a => a.Contains("Create"));
     }

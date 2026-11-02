@@ -57,7 +57,7 @@ namespace FieldCodes.Editing
                 : "None"));
 
             lines.Add("Rotation: " + (p.RotationDegrees.HasValue
-                ? p.RotationDegrees.Value.ToString("0.#", CultureInfo.InvariantCulture) + "°"
+                ? Marker(p).ToString("0.#", CultureInfo.InvariantCulture) + "°" + Facing(p)
                 : "None"));
 
             if (!string.IsNullOrEmpty(p.LabelText))
@@ -76,6 +76,21 @@ namespace FieldCodes.Editing
                           "never reissued)");
 
             return string.Join(Environment.NewLine, lines.ToArray());
+        }
+
+        /// <summary>The rotation FTF writes to the marker: the symbol's own zero taken off.</summary>
+        private static double Marker(ParsedPoint p)
+        {
+            return p.MarkerRotationDegrees ?? p.RotationDegrees.Value;
+        }
+
+        /// <summary>For a field azimuth, the way the feature faces, so the marker number is not
+        /// mistaken for it.</summary>
+        private static string Facing(ParsedPoint p)
+        {
+            return p.RotationIsAzimuth
+                ? " (faces " + Geometry.Angles.NormalizeDegrees(90.0 - p.RotationDegrees.Value).ToString("0.#", CultureInfo.InvariantCulture) + "° azimuth)"
+                : string.Empty;
         }
     }
 }

@@ -138,6 +138,16 @@ namespace FieldCodes
         /// <summary>AutoCAD convention: degrees counter-clockwise from east.</summary>
         public double? RotationDegrees { get; set; }
 
+        /// <summary>True when <see cref="RotationDegrees"/> came from a field azimuth: the
+        /// direction the feature faces, not a raw block rotation. Such a direction is turned
+        /// into a marker rotation against the symbol's own zero (FieldCodes.Orient).</summary>
+        public bool RotationIsAzimuth { get; set; }
+
+        /// <summary>The marker rotation FTF writes (AutoCAD degrees): <see cref="RotationDegrees"/>
+        /// with the symbol's own zero taken off when the orientation standard knows the code
+        /// (a PMX sign faces north at zero, so SN 135 is a 225 degree marker). Null with no rotation.</summary>
+        public double? MarkerRotationDegrees { get; set; }
+
         // --- drawing instructions ---
         /// <summary>
         /// True only when the rule explicitly opted in. Civil 3D's description keys own

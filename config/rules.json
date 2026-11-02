@@ -101,6 +101,24 @@
     "labelFormat": "BENCH {length:0.#}'x{depth:0.#}'"
   },
 
+  "//orientation": "FTFORIENT. Turns the symbols Civil 3D already drew (COGO point markers) to face the way the surveyed features do; nothing is inserted and no point or line moves. Decisions, strongest first: Measured (the crew's direction in the description or note: SN 135, AZ 135, FACES NE, NOZ E, ARM W, N-S for a valve), Relationship (stop bar, intersection approach, luminaire shot, panel line, valve tee), Alignment (the road or main beside it), Inferred (nearest-road reasoning), Review (two answers equally good: left alone, listed). A marker is turned only for a decision at or above applyMinimumConfidence and at least as strong as applyWeakestTier (Measured, Relationship, Alignment or Inferred). symbols / lines / stopSignCodes / stopSignWords / luminaireCodes are left out here, so the built-in PMX standard applies (README, 'Orienting symbols': each block's zero as read from the PMX template). Name one of them here to replace that whole list. Distances in feet; qcArrowPlotted in sheet inches.",
+  "orientation": {
+    "applyMinimumConfidence": 0.6,
+    "applyWeakestTier": "Inferred",
+    "roadSearchFeet": 80,
+    "intersectionSearchFeet": 150,
+    "stopBarSearchFeet": 60,
+    "samePostFeet": 1.5,
+    "valveClusterFeet": 20,
+    "hydrantSearchFeet": 60,
+    "mainSnapFeet": 5,
+    "panelSnapFeet": 3,
+    "luminaireSearchFeet": 40,
+    "qcLayer": "FTF-QC-ORIENT",
+    "qcInferredLayer": "FTF-QC-ORIENT-INFERRED",
+    "qcArrowPlotted": 0.3
+  },
+
   "//spanMarkers": "Notes on the points ALONG a line that mark a span between two of them: two fence shots noted GATE define a gate, and FTFLABELLINE places the label centred between the pair. Token-exact ('FCK B GATE' carries GATE; 'GATEPOST' does not); markers pair up in order along the line; an odd one out is reported, never guessed.",
   "spanMarkers": [
     { "token": "FGP", "label": "GATE" }

@@ -220,7 +220,8 @@ public sealed class PointFeatureEditingTests
         Assert.StartsWith("Sign", preview);
         Assert.Contains("Civil 3D symbol: Existing", preview);
         Assert.Contains("FTF action: Rotate existing marker + Label", preview);
-        Assert.Contains("Rotation: 315°", preview);
+        // The PMX sign faces north at rotation zero: facing 135 is a 225 degree marker.
+        Assert.Contains("Rotation: 225° (faces 135° azimuth)", preview);
         Assert.Contains("Label: SIGN", preview);
         Assert.Contains("Tag: S#", preview);
     }

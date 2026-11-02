@@ -1128,6 +1128,15 @@ namespace FieldCodes.Cad.Ui
                 "piece where the surface crosses it, at exactly that elevation, on the " +
                 "contour layer. B clips to a closed boundary, L adds elevation labels. " +
                 "The surface is only read -- never rebuilt or edited.");
+            CommandRow(stack, "FTFORIENT",
+                "Turn the survey symbols Civil 3D already drew to face the way the features " +
+                "do: signs at the traffic they face, hydrant nozzles at the street, light and " +
+                "signal arms over the road, valve pipe axes along the main, arrows and painted " +
+                "words with their lane. Uses the crew's measured direction first, then stop " +
+                "bars, intersections and roads. Unsure ones are left alone and listed for " +
+                "review. P previews; nothing but marker rotation is changed.");
+            CommandRow(stack, "FTFORIENTRESET",
+                "Put every symbol FTFORIENT turned back as it was, and remove its QC arrows.");
             CommandRow(stack, "FTFRUN",
                 "The whole pipeline in one go -- the same thing as Process Drawing.");
 
