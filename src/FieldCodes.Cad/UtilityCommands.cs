@@ -12,6 +12,7 @@ using Autodesk.AutoCAD.Runtime;
 using Autodesk.Civil.DatabaseServices;
 using FieldCodes.Settings;
 using FieldCodes.Utilities;
+using FieldCodes.Utilities.FieldNotes;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
@@ -384,6 +385,7 @@ namespace FieldCodes.Cad
                                                       at.Value.TransformBy(ed.CurrentUserCoordinateSystem), settings, rules.Version);
                 project.Overrides.RemoveAll(o => o.Target == structure.Id && o.What == "Structure label text");
                 DrawingStore.SaveDips(db, tr, project);
+                AfterStructuresFinished(db, tr, ed, project, settings, new[] { structure.Id });
                 ed.WriteMessage("\n");
             });
         }
@@ -393,7 +395,8 @@ namespace FieldCodes.Cad
         /// set up and to the right of its point. Labels already placed -- including ones
         /// moved or edited by hand -- are left exactly as they are.
         /// </summary>
-        internal static int LabelAll(Database db, Transaction tr, Editor ed, UtilityProject project, FtfSettings settings, string version)
+        internal static int LabelAll(Database db, Transaction tr, Editor ed, UtilityProject project, FtfSettings settings, string version,
+                                     IList<string> labelled = null)
         {
             var offset = CadUtil.DrawingUnitsPerPlottedUnit(db) * 0.6;
             var placed = 0;
@@ -407,6 +410,7 @@ namespace FieldCodes.Cad
                 var text = string.Join("\n", UtilityLabelFormatter.StructureLabel(project, structure, settings.Dips).ToArray());
                 UtilityCadService.PlaceStructureLabel(db, tr, structure, text,
                     new Point3d(structure.Cad.Easting + offset, structure.Cad.Northing + offset, 0), settings, version);
+                if (labelled != null) labelled.Add(structure.Id);
                 placed++;
             }
             ed.WriteMessage("\nDip Builder: {0} structure label(s) placed; structures already labelled were left as they are.", placed);
@@ -689,6 +693,190 @@ namespace FieldCodes.Cad
                                     DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) +
                                     Environment.NewLine + Environment.NewLine + text, new UTF8Encoding(true));
             return path;
+        }
+
+        // =========================================================== field notes PDF
+
+        /// <summary>
+        /// Saves the dip field notes PDF for the drawing's completed observations, using the field-notes header
+        /// stored in the drawing (project, number, date of observation, crew). Asks for each header value at the
+        /// command line, Enter keeping the one shown; "." clears it. The PDF goes in the field notes folder
+        /// (Settings > Storm &amp; Sewer Dips) as a new revision unless the office chose to overwrite.
+        /// </summary>
+        [CommandMethod("FTFDIPPDF", CommandFlags.Modal)]
+        public void SaveFieldNotesPdf()
+        {
+            FtfSession.Run("FTFDIPPDF", (db, tr, ed) =>
+            {
+                var rules = FtfSession.Rules(db);
+                var settings = FtfSession.SettingsFor(db, rules);
+                DipSession.Reload();
+                var project = DipSession.ProjectFor(db, tr);
+
+                var header = DipFieldNotesStore.Suggest(db, tr);
+                string answer;
+                if (!AskHeader(ed, "Project name", header.ProjectName, out answer)) return;
+                header.ProjectName = answer;
+                if (!AskHeader(ed, "Project number", header.ProjectNumber, out answer)) return;
+                header.ProjectNumber = answer;
+                while (true)
+                {
+                    if (!AskHeader(ed, "Date of observation (YYYY-MM-DD)", header.ObservationDateText, out answer)) return;
+                    var check = new FieldNotesHeader { ObservationDateText = answer };
+                    if (answer == null || check.ObservationDate.HasValue) { header.ObservationDateText = answer; break; }
+                    ed.WriteMessage("\n  Type the date as YYYY-MM-DD, for example 2026-10-28, or . for not recorded.");
+                }
+                if (!AskHeader(ed, "Crew / observer", header.Crew, out answer)) return;
+                header.Crew = answer;
+                DipFieldNotesStore.Save(db, tr, header);
+
+                var result = SaveFieldNotes(db, tr, ed, project, settings, header, null, settings.Dips.FieldNotesOverwrite, false, null);
+                if (settings.Dips.FieldNotesOpenAfterSave &&
+                    (result.Outcome == FieldNotesOutcome.Written || result.Outcome == FieldNotesOutcome.Replaced))
+                    OpenPdf(result.Path, ed);
+                ed.WriteMessage("\n");
+            });
+        }
+
+        /// <summary>One header prompt. False when cancelled; the value is null when cleared or left blank.</summary>
+        private static bool AskHeader(Editor ed, string what, string current, out string value)
+        {
+            value = current;
+            var shown = string.IsNullOrWhiteSpace(current) ? "not recorded" : current.Trim();
+            var options = new PromptStringOptions("\n" + what + " <" + shown + ">: ") { AllowSpaces = true };
+            var result = ed.GetString(options);
+            if (result.Status == PromptStatus.Cancel) return false;
+            if (result.Status != PromptStatus.OK) return true;
+            var typed = (result.StringResult ?? string.Empty).Trim();
+            if (typed.Length == 0) return true;
+            value = typed == "." ? null : typed;
+            return true;
+        }
+
+        /// <summary>
+        /// Writes the field notes PDF for the selected structures (null: every complete one). Incomplete observations
+        /// are never included -- they are listed in the PDF as not included, with what they are missing. Nothing is
+        /// written for an unsaved drawing unless a folder is given. Returns what happened; the message is also
+        /// written to the command line.
+        /// </summary>
+        internal static FieldNotesSaveResult SaveFieldNotes(Database db, Transaction tr, Editor ed, UtilityProject project,
+                                                            FtfSettings settings, FieldNotesHeader header,
+                                                            ICollection<string> structureIds, bool overwrite, bool automatic,
+                                                            string folder)
+        {
+            var drawing = SavedDrawingPath(db);
+            folder = !string.IsNullOrWhiteSpace(folder)
+                ? folder.Trim()
+                : FieldNotesFiles.ResolveFolder(drawing, settings.Dips.FieldNotesFolder, Directory.Exists);
+            var stale = DipFieldNotes.StaleIds(project, UtilityCadService.LivePoints(db, tr));
+            var report = FieldNotesReportBuilder.Build(project, settings.Dips, header,
+                drawing != null ? Path.GetFileName(drawing) : null, structureIds, stale);
+            var result = DipFieldNotes.Save(report, folder, FieldNotesFiles.BaseName(header, drawing),
+                                            DipFieldNotes.OptionsFrom(settings.Dips, overwrite, automatic));
+
+            ed.WriteMessage("\nDip field notes: " + result.Message);
+            if (result.Outcome == FieldNotesOutcome.Written || result.Outcome == FieldNotesOutcome.Replaced)
+                ed.WriteMessage("\n  {0} structure(s), {1} page(s){2}.", result.Structures, result.Pages,
+                                result.Incomplete > 0 ? "; " + result.Incomplete + " incomplete observation(s) listed as not included" : string.Empty);
+            return result;
+        }
+
+        /// <summary>
+        /// Called when the Dip Builder's finishing step for a structure -- placing its label -- has been done. With
+        /// "save field notes automatically" on, and at least one of those structures complete, the field notes PDF is
+        /// saved for every complete observation: a new revision only when something changed (or the newest file
+        /// replaced, when the office chose overwrite). Never opened, never marks anything complete, and never lets a
+        /// problem here undo the label that was just placed. Returns what was saved, or null when nothing was tried.
+        /// </summary>
+        internal static FieldNotesSaveResult AfterStructuresFinished(Database db, Transaction tr, Editor ed, UtilityProject project,
+                                                                     FtfSettings settings, IEnumerable<string> finishedIds)
+        {
+            if (!settings.Dips.FieldNotesAutoGenerate || project == null) return null;
+            try
+            {
+                var ids = (finishedIds ?? Enumerable.Empty<string>()).Where(id => id != null).Distinct().ToList();
+                if (ids.Count == 0) return null;
+                var stale = DipFieldNotes.StaleIds(project, UtilityCadService.LivePoints(db, tr));
+                var complete = ids.Where(id => DipObservationStatus.Check(project, project.Structure(id), stale).IsComplete).ToList();
+                if (complete.Count == 0)
+                {
+                    foreach (var id in ids)
+                    {
+                        var s = project.Structure(id);
+                        var status = DipObservationStatus.Check(project, s, stale);
+                        ed.WriteMessage("\nDip field notes not updated: {0} is not complete ({1}).",
+                                        s != null ? s.Label : "structure", string.Join("; ", status.Missing.ToArray()));
+                    }
+                    return new FieldNotesSaveResult
+                    {
+                        Outcome = FieldNotesOutcome.NothingToSave,
+                        Message = "Field notes not updated: the structure's observation is not complete."
+                    };
+                }
+                if (SavedDrawingPath(db) == null)
+                {
+                    ed.WriteMessage("\nDip field notes not saved automatically: save the drawing first.");
+                    return new FieldNotesSaveResult { Outcome = FieldNotesOutcome.Failed, Message = "Field notes not saved: save the drawing first." };
+                }
+                return SaveFieldNotes(db, tr, ed, project, settings, DipFieldNotesStore.Suggest(db, tr), null,
+                                      settings.Dips.FieldNotesOverwrite, true, null);
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage("\nDip field notes were not saved automatically: " + ex.Message);
+                return new FieldNotesSaveResult { Outcome = FieldNotesOutcome.Failed, Message = "Field notes not saved automatically: " + ex.Message };
+            }
+        }
+
+        /// <summary>What the Save Field Notes PDF window starts from, read inside a command.</summary>
+        internal static Ui.DipFieldNotesPrep PrepareFieldNotes(Database db, Transaction tr, UtilityProject project, FtfSettings settings)
+        {
+            var drawing = SavedDrawingPath(db);
+            var stale = DipFieldNotes.StaleIds(project, UtilityCadService.LivePoints(db, tr));
+            var prep = new Ui.DipFieldNotesPrep
+            {
+                Header = DipFieldNotesStore.Suggest(db, tr),
+                DrawingPath = drawing,
+                Folder = FieldNotesFiles.ResolveFolder(drawing, settings.Dips.FieldNotesFolder, Directory.Exists),
+                Overwrite = settings.Dips.FieldNotesOverwrite,
+                OpenAfterSave = settings.Dips.FieldNotesOpenAfterSave
+            };
+            foreach (var s in project.Structures)
+            {
+                var status = DipObservationStatus.Check(project, s, stale);
+                prep.Choices.Add(new Ui.DipFieldNotesChoice
+                {
+                    StructureId = s.Id,
+                    Label = s.Label,
+                    Complete = status.IsComplete,
+                    Missing = string.Join("; ", status.Missing.ToArray())
+                });
+            }
+            return prep;
+        }
+
+        /// <summary>The drawing's file, or null when it has never been saved (a new drawing reports its template).</summary>
+        internal static string SavedDrawingPath(Database db)
+        {
+            var name = db.Filename;
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            if (name.EndsWith(".dwt", StringComparison.OrdinalIgnoreCase)) return null;
+            return name;
+        }
+
+        /// <summary>Opens a saved PDF in the default viewer. A machine with no PDF viewer is told, not crashed.</summary>
+        internal static void OpenPdf(string path, Editor ed)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+            try { System.Diagnostics.Process.Start(path); }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                if (ed != null) ed.WriteMessage("\nThe PDF was saved but could not be opened ({0}): {1}", ex.Message, path);
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ed != null) ed.WriteMessage("\nThe PDF was saved but could not be opened ({0}): {1}", ex.Message, path);
+            }
         }
     }
 }

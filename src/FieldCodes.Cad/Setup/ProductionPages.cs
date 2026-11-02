@@ -47,6 +47,8 @@ namespace FieldCodes.Cad.Setup
         private CheckBox _convention;
         private TextBox _conventionSource;
         private TextBox _prefixUnconfirmed;
+        private TextBox _notesFolder;
+        private CheckBox _notesAuto, _notesOverwrite, _notesOpen, _notesSketch;
 
         /// <summary>Checks a drafter may switch off, in plain words. Checks that stop
         /// invalid geometry from being drawn are not listed.</summary>
@@ -76,7 +78,7 @@ namespace FieldCodes.Cad.Setup
         };
 
         public override string Title { get { return "Storm & Sewer Dips"; } }
-        public override string AffectedCommands { get { return "FTFDIP, FTFDIPCHECK"; } }
+        public override string AffectedCommands { get { return "FTFDIP, FTFDIPCHECK, FTFDIPPDF"; } }
 
         protected override void BuildBody()
         {
@@ -195,6 +197,22 @@ namespace FieldCodes.Cad.Setup
             _prefixInvert = TextRow("Word for invert", null);
             _prefixTop = TextRow("Word for top of pipe", null);
             _prefixSpring = TextRow("Word for springline", null);
+
+            Heading("Field notes PDF");
+            Note("Dip Builder > Save Field Notes PDF (or FTFDIPPDF) writes the completed dip observations as field-book " +
+                 "notes on US Letter pages: measured depths in black, calculated invert elevations in red, a plan sketch " +
+                 "of each structure. Incomplete observations are never included; the PDF lists them as not included. " +
+                 "The file is named for the project and the date of observation; an issued PDF is never overwritten " +
+                 "unless you choose to below -- the next save is _R1, _R2...");
+            _notesFolder = TextRow("Save in",
+                "Relative to the project folder (the folder above the drawing's Survey folder, else the drawing's folder), or a full path. " +
+                "Default Survey\\Field Notes\\Utility Dips.", 360);
+            _notesAuto = CheckRow("Save the field notes automatically when a structure is finished",
+                "When its structure label is placed and its observation is complete. A new revision only when the notes changed; never opened.");
+            _notesOverwrite = CheckRow("Replace the newest field notes PDF instead of saving a new revision",
+                "Off (default): earlier issues are kept and the new one is _R1, _R2...");
+            _notesOpen = CheckRow("Open the PDF after Save Field Notes PDF", null);
+            _notesSketch = CheckRow("Draw a plan sketch of each structure and its pipes", "North up, not to scale; directions not observed are dashed and marked (inferred).");
         }
 
         public override void LoadFrom(FtfSettings s)
@@ -254,6 +272,11 @@ namespace FieldCodes.Cad.Setup
             _prefixInvert.Text = d.PrefixInvert;
             _prefixTop.Text = d.PrefixTop;
             _prefixSpring.Text = d.PrefixSpringline;
+            _notesFolder.Text = d.FieldNotesFolder ?? string.Empty;
+            _notesAuto.Checked = d.FieldNotesAutoGenerate;
+            _notesOverwrite.Checked = d.FieldNotesOverwrite;
+            _notesOpen.Checked = d.FieldNotesOpenAfterSave;
+            _notesSketch.Checked = d.FieldNotesSketches;
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
@@ -379,6 +402,13 @@ namespace FieldCodes.Cad.Setup
             d.PrefixInvert = (_prefixInvert.Text ?? string.Empty).Trim();
             d.PrefixTop = (_prefixTop.Text ?? string.Empty).Trim();
             d.PrefixSpringline = (_prefixSpring.Text ?? string.Empty).Trim();
+
+            var folder = (_notesFolder.Text ?? string.Empty).Trim();
+            d.FieldNotesFolder = folder.Length == 0 ? FieldCodes.Utilities.FieldNotes.FieldNotesFiles.DefaultFolder : folder;
+            d.FieldNotesAutoGenerate = _notesAuto.Checked;
+            d.FieldNotesOverwrite = _notesOverwrite.Checked;
+            d.FieldNotesOpenAfterSave = _notesOpen.Checked;
+            d.FieldNotesSketches = _notesSketch.Checked;
         }
 
         private static string Required(TextBox box, string name, ICollection<string> problems, string fallback)

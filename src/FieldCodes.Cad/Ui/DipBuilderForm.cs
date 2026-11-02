@@ -10,6 +10,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using FieldCodes.Settings;
 using FieldCodes.Utilities;
+using FieldCodes.Utilities.FieldNotes;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using CogoPoint = Autodesk.Civil.DatabaseServices.CogoPoint;
@@ -1025,6 +1026,7 @@ namespace FieldCodes.Cad.Ui
                 Btn("Find all connections", OnFindAll, true),
                 Btn("Draw all confirmed pipes", (s, e) => OnDraw(true)),
                 Btn("Label all structures", OnLabelAll),
+                Btn("Save Field Notes PDF...", OnSaveFieldNotes),
                 Btn("Refresh", (s, e) => { RefreshMapSummary(); _projectMap.Invalidate(); }),
                 _projectSummary);
             row.BackColor = Ground;
@@ -1291,6 +1293,7 @@ namespace FieldCodes.Cad.Ui
             page.Controls.Add(_findings);
             var row = Row(
                 Btn("Check for changed survey points / rebuild...", OnRebuild),
+                Btn("Save Field Notes PDF...", OnSaveFieldNotes),
                 Btn("Refresh", (s, e) => RefreshReview()),
                 Hint("Double-click a finding to zoom to it in the drawing."));
             row.BackColor = Ground;
@@ -2775,8 +2778,67 @@ namespace FieldCodes.Cad.Ui
         private void OnLabelAll(object sender, EventArgs e)
         {
             var posted = DipSession.Post("label all structures", (db, tr, ed, project, settings, version) =>
-                UtilityCommands.LabelAll(db, tr, ed, project, settings, version) > 0);
+            {
+                var labelled = new List<string>();
+                var placed = UtilityCommands.LabelAll(db, tr, ed, project, settings, version, labelled);
+                SayFieldNotes(UtilityCommands.AfterStructuresFinished(db, tr, ed, project, settings, labelled));
+                return placed > 0;
+            });
             if (posted) Say("Labelling every structure that has pipes and no label yet.", Muted);
+        }
+
+        // ============================================================ field notes PDF
+
+        /// <summary>
+        /// Save Field Notes PDF: reads what the window needs from the drawing (inside a command), then asks which
+        /// completed observations to include and where, then saves -- again inside a command, so the header the
+        /// drafter typed is kept in the drawing with the same undo.
+        /// </summary>
+        private void OnSaveFieldNotes(object sender, EventArgs e)
+        {
+            _grid.EndEdit();
+            var posted = DipSession.Post("prepare field notes", (db, tr, ed, project, settings, version) =>
+            {
+                var prep = UtilityCommands.PrepareFieldNotes(db, tr, project, settings);
+                BeginInvoke(new Action(() => ShowFieldNotesDialog(prep)));
+                return false;
+            });
+            if (posted) Say("Opening Save Field Notes PDF...", Muted);
+        }
+
+        private void ShowFieldNotesDialog(DipFieldNotesPrep prep)
+        {
+            if (IsDisposed || prep == null) return;
+            if (prep.Choices.Count == 0) { Say("No structures in the dip project yet: nothing to put in field notes.", Muted); return; }
+            using (var dialog = new DipFieldNotesDialog(prep))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) { Say("Field notes not saved.", Muted); return; }
+                var header = dialog.Header;
+                var ids = dialog.SelectedIds;
+                var folder = dialog.Folder;
+                var overwrite = dialog.Overwrite;
+                var open = dialog.OpenAfterSave;
+                var posted = DipSession.Post("save field notes PDF", (db, tr, ed, project, settings, version) =>
+                {
+                    DipFieldNotesStore.Save(db, tr, header);
+                    var result = UtilityCommands.SaveFieldNotes(db, tr, ed, project, settings, header, ids, overwrite, false, folder);
+                    if (open && (result.Outcome == FieldNotesOutcome.Written || result.Outcome == FieldNotesOutcome.Replaced))
+                        UtilityCommands.OpenPdf(result.Path, ed);
+                    SayFieldNotes(result);
+                    return false;
+                });
+                if (posted) Say("Saving the field notes PDF...", Muted);
+            }
+        }
+
+        /// <summary>The outcome of a field-notes save on the status line, once the command has finished.</summary>
+        private void SayFieldNotes(FieldNotesSaveResult result)
+        {
+            if (result == null || IsDisposed) return;
+            var good = result.Outcome == FieldNotesOutcome.Written || result.Outcome == FieldNotesOutcome.Replaced ||
+                       result.Outcome == FieldNotesOutcome.Unchanged;
+            var text = result.Message;
+            BeginInvoke(new Action(() => Say(text, good ? Good : result.Outcome == FieldNotesOutcome.Failed ? Bad : Muted)));
         }
 
         private void OnPlaceLabel(object sender, EventArgs e)
@@ -2807,6 +2869,9 @@ namespace FieldCodes.Cad.Ui
                 project.Overrides.RemoveAll(o => o.Target == structureId && o.What == "Structure label text");
                 if (edited)
                     project.Overrides.Add(new ManualOverride { Target = structureId, What = "Structure label text", Generated = generated, Entered = text, Utc = DateTime.UtcNow });
+                // Placing the label is the Dip Builder's finishing step for a structure: the field notes follow it
+                // when the office asked for that (Settings > Storm & Sewer Dips) and the observation is complete.
+                SayFieldNotes(UtilityCommands.AfterStructuresFinished(db, tr, ed, project, settings, new[] { structureId }));
                 return true;
             });
             if (posted) Say("Click where the label text goes.", Muted);
