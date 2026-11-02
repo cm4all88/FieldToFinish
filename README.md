@@ -615,7 +615,7 @@ The FTF window's Settings page is grouped the way the work goes:
 | FieldToFinish | General, **Layers**, Point Features, Symbols and Rotations (read only), Trees, Point Labels, Line Labels, **Label All**, Tags, Schedule, Driplines, Drawing Order |
 | Survey Drafting | Spot Elevations, Contours, Drafting Lines, Sheets, Utility Dips |
 | Boundary and Easements | Right of Way, Platted Blocks, Recorded Surveys, Survey Comparison, Strip Easements, Easement Exhibits |
-| Administration | Profiles, Advanced Settings |
+| Administration | Profiles, Diagnostics (codes you marked ignored), Advanced Settings |
 
 Every page shows "Unsaved changes" as soon as something is edited; **Save** writes to the
 level chosen at the bottom (my settings, this drawing's folder, or the drawing's
@@ -667,6 +667,30 @@ and is not run otherwise; a schedule without a tags stage uses the tags already 
 drawing. **Preview** counts what a run would create, update, skip or flag; after a run
 the page shows each stage's outcome. Label and tag stages replace and erase only the
 families of the preset running, so a trees-only run never touches a pole's label.
+
+### Review, diagnostics, field notes
+
+- **Unknown Codes** sorts every point into *Errors* (blank or unreadable descriptions,
+  invalid values), *Needs Configuration* (data with no rule) and *Informational*
+  (Civil 3D linework, never-draw codes, codes you marked ignored, bare codes), with
+  counts and filters. **Configure Rule** opens Point Features at the rule (or offers a
+  starter rule for a code nothing handles); **Mark Ignored** stores the code in the
+  settings (`"diagnostics": { "ignoredCodes": [...] }`). **Overview** separates what is in
+  the drawing (points, eligible, processed, errors, unconfigured, skipped, FTF objects by
+  kind, last processed and its outcome, kept in the drawing) from this session's
+  activity; **Reports** lists every error and warning with point, code and reason, and
+  keeps the CSV exports. **Lines** gives each line a status and lists the settings that
+  decide its label, with a link to its row on Line Labels. **Standards** says where each
+  value is defined and opens the page that edits it; "planned" items are marked not
+  available. Every list sorts by column. Details: `docs/diagnostics.md`.
+- **Dip Builder > Save Field Notes PDF** (`FTFDIPPDF`): the completed dips as
+  field-book notes on US Letter -- measured depths in black, calculated inverts in red,
+  bottom and water elevations labelled as such, a plan sketch per structure (inferred
+  directions dashed and marked), warnings included, page numbers and project on every
+  page. Saved under `Survey\Field Notes\Utility Dips` (configurable) as
+  `<project>_Utility-Dip-Field-Notes_<date>.pdf`; an issued file is never overwritten
+  (`_R1`, `_R2`...). Optional automatic save when a structure is labelled. Written
+  directly, no printer driver. Details: `docs/dip-field-notes.md`.
 
 ### What reprocessing can and cannot remove
 

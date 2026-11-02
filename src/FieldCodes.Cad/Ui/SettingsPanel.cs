@@ -176,6 +176,7 @@ namespace FieldCodes.Cad.Ui
 
             AddGroup("ADMINISTRATION");
             AddSection("Profiles", new ProfilesPage());
+            AddSection("Diagnostics", new DiagnosticsPage());
             AddSection("Advanced Settings", new CleanupPage());
 
             BuildLayout();

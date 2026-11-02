@@ -376,3 +376,51 @@ namespace FieldCodes.Cad.Setup
         public override void RestoreDefaults(FtfSettings s) { }
     }
 }
+
+namespace FieldCodes.Cad.Setup
+{
+    /// <summary>
+    /// Settings > Diagnostics: the codes marked "intentionally ignored" on the Unknown Codes
+    /// screen. An ignored code is reported as informational, not as needing configuration; a
+    /// rule added for it later still wins. Codes are added from Unknown Codes (Mark Ignored).
+    /// </summary>
+    internal sealed class DiagnosticsPage : SetupPage
+    {
+        private System.Windows.Forms.ListBox _codes;
+
+        public override string Title { get { return "Diagnostics"; } }
+        public override string AffectedCommands { get { return "FTFPOINTS and the FTF window's Unknown Codes, Overview and Reports"; } }
+
+        protected override void BuildBody()
+        {
+            Heading("Codes you marked as intentionally ignored");
+            _codes = new System.Windows.Forms.ListBox { Width = 220, Height = 160, IntegralHeight = false, Sorted = true };
+            var remove = new System.Windows.Forms.Button { Text = "Stop Ignoring" };
+            remove.Click += (s, e) =>
+            {
+                if (_codes.SelectedItem != null) { _codes.Items.Remove(_codes.SelectedItem); MarkChanged(); }
+            };
+            AddWithSideButtons(_codes, SideButtons(remove));
+            Note("Add codes from Unknown Codes > Mark Ignored. A code also covers its sequence numbers (XYZ covers XYZ2). " +
+                 "Errors (blank or unreadable descriptions) are never hidden by this list.");
+        }
+
+        public override void LoadFrom(FtfSettings s)
+        {
+            _codes.Items.Clear();
+            foreach (var c in s.Diagnostics != null ? s.Diagnostics.Codes() : new List<string>()) _codes.Items.Add(c);
+        }
+
+        public override void SaveTo(FtfSettings s, ICollection<string> problems)
+        {
+            if (s.Diagnostics == null) s.Diagnostics = new DiagnosticsSettings();
+            s.Diagnostics.IgnoredCodes = _codes.Items.Cast<object>().Select(o => o.ToString()).ToList();
+        }
+
+        public override void RestoreDefaults(FtfSettings s)
+        {
+            if (s.Diagnostics != null) s.Diagnostics.RestoreDefaults();
+            LoadFrom(s);
+        }
+    }
+}
