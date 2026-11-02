@@ -277,6 +277,24 @@ Get-ChildItem $staging -Recurse -File | Unblock-File -ErrorAction SilentlyContin
 
 if ($office) { Set-Content -Path (Join-Path $staging 'source.txt') -Value $office -Encoding utf8 }
 
+# The office standard saved from Settings (ftf-settings.json beside FieldCodes.Cad.dll, the
+# "Office" level) belongs to the office, not to a release: carry it into the new copy, with its
+# .bak, unless the release brings one of its own. Without this every update would erase it.
+if (Test-Path $target) {
+    $oldDll = Get-ChildItem (Join-Path $target 'Contents') -Recurse -Filter 'FieldCodes.Cad.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
+    $newDll = Get-ChildItem (Join-Path $staging 'Contents') -Recurse -Filter 'FieldCodes.Cad.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($oldDll -and $newDll) {
+        foreach ($name in @('ftf-settings.json', 'ftf-settings.json.bak')) {
+            $kept = Join-Path $oldDll.DirectoryName $name
+            $into = Join-Path $newDll.DirectoryName $name
+            if ((Test-Path -LiteralPath $kept) -and -not (Test-Path -LiteralPath $into)) {
+                try { Copy-Item -LiteralPath $kept -Destination $into -Force -ErrorAction Stop }
+                catch { Fail ("The office settings file could not be carried over (" + $_.Exception.Message + "). Nothing was changed.") }
+            }
+        }
+    }
+}
+
 # The swap itself: two local renames, with the old one kept until the new one is in place.
 $script:changed = $true
 if (Test-Path $target) {

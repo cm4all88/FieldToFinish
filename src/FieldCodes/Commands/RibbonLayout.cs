@@ -217,7 +217,11 @@ namespace FieldCodes.Commands
                     Tool("Version", "FTFVERSION", "Version",
                         "Shows which FTF build is running, where it was loaded from, and whether it is the latest approved build."),
                     Tool("Office Update", "FTFUPDATE", "Update",
-                        "Compares this machine's FTF with the office copy. A newer office copy installs itself when Civil 3D closes.")),
+                        "Compares this machine's FTF with the office copy. A newer office copy installs itself when Civil 3D closes."),
+                    Tool("Check Standards", "FTFCHECKSTANDARDS", "CheckStandards",
+                        "Checks every layer, linetype, text style, multileader style and block the settings name against this drawing, and offers fixes. Nothing changes until you press a fix."),
+                    Tool("Update Layers", "FTFLAYERUPDATE", "LayerUpdate",
+                        "Lists every layer FTF uses whose colour, linetype, lineweight or plot setting differs from its standard, then asks before changing anything. Never touches entities.")),
 
                 Panel("Reports",
                     Tool("Linework", "FTFLINES", "Lines",

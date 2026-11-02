@@ -25,16 +25,33 @@ namespace FieldCodes.Cad.Setup
 
         public StyleSettings Styles { get; private set; }
 
+        /// <summary>The section as it was when this copy was taken (or last written), so a change
+        /// made to it from elsewhere -- a Check Standards fix, an import -- is noticed.</summary>
+        private string _baseline;
+
         /// <summary>Raised when a style is added, renamed or removed, so the other pages refresh their lists.</summary>
         public event Action NamesChanged;
 
-        private StyleWorkspace(StyleSettings from) { Styles = Copy(from); }
+        private StyleWorkspace(StyleSettings from) { Take(from); }
+
+        private void Take(StyleSettings from)
+        {
+            Styles = Copy(from);
+            _baseline = JsonConvert.SerializeObject(from);
+        }
 
         public static StyleWorkspace For(FtfSettings settings)
         {
             if (settings.Styles == null) settings.Styles = new StyleSettings();
             settings.Styles.FillMissing();
-            return Table.GetValue(settings.Styles, s => new StyleWorkspace(s));
+            var workspace = Table.GetValue(settings.Styles, s => new StyleWorkspace(s));
+            // Changed underneath (not by WriteTo): start again from what the settings now hold.
+            if (JsonConvert.SerializeObject(settings.Styles) != workspace._baseline)
+            {
+                workspace.Take(settings.Styles);
+                workspace.AnnounceNames();
+            }
+            return workspace;
         }
 
         /// <summary>Writes the working copy into the settings, in place.</summary>
@@ -46,6 +63,7 @@ namespace FieldCodes.Cad.Setup
             target.Text = copy.Text;
             target.Leaders = copy.Leaders;
             target.Assignments = copy.Assignments;
+            _baseline = JsonConvert.SerializeObject(target);
         }
 
         public void AnnounceNames() { var h = NamesChanged; if (h != null) h(); }

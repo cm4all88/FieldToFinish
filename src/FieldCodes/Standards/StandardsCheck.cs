@@ -336,6 +336,13 @@ namespace FieldCodes.Standards
                 if (section is LayerStandardsSettings) continue;
                 Walk(section, section.Title, null, 0, (kind, name, owner, prop, field) =>
                 {
+                    // A style assignment names FTF's own text and leader styles, not the drawing's;
+                    // the styles section validates those. AutoCAD's own arrowheads (_Dot...) are
+                    // loaded on first use, and ByLayer / ByBlock are not linetypes to load.
+                    if (owner is FieldCodes.Styles.StyleAssignment) return;
+                    if (kind == StandardsKind.Block && FieldCodes.Styles.StyleCheck.IsBuiltInArrow(name)) return;
+                    if (kind == StandardsKind.Linetype && FieldCodes.Styles.StyleCheck.IsSpecialLinetype(name) &&
+                        !string.Equals(name, "Continuous", StringComparison.OrdinalIgnoreCase)) return;
                     var key = (int)kind + "|" + name;
                     SettingReference reference;
                     if (!found.TryGetValue(key, out reference))

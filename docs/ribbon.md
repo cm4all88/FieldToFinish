@@ -39,6 +39,8 @@ command it types, so any button can also be typed.
 | | Profile | `FTFPROFILE` |
 | | Version | `FTFVERSION` |
 | | Office Update | `FTFUPDATE` |
+| | Check Standards | `FTFCHECKSTANDARDS` |
+| | Update Layers | `FTFLAYERUPDATE` |
 | Reports | Linework | `FTFLINES` |
 | | Blocks | `FTFBLOCKS` |
 | | Rules File | `FTFWHERE` |

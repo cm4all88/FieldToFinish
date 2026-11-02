@@ -52,6 +52,24 @@ public sealed class StandardsCheckTests
     }
 
     [Fact]
+    public void AnnotationStylesAreCheckedForWhatTheyNameInTheDrawingOnly()
+    {
+        var rules = Rules();
+        var settings = new FtfSettings();
+        settings.Styles.Text.Add(new FieldCodes.Styles.TextStyleDef { Name = "Utility", TextStyle = "L80" });
+        settings.Styles.Leaders.Add(new FieldCodes.Styles.LeaderStyleDef { Name = "Dot", ArrowBlock = "_Dot", Linetype = "ByLayer", MLeaderStyle = "Standard" });
+        settings.Styles.Assignments.Add(new FieldCodes.Styles.StyleAssignment { Kind = FieldCodes.Styles.StyledKind.Label, Category = "Utilities", TextStyle = "Utility", LeaderStyle = "Dot" });
+
+        var issues = StandardsCheck.Run(rules, settings, Complete(rules, settings));
+
+        // The drawing text style the named style uses is missing; the assignment's names are FTF's
+        // own styles, _Dot is AutoCAD's arrow and ByLayer is not a linetype: none of those is an issue.
+        var only = Assert.Single(issues);
+        Assert.Equal(StandardsKind.TextStyle, only.Kind);
+        Assert.Equal("L80", only.Name);
+    }
+
+    [Fact]
     public void AMissingLayerIsCreatedOnFirstUseOrSentToASimilarOne()
     {
         var rules = Rules();

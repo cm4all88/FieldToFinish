@@ -597,6 +597,28 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>Check Standards: a checklist with a tick.</summary>
+        public static ImageSource CheckStandards(int px)
+        {
+            return Render(px, dc =>
+            {
+                for (var y = 7; y <= 23; y += 8) dc.DrawRectangle(Gray, null, new Rect(14, y - 1.5, 14, 3));
+                Path(dc, null, BluePen(Regular), false, P(3, 15), P(6.5, 19), P(12, 9));
+            });
+        }
+
+        /// <summary>Update Layers: stacked layer sheets with an arrow onto the top one.</summary>
+        public static ImageSource LayerUpdate(int px)
+        {
+            return Render(px, dc =>
+            {
+                Path(dc, null, GrayPen(Light), true, P(4, 22), P(16, 16), P(28, 22), P(16, 28));
+                Path(dc, Gray, null, true, P(4, 16), P(16, 10), P(28, 16), P(16, 22));
+                dc.DrawLine(BluePen(Regular), P(16, 2), P(16, 9));
+                Path(dc, Blue, null, true, P(12.5, 6.5), P(19.5, 6.5), P(16, 11));
+            });
+        }
+
         /// <summary>Update annotation styles: a label with a curved arrow going round it.</summary>
         public static ImageSource Restyle(int px)
         {
