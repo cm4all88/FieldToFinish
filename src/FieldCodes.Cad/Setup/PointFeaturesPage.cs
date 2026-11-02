@@ -8,6 +8,7 @@ using System.Windows.Forms;
 using FieldCodes.Annotation;
 using FieldCodes.Editing;
 using FieldCodes.Settings;
+using FieldCodes.Styles;
 
 namespace FieldCodes.Cad.Setup
 {
@@ -65,6 +66,18 @@ namespace FieldCodes.Cad.Setup
         // preview
         private TextBox _testInput;
         private TextBox _preview;
+
+        // Appearance: this feature's style assignments (Settings > Style Assignments, rule rows).
+        private const string FromFamily = "(family / default)";
+        private FtfSettings _settings;
+        private StyleWorkspace _workspace;
+        private CheckBox _labelOn;
+        private ComboBox _labelText;
+        private ComboBox _labelLeaderStyle;
+        private TextBox _labelOffset;
+        private ComboBox _tagText;
+        private Label _appearance;
+        private StylePreview _stylePreview;
 
         public override string Title { get { return "Point Features"; } }
         public override string AffectedCommands { get { return "FTFPOINTS, FTFLABELS, FTFTAGS, FTFLABELALL"; } }
@@ -226,6 +239,37 @@ namespace FieldCodes.Cad.Setup
             heading("Tag");
             _tagPrefix = (TextBox)labelled("Tag prefix", new TextBox { Width = 60 },
                 "Blank: never tagged. Letters only. Trees are tagged only when Settings > Trees is Tag only.");
+
+            heading("Appearance (saved with the window's Save, not Save Rules)");
+            _labelOn = new CheckBox { Text = "Label this feature", AutoSize = true, Checked = true };
+            Tip(_labelOn, "Off: FTFLABELS, Label All and Process Drawing leave this feature unlabelled, whatever its family.");
+            full(_labelOn);
+            _labelText = (ComboBox)labelled("Label text style", new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 },
+                "A named style from Settings > Text Styles: text style, height, width, colour, mask, prefix, suffix, rounding. " +
+                FromFamily + ": the family's assignment, else Point Labels.");
+            _labelLeaderStyle = (ComboBox)labelled("Label leader style", new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 },
+                "A named style from Settings > Leader Styles: multileader style, arrowhead and size, straight or spline, landing, attachment.");
+            _labelOffset = (TextBox)labelled("Label offset (plotted, in)", new TextBox { Width = 70 },
+                "How far from the point the label's first position is. Blank: the family's, else Point Labels' base offset.");
+            _tagText = (ComboBox)labelled("Tag text style", new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 },
+                "The style of this feature's numbered tag. " + FromFamily + ": the family's, else Settings > Tags.");
+            _appearance = readOnly();
+            _appearance.MaximumSize = new Size(420, 0);
+            full(_appearance);
+            _stylePreview = new StylePreview { Width = 400, Height = 150, Margin = new Padding(0, 4, 0, 4) };
+            full(_stylePreview);
+            var styleLinks = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+            var editText = new LinkLabel { Text = "Edit text styles", AutoSize = true, Margin = new Padding(0, 2, 12, 2) };
+            var editLeaders = new LinkLabel { Text = "Edit leader styles", AutoSize = true, Margin = new Padding(0, 2, 12, 2) };
+            var editAssign = new LinkLabel { Text = "All style assignments", AutoSize = true, Margin = new Padding(0, 2, 12, 2) };
+            editText.LinkClicked += (s, e) => { if (Context.Navigate != null) Context.Navigate("Text Styles"); };
+            editLeaders.LinkClicked += (s, e) => { if (Context.Navigate != null) Context.Navigate("Leader Styles"); };
+            editAssign.LinkClicked += (s, e) => { if (Context.Navigate != null) Context.Navigate("Style Assignments"); };
+            styleLinks.Controls.AddRange(new Control[] { editText, editLeaders, editAssign });
+            full(styleLinks);
+            _labelOn.CheckedChanged += (s, e) => AppearanceEdited();
+            foreach (var c in new[] { _labelText, _labelLeaderStyle, _tagText }) c.SelectedIndexChanged += (s, e) => AppearanceEdited();
+            _labelOffset.TextChanged += (s, e) => AppearanceEdited();
 
             _dripCaption = heading("Dripline");
             _dripLayer = (ComboBox)labelled("Dripline layer", new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 240 }, null);
@@ -437,9 +481,107 @@ namespace FieldCodes.Cad.Setup
                 if (compiled != null && compiled.Species != null && compiled.Species.Count > 0) code = compiled.Species.Keys.First() + " 18 . 20";
                 else if (code != null) code = code + " 1234";
                 _testInput.Text = code ?? string.Empty;
+                LoadAppearance(id);
             }
             finally { _loading = false; }
             RunPreview();
+        }
+
+        // ------------------------------------------------------------------ appearance
+
+        private void FillStyleChoices()
+        {
+            if (_labelText == null || _workspace == null) return;
+            var wasLoading = _loading;
+            _loading = true;
+            try
+            {
+                foreach (var pair in new[] { Tuple.Create(_labelText, true), Tuple.Create(_tagText, true), Tuple.Create(_labelLeaderStyle, false) })
+                {
+                    var current = pair.Item1.SelectedItem as string;
+                    pair.Item1.Items.Clear();
+                    pair.Item1.Items.Add(FromFamily);
+                    foreach (var n in pair.Item2 ? _workspace.Styles.Text.Select(t => t.Name) : _workspace.Styles.Leaders.Select(t => t.Name))
+                        if (!string.IsNullOrWhiteSpace(n)) pair.Item1.Items.Add(n);
+                    pair.Item1.SelectedItem = current;
+                    if (pair.Item1.SelectedIndex < 0) pair.Item1.SelectedIndex = 0;
+                }
+            }
+            finally { _loading = wasLoading; }
+        }
+
+        private static void Choose(ComboBox c, string name)
+        {
+            c.SelectedIndex = 0;
+            if (string.IsNullOrWhiteSpace(name)) return;
+            for (var i = 1; i < c.Items.Count; i++)
+                if (string.Equals((string)c.Items[i], name, StringComparison.OrdinalIgnoreCase)) { c.SelectedIndex = i; return; }
+        }
+
+        private void LoadAppearance(string ruleId)
+        {
+            if (_workspace == null || _labelText == null) return;
+            FillStyleChoices();
+            var label = _workspace.Styles.FindAssignment(StyledKind.Label, null, ruleId, null);
+            var tag = _workspace.Styles.FindAssignment(StyledKind.Tag, null, ruleId, null);
+            _labelOn.Checked = label == null || label.Enabled != false;
+            Choose(_labelText, label != null ? label.TextStyle : null);
+            Choose(_labelLeaderStyle, label != null ? label.LeaderStyle : null);
+            _labelOffset.Text = label != null && label.OffsetPlotted.HasValue
+                ? label.OffsetPlotted.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+            Choose(_tagText, tag != null ? tag.TextStyle : null);
+            foreach (var c in new Control[] { _labelOn, _labelText, _labelLeaderStyle, _labelOffset, _tagText }) c.Enabled = ruleId != null;
+            ShowAppearance();
+        }
+
+        private void AppearanceEdited()
+        {
+            if (_loading || _workspace == null || _editingId == null) return;
+            var label = _workspace.Styles.AssignmentFor(StyledKind.Label, null, _editingId, null);
+            label.Enabled = _labelOn.Checked ? (bool?)null : false;
+            label.TextStyle = _labelText.SelectedIndex > 0 ? (string)_labelText.SelectedItem : null;
+            label.LeaderStyle = _labelLeaderStyle.SelectedIndex > 0 ? (string)_labelLeaderStyle.SelectedItem : null;
+            double offset;
+            var text = (_labelOffset.Text ?? string.Empty).Trim();
+            label.OffsetPlotted = text.Length > 0 && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out offset) && offset >= 0
+                ? offset : (double?)null;
+            var tag = _workspace.Styles.AssignmentFor(StyledKind.Tag, null, _editingId, null);
+            tag.TextStyle = _tagText.SelectedIndex > 0 ? (string)_tagText.SelectedItem : null;
+            MarkChanged();
+            ShowAppearance();
+        }
+
+        /// <summary>The look this feature's label will get and where each part comes from,
+        /// resolved through the same code the drawing commands use.</summary>
+        private void ShowAppearance()
+        {
+            if (_appearance == null || _workspace == null || _settings == null) return;
+            if (_editingId == null || _candidate == null) { _appearance.Text = string.Empty; return; }
+            ParsedPoint parsed = null;
+            try
+            {
+                var input = (_testInput.Text ?? string.Empty).Trim();
+                if (input.Length > 0) parsed = new FieldCodeParser(_candidate).Parse("preview", input);
+            }
+            catch (System.Exception) { parsed = null; }
+            if (parsed == null || !string.Equals(parsed.RuleId, _editingId, StringComparison.OrdinalIgnoreCase))
+                parsed = new ParsedPoint { RuleId = _editingId, LabelLayer = _labelLayer.Text, LabelText = _identity.Text };
+
+            var settings = _workspace.PreviewSettings(_settings);
+            var r = StyleResolver.Resolve(settings, StyleSubject.For(StyledKind.Label, parsed, _candidate));
+            var lines = new List<string>();
+            if (!r.Enabled) lines.Add("Not labelled (" + r.OriginOf("Enabled") + ").");
+            lines.Add(string.Format(CultureInfo.InvariantCulture, "Text: {0}, {1:0.###}\" -- {2}",
+                string.IsNullOrEmpty(r.Text.DrawingTextStyle) ? "current text style" : r.Text.DrawingTextStyle,
+                r.Text.HeightPlotted, r.OriginOf("Text height")));
+            lines.Add("Leader: " + r.LeaderMode + (r.Leader.Name.IndexOf("(no style)", StringComparison.Ordinal) >= 0
+                ? ", the drawing's multileader style" : ", " + r.Leader.Name) + " -- " + (r.OriginOf("Multileader style") ?? r.OriginOf("Leader")));
+            lines.Add("Layer: " + (string.IsNullOrEmpty(r.Layer) ? "(none)" : r.Layer) + " -- " + r.OriginOf("Layer"));
+            lines.Add("Mask: " + r.Text.Mask + " -- " + r.OriginOf("Mask"));
+            foreach (var p in r.Problems) lines.Add("Problem: " + p);
+            _appearance.Text = string.Join(Environment.NewLine, lines.ToArray());
+            _stylePreview.ShowStyle(r, parsed.LabelText ?? parsed.RawDescription ?? "LABEL", r.LeaderMode != LeaderMode.Never,
+                                    Context.Drawing.TextStyleFonts, parsed.MarkerRotationDegrees);
         }
 
         private string CodesOfSelected(string id)
@@ -595,6 +737,7 @@ namespace FieldCodes.Cad.Setup
             {
                 _preview.Text = ex.Message;
             }
+            ShowAppearance();
         }
 
         /// <summary>Arriving from Unknown Codes or Standards ("Configure Rule"): show the rule
@@ -639,8 +782,21 @@ namespace FieldCodes.Cad.Setup
             if (sample != null) _testInput.Text = sample;
         }
 
-        public override void LoadFrom(FtfSettings s) { }
-        public override void SaveTo(FtfSettings s, ICollection<string> problems) { }
+        public override void LoadFrom(FtfSettings s)
+        {
+            _settings = s;
+            if (_workspace != null) _workspace.NamesChanged -= FillStyleChoices;
+            _workspace = StyleWorkspace.For(s);
+            _workspace.NamesChanged += FillStyleChoices;
+            _loading = true;
+            try { LoadAppearance(_editingId); }
+            finally { _loading = false; }
+        }
+
+        public override void SaveTo(FtfSettings s, ICollection<string> problems)
+        {
+            if (_workspace != null) _workspace.WriteTo(s);
+        }
         public override void RestoreDefaults(FtfSettings s) { }
     }
 }

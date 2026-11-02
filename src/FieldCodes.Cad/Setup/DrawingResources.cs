@@ -22,6 +22,13 @@ namespace FieldCodes.Cad.Setup
         public IList<string> Blocks { get; private set; }
         public IList<string> Linetypes { get; private set; }
 
+        /// <summary>Multileader styles (MLEADERSTYLE), for the Leader Styles page.</summary>
+        public IList<string> MLeaderStyles { get; private set; }
+
+        /// <summary>Text style name to its TrueType typeface; an SHX style maps to its font
+        /// file name. The style previews draw with the typeface when Windows has it.</summary>
+        public Dictionary<string, string> TextStyleFonts { get; private set; }
+
         /// <summary>Civil 3D general line and curve label styles, for the Recorded Surveys
         /// standards page. Empty in a drawing without Civil 3D styles.</summary>
         public IList<string> LineLabelStyles { get; private set; }
@@ -46,6 +53,8 @@ namespace FieldCodes.Cad.Setup
             Layers = new List<string>();
             Blocks = new List<string>();
             Linetypes = new List<string>();
+            MLeaderStyles = new List<string>();
+            TextStyleFonts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             LineLabelStyles = new List<string>();
             CurveLabelStyles = new List<string>();
             FixedHeightTextStyles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -72,6 +81,7 @@ namespace FieldCodes.Cad.Setup
             ReadLayers(db, tr);
             ReadBlocks(db, tr);
             ReadLinetypes(db, tr);
+            ReadMLeaderStyles(db, tr);
             LineLabelStyles = CivilLabels.LineLabelStyleNames(db, tr);
             CurveLabelStyles = CivilLabels.CurveLabelStyleNames(db, tr);
         }
@@ -88,6 +98,12 @@ namespace FieldCodes.Cad.Setup
 
                 names.Add(record.Name);
                 if (record.TextSize > 0) FixedHeightTextStyles.Add(record.Name);
+                try
+                {
+                    var face = record.Font.TypeFace;
+                    TextStyleFonts[record.Name] = string.IsNullOrEmpty(face) ? (record.FileName ?? string.Empty) : face;
+                }
+                catch (System.Exception) { }
             }
 
             names.Sort(StringComparer.OrdinalIgnoreCase);
@@ -123,6 +139,19 @@ namespace FieldCodes.Cad.Setup
 
             names.Sort(StringComparer.OrdinalIgnoreCase);
             Blocks = names;
+        }
+
+        private void ReadMLeaderStyles(Database db, Transaction tr)
+        {
+            var names = new List<string>();
+            try
+            {
+                var dict = (DBDictionary)tr.GetObject(db.MLeaderStyleDictionaryId, OpenMode.ForRead);
+                foreach (DBDictionaryEntry entry in dict) names.Add(entry.Key);
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { }
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+            MLeaderStyles = names;
         }
 
         private void ReadLinetypes(Database db, Transaction tr)
