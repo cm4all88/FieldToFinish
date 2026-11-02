@@ -248,5 +248,28 @@ namespace FieldCodes.Cad
         {
             WriteText(tr, RootDictionary(tr, db, true), ProfileKey, name ?? string.Empty);
         }
+
+        // --------------------------------------------------------------- last run
+
+        private const string LastRunKey = "LASTRUN";
+
+        /// <summary>The last processing run recorded in this drawing (when, what ran,
+        /// how it ended), or null when it has never been processed from the FTF
+        /// window or the record is unreadable.</summary>
+        public static FieldCodes.Reporting.ProcessingRecord ReadLastRun(Database db, Transaction tr)
+        {
+            if (db == null || tr == null) return null;
+            return FieldCodes.Reporting.ProcessingRecord.FromJson(
+                ReadText(tr, RootDictionary(tr, db, false), LastRunKey));
+        }
+
+        /// <summary>Replaces the recorded last run. Part of the caller's transaction,
+        /// so it saves with the drawing and is undone with it.</summary>
+        public static void WriteLastRun(Database db, Transaction tr,
+                                        FieldCodes.Reporting.ProcessingRecord record)
+        {
+            if (record == null) return;
+            WriteText(tr, RootDictionary(tr, db, true), LastRunKey, record.ToJson());
+        }
     }
 }

@@ -12,7 +12,29 @@ namespace FieldCodes.Cad
         public IList<ReviewRow> Rows { get; set; }
         public string RulesError { get; set; }
 
-        public FtfReviewResult() { Rows = new List<ReviewRow>(); }
+        /// <summary>The classifier the scan used: Error / Needs Configuration /
+        /// Informational, with the codes marked ignored in settings. Null when the
+        /// rules could not be loaded.</summary>
+        public CodeDiagnostics Diagnostics { get; set; }
+
+        /// <summary>Codes marked ignored in settings when the scan ran.</summary>
+        public IList<string> IgnoredCodes { get; set; }
+
+        /// <summary>When the scan ran (local time).</summary>
+        public DateTime ScannedLocal { get; set; }
+
+        public FtfReviewResult()
+        {
+            Rows = new List<ReviewRow>();
+            IgnoredCodes = new List<string>();
+        }
+
+        /// <summary>The parsed points behind the rows, in scan order.</summary>
+        public IEnumerable<ParsedPoint> Points()
+        {
+            foreach (var row in Rows)
+                if (row != null && row.Parsed != null) yield return row.Parsed;
+        }
     }
 
     /// <summary>
@@ -22,13 +44,14 @@ namespace FieldCodes.Cad
     /// changed nothing. Opening or refreshing Feature Review can never modify the
     /// drawing.
     ///
-    /// UNTESTED against a drawing; the row-building it delegates to is unit tested.
+    /// UNTESTED against a drawing; the row-building and classification it delegates
+    /// to are unit tested.
     /// </summary>
     internal static class FtfReviewService
     {
         public static FtfReviewResult Scan()
         {
-            var result = new FtfReviewResult();
+            var result = new FtfReviewResult { ScannedLocal = DateTime.Now };
 
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return result;
@@ -52,8 +75,13 @@ namespace FieldCodes.Cad
                     return result;
                 }
 
+                result.IgnoredCodes = settings.Diagnostics != null
+                    ? settings.Diagnostics.Codes()
+                    : new List<string>();
+
                 var parser = new FieldCodeParser(cfg);
-                var builder = new FeatureReviewBuilder(cfg);
+                var builder = new FeatureReviewBuilder(cfg, result.IgnoredCodes);
+                result.Diagnostics = new CodeDiagnostics(cfg, result.IgnoredCodes);
                 var notes = CogoNotes.For(db, tr, settings);
 
                 foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))

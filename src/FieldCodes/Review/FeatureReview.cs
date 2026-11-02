@@ -110,11 +110,21 @@ namespace FieldCodes.Review
             };
 
         private readonly RulesConfig _cfg;
+        private readonly CodeDiagnostics _diagnostics;
 
         public FeatureReviewBuilder(RulesConfig cfg)
+            : this(cfg, null)
+        {
+        }
+
+        /// <param name="cfg">The rules in force.</param>
+        /// <param name="userIgnoredCodes">Codes marked ignored in settings
+        /// (diagnostics.ignoredCodes); their points say so instead of "linework".</param>
+        public FeatureReviewBuilder(RulesConfig cfg, IEnumerable<string> userIgnoredCodes)
         {
             if (cfg == null) throw new ArgumentNullException("cfg");
             _cfg = cfg;
+            _diagnostics = new CodeDiagnostics(cfg, userIgnoredCodes);
         }
 
         public ReviewRow Build(ParsedPoint p)
@@ -133,9 +143,12 @@ namespace FieldCodes.Review
             {
                 row.Category = ReviewCategory.OutsideScope;
                 row.Status = ReviewStatus.OutsideScope;
-                row.Reason = IsLinework(p.RawDescription)
-                    ? "Linework - Civil 3D builds the figures; FTF does not touch the points"
-                    : "Ignored intentionally (never-draw list)";
+                var kind = _diagnostics.Classify(p).Kind;
+                row.Reason = kind == CodeIssueKind.IgnoredByUser
+                    ? "Marked ignored by you (Unknown Codes) - not reported"
+                    : IsLinework(p.RawDescription)
+                        ? "Linework - Civil 3D builds the figures; FTF does not touch the points"
+                        : "Ignored intentionally (never-draw list)";
                 return row;
             }
 

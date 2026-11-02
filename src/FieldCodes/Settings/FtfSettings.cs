@@ -79,6 +79,7 @@ namespace FieldCodes.Settings
         [JsonProperty("recordSurvey")] public RecordSurveySettings RecordSurvey { get; set; }
         [JsonProperty("cleanup")] public CleanupSettings Cleanup { get; set; }
         [JsonProperty("compare")] public CompareSettings Compare { get; set; }
+        [JsonProperty("diagnostics")] public DiagnosticsSettings Diagnostics { get; set; }
 
         public FtfSettings()
         {
@@ -102,6 +103,7 @@ namespace FieldCodes.Settings
             RecordSurvey = new RecordSurveySettings();
             Cleanup = new CleanupSettings();
             Compare = new CompareSettings();
+            Diagnostics = new DiagnosticsSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -347,6 +349,7 @@ namespace FieldCodes.Settings
             }
             if (Cleanup == null) Cleanup = new CleanupSettings();
             if (Compare == null) Compare = new CompareSettings();
+            if (Diagnostics == null) Diagnostics = new DiagnosticsSettings();
 
             if (DrawOrder.ProtectedLayers == null) DrawOrder.ProtectedLayers = new List<string>();
             if (DrawOrder.MaskableLayers == null) DrawOrder.MaskableLayers = new List<string>();
@@ -444,6 +447,7 @@ namespace FieldCodes.Settings
             rules.MultiStemAverage = Trees.MultiStemAverage;
             rules.ProtectedLayers = new List<string>(DrawOrder.ProtectedLayers ?? new List<string>());
             rules.MaskableLayers = new List<string>(DrawOrder.MaskableLayers ?? new List<string>());
+            if (Diagnostics != null) Diagnostics.ApplyTo(rules);
         }
     }
 }
