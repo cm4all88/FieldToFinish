@@ -54,8 +54,9 @@ file that imports both sides. This project remains the authority.
 tools/check-before-push.sh
 ```
 
-runs the namespace lint, the three compile checks, the unit tests and the PowerShell lint, and
-says whether Civil 3D names were checked in full. To run it on every push from a working copy:
+runs the namespace lint, the three compile checks, the unit tests (on this checkout and again on a
+CRLF checkout of the commit, as Git for Windows and UPDATEFTF's build checkout have the files) and
+the PowerShell lint, and says whether Civil 3D names were checked in full. To run it on every push from a working copy:
 
 ```
 git config core.hooksPath tools/githooks

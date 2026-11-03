@@ -40,7 +40,31 @@ public sealed class HarnessContractTests
         return dir!.FullName;
     }
 
-    private static string Harness(string name) => File.ReadAllText(Path.Combine(Root(), "tests", "LiveSmoke", name));
+    /// <summary>
+    /// The line endings a checkout gives a file: LF as the repository stores it (Linux), CRLF as Git
+    /// for Windows writes it by default (core.autocrlf=true), which is what UPDATEFTF's build
+    /// checkout has. Every test here that reads a file runs on both, so a check written on one
+    /// cannot fail only on the other: TheSmokeTestSaysHowARunEndedAndWhereItGotTo looked for
+    /// "\n}\n" and failed on Windows at 063b747 (the search found nothing in CRLF text).
+    /// </summary>
+    public static TheoryData<string> LineEndings => new() { "\n", "\r\n" };
+
+    private static string WithLineEndings(string text, string eol) => text.Replace("\r\n", "\n").Replace("\n", eol);
+
+    private static string Harness(string name, string eol) => WithLineEndings(File.ReadAllText(Path.Combine(Root(), "tests", "LiveSmoke", name)), eol);
+
+    private static string Source(string eol, params string[] parts) => WithLineEndings(File.ReadAllText(Path.Combine(new[] { Root() }.Concat(parts).ToArray())), eol);
+
+    /// <summary>A PowerShell function, from its "function" line to the "}" that closes it (the first
+    /// line that is only "}"), whichever line endings the file has.</summary>
+    private static string FunctionBody(string script, string name)
+    {
+        var start = script.IndexOf("function " + name, StringComparison.Ordinal);
+        Assert.True(start >= 0, "no function " + name);
+        var end = Regex.Match(script.Substring(start), @"^\}\r?$", RegexOptions.Multiline);
+        Assert.True(end.Success, "function " + name + " has no closing brace on a line of its own");
+        return script.Substring(start, end.Index + 1);
+    }
 
     // ------------------------------------------------------------------ the compiled plugin
 
@@ -140,23 +164,24 @@ public sealed class HarnessContractTests
         Assert.Single(notes.Matches);
         Assert.Equal(2, plain.Named.Count);
         Assert.NotEqual(plain.Matches[0], notes.Matches[0]);
-        Assert.Contains(SignaturesIn("IdentityTestHarness.cs"), s => s.EndsWith("Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction)", StringComparison.Ordinal));
-        Assert.Contains(SignaturesIn("IdentityTestHarness.cs"), s => s.EndsWith("Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction, FieldCodes.Cad.CogoNotes)", StringComparison.Ordinal));
+        Assert.Contains(SignaturesIn("IdentityTestHarness.cs", "\n"), s => s.EndsWith("Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction)", StringComparison.Ordinal));
+        Assert.Contains(SignaturesIn("IdentityTestHarness.cs", "\n"), s => s.EndsWith("Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction, FieldCodes.Cad.CogoNotes)", StringComparison.Ordinal));
     }
 
     // ------------------------------------------------------------------ every signature
 
-    private static List<string> SignaturesIn(string harness) =>
-        Signature.Matches(Harness(harness)).Select(m => m.Groups[1].Value).Distinct().ToList();
+    private static List<string> SignaturesIn(string harness, string eol) =>
+        Signature.Matches(Harness(harness, eol)).Select(m => m.Groups[1].Value).Distinct().ToList();
 
-    [Fact]
-    public void EverySignatureTheHarnessesCallResolvesToOneMethodOfTheCompiledPlugin()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void EverySignatureTheHarnessesCallResolvesToOneMethodOfTheCompiledPlugin(string eol)
     {
         var problems = new List<string>();
         var total = 0;
         foreach (var harness in Harnesses)
         {
-            var signatures = SignaturesIn(harness);
+            var signatures = SignaturesIn(harness, eol);
             Assert.True(signatures.Count > 0, harness + " names no plugin signature; it reaches the plugin some other way.");
             foreach (var signature in signatures)
             {
@@ -172,13 +197,14 @@ public sealed class HarnessContractTests
         Assert.True(total >= 20, "Expected the harnesses' signatures, found " + total);
     }
 
-    [Fact]
-    public void NoHarnessLooksAPluginMethodUpByNameAlone()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void NoHarnessLooksAPluginMethodUpByNameAlone(string eol)
     {
         var problems = new List<string>();
         foreach (var harness in Harnesses)
         {
-            var code = AmbiguousTypeNameTests.CodeOnly(WithoutContractBlock(Harness(harness)));
+            var code = AmbiguousTypeNameTests.CodeOnly(WithoutContractBlock(Harness(harness, eol)));
             // GetMethod by name (GetMethods, which lists them all, cannot be ambiguous).
             foreach (Match m in Regex.Matches(code, @"\.GetMethod\s*\("))
                 problems.Add(harness + "(" + (code.Take(m.Index).Count(c => c == '\n') + 1) + "): use Call/Contract with the exact signature");
@@ -201,12 +227,13 @@ public sealed class HarnessContractTests
         return text.Replace("\r\n", "\n").Replace(block, new string('\n', block.Count(c => c == '\n')));
     }
 
-    [Fact]
-    public void ThePluginContractBlockIsTheSameInEveryHarness()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void ThePluginContractBlockIsTheSameInEveryHarness(string eol)
     {
-        var first = Block(Harness(Harnesses[0]));
+        var first = Block(Harness(Harnesses[0], eol));
         foreach (var harness in Harnesses.Skip(1))
-            Assert.True(Block(Harness(harness)) == first, harness + ": its plugin contract block differs from " + Harnesses[0] + "'s; copy it over.");
+            Assert.True(Block(Harness(harness, eol)) == first, harness + ": its plugin contract block differs from " + Harnesses[0] + "'s; copy it over.");
         // Lines written through to the disk, and exceptions recorded in full.
         Assert.Contains("FileOptions.WriteThrough", first);
         Assert.Contains("stream.Flush(true)", first);
@@ -214,13 +241,14 @@ public sealed class HarnessContractTests
         Assert.Contains("Fatal(what + \" threw \"", first);
     }
 
-    [Fact]
-    public void EveryHarnessCommandIsGuardedAndEveryResultLineIsDurable()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void EveryHarnessCommandIsGuardedAndEveryResultLineIsDurable(string eol)
     {
         var problems = new List<string>();
         foreach (var harness in Harnesses)
         {
-            var text = Harness(harness);
+            var text = Harness(harness, eol);
             foreach (Match m in Regex.Matches(text, @"\[CommandMethod\(""(\w+)""\)\]\s*public void \w+\(\)\s*\{\s*(.*)"))
             {
                 var first = m.Groups[2].Value;
@@ -234,12 +262,13 @@ public sealed class HarnessContractTests
         Assert.True(problems.Count == 0, string.Join("\n", problems));
     }
 
-    [Fact]
-    public void TheHarnessesCheckTheirWholeContractBeforeSeeding()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void TheHarnessesCheckTheirWholeContractBeforeSeeding(string eol)
     {
         foreach (var harness in new[] { "IdentityTestHarness.cs", "AccountabilityTestHarness.cs", "FigureFixtureHarness.cs" })
         {
-            var text = Harness(harness);
+            var text = Harness(harness, eol);
             Assert.Contains("foreach (var signature in PluginContract) Contract(_plugin, signature);", text);
             var listed = Regex.Match(text, @"PluginContract = \{([^}]*)\}").Groups[1].Value.Split(',').Select(x => x.Trim()).ToHashSet();
             foreach (Match c in Regex.Matches(text, @"private const string (\w+) = ""FieldCodes\."))
@@ -289,42 +318,61 @@ public sealed class HarnessContractTests
         finally { Environment.SetEnvironmentVariable("FTF_TRACE_FILE", before); }
     }
 
-    [Fact]
-    public void TheReaderAndThePointEnumerationTraceEachStep()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void TheReaderAndThePointEnumerationTraceEachStep(string eol)
     {
-        var root = Root();
-        var reader = File.ReadAllText(Path.Combine(root, "src", "FieldCodes.Cad", "SourcePointReader.cs"));
+        var reader = Source(eol, "src", "FieldCodes.Cad", "SourcePointReader.cs");
         Assert.Contains("FtfCommandTrace.Step(\"reader: point \" + n + \" handle \"", reader);
         Assert.Contains("FtfCommandTrace.Step(\"reader: done, \"", reader);
-        var util = File.ReadAllText(Path.Combine(root, "src", "FieldCodes.Cad", "CadUtil.cs"));
+        var util = Source(eol, "src", "FieldCodes.Cad", "CadUtil.cs");
         Assert.Contains("FtfCommandTrace.Step(\"points: opening model space\")", util);
         // FTFLINES does not go through FtfSession.Run: it records its own exception before AutoCAD sees it.
-        var lines = File.ReadAllText(Path.Combine(root, "src", "FieldCodes.Cad", "LineworkCommands.cs"));
+        var lines = Source(eol, "src", "FieldCodes.Cad", "LineworkCommands.cs");
         Assert.Contains("FtfCommandTrace.Failed(\"FTFLINES\", ex);", lines);
-        var session = File.ReadAllText(Path.Combine(root, "src", "FieldCodes.Cad", "FtfSession.cs"));
+        var session = Source(eol, "src", "FieldCodes.Cad", "FtfSession.cs");
         Assert.Equal(3, Regex.Matches(session, @"FtfCommandTrace\.Failed\(commandName, ex\);").Count);
     }
 
     // ------------------------------------------------------------------ the smoke test's report
 
-    [Fact]
-    public void TheSmokeTestSaysHowARunEndedAndWhereItGotTo()
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void TheSmokeTestSaysHowARunEndedAndWhereItGotTo(string eol)
     {
-        var smoke = File.ReadAllText(Path.Combine(Root(), "deploy", "smoke-test.ps1"));
+        var smoke = Source(eol, "deploy", "smoke-test.ps1");
         // Exit codes are only readable from Start-Process when the handle was taken while it ran.
         Assert.Equal(3, Regex.Matches(smoke, @"\$null = \$(p|process)\.Handle").Count);
         Assert.Equal(3, Regex.Matches(smoke, @"Get-ExitReport \$(p|process) \$(killed|styleKilled)").Count);
-        Assert.Contains("-532462766 { 'a .NET exception nothing caught' }", smoke);
-        Assert.Contains("3 { 'the harness ended the run (FATAL)' }", smoke);
+
+        // How the run ended: the exit code and what it means, or a kill on a timeout, and how long.
+        var exit = FunctionBody(smoke, "Get-ExitReport");
+        Assert.Contains("-532462766 { 'a .NET exception nothing caught' }", exit);
+        Assert.Contains("3 { 'the harness ended the run (FATAL)' }", exit);
+        Assert.Contains("exit code $code ($hex, $meaning) after $seconds s", exit);
+        Assert.Contains("stopped by the smoke test after $seconds s ($why)", exit);
+        // Where it got to: the exception, and the last steps recorded (harness STEP, plugin TRACE).
+        var diagnostics = FunctionBody(smoke, "Get-RunDiagnostics");
+        Assert.Contains("$_ -like 'EXCEPTION *'", diagnostics);
+        Assert.Contains("$_ -like 'STEP *' -or $_ -like 'TRACE *'", diagnostics);
+        Assert.Contains("--- last steps recorded", diagnostics);
+
         // The plugin's trace beside the harness's steps, in each run's result file.
         Assert.Contains("[Environment]::SetEnvironmentVariable('FTF_TRACE_FILE', $resultPath, 'Process')", smoke);
         Assert.Contains("$env:FTF_TRACE_FILE = $result", smoke);
-        // Every way a required check can fail reports the exit, the exception and the last steps.
-        var required = smoke.Substring(smoke.IndexOf("function Invoke-RequiredCheck", StringComparison.Ordinal));
-        required = required.Substring(0, required.IndexOf("\n}\n", StringComparison.Ordinal));
+        // The main run: a run without its COMPLETE line fails, with the diagnostics.
+        Assert.Contains("if (-not ($outcome -contains 'COMPLETE')) { Fail 'the run stopped before its end' (@($failLines) + $diagnostics + $tail) }", smoke);
+
+        // Every way a required check can fail reports the exit, the exception and the last steps;
+        // a run that never wrote COMPLETE, and one stopped on a timeout, among them.
+        var required = FunctionBody(smoke, "Invoke-RequiredCheck");
         Assert.Contains("$diagnostics = @($exitReport) + @(Get-RunDiagnostics $r)", required);
-        foreach (Match fail in Regex.Matches(required, @"\bFail \(\$prefix \+ [^\n]*"))
-            if (!fail.Value.Contains("did not compile") && !fail.Value.Contains("no rules.json") && !fail.Value.Contains("stages not passed"))
-                Assert.Contains("$diagnostics", fail.Value);
+        Assert.Contains("if (-not ($r -contains 'COMPLETE')) { Fail ($prefix + 'the run stopped before its end') (@($failed) + $diagnostics", required);
+        Assert.Contains("$why = 'no result after 300 s", required);
+        var fails = Regex.Matches(required, @"\bFail \(\$prefix \+ [^\r\n]*").Select(m => m.Value).ToList();
+        Assert.True(fails.Count >= 6, "expected the required check's failure paths, found " + fails.Count);
+        foreach (var fail in fails)
+            if (!fail.Contains("did not compile") && !fail.Contains("no rules.json") && !fail.Contains("stages not passed"))
+                Assert.Contains("$diagnostics", fail);
     }
 }

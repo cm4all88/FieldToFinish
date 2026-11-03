@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Every check that can run without Civil 3D, in the order that fails fastest. Run it before
+# Every check that can run without Civil 3D, in the order that fails fastest, the unit tests on LF
+# and on Windows-style CRLF checkouts. Run it before
 # pushing a branch UPDATEFTF will build; tools/githooks/pre-push runs it on every push once
 #   git config core.hooksPath tools/githooks
 # is set in the working copy.
@@ -34,6 +35,25 @@ case "$(uname -s)" in
   *) filter="FullyQualifiedName!~ReportSitsBesideTheDrawing" ;;
 esac
 dotnet test tests/FieldCodes.Tests --nologo -v q ${filter:+--filter "$filter"}
+
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) ;;   # a Windows checkout already has CRLF endings
+  *)
+    # Git for Windows checks files out with CRLF (core.autocrlf=true), and so does UPDATEFTF's build
+    # checkout: a test that reads a file and assumes LF passes here and fails there (063b747). So the
+    # unit tests run once more on the commit as Windows checks it out. Committed work only.
+    step "Unit tests on a Windows-style checkout (CRLF line endings)"
+    crlf="$(mktemp -d)"
+    trap 'rm -rf "$crlf"' EXIT
+    git clone -q -c core.autocrlf=true "$(pwd)" "$crlf/repo"
+    git -C "$crlf/repo" checkout -q --detach "$(git rev-parse HEAD)"
+    if ! grep -q $'\r$' "$crlf/repo/deploy/smoke-test.ps1"; then echo "the CRLF checkout has LF endings; git did not convert" >&2; exit 1; fi
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+      echo "note: uncommitted changes are not in this run (it tests $(git rev-parse --short HEAD))"
+    fi
+    dotnet test "$crlf/repo/tests/FieldCodes.Tests" --nologo -v q ${filter:+--filter "$filter"}
+    ;;
+esac
 
 if command -v pwsh >/dev/null 2>&1; then
   step "PowerShell scripts (Windows PowerShell 5.1 syntax)"
