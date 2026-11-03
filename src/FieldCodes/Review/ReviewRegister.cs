@@ -281,8 +281,11 @@ namespace FieldCodes.Review
 
             if (complete)
             {
+                // An open item that still names a correction FTF drew was reopened for a person to
+                // decide (the correction is still in the drawing): never resolved behind their back.
                 foreach (var item in Items.Where(i => string.Equals(i.Source, source, StringComparison.OrdinalIgnoreCase) &&
-                                                      i.Status == ReviewItemStatus.Open && !seen.Contains(i.Id)))
+                                                      i.Status == ReviewItemStatus.Open && !seen.Contains(i.Id) &&
+                                                      string.IsNullOrEmpty(i.CorrectionHandle)))
                 {
                     item.Status = ReviewItemStatus.Resolved;
                     item.Note = "no longer found when " + source + " ran " + Stamp(now);

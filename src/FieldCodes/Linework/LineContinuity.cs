@@ -175,8 +175,16 @@ namespace FieldCodes.Linework
         /// on (a vertex, or on a segment within the tolerance), corrections included.</summary>
         public Dictionary<string, List<string>> Coverage { get; private set; }
 
-        /// <summary>Shot number -> the finding ids that name it.</summary>
+        /// <summary>(shot number, figure id) -> the finding ids that name the shot on that figure.</summary>
         public Dictionary<string, List<string>> FindingsByShot { get; private set; }
+
+        /// <summary>The findings about a shot on one figure (a shot on two figures can have a
+        /// finding on one and none on the other).</summary>
+        public IList<string> FindingsFor(string shot, string figureId)
+        {
+            List<string> ids;
+            return FindingsByShot.TryGetValue(Key(shot, figureId), out ids) ? ids : new List<string>();
+        }
 
         public ContinuityResult()
         {
@@ -274,7 +282,8 @@ namespace FieldCodes.Linework
                 foreach (var n in f.Shots)
                 {
                     List<string> ids;
-                    if (!result.FindingsByShot.TryGetValue(n, out ids)) { ids = new List<string>(); result.FindingsByShot[n] = ids; }
+                    var key = ContinuityResult.Key(n, f.FigureId);
+                    if (!result.FindingsByShot.TryGetValue(key, out ids)) { ids = new List<string>(); result.FindingsByShot[key] = ids; }
                     if (!ids.Contains(f.Id)) ids.Add(f.Id);
                 }
             return result;
@@ -481,7 +490,8 @@ namespace FieldCodes.Linework
                 }
                 else
                 {
-                    var crossing = Crossing(shots[first], shots[last], lines, lineFamily, str.Family, a, b);
+                    bool identified;
+                    var crossing = Crossing(shots[first], shots[last], lines, lineFamily, str.Family, a, b, out identified);
                     if (crossing != null)
                     {
                         f.Confidence = GapConfidence.Possible;
@@ -491,7 +501,7 @@ namespace FieldCodes.Linework
                 f.Issue = (f.Confidence == GapConfidence.Probable ? "Probable" : f.Confidence == GapConfidence.Possible ? "Possible" : "Intentional") +
                           " missing connection (" + str.FigureId + " " + first + "-" + last + ")";
                 f.Reason = str.FigureId + " is coded continuous from " + first + " to " + last + " but the drawing has a " + Ft(gap) + " gap there.";
-                Finish(f, shots, null);
+                Finish(f, shots, null, a, b);
                 result.Findings.Add(f);
                 return;
             }
@@ -596,11 +606,14 @@ namespace FieldCodes.Linework
                     if (GateAt(shots[a], shots[b], input, rules, tol, out why)) { intentional = true; f.Evidence.Add(why); }
                     else
                     {
-                        var crossing = Crossing(shots[a], shots[b], lines, lineFamily, s1.Family, onA[0], onB[0]);
+                        bool identified;
+                        var crossing = Crossing(shots[a], shots[b], lines, lineFamily, s1.Family, onA[0], onB[0], out identified);
                         if (crossing != null)
                         {
-                            f.Evidence.Add("crossed by " + crossing);
-                            if (rules.CrossingMeansIntentional) intentional = true; else against++;
+                            // Only a surveyed feature (a driveway edge, a road, a wall) explains a break;
+                            // a line nothing identifies (a contour, a parcel line) only weakens the case.
+                            f.Evidence.Add("crossed by " + crossing + (identified ? string.Empty : " (not an identified feature)"));
+                            if (identified && rules.CrossingMeansIntentional) intentional = true; else against++;
                         }
                     }
 
@@ -613,7 +626,7 @@ namespace FieldCodes.Linework
                               " missing connection (" + s1.FigureId + " " + a + "-" + b + ")";
                     f.Reason = s1.FigureId + " stops at " + a + " and starts again at " + b + ", " + Ft(gap / upf) + " away" +
                                (f.Confidence == GapConfidence.Intentional ? ": an intentional break." : ".");
-                    Finish(f, shots, null);
+                    Finish(f, shots, null, onA[0], onB[0]);
                     result.Findings.Add(f);
                 }
             }
@@ -632,10 +645,13 @@ namespace FieldCodes.Linework
             return false;
         }
 
-        /// <summary>The first other line (another feature) the gap crosses, described; null for none.</summary>
+        /// <summary>The other line (another feature) the gap crosses, described -- an identified
+        /// feature first; null for none.</summary>
         private static string Crossing(ContinuityShot a, ContinuityShot b, IList<ContinuityLine> lines, IDictionary<ContinuityLine, string> lineFamily,
-                                       string family, ContinuityLine skipA, ContinuityLine skipB)
+                                       string family, ContinuityLine skipA, ContinuityLine skipB, out bool identified)
         {
+            identified = false;
+            string unidentified = null;
             var minX = Math.Min(a.X, b.X); var maxX = Math.Max(a.X, b.X);
             var minY = Math.Min(a.Y, b.Y); var maxY = Math.Max(a.Y, b.Y);
             foreach (var l in lines)
@@ -648,11 +664,14 @@ namespace FieldCodes.Linework
                     var p = l.Vertices[i - 1];
                     var q = l.Vertices[i];
                     if (Math.Max(p[0], q[0]) < minX || Math.Min(p[0], q[0]) > maxX || Math.Max(p[1], q[1]) < minY || Math.Min(p[1], q[1]) > maxY) continue;
-                    if (Cross(a.X, a.Y, b.X, b.Y, p[0], p[1], q[0], q[1]))
-                        return (string.IsNullOrWhiteSpace(f) ? "a line" : f) + " (" + (string.IsNullOrWhiteSpace(l.Layer) ? l.Handle : l.Layer + " " + l.Handle) + ")";
+                    if (!Cross(a.X, a.Y, b.X, b.Y, p[0], p[1], q[0], q[1])) continue;
+                    var what = (string.IsNullOrWhiteSpace(f) ? "a line" : f) + " (" + (string.IsNullOrWhiteSpace(l.Layer) ? l.Handle : l.Layer + " " + l.Handle) + ")";
+                    if (!string.IsNullOrWhiteSpace(f)) { identified = true; return what; }
+                    if (unidentified == null) unidentified = what;
+                    break;
                 }
             }
-            return null;
+            return unidentified;
         }
 
         private static double MedianSpacing(CodedString s1, CodedString s2, IDictionary<string, ContinuityShot> shots)
@@ -712,7 +731,7 @@ namespace FieldCodes.Linework
             return f;
         }
 
-        private static void Finish(ContinuityFinding f, IDictionary<string, ContinuityShot> shots, ContinuityLine line)
+        private static void Finish(ContinuityFinding f, IDictionary<string, ContinuityShot> shots, ContinuityLine line, params ContinuityLine[] ends)
         {
             var parts = new List<string> { f.Kind, f.FigureId };
             foreach (var n in f.Shots)
@@ -722,6 +741,15 @@ namespace FieldCodes.Linework
             }
             foreach (var h in f.Lines) parts.Add("line " + h);
             if (line != null) foreach (var v in line.Vertices) parts.Add(R(v[0]) + "," + R(v[1]));
+            // The ends of the lines either side of a gap: a line extended toward the other (and
+            // still short of it) is a changed source, so a decision about the gap reopens.
+            foreach (var l in ends ?? new ContinuityLine[0])
+                if (l != null && l.Vertices.Count > 0)
+                {
+                    var p = l.Vertices[0];
+                    var q = l.Vertices[l.Vertices.Count - 1];
+                    parts.Add("ends " + l.Handle + " " + R(p[0]) + "," + R(p[1]) + " " + R(q[0]) + "," + R(q[1]));
+                }
             f.Fingerprint = Fingerprint.Of(parts);
             var mid = f.Geometry.Count > 0 ? f.Geometry[f.Geometry.Count / 2] : null;
             if (f.Geometry.Count == 2) mid = new[] { (f.Geometry[0][0] + f.Geometry[1][0]) / 2, (f.Geometry[0][1] + f.Geometry[1][1]) / 2, 0.0 };
@@ -735,9 +763,27 @@ namespace FieldCodes.Linework
         /// vertices (a curve shot).</summary>
         private static bool Joined(ContinuityLine line, string a, string b)
         {
-            var va = VertexOf(line, a);
-            var vb = VertexOf(line, b);
-            if (va < 0 || vb < 0) return true;
+            var all = VerticesOf(line, a);
+            var bll = VerticesOf(line, b);
+            if (all.Count == 0 || bll.Count == 0) return true;
+            // A closed polyline can carry its first shot at its last vertex too: any pair of the
+            // shots' vertices that are joined will do.
+            foreach (var va in all)
+                foreach (var vb in bll)
+                    if (JoinedAt(line, va, vb)) return true;
+            return false;
+        }
+
+        private static List<int> VerticesOf(ContinuityLine line, string shot)
+        {
+            var found = new List<int>();
+            for (var i = 0; i < line.ShotsAtVertex.Count; i++)
+                if (line.ShotsAtVertex[i] != null && line.ShotsAtVertex[i].Contains(shot)) found.Add(i);
+            return found;
+        }
+
+        private static bool JoinedAt(ContinuityLine line, int va, int vb)
+        {
             if (va == vb) return true;
             var lo = Math.Min(va, vb);
             var hi = Math.Max(va, vb);

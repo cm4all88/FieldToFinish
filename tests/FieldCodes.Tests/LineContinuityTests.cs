@@ -178,7 +178,7 @@ public sealed class LineContinuityTests : IClassFixture<RulesFixture>
         Assert.StartsWith("Coded string not drawn", f.Issue);
         Assert.Equal(5, f.Geometry.Count);
         Assert.Empty(result.LinesOf("303", "EP"));
-        Assert.Contains(f.Id, result.FindingsByShot["303"]);
+        Assert.Contains(f.Id, result.FindingsFor("303", "EP"));
     }
 
     [Fact]
@@ -304,5 +304,64 @@ public sealed class LineContinuityTests : IClassFixture<RulesFixture>
         Assert.Equal(a.Fingerprint, b.Fingerprint);
         Assert.Equal(a.Id, moved.Id);
         Assert.NotEqual(a.Fingerprint, moved.Fingerprint);
+    }
+
+    [Fact]
+    public void AClosedPolylineThatRepeatsItsFirstVertexIsNotAGap()
+    {
+        // Read by parameter, a closed polyline comes back to its first vertex: the first shot is
+        // at two vertices. The closing side is drawn.
+        var s = S();
+        Shot(s, "1", 0, 0, "BLD B"); Shot(s, "2", 40, 0, "BLD"); Shot(s, "3", 40, 30, "BLD"); Shot(s, "4", 0, 30, "BLD C");
+        var line = Line(s, "L1", "1", "2", "3", "4", "1");
+        line.Closed = true;
+        Assert.Empty(Run(s).Findings);
+        line.Closed = false;                                  // drawn round but left open: still joined
+        Assert.Empty(Run(s).Findings);
+    }
+
+    [Fact]
+    public void ALineNothingIdentifiesCrossingTheGapDoesNotMakeItIntentional()
+    {
+        var s = S();
+        Shot(s, "101", 0, 0, "FNC B"); Shot(s, "102", 20, 0, "FNC"); Shot(s, "103", 40, 0, "FNC");
+        Shot(s, "104", 45, 30, "PP");
+        Shot(s, "105", 48, 0, "FNC B"); Shot(s, "106", 68, 0, "FNC"); Shot(s, "107", 88, 0, "FNC E");
+        Line(s, "L1", "101", "102", "103");
+        Line(s, "L2", "105", "106", "107");
+        var contour = Plain(s, "C1", "V-TOPO-CONT-E", 44, -30, 44, 30);
+        contour.FeatureCode = null;                           // a contour: no feature, no shots
+        var f = Assert.Single(Run(s).Findings);
+        Assert.Equal(GapConfidence.Possible, f.Confidence);    // weakened, still for review
+        Assert.Contains(f.Evidence, e => e.Contains("not an identified feature"));
+    }
+
+    [Fact]
+    public void ALineExtendedTowardTheGapChangesItsFingerprint()
+    {
+        Scene Build(double end)
+        {
+            var s = S();
+            Shot(s, "101", 0, 0, "FNC B"); Shot(s, "102", 20, 0, "FNC"); Shot(s, "103", 40, 0, "FNC");
+            Shot(s, "105", 48, 0, "FNC B"); Shot(s, "106", 68, 0, "FNC"); Shot(s, "107", 88, 0, "FNC E");
+            var l1 = Line(s, "L1", "101", "102", "103");
+            if (end > 40) { l1.Vertices.Add(new[] { end, 0.0, 100.0 }); l1.ShotsAtVertex.Add(new List<string>()); }
+            Line(s, "L2", "105", "106", "107");
+            return s;
+        }
+        var before = Run(Build(40)).Findings.Single();
+        var extended = Run(Build(44)).Findings.Single();
+        Assert.Equal(before.Id, extended.Id);
+        Assert.NotEqual(before.Fingerprint, extended.Fingerprint);
+    }
+
+    [Fact]
+    public void FindingsAreKeptPerFigure()
+    {
+        var s = S();
+        Shot(s, "1", 0, 0, "EP B LN B"); Shot(s, "2", 10, 0, "EP LN"); Shot(s, "3", 20, 0, "EP E LN E");
+        var result = Run(s);                                    // nothing drawn; striping is not checked by default
+        Assert.NotEmpty(result.FindingsFor("2", "EP"));
+        Assert.Empty(result.FindingsFor("2", "LN"));
     }
 }

@@ -454,6 +454,11 @@ namespace FieldCodes.Review
             // has its item there (one per code), not another here.
             var issue = ctx.Diagnostics != null && parsed != null ? ctx.Diagnostics.Classify(parsed) : null;
             var codeIsFigure = coding != null && coding.IsLinework && coding.Leading.Count == 0;
+            // A code the office ignores (Settings > Diagnostics) is an exclusion, never a code nothing
+            // handles, whatever list the classifier was given.
+            if (issue != null && issue.Category == CodeIssueCategory.NeedsConfiguration && parsed != null && !parsed.Recognized &&
+                (ctx.Settings ?? settings).Diagnostics != null && (ctx.Settings ?? settings).Diagnostics.NoteFor(token) != null)
+                issue = null;
             if (issue != null && issue.Category == CodeIssueCategory.Error)
             {
                 entry.Reading = "error: " + issue.Reason;
@@ -481,8 +486,8 @@ namespace FieldCodes.Review
                         continue;
                     }
                     entry.Missing.Add(want);
-                    List<string> findings;
-                    if (ctx.Continuity != null && ctx.Continuity.FindingsByShot.TryGetValue(p.Number, out findings) && findings.Count > 0)
+                    var findings = ctx.Continuity != null ? ctx.Continuity.FindingsFor(p.Number, f.FigureId) : new List<string>();
+                    if (findings.Count > 0)
                         foreach (var id in findings) { if (!entry.Issues.Contains(id)) entry.Issues.Add(id); }
                     else
                     {
@@ -509,6 +514,16 @@ namespace FieldCodes.Review
                 entry.Evidence.Add("marker: " + (marker.StyleName ?? "style") + " (" + (marker.MarkerType ?? "?") +
                                    (string.IsNullOrWhiteSpace(marker.SymbolName) ? string.Empty : " " + marker.SymbolName) + ")");
             entry.Found = entry.Found.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // Never a point left for review with nothing anyone can close: if no evidence accounts
+            // for it and no item is about it, it gets one.
+            if (entry.Issues.Count == 0 && entry.Missing.Count == 0 && Strongest(entry) == PointDisposition.Review)
+            {
+                entry.Missing.Add("an output");
+                var item = Item(ReviewKinds.PointMissingOutput, entry,
+                    Quote(raw) + ": nothing in the drawing accounts for this point (no FTF object, no line, no symbol, no surface, no documented exclusion).");
+                items.Add(item);
+                entry.Issues.Add(item.Id);
+            }
             entry.Disposition = entry.Issues.Count == 0 && entry.Missing.Count == 0 ? Strongest(entry) : PointDisposition.Review;
             entry.DraftingComplete = entry.Missing.Count == 0 && entry.Issues.Count == 0;
         }
@@ -537,11 +552,13 @@ namespace FieldCodes.Review
 
             if (parsed == null) return;
 
-            // Excluded by an ignore list: documented, or for review.
-            if (parsed.Ignored)
+            // Excluded by an ignore list: documented, or for review. The office's own ignored codes
+            // (Settings > Diagnostics) apply whenever no rule matched, however the parser flagged it.
+            var officeNote = !parsed.Recognized && settings.Diagnostics != null ? settings.Diagnostics.NoteFor(token) : null;
+            if (parsed.Ignored || officeNote != null)
             {
-                var ruleNote = rules != null ? rules.IgnoreNoteFor(token) : null;
-                var userNote = ruleNote == null && settings.Diagnostics != null ? settings.Diagnostics.NoteFor(token) : null;
+                var ruleNote = parsed.Ignored && rules != null ? rules.IgnoreNoteFor(token) : null;
+                var userNote = ruleNote == null ? officeNote ?? (settings.Diagnostics != null ? settings.Diagnostics.NoteFor(token) : null) : null;
                 var note = ruleNote ?? userNote;
                 if (note != null)
                 {

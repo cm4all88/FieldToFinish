@@ -111,7 +111,12 @@ Never proposed:
 - strings with different figure numbers;
 - different features;
 - a gap longer than the feature's limit;
-- a gate opening (posts at both ends). Gate openings and crossings with "crossing means intentional" are intentional breaks: listed in the continuity report, not review items.
+- a gate opening (posts at both ends). Gate openings are intentional breaks: listed in the continuity report, not review items.
+
+A gap crossed by an **identified** feature (a line FTF names from its shots, figure name or layer: a
+driveway edge, a road, a wall) is intentional when the feature's row says "crossing means
+intentional". A line nothing identifies (a contour, a parcel line) only weakens the case: the gap is
+still possible, and still for review.
 
 **Probable and possible gaps both need review** (decision 5).
 
@@ -226,4 +231,5 @@ A trailing `*` names every open id that starts so (`point.duplicate:*`); commas 
 | Library: continuity, ledger, decisions, ignore notes, reports | Unit tests (`LineContinuityTests`, `PointAccountingTests`, `ReviewDecisionTests`, `IgnoreReasonTests`, `AccountabilityHarnessExpectationTests`). |
 | Plugin | Compiles against the real AutoCAD 2024 API (`tests/RealApiCompileCheck`). Civil 3D members use stand-ins on Linux. |
 | Civil 3D 2024, headless | `tests/LiveSmoke/AccountabilityTestHarness.cs`, a **required** stage of the deploy smoke test (UPDATEFTF puts the previous build back if it fails). Covers the audit's scenarios A1, A2, A4, A6-A11, R1-R4 and R6: FTFRUN twice, approve, recheck, source change, QC refused then marked, erased point and correction. **Not yet run in Civil 3D at the time of writing.** |
+| Fence heights in field notes | A fence height written in the crew's note (Settings > Point Labels > Read notes from) is read as one written in the description; identification still uses the raw description. Unit tested; not run in Civil 3D. |
 | Not covered headless | The FTFREVIEW window itself (buttons, multi-select): needs an `acad.exe` UI run (scenario U1). Survey figures: the figure fixture (`tests/LiveSmoke/fixtures/README.md`). Undo of a run and its checks together (R5). Surface membership through a point-group definition (the harness builds its TIN from vertices; the definition path is read by reflection and reported as a NOTE). |

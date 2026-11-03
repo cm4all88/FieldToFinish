@@ -189,7 +189,11 @@ namespace FieldCodes.Cad
                     IsCorrection = isCorrection
                 };
                 try { line.Closed = curve.Closed; } catch (System.Exception) { }
-                foreach (var v in Densify(curve))
+                var points = Densify(curve, Math.Max(1e-6, (acc.Continuity != null ? acc.Continuity.OnLineToleranceFeet : 0.05) * upf / 4));
+                // A closed curve read by parameter comes back to its first vertex: drop the repeat,
+                // the line is closed anyway.
+                if (line.Closed && points.Count > 2 && points[0].Key.DistanceTo(points[points.Count - 1].Key) < 1e-9) points.RemoveAt(points.Count - 1);
+                foreach (var v in points)
                 {
                     line.Vertices.Add(new[] { v.Key.X, v.Key.Y, v.Key.Z });
                     line.ShotsAtVertex.Add(v.Value ? sources.At(v.Key.X, v.Key.Y).Select(s => s.Number).ToList() : new List<string>());
@@ -236,8 +240,8 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>The curve's vertices (true) and, along its arcs, points between them (false),
-        /// so a shot on a curve is found on it.</summary>
-        private static IList<KeyValuePair<Point3d, bool>> Densify(Curve curve)
+        /// close enough that a shot on the arc is within <paramref name="chordError"/> of a chord.</summary>
+        private static List<KeyValuePair<Point3d, bool>> Densify(Curve curve, double chordError)
         {
             var list = new List<KeyValuePair<Point3d, bool>>();
             var vertices = LineworkCommands.VerticesOf(curve).ToList();
@@ -245,10 +249,11 @@ namespace FieldCodes.Cad
             {
                 try
                 {
-                    for (var i = 0; i <= 16; i++)
+                    var n = Steps(curve, curve.StartParam, curve.EndParam, chordError);
+                    for (var i = 0; i <= n; i++)
                     {
-                        var t = curve.StartParam + (curve.EndParam - curve.StartParam) * i / 16.0;
-                        list.Add(new KeyValuePair<Point3d, bool>(curve.GetPointAtParameter(t), i == 0 || i == 16));
+                        var t = curve.StartParam + (curve.EndParam - curve.StartParam) * i / n;
+                        list.Add(new KeyValuePair<Point3d, bool>(curve.GetPointAtParameter(t), i == 0 || i == n));
                     }
                     return list;
                 }
@@ -265,12 +270,30 @@ namespace FieldCodes.Cad
                     if (b <= a) continue;
                     var mid = curve.GetPointAtParameter((a + b) / 2);
                     var chord = new Point3d((vertices[i].X + vertices[i + 1].X) / 2, (vertices[i].Y + vertices[i + 1].Y) / 2, mid.Z);
-                    if (mid.DistanceTo(chord) < 1e-3) continue;           // straight
-                    for (var k = 1; k < 8; k++) list.Add(new KeyValuePair<Point3d, bool>(curve.GetPointAtParameter(a + (b - a) * k / 8.0), false));
+                    if (mid.DistanceTo(chord) < chordError) continue;      // straight enough
+                    var k = Steps(curve, a, b, chordError);
+                    for (var j = 1; j < k; j++) list.Add(new KeyValuePair<Point3d, bool>(curve.GetPointAtParameter(a + (b - a) * j / k), false));
                 }
                 catch (System.Exception) { }
             }
             return list;
+        }
+
+        /// <summary>How many chords between two parameters keep every chord within the error of the
+        /// curve (doubling from 8, at most 1024).</summary>
+        private static int Steps(Curve curve, double a, double b, double chordError)
+        {
+            var n = 8;
+            while (n < 1024)
+            {
+                var p = curve.GetPointAtParameter(a);
+                var q = curve.GetPointAtParameter(a + (b - a) / n);
+                var m = curve.GetPointAtParameter(a + (b - a) / (2.0 * n));
+                var c = new Point3d((p.X + q.X) / 2, (p.Y + q.Y) / 2, m.Z);
+                if (m.DistanceTo(c) <= chordError) break;
+                n *= 2;
+            }
+            return n;
         }
 
         private static void ReadControlTable(Transaction tr, ObjectId id, ICollection<string> points)
@@ -493,7 +516,18 @@ namespace FieldCodes.Cad
             summary.LineItems = lineItems.Count;
 
             var register = DrawingStore.ReadReview(db, tr);
-            register.Report(ReviewKinds.ContinuitySource, lineItems, now, true, settings.Review);
+            if (acc.Continuity != null && acc.Continuity.Enabled)
+            {
+                // A feature switched off is not checked this run: its earlier items stay as they
+                // are (neither resolved nor reopened) until it is switched on again.
+                var reported = new List<ReviewItem>(lineItems);
+                foreach (var kept in register.Items.Where(i => string.Equals(i.Source, ReviewKinds.ContinuitySource, StringComparison.OrdinalIgnoreCase) &&
+                                                               !string.IsNullOrEmpty(i.Code) && !acc.Continuity.For(i.Code).Enabled &&
+                                                               !reported.Any(r => string.Equals(r.Id, i.Id, StringComparison.OrdinalIgnoreCase))).ToList())
+                    reported.Add(kept.Clone());
+                register.Report(ReviewKinds.ContinuitySource, reported, now, true, settings.Review);
+            }
+            else summary.Notes.Add("Linework continuity is switched off (Settings > Point Accountability): its earlier items are left as they are.");
 
             // A correction that was erased puts its item back on the list.
             foreach (var item in register.Items.Where(i => i.Status == ReviewItemStatus.Corrected).ToList())
@@ -541,8 +575,9 @@ namespace FieldCodes.Cad
 
         private static void WriteReports(Database db, PointLedger ledger, ContinuityResult continuity, ReviewRegister register, AccountabilitySummary summary)
         {
-            var points = FieldCodes.Reporting.AccountabilityReport.PointsPathFor(db.Filename);
-            var lines = FieldCodes.Reporting.AccountabilityReport.ContinuityPathFor(db.Filename);
+            var saved = UtilityCommands.SavedDrawingPath(db);                 // an unsaved drawing's Filename is its template
+            var points = FieldCodes.Reporting.AccountabilityReport.PointsPathFor(saved);
+            var lines = FieldCodes.Reporting.AccountabilityReport.ContinuityPathFor(saved);
             if (points == null) { summary.Notes.Add("The drawing has never been saved: no report was written beside it."); return; }
             try
             {
@@ -602,6 +637,15 @@ namespace FieldCodes.Cad
     {
         public const string FixTag = "linefix:";
 
+        /// <summary>The tag naming a review item on FTF's proposal and correction objects. XData
+        /// strings stop at 255 characters, so a long id (a line skipping many shots) is named by
+        /// its hash instead, which still matches exactly one item.</summary>
+        internal static string TagFor(string id)
+        {
+            if (string.IsNullOrEmpty(id) || id.Length <= 200) return id ?? string.Empty;
+            return "#" + Fingerprint.Of(id);
+        }
+
         public static int DrawProposals(Database db, Transaction tr, RulesConfig cfg, AccountabilitySettings acc, ReviewRegister register)
         {
             Ownership.DeleteOwnedKinds(db, tr, FtfEntityKind.LineGapProposal);
@@ -624,7 +668,7 @@ namespace FieldCodes.Cad
                     pl.ColorIndex = color;
                     pl.ConstantWidth = textHeight * 0.25;
                     CadUtil.AddToModelSpace(db, tr, pl);
-                    Ownership.Stamp(pl, item.Code ?? string.Empty, cfg.Version, FtfEntityKind.LineGapProposal, null, item.Id);
+                    Ownership.Stamp(pl, item.Code ?? string.Empty, cfg.Version, FtfEntityKind.LineGapProposal, null, TagFor(item.Id));
                     count++;
                 }
                 var first = item.Geometry[0];
@@ -636,7 +680,7 @@ namespace FieldCodes.Cad
                     text.LayerId = layer;
                     text.ColorIndex = color;
                     CadUtil.AddToModelSpace(db, tr, text);
-                    Ownership.Stamp(text, item.Code ?? string.Empty, cfg.Version, FtfEntityKind.LineGapProposal, null, item.Id);
+                    Ownership.Stamp(text, item.Code ?? string.Empty, cfg.Version, FtfEntityKind.LineGapProposal, null, TagFor(item.Id));
                 }
             }
             return count;
@@ -658,7 +702,7 @@ namespace FieldCodes.Cad
             if (item.Status != ReviewItemStatus.Open) { problem = item.Id + " is " + item.Status.ToString().ToLowerInvariant() + ", not open."; return false; }
 
             foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == FtfEntityKind.LineCorrection &&
-                                                                  string.Equals(s.TagText, FixTag + item.Id, StringComparison.OrdinalIgnoreCase)))
+                                                                  string.Equals(s.TagText, FixTag + TagFor(item.Id), StringComparison.OrdinalIgnoreCase)))
             {
                 var existing = (AcEntity)tr.GetObject(pair.Key, OpenMode.ForRead);
                 if (EditedByHand(existing, pair.Value))
@@ -690,12 +734,12 @@ namespace FieldCodes.Cad
             line.LayerId = layer;
             CadUtil.AddToModelSpace(db, tr, line);
             Ownership.Stamp(line, item.Code ?? string.Empty, cfg.Version, FtfEntityKind.LineCorrection, null,
-                            FixTag + item.Id, null, null, GeometryText(line));
+                            FixTag + TagFor(item.Id), null, null, GeometryText(line));
             handle = line.Handle.ToString();
             line.Dispose();
 
             if (!register.MarkCorrected(item.Id, handle, note, by, DateTime.Now, out problem)) return false;
-            Ownership.DeleteOwned(db, tr, s => s.Kind == FtfEntityKind.LineGapProposal && string.Equals(s.TagText, item.Id, StringComparison.OrdinalIgnoreCase));
+            Ownership.DeleteOwned(db, tr, s => s.Kind == FtfEntityKind.LineGapProposal && string.Equals(s.TagText, TagFor(item.Id), StringComparison.OrdinalIgnoreCase));
             return true;
         }
 

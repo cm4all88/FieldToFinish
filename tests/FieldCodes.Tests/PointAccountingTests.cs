@@ -282,6 +282,51 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
     }
 
     [Fact]
+    public void CodesTheOfficeIgnoresAreExcludedWithTheirReason()
+    {
+        var settings = new FtfSettings();
+        settings.Diagnostics.Ignore("XYZQ", "crew's practice shots", "JD", null);
+        settings.Diagnostics.Ignore("QQQ");
+        // The parser here has not had the settings applied: the ledger must not depend on it.
+        var a = Account(null, new[] { P("1", "XYZQ 12"), P("2", "XYZQ"), P("3", "QQQ 4") }, Ctx(settings));
+        Assert.Equal(PointDisposition.Excluded, a.ledger.Find("1")!.Disposition);
+        Assert.Equal(PointDisposition.Excluded, a.ledger.Find("2")!.Disposition);
+        Assert.Contains(a.ledger.Find("1")!.Evidence, e => e.Contains("crew's practice shots"));
+        Assert.Contains(a.items, i => i.Id == "point.excludednoreason:3");
+        Assert.DoesNotContain(a.items, i => i.Id == "point.nosymbol:2");
+    }
+
+    [Fact]
+    public void APointNothingAccountsForAlwaysHasAnItem()
+    {
+        var a = Account(null, new[] { P("1", "SSCO") }, Ctx());
+        var e = a.ledger.Find("1")!;
+        Assert.Equal(PointDisposition.Review, e.Disposition);
+        Assert.NotEmpty(e.Issues);                                       // something a person can close
+        Assert.All(a.ledger.Points.Where(p => p.Disposition == PointDisposition.Review), p => Assert.NotEmpty(p.Issues));
+    }
+
+    [Fact]
+    public void AShotOnTwoFiguresNeedsALineOfEach()
+    {
+        var shots = new[] { P("1", "EP B FNC B", 0, 0), P("2", "EP E FNC E", 10, 0) };
+        var input = new ContinuityInput { Shots = shots.Select(s => new ContinuityShot { Number = s.Number, X = s.X, Y = s.Y, RawDescription = s.RawDescription, Coding = s.Coding }).ToList() };
+        var line = new ContinuityLine { Handle = "EP1" };
+        foreach (var s in shots) { line.Vertices.Add(new[] { s.X, s.Y, 0.0 }); line.ShotsAtVertex.Add(new List<string> { s.Number }); }
+        line.FeatureCode = "EP";
+        // The line's family comes from its shots: both EP and FNC are coded there, so make it EP's by name.
+        line.FigureName = "EP";
+        input.Lines = new List<ContinuityLine> { line };
+        var continuity = LineContinuity.Analyze(input);
+        var a = Account(null, shots, Ctx(continuity: continuity));
+        var e = a.ledger.Find("1")!;
+        Assert.Contains("linework EP", e.Found);
+        Assert.Contains("linework FNC", e.Missing);
+        Assert.Contains(e.Issues, id => id.StartsWith("line.missingsegment:FNC:"));
+        Assert.DoesNotContain(e.Issues, id => id.StartsWith("line.") && id.Contains(":EP:"));
+    }
+
+    [Fact]
     public void TheLedgerRoundTripsThroughJson()
     {
         var a = Account(null, new[] { P("1", "SSCO"), P("2", "WFH 1") }, Ctx());
@@ -338,6 +383,21 @@ public sealed class ReviewDecisionTests
         r.Report(ReviewKinds.ContinuitySource, new ReviewItem[0], t);           // the gap is no longer found
         Assert.Equal(ReviewItemStatus.Open, r.Items[0].Status);
         Assert.Contains("the correction 2F2 was kept", r.Items[0].Note);
+    }
+
+    [Fact]
+    public void AReopenedCorrectionWaitsForAPersonAndIsNeverResolvedByARerun()
+    {
+        var r = new ReviewRegister();
+        var t = DateTime.Now;
+        r.Report(ReviewKinds.ContinuitySource, new[] { Gap("A") }, t);
+        r.MarkCorrected("line.gap:FNC:103-105", "2F1", null, "JD", t, out _);
+        r.Report(ReviewKinds.ContinuitySource, new ReviewItem[0], t);        // the drafter joined the fence by hand
+        Assert.Equal(ReviewItemStatus.Open, r.Items[0].Status);
+        r.Report(ReviewKinds.ContinuitySource, new ReviewItem[0], t);        // FTFQC reruns the checks
+        Assert.Equal(ReviewItemStatus.Open, r.Items[0].Status);              // still the person's to decide
+        Assert.False(r.MarkQcComplete(new ReviewSettings(), "JD", t, out _));
+        Assert.True(r.Accept("line.gap:FNC:103-105", "joined by hand; correction 2F1 erased", "JD", t, out _));
     }
 
     [Fact]
