@@ -31,8 +31,10 @@
 // ACCERASE    erases point 1001 and the approved correction.
 // ACCEND      writes the verdict and COMPLETE.
 //
-// Result protocol as ContourTestHarness: lines appended to the file named by FTF_ACCOUNT_RESULT.
-// Compiled with the .NET Framework csc (C# 5 only). FTF types are read by reflection.
+// Result protocol as ContourTestHarness: lines appended to the file named by FTF_ACCOUNT_RESULT, each
+// written through to the disk at once, with STEP, EXCEPTION and the plugin's TRACE lines beside them
+// (as IdentityTestHarness). Compiled with the .NET Framework csc (C# 5 only). FTF types are read by
+// reflection, by exact signature only (the plugin contract block below).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -65,6 +67,15 @@ namespace FtfAccountTest
         private static readonly List<string> Stages = new List<string>();
         private static readonly List<string> LineHandles = new List<string>();
         private static Assembly _plugin;
+
+        // Everything of the plugin this harness calls, by exact signature; checked before anything is seeded.
+        private const string ReadReviewSignature = "FieldCodes.Cad.DrawingStore.ReadReview(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction)";
+        private const string ReadLedgerSignature = "FieldCodes.Cad.DrawingStore.ReadLedger(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction)";
+        private const string FindPointSignature = "FieldCodes.Review.PointLedger.Find(System.String)";
+        private const string DescribeRunSignature = "FieldCodes.Review.LedgerRun.Describe()";
+        private const string StartedCount = "FieldCodes.Cad.FtfCommandTrace.StartedCount(System.String)";
+        private const string FinishedCount = "FieldCodes.Cad.FtfCommandTrace.FinishedCount(System.String)";
+        private static readonly string[] PluginContract = { ReadReviewSignature, ReadLedgerSignature, FindPointSignature, DescribeRunSignature, StartedCount, FinishedCount };
         private static short _correctionKind = -1;
         private static short _proposalKind = -1;
         private static short _labelKind = -1;
@@ -88,6 +99,135 @@ namespace FtfAccountTest
             Record((ok ? "PASS " : "FAIL ") + what);
         }
 
+        // ==== plugin contract: this block is the same in every Civil 3D harness (HarnessContractTests) ====
+        // The plugin is reached by reflection by exact signature, "Namespace.Type.Method(Full.Type, ...)",
+        // never by name alone: a name is ambiguous as soon as the plugin adds an overload. That is how
+        // IDVERIFY READER died at 68804df: SourcePointReader gained Read(db, tr, notes), GetMethod("Read")
+        // threw AmbiguousMatchException, nothing caught it, and accoreconsole ended without a word.
+        // A signature that matches no method, or several, throws with the overloads the build has.
+        // Guard records any exception in full after the steps that led to it, and makes it FATAL.
+
+        private static readonly Dictionary<string, MethodInfo> ContractCache = new Dictionary<string, MethodInfo>(StringComparer.Ordinal);
+
+        /// <summary>The one method <paramref name="signature"/> names, in the plugin or in the
+        /// FieldCodes library it loaded.</summary>
+        private static MethodInfo Contract(Assembly plugin, string signature)
+        {
+            MethodInfo cached;
+            if (ContractCache.TryGetValue(signature, out cached)) return cached;
+            var open = signature.IndexOf('(');
+            var dot = open < 0 ? -1 : signature.LastIndexOf('.', open);
+            if (dot < 0 || !signature.EndsWith(")", StringComparison.Ordinal))
+                throw new ArgumentException("plugin contract: not a signature: " + signature);
+            var typeName = signature.Substring(0, dot);
+            var name = signature.Substring(dot + 1, open - dot - 1);
+            var wanted = signature.Substring(open + 1, signature.Length - open - 2).Replace(" ", string.Empty);
+            var type = ContractType(plugin, typeName);
+            if (type == null) throw new InvalidOperationException("plugin contract: the loaded build has no type " + typeName + " (" + signature + ")");
+            var named = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                            .Where(m => m.Name == name).ToList();
+            var matches = named.Where(m => ParameterList(m) == wanted).ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("plugin contract: " + signature + " matches " + matches.Count + " methods; the loaded build has " +
+                    (named.Count == 0 ? "no method " + name : string.Join("; ", named.Select(m => name + "(" + ParameterList(m) + ")").ToArray())));
+            ContractCache[signature] = matches[0];
+            return matches[0];
+        }
+
+        /// <summary>Parameter types as the signatures write them: full names, generic arguments in
+        /// brackets, the same on .NET Framework and .NET.</summary>
+        private static string ParameterList(MethodInfo m)
+        {
+            return string.Join(",", m.GetParameters().Select(p => TypeText(p.ParameterType)).ToArray());
+        }
+
+        private static string TypeText(Type t)
+        {
+            if (t.IsByRef) return TypeText(t.GetElementType()) + "&";
+            if (t.IsArray) return TypeText(t.GetElementType()) + "[]";
+            if (t.IsGenericType && !t.IsGenericTypeDefinition)
+                return t.GetGenericTypeDefinition().FullName + "[" + string.Join(",", t.GetGenericArguments().Select(a => TypeText(a)).ToArray()) + "]";
+            return t.FullName ?? t.Name;
+        }
+
+        private static Type ContractType(Assembly plugin, string typeName)
+        {
+            var type = plugin.GetType(typeName);
+            if (type != null) return type;
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!string.Equals(a.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) continue;
+                type = a.GetType(typeName);
+                if (type != null) return type;
+            }
+            // Civil 3D loads the library only when the plugin first needs it. Have the plugin load it
+            // now, through its own binding (so it is the same FieldCodes the plugin uses): resolve the
+            // return types of its methods until one is a library type.
+            var methods = new List<MethodInfo>(ContractCache.Values);
+            Type[] types;
+            try { types = plugin.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+            foreach (var t in types)
+                methods.AddRange(t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            foreach (var m in methods)
+            {
+                Assembly library;
+                try { library = m.ReturnType.Assembly; }
+                catch (System.Exception) { continue; }
+                if (string.Equals(library.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) return library.GetType(typeName);
+            }
+            return null;
+        }
+
+        /// <summary>Calls the method <paramref name="signature"/> names (<paramref name="target"/> is
+        /// ignored for a static one). An exception it throws comes out as itself, not wrapped.</summary>
+        private static object Call(Assembly plugin, string signature, object target, params object[] args)
+        {
+            var m = Contract(plugin, signature);
+            try { return m.Invoke(m.IsStatic ? null : target, args); }
+            catch (TargetInvocationException ex)
+            {
+                if (ex.InnerException != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        /// <summary>Runs a command's body. An exception from it is recorded in full (type, message,
+        /// inner exceptions, stacks) after the steps that led to it, and is FATAL.</summary>
+        private static void Guard(string what, Action body)
+        {
+            Step(what + ": begin");
+            try { body(); }
+            catch (System.Exception ex)
+            {
+                var inner = ex;
+                while (inner is TargetInvocationException && inner.InnerException != null) inner = inner.InnerException;
+                foreach (var line in ex.ToString().Split('\n'))
+                    if (line.Trim().Length > 0) Record("EXCEPTION " + line.TrimEnd('\r'));
+                Fatal(what + " threw " + inner.GetType().FullName + ": " + inner.Message);
+            }
+            Step(what + ": end");
+        }
+
+        /// <summary>"STEP time what" in the result file, on the disk before the step is taken.</summary>
+        private static void Step(string what)
+        {
+            Record("STEP " + DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + what);
+        }
+
+        /// <summary>Appends a line and writes it through to the disk before returning, so it
+        /// survives the process ending at the next instruction.</summary>
+        private static void AppendDurably(string file, string line)
+        {
+            var bytes = Encoding.UTF8.GetBytes(line + Environment.NewLine);
+            using (var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.WriteThrough))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+        }
+        // ==== end of plugin contract ====
+
         private static void Note(Editor ed, string what)
         {
             ed.WriteMessage("\n  [NOTE] {0}", what);
@@ -98,7 +238,7 @@ namespace FtfAccountTest
         {
             var file = Environment.GetEnvironmentVariable("FTF_ACCOUNT_RESULT");
             if (string.IsNullOrEmpty(file)) return;
-            try { File.AppendAllText(file, line + Environment.NewLine); }
+            try { AppendDurably(file, line); }
             catch (System.Exception) { }
         }
 
@@ -115,6 +255,11 @@ namespace FtfAccountTest
         [CommandMethod("ACCSEED")]
         public void Seed()
         {
+            Guard("ACCSEED", delegate { SeedBody(); });
+        }
+
+        private static void SeedBody()
+        {
             var doc = Application.DocumentManager.MdiActiveDocument;
             var db = doc.Database;
             var ed = doc.Editor;
@@ -124,6 +269,9 @@ namespace FtfAccountTest
                 .Where(a => string.Equals(a.GetName().Name, "FieldCodes.Cad", StringComparison.OrdinalIgnoreCase)).ToList();
             if (loaded.Count != 1) Fatal("FieldCodes.Cad is loaded " + loaded.Count + " times; expected once.");
             _plugin = loaded[0];
+            Step("ACCSEED: checking the plugin contract (" + PluginContract.Length + " signatures)");
+            foreach (var signature in PluginContract) Contract(_plugin, signature);
+            Step("ACCSEED: plugin contract resolved");
             var kinds = _plugin.GetType("FieldCodes.Cad.FtfEntityKind");
             if (kinds == null) Fatal("FieldCodes.Cad.FtfEntityKind not found.");
             try
@@ -135,8 +283,8 @@ namespace FtfAccountTest
             catch (System.Exception) { Fatal("the loaded build has no LineCorrection / LineGapProposal kinds: it predates point accountability."); }
             foreach (var name in new[] { "FTFRUN", "FTFREVIEWCHECK", "-FTFREVIEW", "FTFQC" })
             {
-                SeenStarted[name] = Trace("StartedCount", name);
-                SeenFinished[name] = Trace("FinishedCount", name);
+                SeenStarted[name] = Trace(StartedCount, name);
+                SeenFinished[name] = Trace(FinishedCount, name);
             }
 
             var cdoc = CivApp.CivilDocument.GetCivilDocument(db);
@@ -205,11 +353,17 @@ namespace FtfAccountTest
         [CommandMethod("ACCVERIFY")]
         public void Verify()
         {
+            Guard("ACCVERIFY", delegate { VerifyBody(); });
+        }
+
+        private static void VerifyBody()
+        {
             var doc = Application.DocumentManager.MdiActiveDocument;
             var db = doc.Database;
             var ed = doc.Editor;
             var stage = ed.GetString("\nStage: ").StringResult.Trim().ToUpperInvariant();
             Stages.Add(stage);
+            Step("ACCVERIFY " + stage + ": begin");
             var before = _failures;
 
             if (stage == "RUN") { RequireRanOnce("FTFRUN"); RequireRanOnce("FTFREVIEWCHECK"); AfterRun(db, ed); }
@@ -224,6 +378,7 @@ namespace FtfAccountTest
 
             Check(ed, LineSnapshot(db) == _lineSnapshot, stage + ": every seeded survey line unchanged");
             Check(ed, PointSnapshot(db) == _pointSnapshot, stage + ": no COGO point changed (number, raw description, XYZ) except by the harness");
+            Step("ACCVERIFY " + stage + ": end");
             Record("STAGE " + stage + " " + (_failures == before ? "PASS" : "FAIL"));
         }
 
@@ -262,7 +417,7 @@ namespace FtfAccountTest
                   "A11: the hydrant is " + (labelled ? "labelled by FTFRUN and accounted for as drawn" : "not labelled and its missing label is a review item"));
             var run = P(ledger, "LastRun");
             Check(ed, run != null && (int)P(run, "Points") == 34 && (int)P(run, "Review") > 0 && (int)P(run, "Accounted") > 0,
-                  "the run's numbers: " + (run == null ? "none" : Convert.ToString(run.GetType().GetMethod("Describe").Invoke(run, null))));
+                  "the run's numbers: " + (run == null ? "none" : Convert.ToString(Call(_plugin, DescribeRunSignature, run))));
 
             var proposals = Owned(db).Where(o => o.Value == _proposalKind).ToList();
             var withGeometry = open.Count(i => S(i, "Source") == "Linework continuity" && Count(P(i, "Geometry")) >= 2);
@@ -359,6 +514,11 @@ namespace FtfAccountTest
         [CommandMethod("ACCMOVE")]
         public void Move()
         {
+            Guard("ACCMOVE", delegate { MoveBody(); });
+        }
+
+        private static void MoveBody()
+        {
             var db = Application.DocumentManager.MdiActiveDocument.Database;
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -374,6 +534,11 @@ namespace FtfAccountTest
 
         [CommandMethod("ACCERASE")]
         public void Erase()
+        {
+            Guard("ACCERASE", delegate { EraseBody(); });
+        }
+
+        private static void EraseBody()
         {
             var db = Application.DocumentManager.MdiActiveDocument.Database;
             using (var tr = db.TransactionManager.StartTransaction())
@@ -393,6 +558,11 @@ namespace FtfAccountTest
         [CommandMethod("ACCEND")]
         public void End()
         {
+            Guard("ACCEND", delegate { EndBody(); });
+        }
+
+        private static void EndBody()
+        {
             var verdict = _failures == 0 ? "PASS" : "FAIL";
             Ed.WriteMessage("\nFTF ACCOUNTABILITY: {0} ({1} passed, {2} failed)\n", verdict, _passes, _failures);
             Record("STAGES " + string.Join(",", Stages.ToArray()));
@@ -404,23 +574,20 @@ namespace FtfAccountTest
 
         private static object Register(AcDb.Database db)
         {
-            return Store(db, "ReadReview");
+            return Store(db, ReadReviewSignature);
         }
 
         private static object Ledger(AcDb.Database db)
         {
-            return Store(db, "ReadLedger");
+            return Store(db, ReadLedgerSignature);
         }
 
-        private static object Store(AcDb.Database db, string method)
+        private static object Store(AcDb.Database db, string signature)
         {
-            var store = _plugin.GetType("FieldCodes.Cad.DrawingStore");
-            if (store == null) Fatal("FieldCodes.Cad.DrawingStore not found.");
-            var m = store.GetMethod(method, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-            if (m == null) Fatal("DrawingStore." + method + " not found: the loaded build predates point accountability.");
+            Step("read the drawing's store: " + signature.Substring(signature.LastIndexOf('.', signature.IndexOf('(')) + 1));
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var result = m.Invoke(null, new object[] { db, tr });
+                var result = Call(_plugin, signature, null, db, tr);
                 tr.Commit();
                 return result;
             }
@@ -434,7 +601,7 @@ namespace FtfAccountTest
         private static object Point(object ledger, string number)
         {
             if (ledger == null) return null;
-            return ledger.GetType().GetMethod("Find").Invoke(ledger, new object[] { number });
+            return Call(_plugin, FindPointSignature, ledger, number);
         }
 
         private static string Disposition(object ledger, string number)
@@ -482,8 +649,8 @@ namespace FtfAccountTest
 
         private static void RequireRanOnce(string name)
         {
-            var started = Trace("StartedCount", name);
-            var finished = Trace("FinishedCount", name);
+            var started = Trace(StartedCount, name);
+            var finished = Trace(FinishedCount, name);
             int seenStarted, seenFinished;
             SeenStarted.TryGetValue(name, out seenStarted);
             SeenFinished.TryGetValue(name, out seenFinished);
@@ -494,11 +661,9 @@ namespace FtfAccountTest
             SeenFinished[name] = finished;
         }
 
-        private static int Trace(string method, string command)
+        private static int Trace(string signature, string command)
         {
-            var trace = _plugin.GetType("FieldCodes.Cad.FtfCommandTrace");
-            if (trace == null) Fatal("FieldCodes.Cad.FtfCommandTrace not found.");
-            return (int)trace.GetMethod(method, BindingFlags.Public | BindingFlags.Static).Invoke(null, new object[] { command });
+            return (int)Call(_plugin, signature, null, command);
         }
 
         private static void Layer(AcDb.Database db, AcDb.Transaction tr, string name)

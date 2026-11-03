@@ -160,15 +160,76 @@ namespace FieldCodes.Cad
         private static readonly Dictionary<string, int> Started = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, int> Finished = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>The environment variable naming the diagnostic trace file. The headless smoke
+        /// tests set it; an office session never does, and then nothing is written.</summary>
+        public const string TraceVariable = "FTF_TRACE_FILE";
+
+        private static readonly string TraceFile = ReadTraceFile();
+        private static readonly object TraceLock = new object();
+
+        private static string ReadTraceFile()
+        {
+            try
+            {
+                var path = Environment.GetEnvironmentVariable(TraceVariable);
+                return string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+            }
+            catch (System.Security.SecurityException) { return null; }
+        }
+
+        /// <summary>Whether <see cref="Step"/> writes anything: test before building a message
+        /// that costs something.</summary>
+        public static bool Tracing { get { return TraceFile != null; } }
+
         public static void Start(string command)
         {
             lock (Started) { int n; Started.TryGetValue(command, out n); Started[command] = n + 1; }
+            if (Tracing) Step(command + " started");
         }
 
         /// <summary>The command got to its end without throwing (whether or not it drew anything).</summary>
         public static void Finish(string command)
         {
             lock (Started) { int n; Finished.TryGetValue(command, out n); Finished[command] = n + 1; }
+            if (Tracing) Step(command + " finished");
+        }
+
+        /// <summary>
+        /// One line, "TRACE &lt;time&gt; &lt;what&gt;", appended to the trace file and written through to
+        /// the disk before this returns, so the last step before an unexpected end of the process
+        /// (a crash, an exception nothing caught, a kill on a timeout) is still there to read. Never
+        /// throws: diagnostics must not be what breaks a command.
+        /// </summary>
+        public static void Step(string what)
+        {
+            if (TraceFile == null) return;
+            var line = "TRACE " + DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " +
+                       (what ?? string.Empty).Replace("\r", " ").Replace("\n", " | ") + Environment.NewLine;
+            lock (TraceLock)
+            {
+                try
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(line);
+                    using (var stream = new FileStream(TraceFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.WriteThrough))
+                    {
+                        stream.Write(bytes, 0, bytes.Length);
+                        stream.Flush(true);
+                    }
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+                catch (System.Security.SecurityException) { }
+            }
+        }
+
+        /// <summary>The command threw: its full exception, inner exceptions and stack traces
+        /// included, into the trace file.</summary>
+        public static void Failed(string command, System.Exception ex)
+        {
+            if (TraceFile == null || ex == null) return;
+            Step(command + " threw " + ex.GetType().FullName + ": " + ex.Message);
+            foreach (var line in ex.ToString().Split('\n'))
+                if (line.Trim().Length > 0) Step("  " + line.TrimEnd('\r'));
         }
 
         public static int StartedCount(string command)

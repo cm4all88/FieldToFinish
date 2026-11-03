@@ -142,9 +142,11 @@ $raw = Join-Path $WorkFolder 'accore.raw.txt'
 Remove-Item $result, $manifest, $raw -Force -ErrorAction SilentlyContinue
 $env:FTF_FIGURE_RESULT = $result
 $env:FTF_FIGURE_MANIFEST = $manifest
+$env:FTF_TRACE_FILE = $result   # the plugin's own TRACE lines beside the harness's STEP lines
 $arguments = '/i "' + $drawing + '" /s "' + $script + '" /product C3D /language en-US'
 Say "running accoreconsole (up to $TimeoutSeconds s)..."
 $process = Start-Process -FilePath $accore -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $raw
+$null = $process.Handle   # kept, so ExitCode is readable once the process has ended
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $stopped = $null
 while (-not $process.HasExited) {
@@ -155,11 +157,14 @@ while (-not $process.HasExited) {
     if ($text -match '\[FATAL\]') { Start-Sleep -Milliseconds 500; break }
     if ((Get-Date) -gt $deadline) { $stopped = "no result after $TimeoutSeconds s: a prompt is waiting for input the script did not give."; break }
 }
+$exitLine = 'accoreconsole: still running; stopped by this script'
 if (-not $process.HasExited) {
     if ($env:OS -eq 'Windows_NT') { & taskkill.exe /PID $process.Id /T /F 2>&1 | Out-Null } else { try { $process.Kill() } catch { } }
     Start-Sleep -Milliseconds 500
+} else {
+    try { $process.WaitForExit(); $exitLine = 'accoreconsole: exit code {0} (0x{0:X8}; 3 = FATAL, 0xE0434352 = a .NET exception nothing caught)' -f [int]$process.ExitCode } catch { }
 }
-Remove-Item Env:\FTF_FIGURE_RESULT, Env:\FTF_FIGURE_MANIFEST -ErrorAction SilentlyContinue
+Remove-Item Env:\FTF_FIGURE_RESULT, Env:\FTF_FIGURE_MANIFEST, Env:\FTF_TRACE_FILE -ErrorAction SilentlyContinue
 
 $text = Read-Console $raw
 $log = Join-Path $WorkFolder 'figures.log'
@@ -168,6 +173,10 @@ $runLines = $text -split "`r?`n"
 $outcome = if (Test-Path -LiteralPath $result) { @(Get-Content -LiteralPath $result) } else { @() }
 $failed = @($outcome | Where-Object { $_ -like 'FAIL *' -or $_ -like 'FATAL *' })
 $last = @($runLines | Where-Object { $_.Trim() } | Select-Object -Last 25)
+# Where a run that stopped early got to: how accoreconsole ended, the exception, the last steps.
+$last = @($exitLine) + @($outcome | Where-Object { $_ -like 'EXCEPTION *' } | Select-Object -First 30) +
+        @('--- last steps ---') + @($outcome | Where-Object { $_ -like 'STEP *' -or $_ -like 'TRACE *' } | Select-Object -Last 15) +
+        @('--- last lines of the console ---') + $last
 
 # --- judge ------------------------------------------------------------------------------
 

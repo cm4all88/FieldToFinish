@@ -22,8 +22,10 @@
 //             and at every stage that no figure and no point changed and nothing FTF-owned appeared.
 // FIGEND      writes the verdict and COMPLETE to the result file.
 //
-// Result protocol as the other harnesses: lines appended to the file named by FTF_FIGURE_RESULT;
-// the manifest goes to FTF_FIGURE_MANIFEST. C# 5 only (the .NET Framework csc).
+// Result protocol as the other harnesses: lines appended to the file named by FTF_FIGURE_RESULT, each
+// written through to the disk at once, with STEP and EXCEPTION lines (as IdentityTestHarness); the
+// manifest goes to FTF_FIGURE_MANIFEST. The plugin is reached by exact signature only (the plugin
+// contract block below). C# 5 only (the .NET Framework csc).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -57,6 +59,16 @@ namespace FtfFigureTest
         private static string _pointSnapshot;
         private static string _firstCsv;
         private static Assembly _plugin;
+
+        // Everything of the plugin this harness calls, by exact signature; checked before anything is read.
+        private const string ReadPoints = "FieldCodes.Cad.SourcePointReader.Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction)";
+        private const string PointsAt = "FieldCodes.Linework.SourcePointIndex.At(System.Double, System.Double)";
+        private const string VerticesOfSignature = "FieldCodes.Cad.LineworkCommands.VerticesOf(Autodesk.AutoCAD.DatabaseServices.Curve)";
+        private const string SessionRules = "FieldCodes.Cad.FtfSession.Rules(Autodesk.AutoCAD.DatabaseServices.Database)";
+        private const string ParseCoding = "FieldCodes.Linework.LineworkCoding.Parse(System.String, FieldCodes.RulesConfig)";
+        private const string StartedCount = "FieldCodes.Cad.FtfCommandTrace.StartedCount(System.String)";
+        private const string FinishedCount = "FieldCodes.Cad.FtfCommandTrace.FinishedCount(System.String)";
+        private static readonly string[] PluginContract = { ReadPoints, PointsAt, VerticesOfSignature, SessionRules, ParseCoding, StartedCount, FinishedCount };
         private static int _seenStarted;
         private static int _seenFinished;
 
@@ -72,11 +84,140 @@ namespace FtfFigureTest
             Record((ok ? "PASS " : "FAIL ") + what);
         }
 
+        // ==== plugin contract: this block is the same in every Civil 3D harness (HarnessContractTests) ====
+        // The plugin is reached by reflection by exact signature, "Namespace.Type.Method(Full.Type, ...)",
+        // never by name alone: a name is ambiguous as soon as the plugin adds an overload. That is how
+        // IDVERIFY READER died at 68804df: SourcePointReader gained Read(db, tr, notes), GetMethod("Read")
+        // threw AmbiguousMatchException, nothing caught it, and accoreconsole ended without a word.
+        // A signature that matches no method, or several, throws with the overloads the build has.
+        // Guard records any exception in full after the steps that led to it, and makes it FATAL.
+
+        private static readonly Dictionary<string, MethodInfo> ContractCache = new Dictionary<string, MethodInfo>(StringComparer.Ordinal);
+
+        /// <summary>The one method <paramref name="signature"/> names, in the plugin or in the
+        /// FieldCodes library it loaded.</summary>
+        private static MethodInfo Contract(Assembly plugin, string signature)
+        {
+            MethodInfo cached;
+            if (ContractCache.TryGetValue(signature, out cached)) return cached;
+            var open = signature.IndexOf('(');
+            var dot = open < 0 ? -1 : signature.LastIndexOf('.', open);
+            if (dot < 0 || !signature.EndsWith(")", StringComparison.Ordinal))
+                throw new ArgumentException("plugin contract: not a signature: " + signature);
+            var typeName = signature.Substring(0, dot);
+            var name = signature.Substring(dot + 1, open - dot - 1);
+            var wanted = signature.Substring(open + 1, signature.Length - open - 2).Replace(" ", string.Empty);
+            var type = ContractType(plugin, typeName);
+            if (type == null) throw new InvalidOperationException("plugin contract: the loaded build has no type " + typeName + " (" + signature + ")");
+            var named = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                            .Where(m => m.Name == name).ToList();
+            var matches = named.Where(m => ParameterList(m) == wanted).ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("plugin contract: " + signature + " matches " + matches.Count + " methods; the loaded build has " +
+                    (named.Count == 0 ? "no method " + name : string.Join("; ", named.Select(m => name + "(" + ParameterList(m) + ")").ToArray())));
+            ContractCache[signature] = matches[0];
+            return matches[0];
+        }
+
+        /// <summary>Parameter types as the signatures write them: full names, generic arguments in
+        /// brackets, the same on .NET Framework and .NET.</summary>
+        private static string ParameterList(MethodInfo m)
+        {
+            return string.Join(",", m.GetParameters().Select(p => TypeText(p.ParameterType)).ToArray());
+        }
+
+        private static string TypeText(Type t)
+        {
+            if (t.IsByRef) return TypeText(t.GetElementType()) + "&";
+            if (t.IsArray) return TypeText(t.GetElementType()) + "[]";
+            if (t.IsGenericType && !t.IsGenericTypeDefinition)
+                return t.GetGenericTypeDefinition().FullName + "[" + string.Join(",", t.GetGenericArguments().Select(a => TypeText(a)).ToArray()) + "]";
+            return t.FullName ?? t.Name;
+        }
+
+        private static Type ContractType(Assembly plugin, string typeName)
+        {
+            var type = plugin.GetType(typeName);
+            if (type != null) return type;
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!string.Equals(a.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) continue;
+                type = a.GetType(typeName);
+                if (type != null) return type;
+            }
+            // Civil 3D loads the library only when the plugin first needs it. Have the plugin load it
+            // now, through its own binding (so it is the same FieldCodes the plugin uses): resolve the
+            // return types of its methods until one is a library type.
+            var methods = new List<MethodInfo>(ContractCache.Values);
+            Type[] types;
+            try { types = plugin.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+            foreach (var t in types)
+                methods.AddRange(t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            foreach (var m in methods)
+            {
+                Assembly library;
+                try { library = m.ReturnType.Assembly; }
+                catch (System.Exception) { continue; }
+                if (string.Equals(library.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) return library.GetType(typeName);
+            }
+            return null;
+        }
+
+        /// <summary>Calls the method <paramref name="signature"/> names (<paramref name="target"/> is
+        /// ignored for a static one). An exception it throws comes out as itself, not wrapped.</summary>
+        private static object Call(Assembly plugin, string signature, object target, params object[] args)
+        {
+            var m = Contract(plugin, signature);
+            try { return m.Invoke(m.IsStatic ? null : target, args); }
+            catch (TargetInvocationException ex)
+            {
+                if (ex.InnerException != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        /// <summary>Runs a command's body. An exception from it is recorded in full (type, message,
+        /// inner exceptions, stacks) after the steps that led to it, and is FATAL.</summary>
+        private static void Guard(string what, Action body)
+        {
+            Step(what + ": begin");
+            try { body(); }
+            catch (System.Exception ex)
+            {
+                var inner = ex;
+                while (inner is TargetInvocationException && inner.InnerException != null) inner = inner.InnerException;
+                foreach (var line in ex.ToString().Split('\n'))
+                    if (line.Trim().Length > 0) Record("EXCEPTION " + line.TrimEnd('\r'));
+                Fatal(what + " threw " + inner.GetType().FullName + ": " + inner.Message);
+            }
+            Step(what + ": end");
+        }
+
+        /// <summary>"STEP time what" in the result file, on the disk before the step is taken.</summary>
+        private static void Step(string what)
+        {
+            Record("STEP " + DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + what);
+        }
+
+        /// <summary>Appends a line and writes it through to the disk before returning, so it
+        /// survives the process ending at the next instruction.</summary>
+        private static void AppendDurably(string file, string line)
+        {
+            var bytes = Encoding.UTF8.GetBytes(line + Environment.NewLine);
+            using (var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.WriteThrough))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+        }
+        // ==== end of plugin contract ====
+
         private static void Record(string line)
         {
             var file = Environment.GetEnvironmentVariable("FTF_FIGURE_RESULT");
             if (string.IsNullOrEmpty(file)) return;
-            try { File.AppendAllText(file, line + Environment.NewLine); }
+            try { AppendDurably(file, line); }
             catch (System.Exception) { }
         }
 
@@ -174,10 +315,7 @@ namespace FtfFigureTest
         /// <summary>The figure IDs FTF's parser reads from a description ("FNC1", "EP", ...).</summary>
         private static List<string> FigureIds(object rules, string description)
         {
-            var coding = rules.GetType().Assembly.GetType("FieldCodes.Linework.LineworkCoding");
-            if (coding == null) Fatal("FieldCodes.Linework.LineworkCoding not found: the loaded build predates Step 1.");
-            var parse = coding.GetMethod("Parse", new[] { typeof(string), rules.GetType() });
-            var shot = parse.Invoke(null, new object[] { description, rules });
+            var shot = Call(_plugin, ParseCoding, null, description, rules);
             var ids = new List<string>();
             foreach (var f in (IEnumerable)shot.GetType().GetProperty("Figures").GetValue(shot, null))
                 ids.Add((string)f.GetType().GetProperty("FigureId").GetValue(f, null));
@@ -230,6 +368,11 @@ namespace FtfFigureTest
         [CommandMethod("FIGSNAP")]
         public void Snap()
         {
+            Guard("FIGSNAP", delegate { SnapBody(); });
+        }
+
+        private static void SnapBody()
+        {
             var doc = Application.DocumentManager.MdiActiveDocument;
             var db = doc.Database;
             var ed = doc.Editor;
@@ -239,8 +382,11 @@ namespace FtfFigureTest
                 .Where(a => string.Equals(a.GetName().Name, "FieldCodes.Cad", StringComparison.OrdinalIgnoreCase)).ToList();
             if (loaded.Count != 1) Fatal("FieldCodes.Cad is loaded " + loaded.Count + " times; expected once.");
             _plugin = loaded[0];
-            _seenStarted = Trace("StartedCount");
-            _seenFinished = Trace("FinishedCount");
+            Step("FIGSNAP: checking the plugin contract (" + PluginContract.Length + " signatures)");
+            foreach (var signature in PluginContract) Contract(_plugin, signature);
+            Step("FIGSNAP: plugin contract resolved");
+            _seenStarted = Trace(StartedCount);
+            _seenFinished = Trace(FinishedCount);
 
             var manifest = new StringBuilder();
             manifest.AppendLine("FTF survey figure fixture manifest (what Civil 3D made of the synthetic coding)");
@@ -260,14 +406,11 @@ namespace FtfFigureTest
                 Check(ed, thin.Count == 0, "API: GetPoints(AllPoints) returns at least two points for every figure" + (thin.Count == 0 ? string.Empty : " (not: " + string.Join(", ", thin.ToArray()) + ")"));
 
                 // VERTICES: the plugin reads every point of a figure, not only its ends.
-                var lineworkCommands = _plugin.GetType("FieldCodes.Cad.LineworkCommands");
-                var verticesOf = lineworkCommands == null ? null : lineworkCommands.GetMethod("VerticesOf", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-                if (verticesOf == null) Fatal("FieldCodes.Cad.LineworkCommands.VerticesOf not found.");
                 var differ = new List<string>();
                 foreach (var f in figures)
                 {
                     var curve = (AcDb.Curve)tr.GetObject(f.Id, AcDb.OpenMode.ForRead);
-                    var read = ((IEnumerable)verticesOf.Invoke(null, new object[] { curve })).Cast<Point3d>().ToList();
+                    var read = ((IEnumerable)Call(_plugin, VerticesOfSignature, null, curve)).Cast<Point3d>().ToList();
                     var same = read.Count == f.Points.Count;
                     for (var i = 0; same && i < read.Count; i++) same = read[i].DistanceTo(f.Points[i]) < 1e-9;
                     if (!same) differ.Add(f.Name + " (" + read.Count + " of " + f.Points.Count + ")");
@@ -275,10 +418,9 @@ namespace FtfFigureTest
                 Check(ed, differ.Count == 0, "VERTICES: the plugin reads every figure point, in order" + (differ.Count == 0 ? string.Empty : ": " + string.Join(", ", differ.ToArray())));
 
                 // IDENTITY: the plugin's reader finds a shot at every vertex (figures without arcs).
-                var reader = _plugin.GetType("FieldCodes.Cad.SourcePointReader");
-                if (reader == null) Fatal("FieldCodes.Cad.SourcePointReader not found: the loaded build predates Step 1.");
-                var index = reader.GetMethod("Read", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { db, tr });
-                var at = index.GetType().GetMethod("At");
+                Step("FIGVERIFY: SourcePointReader.Read(db, tr)");
+                var index = Call(_plugin, ReadPoints, null, db, tr);
+                Step("FIGVERIFY: Read(db, tr) returned");
                 var bare = new List<string>();
                 var disagree = new List<string>();
                 foreach (var f in figures)
@@ -287,7 +429,7 @@ namespace FtfFigureTest
                     for (var i = 0; i < f.Points.Count; i++)
                     {
                         var v = f.Points[i];
-                        var plugin = ((IEnumerable)at.Invoke(index, new object[] { v.X, v.Y })).Cast<object>()
+                        var plugin = ((IEnumerable)Call(_plugin, PointsAt, index, v.X, v.Y)).Cast<object>()
                             .Select(p => (string)p.GetType().GetProperty("Number").GetValue(p, null)).ToList();
                         var mine = ShotsAt(shots, v.X, v.Y);
                         if (string.Join(" ", plugin.ToArray()) != string.Join(" ", mine.ToArray()))
@@ -299,8 +441,7 @@ namespace FtfFigureTest
                 Check(ed, bare.Count == 0, "IDENTITY: every vertex of a figure without arcs is at a shot" + (bare.Count == 0 ? string.Empty : ": " + string.Join(", ", bare.Take(12).ToArray())));
 
                 // CODING: FTF's parser and Civil 3D's linework processing agree.
-                var session = _plugin.GetType("FieldCodes.Cad.FtfSession");
-                var rules = session.GetMethod("Rules", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { db });
+                var rules = Call(_plugin, SessionRules, null, db);
                 if (rules == null) Fatal("FtfSession.Rules returned nothing: the rules file did not load.");
                 var offFigure = new List<string>();
                 var coded = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);   // figure id -> shots coded onto it
@@ -385,8 +526,7 @@ namespace FtfFigureTest
         /// <summary>The figure IDs a description closes (its figure has a close command).</summary>
         private static List<string> CloseIds(object rules, string description)
         {
-            var coding = rules.GetType().Assembly.GetType("FieldCodes.Linework.LineworkCoding");
-            var shot = coding.GetMethod("Parse", new[] { typeof(string), rules.GetType() }).Invoke(null, new object[] { description, rules });
+            var shot = Call(_plugin, ParseCoding, null, description, rules);
             var ids = new List<string>();
             foreach (var f in (IEnumerable)shot.GetType().GetProperty("Figures").GetValue(shot, null))
                 if ((bool)f.GetType().GetProperty("Closes").GetValue(f, null))
@@ -398,6 +538,11 @@ namespace FtfFigureTest
 
         [CommandMethod("FIGVERIFY")]
         public void Verify()
+        {
+            Guard("FIGVERIFY", delegate { VerifyBody(); });
+        }
+
+        private static void VerifyBody()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
             var db = doc.Database;
@@ -468,8 +613,7 @@ namespace FtfFigureTest
         private static HashSet<string> Features(AcDb.Database db)
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var session = _plugin.GetType("FieldCodes.Cad.FtfSession");
-            var rules = session.GetMethod("Rules", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { db });
+            var rules = Call(_plugin, SessionRules, null, db);
             var list = rules.GetType().GetProperty("LineFeatures").GetValue(rules, null) as IEnumerable;
             if (list == null) return set;
             foreach (var feature in list)
@@ -491,6 +635,11 @@ namespace FtfFigureTest
         [CommandMethod("FIGEND")]
         public void End()
         {
+            Guard("FIGEND", delegate { EndBody(); });
+        }
+
+        private static void EndBody()
+        {
             var verdict = _failures == 0 ? "PASS" : "FAIL";
             Ed.WriteMessage("\nFTF FIGURES: {0} ({1} passed, {2} failed)\n", verdict, _passes, _failures);
             Record("STAGES SNAP," + string.Join(",", Stages.ToArray()));
@@ -502,8 +651,8 @@ namespace FtfFigureTest
 
         private static void RequireRanOnce()
         {
-            var started = Trace("StartedCount");
-            var finished = Trace("FinishedCount");
+            var started = Trace(StartedCount);
+            var finished = Trace(FinishedCount);
             if (started == _seenStarted) Fatal("FTFLINES never ran (Unknown command, or the script fell out of step).");
             if (started != _seenStarted + 1) Fatal("FTFLINES ran " + (started - _seenStarted) + " times where once was expected.");
             if (finished != _seenFinished + 1) Fatal("FTFLINES started but did not finish (see the command line above).");
@@ -511,11 +660,9 @@ namespace FtfFigureTest
             _seenFinished = finished;
         }
 
-        private static int Trace(string method)
+        private static int Trace(string signature)
         {
-            var trace = _plugin.GetType("FieldCodes.Cad.FtfCommandTrace");
-            if (trace == null) Fatal("FieldCodes.Cad.FtfCommandTrace not found.");
-            return (int)trace.GetMethod(method, BindingFlags.Public | BindingFlags.Static).Invoke(null, new object[] { "FTFLINES" });
+            return (int)Call(_plugin, signature, null, "FTFLINES");
         }
 
         private static string FigureSnapshot(List<Figure> figures)

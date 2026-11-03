@@ -18,6 +18,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FieldCodes\FieldCodes.csproj" />
+    <!-- Built first, not referenced: HarnessContractTests loads its output (the plugin's own code,
+         compiled with the AutoCAD stand-ins) to check every member the Civil 3D harnesses reach by
+         reflection, as Civil 3D will. -->
+    <ProjectReference Include="..\CadCompileCheck\CadCompileCheck.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=net48"
+                      Private="false" />
   </ItemGroup>
 
   <ItemGroup>

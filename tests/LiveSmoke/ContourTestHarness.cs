@@ -38,6 +38,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -67,6 +68,10 @@ namespace FtfContourTest
         private static AcDb.ObjectId _drafterId;
 
         private static Assembly _plugin;
+
+        // The plugin's command trace, by exact signature (the plugin contract block below).
+        private const string StartedCount = "FieldCodes.Cad.FtfCommandTrace.StartedCount(System.String)";
+        private const string FinishedCount = "FieldCodes.Cad.FtfCommandTrace.FinishedCount(System.String)";
         private static short _contourKind = -1;
         private static short _labelKind = -1;
         private static short _maskKind = -1;
@@ -95,11 +100,140 @@ namespace FtfContourTest
             }
         }
 
+        // ==== plugin contract: this block is the same in every Civil 3D harness (HarnessContractTests) ====
+        // The plugin is reached by reflection by exact signature, "Namespace.Type.Method(Full.Type, ...)",
+        // never by name alone: a name is ambiguous as soon as the plugin adds an overload. That is how
+        // IDVERIFY READER died at 68804df: SourcePointReader gained Read(db, tr, notes), GetMethod("Read")
+        // threw AmbiguousMatchException, nothing caught it, and accoreconsole ended without a word.
+        // A signature that matches no method, or several, throws with the overloads the build has.
+        // Guard records any exception in full after the steps that led to it, and makes it FATAL.
+
+        private static readonly Dictionary<string, MethodInfo> ContractCache = new Dictionary<string, MethodInfo>(StringComparer.Ordinal);
+
+        /// <summary>The one method <paramref name="signature"/> names, in the plugin or in the
+        /// FieldCodes library it loaded.</summary>
+        private static MethodInfo Contract(Assembly plugin, string signature)
+        {
+            MethodInfo cached;
+            if (ContractCache.TryGetValue(signature, out cached)) return cached;
+            var open = signature.IndexOf('(');
+            var dot = open < 0 ? -1 : signature.LastIndexOf('.', open);
+            if (dot < 0 || !signature.EndsWith(")", StringComparison.Ordinal))
+                throw new ArgumentException("plugin contract: not a signature: " + signature);
+            var typeName = signature.Substring(0, dot);
+            var name = signature.Substring(dot + 1, open - dot - 1);
+            var wanted = signature.Substring(open + 1, signature.Length - open - 2).Replace(" ", string.Empty);
+            var type = ContractType(plugin, typeName);
+            if (type == null) throw new InvalidOperationException("plugin contract: the loaded build has no type " + typeName + " (" + signature + ")");
+            var named = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                            .Where(m => m.Name == name).ToList();
+            var matches = named.Where(m => ParameterList(m) == wanted).ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("plugin contract: " + signature + " matches " + matches.Count + " methods; the loaded build has " +
+                    (named.Count == 0 ? "no method " + name : string.Join("; ", named.Select(m => name + "(" + ParameterList(m) + ")").ToArray())));
+            ContractCache[signature] = matches[0];
+            return matches[0];
+        }
+
+        /// <summary>Parameter types as the signatures write them: full names, generic arguments in
+        /// brackets, the same on .NET Framework and .NET.</summary>
+        private static string ParameterList(MethodInfo m)
+        {
+            return string.Join(",", m.GetParameters().Select(p => TypeText(p.ParameterType)).ToArray());
+        }
+
+        private static string TypeText(Type t)
+        {
+            if (t.IsByRef) return TypeText(t.GetElementType()) + "&";
+            if (t.IsArray) return TypeText(t.GetElementType()) + "[]";
+            if (t.IsGenericType && !t.IsGenericTypeDefinition)
+                return t.GetGenericTypeDefinition().FullName + "[" + string.Join(",", t.GetGenericArguments().Select(a => TypeText(a)).ToArray()) + "]";
+            return t.FullName ?? t.Name;
+        }
+
+        private static Type ContractType(Assembly plugin, string typeName)
+        {
+            var type = plugin.GetType(typeName);
+            if (type != null) return type;
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!string.Equals(a.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) continue;
+                type = a.GetType(typeName);
+                if (type != null) return type;
+            }
+            // Civil 3D loads the library only when the plugin first needs it. Have the plugin load it
+            // now, through its own binding (so it is the same FieldCodes the plugin uses): resolve the
+            // return types of its methods until one is a library type.
+            var methods = new List<MethodInfo>(ContractCache.Values);
+            Type[] types;
+            try { types = plugin.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+            foreach (var t in types)
+                methods.AddRange(t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            foreach (var m in methods)
+            {
+                Assembly library;
+                try { library = m.ReturnType.Assembly; }
+                catch (System.Exception) { continue; }
+                if (string.Equals(library.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) return library.GetType(typeName);
+            }
+            return null;
+        }
+
+        /// <summary>Calls the method <paramref name="signature"/> names (<paramref name="target"/> is
+        /// ignored for a static one). An exception it throws comes out as itself, not wrapped.</summary>
+        private static object Call(Assembly plugin, string signature, object target, params object[] args)
+        {
+            var m = Contract(plugin, signature);
+            try { return m.Invoke(m.IsStatic ? null : target, args); }
+            catch (TargetInvocationException ex)
+            {
+                if (ex.InnerException != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        /// <summary>Runs a command's body. An exception from it is recorded in full (type, message,
+        /// inner exceptions, stacks) after the steps that led to it, and is FATAL.</summary>
+        private static void Guard(string what, Action body)
+        {
+            Step(what + ": begin");
+            try { body(); }
+            catch (System.Exception ex)
+            {
+                var inner = ex;
+                while (inner is TargetInvocationException && inner.InnerException != null) inner = inner.InnerException;
+                foreach (var line in ex.ToString().Split('\n'))
+                    if (line.Trim().Length > 0) Record("EXCEPTION " + line.TrimEnd('\r'));
+                Fatal(what + " threw " + inner.GetType().FullName + ": " + inner.Message);
+            }
+            Step(what + ": end");
+        }
+
+        /// <summary>"STEP time what" in the result file, on the disk before the step is taken.</summary>
+        private static void Step(string what)
+        {
+            Record("STEP " + DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + what);
+        }
+
+        /// <summary>Appends a line and writes it through to the disk before returning, so it
+        /// survives the process ending at the next instruction.</summary>
+        private static void AppendDurably(string file, string line)
+        {
+            var bytes = Encoding.UTF8.GetBytes(line + Environment.NewLine);
+            using (var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.WriteThrough))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+        }
+        // ==== end of plugin contract ====
+
         private static void Record(string line)
         {
             var file = ResultFile;
             if (file == null) return;
-            try { File.AppendAllText(file, line + Environment.NewLine); }
+            try { AppendDurably(file, line); }
             catch (System.Exception) { }
         }
 
@@ -114,6 +248,11 @@ namespace FtfContourTest
 
         [CommandMethod("FTFSMOKEBEGIN")]
         public void Begin()
+        {
+            Guard("FTFSMOKEBEGIN", delegate { BeginBody(); });
+        }
+
+        private static void BeginBody()
         {
             var ed = Ed;
             var expectedDll = Environment.GetEnvironmentVariable("FTF_SMOKE_EXPECT_DLL");
@@ -163,8 +302,8 @@ namespace FtfContourTest
 
             foreach (var name in new[] { "FTFVERSION", "FTFCONTOUR" })
             {
-                SeenStarted[name] = Trace("StartedCount", name);
-                SeenFinished[name] = Trace("FinishedCount", name);
+                SeenStarted[name] = Trace(StartedCount, name);
+                SeenFinished[name] = Trace(FinishedCount, name);
             }
             Check(ed, true, "the build under test is the one loaded (" + commit.Substring(0, Math.Min(7, commit.Length)) + ")");
             Record("LOADED " + location + " " + commit);
@@ -173,6 +312,11 @@ namespace FtfContourTest
         [CommandMethod("FTFSMOKEEXPECT")]
         public void Expect()
         {
+            Guard("FTFSMOKEEXPECT", delegate { ExpectBody(); });
+        }
+
+        private static void ExpectBody()
+        {
             var name = Ed.GetString("\nCommand that should have run: ").StringResult.Trim().ToUpperInvariant();
             RequireRanOnce(name);
             Check(Ed, true, name + " was registered and ran");
@@ -180,6 +324,11 @@ namespace FtfContourTest
 
         [CommandMethod("FTFSMOKEEND")]
         public void End()
+        {
+            Guard("FTFSMOKEEND", delegate { EndBody(); });
+        }
+
+        private static void EndBody()
         {
             var verdict = _failures == 0 ? "PASS" : "FAIL";
             Ed.WriteMessage("\nFTF SMOKE: {0} ({1} passed, {2} failed; stages {3})\n", verdict, _passes, _failures,
@@ -193,8 +342,8 @@ namespace FtfContourTest
         private static void RequireRanOnce(string name)
         {
             if (_plugin == null) Fatal("FTFSMOKEBEGIN did not run before checking " + name + ".");
-            var started = Trace("StartedCount", name);
-            var finished = Trace("FinishedCount", name);
+            var started = Trace(StartedCount, name);
+            var finished = Trace(FinishedCount, name);
             int seenStarted, seenFinished;
             SeenStarted.TryGetValue(name, out seenStarted);
             SeenFinished.TryGetValue(name, out seenFinished);
@@ -208,11 +357,9 @@ namespace FtfContourTest
             SeenFinished[name] = finished;
         }
 
-        private static int Trace(string method, string command)
+        private static int Trace(string signature, string command)
         {
-            var trace = _plugin.GetType("FieldCodes.Cad.FtfCommandTrace");
-            if (trace == null) Fatal("FieldCodes.Cad.FtfCommandTrace not found: the loaded build predates the smoke test.");
-            return (int)trace.GetMethod(method, BindingFlags.Public | BindingFlags.Static).Invoke(null, new object[] { command });
+            return (int)Call(_plugin, signature, null, command);
         }
 
         private static string Location(Assembly assembly)
@@ -244,6 +391,11 @@ namespace FtfContourTest
 
         [CommandMethod("CONTOURSEED")]
         public void Seed()
+        {
+            Guard("CONTOURSEED", delegate { SeedBody(); });
+        }
+
+        private static void SeedBody()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
             var db = doc.Database;
@@ -306,6 +458,11 @@ namespace FtfContourTest
 
         [CommandMethod("CONTOURVERIFY")]
         public void Verify()
+        {
+            Guard("CONTOURVERIFY", delegate { VerifyBody(); });
+        }
+
+        private static void VerifyBody()
         {
             var doc = Application.DocumentManager.MdiActiveDocument;
             var db = doc.Database;

@@ -15,8 +15,10 @@
 //             and snapshots every point (number, raw description, XYZ) and every seeded curve's vertices.
 // IDVERIFY    first requires that the named command ran exactly once since the previous stage (FATAL
 //             otherwise), then checks:
-//               READER    (no command) FieldCodes.Cad.SourcePointReader reads every point with the number,
-//                         handle, raw description and Z that CogoPoint itself reports
+//               READER    (no command) FieldCodes.Cad.SourcePointReader.Read(db, tr) returns every point in
+//                         Civil 3D's own COGO point collection with the number, handle, raw description and XYZ
+//                         CogoPoint reports; Read(db, tr, notes), the FTFLINES path with the crew's field notes,
+//                         returns the same identities
 //               LINES     FTFLINES: each seeded line's CSV row (by handle) has the expected source, codes,
 //                         vertex count and shot numbers
 //               AGAIN     FTFLINES re-run: the CSV is identical, byte for byte
@@ -27,7 +29,11 @@
 //             which it redraws on every run.
 // IDEND       writes the verdict and COMPLETE to the result file.
 //
-// Result protocol as ContourTestHarness: lines appended to the file named by FTF_IDENTITY_RESULT.
+// Result protocol as ContourTestHarness: lines appended to the file named by FTF_IDENTITY_RESULT, each
+// written through to the disk at once. Diagnostics in the same file: STEP lines before and after each
+// operation, EXCEPTION lines with the full exception of anything that throws (then FATAL), and the
+// plugin's own TRACE lines (the smoke test points FTF_TRACE_FILE at the same file). The plugin is reached
+// by exact signature only (the plugin contract block below).
 // Compiled with the .NET Framework csc (C# 5 only: no interpolation, no ?., no expression bodies).
 using System;
 using System.Collections.Generic;
@@ -66,6 +72,17 @@ namespace FtfIdentityTest
         private static readonly Dictionary<string, int> SeenStarted = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, int> SeenFinished = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+        // Everything of the plugin this harness calls, by exact signature; checked before anything is seeded.
+        private const string ReadPoints = "FieldCodes.Cad.SourcePointReader.Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction)";
+        private const string ReadPointsWithNotes = "FieldCodes.Cad.SourcePointReader.Read(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction, FieldCodes.Cad.CogoNotes)";
+        private const string NotesFor = "FieldCodes.Cad.CogoNotes.For(Autodesk.AutoCAD.DatabaseServices.Database, Autodesk.AutoCAD.DatabaseServices.Transaction, FieldCodes.Settings.FtfSettings)";
+        private const string SessionRules = "FieldCodes.Cad.FtfSession.Rules(Autodesk.AutoCAD.DatabaseServices.Database)";
+        private const string SessionSettings = "FieldCodes.Cad.FtfSession.SettingsFor(Autodesk.AutoCAD.DatabaseServices.Database, FieldCodes.RulesConfig)";
+        private const string PointsAt = "FieldCodes.Linework.SourcePointIndex.At(System.Double, System.Double)";
+        private const string StartedCount = "FieldCodes.Cad.FtfCommandTrace.StartedCount(System.String)";
+        private const string FinishedCount = "FieldCodes.Cad.FtfCommandTrace.FinishedCount(System.String)";
+        private static readonly string[] PluginContract = { ReadPoints, ReadPointsWithNotes, NotesFor, SessionRules, SessionSettings, PointsAt, StartedCount, FinishedCount };
+
         private static Editor Ed
         {
             get { return Application.DocumentManager.MdiActiveDocument.Editor; }
@@ -82,7 +99,7 @@ namespace FtfIdentityTest
         {
             var file = Environment.GetEnvironmentVariable("FTF_IDENTITY_RESULT");
             if (string.IsNullOrEmpty(file)) return;
-            try { File.AppendAllText(file, line + Environment.NewLine); }
+            try { AppendDurably(file, line); }
             catch (System.Exception) { }
         }
 
@@ -99,22 +116,35 @@ namespace FtfIdentityTest
         [CommandMethod("IDSEED")]
         public void Seed()
         {
+            Record("BEGIN " + DateTime.UtcNow.ToString("o", C));
+            Guard("IDSEED", delegate { SeedBody(); });
+        }
+
+        private static void SeedBody()
+        {
+            Step("IDSEED: active document");
             var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) Fatal("no active document");
             var db = doc.Database;
             var ed = doc.Editor;
-            Record("BEGIN " + DateTime.UtcNow.ToString("o", C));
+            Step("IDSEED: active document " + db.Filename);
 
             var loaded = AppDomain.CurrentDomain.GetAssemblies()
                 .Where(a => string.Equals(a.GetName().Name, "FieldCodes.Cad", StringComparison.OrdinalIgnoreCase)).ToList();
             if (loaded.Count != 1) Fatal("FieldCodes.Cad is loaded " + loaded.Count + " times; expected once.");
             _plugin = loaded[0];
+            Step("IDSEED: checking the plugin contract (" + PluginContract.Length + " signatures)");
+            foreach (var signature in PluginContract) Contract(_plugin, signature);
+            Step("IDSEED: plugin contract resolved");
             foreach (var name in new[] { "FTFLINES", "FTFREVIEWCHECK" })
             {
-                SeenStarted[name] = Trace("StartedCount", name);
-                SeenFinished[name] = Trace("FinishedCount", name);
+                SeenStarted[name] = Trace(StartedCount, name);
+                SeenFinished[name] = Trace(FinishedCount, name);
             }
 
+            Step("IDSEED: Civil 3D document");
             var cdoc = CivApp.CivilDocument.GetCivilDocument(db);
+            Step("IDSEED: start transaction");
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 Layer(db, tr, Fence);
@@ -151,8 +181,10 @@ namespace FtfIdentityTest
                 Point(tr, cdoc, 602, 10, 400, 100, "FNC1 E");
                 Handles["G"] = Lw(db, tr, Fence, new[] { 0.0, 400, 10, 400 });
 
+                Step("IDSEED: commit");
                 tr.Commit();
             }
+            Step("IDSEED: transaction disposed; snapshot");
             _pointSnapshot = PointSnapshot(db);
             _curveSnapshot = CurveSnapshot(db);
             Check(ed, CountPoints(db) == 15, "15 synthetic COGO points seeded (" + CountPoints(db) + ")");
@@ -164,10 +196,17 @@ namespace FtfIdentityTest
         [CommandMethod("IDVERIFY")]
         public void Verify()
         {
+            Guard("IDVERIFY", delegate { VerifyBody(); });
+        }
+
+        private static void VerifyBody()
+        {
             var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) Fatal("no active document");
             var db = doc.Database;
             var ed = doc.Editor;
             var stage = ed.GetString("\nStage: ").StringResult.Trim().ToUpperInvariant();
+            Step("IDVERIFY " + stage + ": begin");
             Stages.Add(stage);
             var before = _failures;
 
@@ -180,46 +219,91 @@ namespace FtfIdentityTest
             Check(ed, PointSnapshot(db) == _pointSnapshot, stage + ": every COGO point unchanged (number, raw description, XYZ)");
             Check(ed, CurveSnapshot(db) == _curveSnapshot, stage + ": every seeded line unchanged");
             Check(ed, CountOwned(db) == 0, stage + ": no FTF-owned entity created (" + CountOwned(db) + ")");
+            Step("IDVERIFY " + stage + ": end");
             Record("STAGE " + stage + " " + (_failures == before ? "PASS" : "FAIL"));
         }
 
         private static void VerifyReader(AcDb.Database db, Editor ed)
         {
-            var reader = _plugin.GetType("FieldCodes.Cad.SourcePointReader");
-            if (reader == null) Fatal("FieldCodes.Cad.SourcePointReader not found: the loaded build predates Step 1.");
+            Step("READER: start transaction");
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var index = reader.GetMethod("Read", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                                  .Invoke(null, new object[] { db, tr });
-                var all = ((System.Collections.IEnumerable)index.GetType().GetProperty("All").GetValue(index, null)).Cast<object>().ToList();
+                Step("READER: SourcePointReader.Read(db, tr)");
+                var index = Call(_plugin, ReadPoints, null, db, tr);
+                Step("READER: Read(db, tr) returned");
+                var all = Points(index);
                 Check(ed, all.Count == 15, "the reader returns every point (" + all.Count + ")");
+                var byHandle = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                foreach (var p in all) byHandle[(string)Prop(p, "Handle")] = p;
+
+                // Against Civil 3D's own record of the points: its COGO point collection, not model space.
+                Step("READER: Civil 3D document and its COGO point collection");
+                var ids = new List<AcDb.ObjectId>();
+                foreach (AcDb.ObjectId id in CivApp.CivilDocument.GetCivilDocument(db).CogoPoints) ids.Add(id);
+                Step("READER: " + ids.Count + " object ids in the COGO point collection");
+                Check(ed, ids.Count == 15, "Civil 3D's COGO point collection holds the 15 seeded points (" + ids.Count + ")");
                 var mismatches = new List<string>();
-                var ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForRead);
-                foreach (AcDb.ObjectId id in ms)
+                var n = 0;
+                foreach (var id in ids)
                 {
+                    n++;
+                    Step("READER: open COGO point " + n + " (" + id.Handle + ")");
                     var cogo = tr.GetObject(id, AcDb.OpenMode.ForRead) as CivDb.CogoPoint;
-                    if (cogo == null) continue;
+                    if (cogo == null) { mismatches.Add(id.Handle + " is not a COGO point"); continue; }
+                    Step("READER: point " + n + ": number, description, location, handle");
                     var number = cogo.PointNumber.ToString(C);
-                    var found = all.FirstOrDefault(p => (string)Prop(p, "Number") == number);
-                    if (found == null) { mismatches.Add(number + " missing"); continue; }
-                    if ((string)Prop(found, "Handle") != cogo.Handle.ToString()) mismatches.Add(number + " handle");
-                    if ((string)Prop(found, "RawDescription") != (cogo.RawDescription ?? string.Empty)) mismatches.Add(number + " raw description");
-                    if (Math.Abs((double)Prop(found, "Z") - cogo.Location.Z) > 1e-9) mismatches.Add(number + " Z");
-                    if (Math.Abs((double)Prop(found, "X") - cogo.Location.X) > 1e-9) mismatches.Add(number + " X");
-                    if (Math.Abs((double)Prop(found, "Y") - cogo.Location.Y) > 1e-9) mismatches.Add(number + " Y");
+                    var raw = cogo.RawDescription ?? string.Empty;
+                    var location = cogo.Location;
+                    var handle = cogo.Handle.ToString();
+                    object found;
+                    if (!byHandle.TryGetValue(handle, out found)) { mismatches.Add(number + " (" + handle + ") missing"); continue; }
+                    if ((string)Prop(found, "Number") != number) mismatches.Add(number + " number " + Prop(found, "Number"));
+                    if ((string)Prop(found, "RawDescription") != raw) mismatches.Add(number + " raw description");
+                    if (Math.Abs((double)Prop(found, "X") - location.X) > 1e-9) mismatches.Add(number + " X");
+                    if (Math.Abs((double)Prop(found, "Y") - location.Y) > 1e-9) mismatches.Add(number + " Y");
+                    if (Math.Abs((double)Prop(found, "Z") - location.Z) > 1e-9) mismatches.Add(number + " Z");
                 }
                 Check(ed, mismatches.Count == 0, "number, handle, raw description and XYZ match CogoPoint for every point" +
                       (mismatches.Count == 0 ? string.Empty : ": " + string.Join(", ", mismatches.ToArray())));
 
-                var at = index.GetType().GetMethod("At");
-                var stacked = ((System.Collections.IEnumerable)at.Invoke(index, new object[] { 50.0, 0.0 })).Cast<object>().Select(p => (string)Prop(p, "Number")).ToArray();
+                // The FTFLINES path: the same reader with the crew's field notes beside each description.
+                Step("READER: rules, settings and field notes (CogoNotes.For)");
+                var rules = Call(_plugin, SessionRules, null, db);
+                var settings = Call(_plugin, SessionSettings, null, db, rules);
+                var notes = Call(_plugin, NotesFor, null, db, tr, settings);
+                Step("READER: SourcePointReader.Read(db, tr, notes)");
+                var withNotes = Points(Call(_plugin, ReadPointsWithNotes, null, db, tr, notes));
+                Step("READER: Read(db, tr, notes) returned " + withNotes.Count + " points");
+                Check(ed, Identities(withNotes) == Identities(all),
+                      "read with field notes (the FTFLINES path), every point keeps the same number, handle, raw description and XYZ");
+
+                Step("READER: SourcePointIndex.At");
+                var stacked = Points(Call(_plugin, PointsAt, index, 50.0, 0.0)).Select(p => (string)Prop(p, "Number")).ToArray();
                 Check(ed, string.Join(" ", stacked) == "401 402", "both stacked shots found at one spot (" + string.Join(" ", stacked) + ")");
-                var boundary = ((System.Collections.IEnumerable)at.Invoke(index, new object[] { 100.005001, 50.005001 })).Cast<object>().Count();
+                var boundary = Points(Call(_plugin, PointsAt, index, 100.005001, 50.005001)).Count;
                 Check(ed, boundary == 1, "a shot 0.000002 away across a rounding boundary is found (" + boundary + ")");
-                var miss = ((System.Collections.IEnumerable)at.Invoke(index, new object[] { 0.05, 300.0 })).Cast<object>().Count();
+                var miss = Points(Call(_plugin, PointsAt, index, 0.05, 300.0)).Count;
                 Check(ed, miss == 0, "a shot 0.05 away is not taken for the vertex's own (" + miss + ")");
+                Step("READER: commit");
                 tr.Commit();
             }
+            Step("READER: transaction disposed");
+        }
+
+        /// <summary>The source points an index (or a list of them) holds.</summary>
+        private static List<object> Points(object indexOrList)
+        {
+            var list = indexOrList as System.Collections.IEnumerable;
+            if (list == null) list = (System.Collections.IEnumerable)Prop(indexOrList, "All");
+            return list.Cast<object>().ToList();
+        }
+
+        /// <summary>Every point's identity (number, handle, raw description, XYZ), sorted.</summary>
+        private static string Identities(List<object> points)
+        {
+            return string.Join("\n", points.Select(p => string.Format(C, "{0}|{1}|{2}|{3:R}|{4:R}|{5:R}",
+                Prop(p, "Number"), Prop(p, "Handle"), Prop(p, "RawDescription"), Prop(p, "X"), Prop(p, "Y"), Prop(p, "Z")))
+                .OrderBy(x => x, StringComparer.Ordinal).ToArray());
         }
 
         private static void VerifyLines(AcDb.Database db, Editor ed, bool again)
@@ -294,10 +378,13 @@ namespace FtfIdentityTest
         [CommandMethod("IDEND")]
         public void End()
         {
-            var verdict = _failures == 0 ? "PASS" : "FAIL";
-            Ed.WriteMessage("\nFTF IDENTITY: {0} ({1} passed, {2} failed)\n", verdict, _passes, _failures);
-            Record("STAGES " + string.Join(",", Stages.ToArray()));
-            Record("RESULT " + verdict + " " + _passes + " " + _failures);
+            Guard("IDEND", delegate
+            {
+                var verdict = _failures == 0 ? "PASS" : "FAIL";
+                Ed.WriteMessage("\nFTF IDENTITY: {0} ({1} passed, {2} failed)\n", verdict, _passes, _failures);
+                Record("STAGES " + string.Join(",", Stages.ToArray()));
+                Record("RESULT " + verdict + " " + _passes + " " + _failures);
+            });
             Record("COMPLETE");
         }
 
@@ -305,8 +392,8 @@ namespace FtfIdentityTest
 
         private static void RequireRanOnce(string name)
         {
-            var started = Trace("StartedCount", name);
-            var finished = Trace("FinishedCount", name);
+            var started = Trace(StartedCount, name);
+            var finished = Trace(FinishedCount, name);
             int seenStarted, seenFinished;
             SeenStarted.TryGetValue(name, out seenStarted);
             SeenFinished.TryGetValue(name, out seenFinished);
@@ -317,11 +404,9 @@ namespace FtfIdentityTest
             SeenFinished[name] = finished;
         }
 
-        private static int Trace(string method, string command)
+        private static int Trace(string signature, string command)
         {
-            var trace = _plugin.GetType("FieldCodes.Cad.FtfCommandTrace");
-            if (trace == null) Fatal("FieldCodes.Cad.FtfCommandTrace not found.");
-            return (int)trace.GetMethod(method, BindingFlags.Public | BindingFlags.Static).Invoke(null, new object[] { command });
+            return (int)Call(_plugin, signature, null, command);
         }
 
         private static object Prop(object o, string name)
@@ -456,6 +541,135 @@ namespace FtfIdentityTest
             try { return Convert.ToInt16(Enum.Parse(kinds, "LineGapProposal")); }
             catch (ArgumentException) { return -1; }
         }
+
+        // ==== plugin contract: this block is the same in every Civil 3D harness (HarnessContractTests) ====
+        // The plugin is reached by reflection by exact signature, "Namespace.Type.Method(Full.Type, ...)",
+        // never by name alone: a name is ambiguous as soon as the plugin adds an overload. That is how
+        // IDVERIFY READER died at 68804df: SourcePointReader gained Read(db, tr, notes), GetMethod("Read")
+        // threw AmbiguousMatchException, nothing caught it, and accoreconsole ended without a word.
+        // A signature that matches no method, or several, throws with the overloads the build has.
+        // Guard records any exception in full after the steps that led to it, and makes it FATAL.
+
+        private static readonly Dictionary<string, MethodInfo> ContractCache = new Dictionary<string, MethodInfo>(StringComparer.Ordinal);
+
+        /// <summary>The one method <paramref name="signature"/> names, in the plugin or in the
+        /// FieldCodes library it loaded.</summary>
+        private static MethodInfo Contract(Assembly plugin, string signature)
+        {
+            MethodInfo cached;
+            if (ContractCache.TryGetValue(signature, out cached)) return cached;
+            var open = signature.IndexOf('(');
+            var dot = open < 0 ? -1 : signature.LastIndexOf('.', open);
+            if (dot < 0 || !signature.EndsWith(")", StringComparison.Ordinal))
+                throw new ArgumentException("plugin contract: not a signature: " + signature);
+            var typeName = signature.Substring(0, dot);
+            var name = signature.Substring(dot + 1, open - dot - 1);
+            var wanted = signature.Substring(open + 1, signature.Length - open - 2).Replace(" ", string.Empty);
+            var type = ContractType(plugin, typeName);
+            if (type == null) throw new InvalidOperationException("plugin contract: the loaded build has no type " + typeName + " (" + signature + ")");
+            var named = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                            .Where(m => m.Name == name).ToList();
+            var matches = named.Where(m => ParameterList(m) == wanted).ToList();
+            if (matches.Count != 1)
+                throw new InvalidOperationException("plugin contract: " + signature + " matches " + matches.Count + " methods; the loaded build has " +
+                    (named.Count == 0 ? "no method " + name : string.Join("; ", named.Select(m => name + "(" + ParameterList(m) + ")").ToArray())));
+            ContractCache[signature] = matches[0];
+            return matches[0];
+        }
+
+        /// <summary>Parameter types as the signatures write them: full names, generic arguments in
+        /// brackets, the same on .NET Framework and .NET.</summary>
+        private static string ParameterList(MethodInfo m)
+        {
+            return string.Join(",", m.GetParameters().Select(p => TypeText(p.ParameterType)).ToArray());
+        }
+
+        private static string TypeText(Type t)
+        {
+            if (t.IsByRef) return TypeText(t.GetElementType()) + "&";
+            if (t.IsArray) return TypeText(t.GetElementType()) + "[]";
+            if (t.IsGenericType && !t.IsGenericTypeDefinition)
+                return t.GetGenericTypeDefinition().FullName + "[" + string.Join(",", t.GetGenericArguments().Select(a => TypeText(a)).ToArray()) + "]";
+            return t.FullName ?? t.Name;
+        }
+
+        private static Type ContractType(Assembly plugin, string typeName)
+        {
+            var type = plugin.GetType(typeName);
+            if (type != null) return type;
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!string.Equals(a.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) continue;
+                type = a.GetType(typeName);
+                if (type != null) return type;
+            }
+            // Civil 3D loads the library only when the plugin first needs it. Have the plugin load it
+            // now, through its own binding (so it is the same FieldCodes the plugin uses): resolve the
+            // return types of its methods until one is a library type.
+            var methods = new List<MethodInfo>(ContractCache.Values);
+            Type[] types;
+            try { types = plugin.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray(); }
+            foreach (var t in types)
+                methods.AddRange(t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            foreach (var m in methods)
+            {
+                Assembly library;
+                try { library = m.ReturnType.Assembly; }
+                catch (System.Exception) { continue; }
+                if (string.Equals(library.GetName().Name, "FieldCodes", StringComparison.OrdinalIgnoreCase)) return library.GetType(typeName);
+            }
+            return null;
+        }
+
+        /// <summary>Calls the method <paramref name="signature"/> names (<paramref name="target"/> is
+        /// ignored for a static one). An exception it throws comes out as itself, not wrapped.</summary>
+        private static object Call(Assembly plugin, string signature, object target, params object[] args)
+        {
+            var m = Contract(plugin, signature);
+            try { return m.Invoke(m.IsStatic ? null : target, args); }
+            catch (TargetInvocationException ex)
+            {
+                if (ex.InnerException != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        /// <summary>Runs a command's body. An exception from it is recorded in full (type, message,
+        /// inner exceptions, stacks) after the steps that led to it, and is FATAL.</summary>
+        private static void Guard(string what, Action body)
+        {
+            Step(what + ": begin");
+            try { body(); }
+            catch (System.Exception ex)
+            {
+                var inner = ex;
+                while (inner is TargetInvocationException && inner.InnerException != null) inner = inner.InnerException;
+                foreach (var line in ex.ToString().Split('\n'))
+                    if (line.Trim().Length > 0) Record("EXCEPTION " + line.TrimEnd('\r'));
+                Fatal(what + " threw " + inner.GetType().FullName + ": " + inner.Message);
+            }
+            Step(what + ": end");
+        }
+
+        /// <summary>"STEP time what" in the result file, on the disk before the step is taken.</summary>
+        private static void Step(string what)
+        {
+            Record("STEP " + DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + what);
+        }
+
+        /// <summary>Appends a line and writes it through to the disk before returning, so it
+        /// survives the process ending at the next instruction.</summary>
+        private static void AppendDurably(string file, string line)
+        {
+            var bytes = Encoding.UTF8.GetBytes(line + Environment.NewLine);
+            using (var stream = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.WriteThrough))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+        }
+        // ==== end of plugin contract ====
 
         /// <summary>One CSV line into fields, honouring quotes.</summary>
         private static List<string> Split(string line)

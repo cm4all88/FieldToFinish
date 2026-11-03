@@ -46,10 +46,12 @@ namespace FieldCodes.Cad
                 ? new List<KeyValuePair<string, object>>()
                 : PointProperties(db, source);
 
+            if (FtfCommandTrace.Tracing) FtfCommandTrace.Step("notes: reading (source '" + source + "', " + properties.Count + " properties)");
             var records = new Dictionary<ObjectId, PointRecord>();
             foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
                 records[cogo.ObjectId] = Record(cogo, properties);
 
+            if (FtfCommandTrace.Tracing) FtfCommandTrace.Step("notes: " + records.Count + " points read");
             return new CogoNotes(new FieldNoteReader(source, records.Values), records);
         }
 

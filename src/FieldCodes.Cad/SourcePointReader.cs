@@ -22,9 +22,16 @@ namespace FieldCodes.Cad
         /// description.</summary>
         public static SourcePointIndex Read(Database db, Transaction tr, CogoNotes notes)
         {
+            // Each step goes to the smoke test's trace file (FtfCommandTrace.Step) when there is one,
+            // so a run that ends inside the reader says at which point and which property.
+            var tracing = FtfCommandTrace.Tracing;
+            if (tracing) FtfCommandTrace.Step("reader: start (notes " + (notes == null ? "not read" : "read") + ")");
             var points = new List<SourcePoint>();
+            var n = 0;
             foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
             {
+                n++;
+                if (tracing) FtfCommandTrace.Step("reader: point " + n + " handle " + cogo.Handle + ": reading");
                 string raw;
                 try { raw = cogo.RawDescription; }
                 catch (Autodesk.AutoCAD.Runtime.Exception) { raw = null; }
@@ -45,7 +52,9 @@ namespace FieldCodes.Cad
                     Y = at.Y,
                     Z = at.Z
                 });
+                if (tracing) FtfCommandTrace.Step("reader: point " + n + " number " + points[points.Count - 1].Number + ": read");
             }
+            if (tracing) FtfCommandTrace.Step("reader: done, " + points.Count + " points");
             return new SourcePointIndex(points);
         }
     }

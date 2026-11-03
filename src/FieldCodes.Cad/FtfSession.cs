@@ -221,6 +221,7 @@ namespace FieldCodes.Cad
                 catch (ConfigException ex)
                 {
                     LastRunError = ex.Message;
+                    FtfCommandTrace.Failed(commandName, ex);
                     // Configuration problems are told plainly: a rules file, a settings file,
                     // a comparison profile. The message already says which.
                     ed.WriteMessage("\n{0}: {1}\n", commandName, ex.Message);
@@ -229,12 +230,14 @@ namespace FieldCodes.Cad
                 {
                     LastRunError = ex.Message;
                     LastRunErrorDetail = commandName + ": " + ex.ErrorStatus + " " + ex.Message + "\n" + ex.StackTrace;
+                    FtfCommandTrace.Failed(commandName, ex);
                     ed.WriteMessage("\n{0}: AutoCAD error: {1}\n", commandName, ex.Message);
                 }
                 catch (Exception ex)
                 {
                     LastRunError = ex.Message;
                     LastRunErrorDetail = commandName + ": " + ex + "\n" + ex.StackTrace;
+                    FtfCommandTrace.Failed(commandName, ex);
                     ed.WriteMessage("\n{0} failed: {1}\n{2}\n",
                         commandName, ex.Message, ex.StackTrace);
                 }

@@ -161,7 +161,29 @@ the DLL's *Product version*: `1.0.0+5c3c021.approved`); the installed bundle car
   of it, a re-run that replaces instead of duplicating, and a boundary run with labels. Every
   stage also checks that the surface's statistics and every triangle are untouched.
 
+- **Point identity and accountability are required checks** (`IdentityTestHarness`,
+  `AccountabilityTestHarness`): each on its own fresh drawing; a failure puts the previous build back.
+
 `tests\LiveSmoke\run-contour.ps1 -Installed` runs the same test against whatever is installed.
+
+### When a run stops early
+
+An exception that nothing catches ends accoreconsole without printing anything, so a log can
+stop at a prompt with no error (IDVERIFY READER at 68804df). Each run now leaves enough to say
+where and why:
+
+| Where | What |
+|---|---|
+| The failure message (and the UPDATEFTF log) | How accoreconsole ended: its exit code and what it means (3 = the harness's FATAL, 0xE0434352 = a .NET exception nothing caught, 0xC0000005 = a native crash), or that it was stopped on a timeout, and after how long. Then the exception and the last 20 steps. |
+| `result.txt` in the check's folder (under `%LOCALAPPDATA%\FieldToFinish\smoke\<run>\`) | The harness's checks, plus `STEP` lines before and after each operation, the plugin's own `TRACE` lines (commands starting, finishing and failing; the point reader point by point), and `EXCEPTION` lines with the full exception and stack. Every line is written through to the disk before the next step, so it survives the process ending. |
+| `<harness>.log` | The accoreconsole console, as before. |
+
+The plugin writes `TRACE` lines only when `FTF_TRACE_FILE` names a file. The smoke test sets it
+for its runs; an office session never has it, and then nothing is written.
+
+The harnesses reach the plugin by reflection, so they name every plugin method by its exact
+signature (`HarnessContractTests` checks each against the compiled plugin), check them all before
+seeding, and record any exception in full before ending the run as FATAL.
 
 ## For surveyors
 

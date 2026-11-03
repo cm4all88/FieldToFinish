@@ -84,6 +84,39 @@ function Read-Console([string]$path) {
     return [Text.Encoding]::ASCII.GetString($kept.ToArray())
 }
 
+# How an accoreconsole run ended: exit code (and what it means), killed or not, how long it ran. A run
+# that ends without its COMPLETE line is otherwise silent: an exception nothing caught ends
+# accoreconsole without printing it.
+function Get-ExitReport($process, [bool]$killed, [string]$why, [datetime]$started) {
+    $seconds = [int]((Get-Date) - $started).TotalSeconds
+    if ($killed) { return @("accoreconsole: stopped by the smoke test after $seconds s ($why)") }
+    $code = $null
+    try { $process.WaitForExit(); $code = $process.ExitCode } catch { }
+    if ($null -eq $code) { return @("accoreconsole: ended after $seconds s; exit code not available") }
+    $hex = '0x{0:X8}' -f [int]$code
+    $meaning = switch ([int64]$code) {
+        0 { 'exited normally' }
+        3 { 'the harness ended the run (FATAL)' }
+        -532462766 { 'a .NET exception nothing caught' }
+        -1073741819 { 'access violation in native code' }
+        -1073740791 { 'fail-fast (stack buffer overrun or Environment.FailFast)' }
+        -1073741571 { 'stack overflow' }
+        default { 'unexpected exit code' }
+    }
+    return @("accoreconsole: exit code $code ($hex, $meaning) after $seconds s")
+}
+
+# The harness's STEP lines, the plugin's TRACE lines and any EXCEPTION, from a result file: where a
+# run that stopped early got to.
+function Get-RunDiagnostics([string[]]$resultLines) {
+    $out = New-Object System.Collections.Generic.List[string]
+    $exception = @($resultLines | Where-Object { $_ -like 'EXCEPTION *' } | Select-Object -First 40)
+    if ($exception.Count -gt 0) { $out.Add('--- exception ---'); foreach ($l in $exception) { $out.Add($l.Substring(10)) } }
+    $steps = @($resultLines | Where-Object { $_ -like 'STEP *' -or $_ -like 'TRACE *' } | Select-Object -Last 20)
+    if ($steps.Count -gt 0) { $out.Add('--- last steps recorded (harness STEP, plugin TRACE) ---'); foreach ($l in $steps) { $out.Add($l) } }
+    return @($out)
+}
+
 # --- prerequisites ------------------------------------------------------------------
 
 $PluginDll = [IO.Path]::GetFullPath($PluginDll)
@@ -158,9 +191,12 @@ $lines = @(
 $env:FTF_SMOKE_EXPECT_DLL = $PluginDll
 $env:FTF_SMOKE_EXPECT_COMMIT = $Commit
 $env:FTF_SMOKE_RESULT = $result
+$env:FTF_TRACE_FILE = $result
 $arguments = '/i "' + $drawing + '" /s "' + $script + '" /product C3D /language en-US'
 Say "running accoreconsole (up to $TimeoutSeconds s)..."
+$runStarted = Get-Date
 $process = Start-Process -FilePath $accore -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $raw
+$null = $process.Handle   # kept, so ExitCode is readable once the process has ended
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $stopped = $null
 while (-not $process.HasExited) {
@@ -171,13 +207,16 @@ while (-not $process.HasExited) {
     if ($text -match '\[FATAL\]') { Start-Sleep -Milliseconds 500; break }
     if ((Get-Date) -gt $deadline) { $stopped = "no result after $TimeoutSeconds s: a prompt is waiting for input the script did not give."; break }
 }
+$killed = $false
 if (-not $process.HasExited) {
     # The whole tree, at once: nothing from a failed run may linger holding the plugin open.
+    $killed = $true
     if ($env:OS -eq 'Windows_NT') { & taskkill.exe /PID $process.Id /T /F 2>&1 | Out-Null }
     else { try { $process.Kill() } catch { } }
     Start-Sleep -Milliseconds 500
 }
-Remove-Item Env:\FTF_SMOKE_EXPECT_DLL, Env:\FTF_SMOKE_EXPECT_COMMIT, Env:\FTF_SMOKE_RESULT -ErrorAction SilentlyContinue
+$exitReport = Get-ExitReport $process $killed $(if ($stopped) { $stopped } else { 'FATAL in the run' }) $runStarted
+Remove-Item Env:\FTF_SMOKE_EXPECT_DLL, Env:\FTF_SMOKE_EXPECT_COMMIT, Env:\FTF_SMOKE_RESULT, Env:\FTF_TRACE_FILE -ErrorAction SilentlyContinue
 
 $text = Read-Console $raw
 $text | Set-Content -Path $log -Encoding utf8
@@ -189,16 +228,17 @@ $loadProblems = @($logLines | Where-Object { $_ -match 'Cannot load assembly|Fil
 # --- 5. judge -----------------------------------------------------------------------
 
 $tail = @($logLines | Where-Object { $_.Trim() } | Select-Object -Last 25)
-if ($stopped) { Fail $stopped (@($failLines) + @('--- last lines of the run ---') + $tail) }
+$diagnostics = @($exitReport) + @(Get-RunDiagnostics $outcome)
+if ($stopped) { Fail $stopped (@($failLines) + $diagnostics + @('--- last lines of the run ---') + $tail) }
 
 $fatal = @($outcome | Where-Object { $_ -like 'FATAL*' })
-if ($fatal.Count -gt 0) { Fail ($fatal[0].Substring(6)) (@($failLines) + @('--- last lines of the run ---') + $tail) }
-if ($outcome.Count -eq 0) { Fail 'the harness never ran (NETLOAD of the plugin or the harness failed?)' (@($loadProblems) + $tail) }
+if ($fatal.Count -gt 0) { Fail ($fatal[0].Substring(6)) (@($failLines) + $diagnostics + @('--- last lines of the run ---') + $tail) }
+if ($outcome.Count -eq 0) { Fail 'the harness never ran (NETLOAD of the plugin or the harness failed?)' (@($loadProblems) + $diagnostics + $tail) }
 if ($loadProblems.Count -gt 0) { Fail 'something failed to load in Civil 3D' $loadProblems }
 
 $required = @('UNDONE', 'FIRST', 'AGAIN', 'BOUNDARY')
 $missing = @($required | Where-Object { -not ($outcome -contains "STAGE $_ PASS") })
-if (-not ($outcome -contains 'COMPLETE')) { Fail 'the run stopped before its end' (@($failLines) + $tail) }
+if (-not ($outcome -contains 'COMPLETE')) { Fail 'the run stopped before its end' (@($failLines) + $diagnostics + $tail) }
 if ($missing.Count -gt 0 -or -not ($outcome | Where-Object { $_ -like 'RESULT PASS*' })) {
     Fail ('stages not passed: ' + ($missing -join ', ')) $failLines
 }
@@ -247,9 +287,13 @@ function Invoke-RequiredCheck([string]$label, [string]$harnessName, [string]$env
     $rawPath = Join-Path $folder 'accore.raw.txt'
     Remove-Item $resultPath, $rawPath -Force -ErrorAction SilentlyContinue
     [Environment]::SetEnvironmentVariable($envName, $resultPath, 'Process')
+    # The plugin's own trace (FtfCommandTrace.Step) into the same file, beside the harness's STEP lines.
+    [Environment]::SetEnvironmentVariable('FTF_TRACE_FILE', $resultPath, 'Process')
     $arguments = '/i "' + $drawingPath + '" /s "' + $scriptPath + '" /product C3D /language en-US'
     Say ($prefix + 'running accoreconsole (up to 300 s)...')
+    $started = Get-Date
     $p = Start-Process -FilePath $accore -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $rawPath
+    $null = $p.Handle   # kept, so ExitCode is readable once the process has ended
     $until = (Get-Date).AddSeconds(300)
     $why = $null
     while (-not $p.HasExited) {
@@ -260,11 +304,15 @@ function Invoke-RequiredCheck([string]$label, [string]$harnessName, [string]$env
         if ($t -match '\[FATAL\]') { Start-Sleep -Milliseconds 500; break }
         if ((Get-Date) -gt $until) { $why = 'no result after 300 s: a prompt is waiting for input the script did not give.'; break }
     }
+    $killed = $false
     if (-not $p.HasExited) {
+        $killed = $true
         if ($env:OS -eq 'Windows_NT') { & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null } else { try { $p.Kill() } catch { } }
         Start-Sleep -Milliseconds 500
     }
+    $exitReport = Get-ExitReport $p $killed $(if ($why) { $why } else { 'FATAL in the run' }) $started
     [Environment]::SetEnvironmentVariable($envName, $null, 'Process')
+    [Environment]::SetEnvironmentVariable('FTF_TRACE_FILE', $null, 'Process')
 
     $text = Read-Console $rawPath
     $checkLog = Join-Path $folder ($harnessName + '.log')
@@ -273,11 +321,12 @@ function Invoke-RequiredCheck([string]$label, [string]$harnessName, [string]$env
     $r = if (Test-Path -LiteralPath $resultPath) { @(Get-Content -LiteralPath $resultPath) } else { @() }
     $failed = @($r | Where-Object { $_ -like 'FAIL *' -or $_ -like 'FATAL *' } | ForEach-Object { $_ })
     $last = @($runLines | Where-Object { $_.Trim() } | Select-Object -Last 25)
-    if ($why) { Fail ($prefix + $why) (@($failed) + @('--- last lines of the run ---') + $last + @("log: $checkLog")) }
+    $diagnostics = @($exitReport) + @(Get-RunDiagnostics $r) + @("result and trace: $resultPath")
+    if ($why) { Fail ($prefix + $why) (@($failed) + $diagnostics + @('--- last lines of the run ---') + $last + @("log: $checkLog")) }
     $fatal = @($r | Where-Object { $_ -like 'FATAL*' })
-    if ($fatal.Count -gt 0) { Fail ($prefix + $fatal[0].Substring(6)) (@('--- last lines of the run ---') + $last + @("log: $checkLog")) }
-    if ($r.Count -eq 0) { Fail ($prefix + 'the harness never ran (NETLOAD of the plugin or the harness failed?)') ($last + @("log: $checkLog")) }
-    if (-not ($r -contains 'COMPLETE')) { Fail ($prefix + 'the run stopped before its end') (@($failed) + $last + @("log: $checkLog")) }
+    if ($fatal.Count -gt 0) { Fail ($prefix + $fatal[0].Substring(6)) ($diagnostics + @('--- last lines of the run ---') + $last + @("log: $checkLog")) }
+    if ($r.Count -eq 0) { Fail ($prefix + 'the harness never ran (NETLOAD of the plugin or the harness failed?)') ($diagnostics + $last + @("log: $checkLog")) }
+    if (-not ($r -contains 'COMPLETE')) { Fail ($prefix + 'the run stopped before its end') (@($failed) + $diagnostics + $last + @("log: $checkLog")) }
     $notPassed = @($stages | Where-Object { -not ($r -contains "STAGE $_ PASS") })
     if ($notPassed.Count -gt 0 -or -not ($r | Where-Object { $_ -like 'RESULT PASS*' })) {
         Fail ($prefix + 'stages not passed: ' + ($notPassed -join ', ')) (@($failed | Select-Object -First 20) + @("log: $checkLog"))
@@ -415,9 +464,12 @@ function Invoke-StyleCheck {
     $styleRaw = Join-Path $styleFolder 'accore.raw.txt'
     Remove-Item $styleResult, $styleRaw -Force -ErrorAction SilentlyContinue
     $env:FTF_STYLE_RESULT = $styleResult
+    $env:FTF_TRACE_FILE = $styleResult
     $styleArgs = '/i "' + $styleDrawing + '" /s "' + $styleScript + '" /product C3D /language en-US'
     Say 'style check: running accoreconsole (up to 240 s)...'
+    $styleStarted = Get-Date
     $p = Start-Process -FilePath $accore -ArgumentList $styleArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $styleRaw
+    $null = $p.Handle
     $until = (Get-Date).AddSeconds(240)
     $why = $null
     while (-not $p.HasExited) {
@@ -427,11 +479,14 @@ function Invoke-StyleCheck {
         if ($u.Success) { $why = 'Unknown command ' + $u.Groups[1].Value; break }
         if ((Get-Date) -gt $until) { $why = 'no result after 240 s (a prompt waited for input)'; break }
     }
+    $styleKilled = $false
     if (-not $p.HasExited) {
+        $styleKilled = $true
         if ($env:OS -eq 'Windows_NT') { & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null } else { try { $p.Kill() } catch { } }
         Start-Sleep -Milliseconds 500
     }
-    Remove-Item Env:\FTF_STYLE_RESULT -ErrorAction SilentlyContinue
+    $styleExit = Get-ExitReport $p $styleKilled $(if ($why) { $why } else { 'stopped' }) $styleStarted
+    Remove-Item Env:\FTF_STYLE_RESULT, Env:\FTF_TRACE_FILE -ErrorAction SilentlyContinue
     $styleLog = Join-Path $styleFolder 'styles.log'
     (Read-Console $styleRaw) | Set-Content -Path $styleLog -Encoding utf8
     $r = if (Test-Path -LiteralPath $styleResult) { @(Get-Content -LiteralPath $styleResult) } else { @() }
@@ -443,6 +498,7 @@ function Invoke-StyleCheck {
         Write-Host ("   STYLE CHECK FAILED (not blocking; the install stands): {0} passed, {1} failed{2}" -f $pass, $fails.Count, $(if ($why) { "; $why" } else { '' })) -ForegroundColor Yellow
         $fails | Select-Object -First 12 | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
         if (-not ($r -contains 'COMPLETE')) { Write-Host '     the style run stopped before its end' -ForegroundColor Yellow }
+        foreach ($l in @($styleExit) + @(Get-RunDiagnostics $r)) { Write-Host "     $l" -ForegroundColor Yellow }
     }
     Say "style log: $styleLog"
 }

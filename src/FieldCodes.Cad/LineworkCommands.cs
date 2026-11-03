@@ -42,7 +42,14 @@ namespace FieldCodes.Cad
         {
             // Traced so the Civil 3D harnesses can prove it ran (it does not go through FtfSession.Run).
             FtfCommandTrace.Start("FTFLINES");
-            Lines();
+            try { Lines(); }
+            catch (System.Exception ex)
+            {
+                // Recorded for the smoke test's trace, then left to AutoCAD as before: headless, an
+                // exception nothing catches can end accoreconsole without a word.
+                FtfCommandTrace.Failed("FTFLINES", ex);
+                throw;
+            }
             FtfCommandTrace.Finish("FTFLINES");
         }
 

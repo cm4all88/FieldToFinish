@@ -239,10 +239,11 @@ public sealed class DeploymentContractTests
         Assert.Contains("else if (stage == \"REVIEW\") { RequireRanOnce(\"FTFREVIEWCHECK\");", harness);
         Assert.Contains("never ran (Unknown command", harness);
 
-        // FTFLINES does not go through FtfSession.Run, so it is traced itself; FTFREVIEWCHECK is
-        // traced by FtfSession.Run.
+        // FTFLINES does not go through FtfSession.Run, so it is traced itself (an exception is
+        // recorded in the trace and still thrown, and then it never counts as finished);
+        // FTFREVIEWCHECK is traced by FtfSession.Run.
         var lines = Read("src", "FieldCodes.Cad", "LineworkCommands.cs");
-        Assert.Matches(@"FtfCommandTrace\.Start\(""FTFLINES""\);\s*Lines\(\);\s*FtfCommandTrace\.Finish\(""FTFLINES""\);", lines);
+        Assert.Matches(@"FtfCommandTrace\.Start\(""FTFLINES""\);\s*try \{ Lines\(\); \}\s*catch \(System\.Exception ex\)\s*\{[^{}]*FtfCommandTrace\.Failed\(""FTFLINES"", ex\);\s*throw;\s*\}\s*FtfCommandTrace\.Finish\(""FTFLINES""\);", lines);
         Assert.Contains("FtfSession.Run(\"FTFREVIEWCHECK\"", Read("src", "FieldCodes.Cad", "ReviewCommands.cs"));
     }
 

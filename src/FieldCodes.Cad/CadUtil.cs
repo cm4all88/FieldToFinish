@@ -174,18 +174,26 @@ namespace FieldCodes.Cad
         public static IList<CogoPoint> CogoPointsInOrder(Database db, Transaction tr)
         {
             var points = new List<CogoPoint>();
+            var tracing = FtfCommandTrace.Tracing;
+            if (tracing) FtfCommandTrace.Step("points: opening model space");
             var ms = ModelSpace(db, tr, OpenMode.ForRead);
+            if (tracing) FtfCommandTrace.Step("points: model space open, enumerating its object ids");
 
+            var seen = 0;
             foreach (ObjectId id in ms)
             {
+                seen++;
                 if (id.IsErased) continue;
+                if (tracing) FtfCommandTrace.Step("points: open object " + seen + " (" + id.Handle + ")");
                 var pt = tr.GetObject(id, OpenMode.ForRead, false, true) as CogoPoint;
                 if (pt != null) points.Add(pt);
             }
+            if (tracing) FtfCommandTrace.Step("points: " + points.Count + " COGO points among " + seen + " objects; sorting by number");
 
             // Deterministic ordering: identical input must produce identical output,
             // or every drawing comparison shows phantom changes on re-run.
             points.Sort((a, b) => a.PointNumber.CompareTo(b.PointNumber));
+            if (tracing) FtfCommandTrace.Step("points: sorted");
             return points;
         }
 
