@@ -2185,7 +2185,7 @@ namespace FieldCodes.Cad.Ui
                 "Opens this window. Never processes anything on its own.");
             CommandRow(stack, "FTFLABELALL",
                 "Label everything once the points and linework are in: every " +
-                "recognised line (with gate labels between marked shots), then " +
+                "recognised line (with gate labels between paired gate posts), then " +
                 "every point, then draw order. Labels you placed or moved by hand " +
                 "are kept; run it again after more linework arrives. Lists any line " +
                 "it could not label and why.");
@@ -2203,6 +2203,17 @@ namespace FieldCodes.Cad.Ui
                 "label is the first edge's surface type, read from its layer, with " +
                 "DWY after it -- ASPH DWY off V-SURF-ASPH-E. W switches to the " +
                 "spelled-out word where the feature has one (ASPHALT DWY).");
+            CommandRow(stack, "FTFGATES",
+                "Label the gates: gate posts (FGP) on the fences are paired and each " +
+                "gate is labelled between its posts with its width, 6' GATE. Posts it " +
+                "cannot pair with confidence go to the review list; no post is moved.");
+            CommandRow(stack, "FTFGATE",
+                "Pair two gate posts you pick and label the gate between them -- to " +
+                "confirm or change a pair. Reruns keep it.");
+            CommandRow(stack, "FTFREVIEW",
+                "The review list: everything FTF could not decide, with zoom, fix, " +
+                "settings, recheck, not applicable (with a reason) and accept. FTFQC " +
+                "marks Drafting QC Complete once no required item is open.");
             CommandRow(stack, "FTFBENCH",
                 "Draw a bench from its two end shots: pick the points (or the line " +
                 "between them). The depth comes from the notes (D1.5, 1.5D, DEPTH " +

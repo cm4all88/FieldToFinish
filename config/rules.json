@@ -50,6 +50,7 @@
     { "code": "FCK",   "name": "Chain Link Fence",     "layer": "V-SURF-FENC-CHNL-E", "label": "CHAIN LINK FENCE", "alwaysLabel": true },
     { "code": "GRL",   "name": "Guardrail",            "layer": "V-SURF-GRAL-E" },
     { "code": "HDR",   "name": "Handrail",             "layer": "V-SURF-HDRL-E" },
+    { "code": "HGL",   "name": "Hedge Line",           "label": "HEDGE", "//layer": "HEDGE LINE on the office code sheet (description key HGL*); its figure layer is not in this file's source, so it is identified by figure name (HGL1) or the shots it was drawn through, never by layer. Add the layer once the figure prefix database is checked." },
     { "code": "BLD",   "name": "Building",             "layer": "V-SURF-BLDG-E", "label": "BUILDING" },
     { "code": "BLC",   "name": "Building (site)",      "layer": "V-SURF-BLDG-E", "label": "BUILDING" },
     { "code": "BLE",   "name": "Building Roofline",    "layer": "V-SURF-BLDG-ROOF-E" },

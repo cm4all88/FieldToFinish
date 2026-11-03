@@ -413,6 +413,11 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `FTFLABELALL` | Label Everything: every recognised line (gates included), every point, then draw order; lists what it could not label | yes |
 | `FTFLABELBETWEEN` (`FTFB`) | A label centred between two picked edges, or two sides of one line (a U-shaped hedge); any linework, 3D polylines included; the edges are only read | yes |
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
+| `FTFGATES` | Pairs gate posts (FGP) along the fences and labels each gate between its posts with its width (`6' GATE`); unsure pairs go to the review list. See "Gates" | yes (labels moved or reworded by hand are kept; never duplicates) |
+| `FTFGATE` | Pick two gate posts: confirms or changes a pair, labels the gate between them | yes (replaces its own) |
+| `FTFREVIEW` | The review list: everything FTF could not decide, with zoom, fix, settings, recheck, not applicable and accept. See "Review list and Drafting QC" | n/a |
+| `FTFREVIEWCHECK` | Rechecks the codes for the review list (unknown codes, unreadable descriptions, linework words); read-only | yes |
+| `FTFQC` | Marks the drawing Drafting QC Complete, refused while required review items are open | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
 | `FTFORIENT` | Turns the symbols Civil 3D already drew (COGO markers) to face the way the features do; Preview, Apply or All. See "Orienting symbols" | yes (and kept: a marker turned by hand is not overwritten) |
@@ -724,6 +729,38 @@ families of the preset running, so a trees-only run never touches a pole's label
   `<project>_Utility-Dip-Field-Notes_<date>.pdf`; an issued file is never overwritten
   (`_R1`, `_R2`...). Optional automatic save when a structure is labelled. Written
   directly, no printer driver. Details: `docs/dip-field-notes.md`.
+
+### Review list and Drafting QC (FTFREVIEW, FTFQC)
+
+Everything FTF could not decide is kept in one list inside the drawing, so nothing that
+needs a drafter is lost in command-line history:
+
+| Raised by | Items |
+|---|---|
+| FTFREVIEWCHECK (Recheck codes) | codes nothing handles (one item per code, listing its points); blank or unreadable descriptions and invalid values (per point); words after a linework code that are not a line command, a number or a known code (`FNC CL`) |
+| Line labels (FTFLINELABELS, Label All) | fence heights that cannot be read (`FNC B 35`); lines identified but not labelled |
+| Gates | unpaired posts, posts that could pair more than one way, widths out of range, recorded widths that disagree, posts away from every fence |
+| FTFORIENT | pavement markings whose direction could not be decided, symbols needing review or below the confidence to apply, points that could not be turned |
+| Any FTF command | a command that did not finish (closed when it next finishes) |
+
+Codes ignored on purpose (the ignore list, codes you marked ignored), ordinary Civil 3D
+linework and bare codes are never on it.
+
+Each item shows the point number or entity, the feature, the issue, why, what to do,
+its severity, whether it is required, and its status. In FTFREVIEW: **Zoom to** (double
+click) zooms and selects what it is about; **Fix** runs the command that corrects it
+(FTFGATE, FTFORIENT...); **Its settings** opens the page that governs it; **Recheck**
+reruns the check that raised it; **Not applicable** closes it with your reason;
+**Accept** records that you reviewed it as drawn; **Reopen** puts it back. Reruns keep
+your decisions; an item the check no longer finds is resolved automatically and
+reopens if it comes back. Who and when are recorded (Settings > Review and QC >
+Reviewer name, else your Windows sign-in).
+
+**Drafting QC Complete** (`FTFQC`, or the button in FTFREVIEW) is refused while any
+required item is open, and a new required item takes the mark off again. Which kinds
+are required is a table on Settings > Review and QC; the refusal can be turned off
+there. Nothing here blocks saving or drafting. This is the hook for the planned Survey
+Production Checklist: its Drafting QC Complete step reads this mark.
 
 ### What reprocessing can and cannot remove
 
@@ -1107,6 +1144,39 @@ to that shot and `5' FENCE` after it.
 - Settings > Line Labels > Fence heights: the wording (`{height}' {label}`, empty to
   leave heights out), decimals (-1 keeps what the crew wrote) and the highest height
   believed (20 ft by default).
+
+### Gates (FTFGATES, FTFGATE)
+
+Two shots coded as gate posts (`FGP`, plus any aliases on Settings > Gates) become one
+gate, labelled between the posts along the opening with its width: a 6.0 ft opening is
+`6' GATE`, 4.8 ft is `GATE`, 12 ft `12' GATE`. The label uses the line label text style,
+layer, height and mask of the fence it is in. The posts and fences are only read.
+
+- **Pairing needs a fence, never distance alone.** Both posts on one fence line and next
+  to each other along it (chain link, wood or any fence, bends included), or the fence
+  stopping at both posts (the opening between two fence ends), pair them. A fence at
+  only one post is weaker evidence but still pairs. Posts on two different fences
+  (parallel runs) or either side of a corner are not one gate. Posts away from every
+  fence are proposed in the review list, not labelled, unless Settings > Gates allows it.
+- **Ambiguous pairs are flagged, not guessed.** A post with two plausible partners
+  (three posts in a row, a double gate) is left unlabelled and listed for review.
+- **Widths** (Settings > Gates): under 4.5 ft review (or a narrow-gate label if you set
+  one), 4.5 to under 5 ft the plain `GATE`, 5 to 25 ft `{width}' GATE`, over 25 ft review.
+  Rounding (1 ft by default, or 0.5...) and decimals are settings. The width is the
+  distance between the post shots, centre to centre, and the review list and command
+  line say so: it is not a measured clear opening. A width the crew wrote on a post
+  (`FGP 12`) is used when the posts agree with it, and reviewed when they do not. No
+  width is ever replaced by a standard gate size.
+- **Reruns** (FTFGATES, the automatic line label pass, Label All, FTFLABELLINE on that
+  fence) leave a gate label alone when nothing changed, keep one you moved or reworded,
+  replace one whose posts changed, and never place a second one.
+- **FTFGATE**: pick two posts to confirm a pair FTF was unsure of, or to change one it
+  made. Accept the label, type your own, or cancel; a width FTF would not label on its
+  own (too wide, recorded width disagrees) is shown with its reason first. The label is
+  yours: reruns never move or remove it, its posts are left out of automatic pairing,
+  and the review items for those posts are resolved.
+- The older span-marker rule (two marked shots on one line) no longer labels gate posts
+  while gate finding is on, so nothing is labelled twice.
 
 ## Directional line labels: the TBC export limitation
 
