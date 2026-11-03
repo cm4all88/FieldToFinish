@@ -29,6 +29,79 @@ decisions recorded there.
 Inside FTFRUN the checks are part of the same command, so one `U` undoes the run and its checks
 together.
 
+## The drafting standard (Settings > Point Features > Drafting Standard)
+
+What a point needs on the plan comes from one drafting standard per feature. Point accountability,
+Label All, FTFLABELS and FTFORIENT all read it, so a feature the standard draws no label for is never
+labelled by Label All and never reported for a missing label. The engine has no list of its own.
+
+A point's requirement is built up in this order:
+
+1. the default row (`family: "*"`);
+2. its Label All family's row;
+3. a row whose description pattern matches, only when no rule or list knows its code (so
+   "HOUSE NUMBER 4735 SIGN" is a sign);
+4. its own code's row;
+5. any exception that fits, by sign category or by a pattern on the description or the crew's note.
+
+Each row can set:
+
+| Field | Values |
+|---|---|
+| `class` | Feature, Surface, Control, Sign, Utility, Structure, Vegetation, Note |
+| `disposition` | Drafted, SurfaceOnly, ControlCheck, Symbol, PointStyle, Label, SymbolAndLabel, PointOnly, Review |
+| `symbol` | `None`; `PointStyle` (any visible marker, or one of `symbolStyle`); `Specific` (the code's own symbol block, or one of `symbolStyle`) |
+| `label` | `AsPlanned` (what its rule writes, where Label All labels its family); `None`; `Required`; `PointLabel` (its own Civil 3D label counts, where FTF's label would say no more than the description: "SN STOP" still gets "STOP SIGN") |
+| `surface`, `rotation`, `review` | yes / no |
+| `layer`, `symbolStyle`, `labelStyle`, `note` | text; styles are comma separated, `*` and `?` allowed |
+
+With `review` on, every such point is listed for a person to look at. `rotation` has three states:
+
+- `true`: turning the symbol is part of the deliverable;
+- `false`: FTFORIENT turns it only by a direction the crew recorded, never an assumed one;
+- not stated (the default row states nothing): FTFORIENT's own rules decide, as before.
+
+The built-in PMX standard, used when the rules file has no `featureStandard`:
+
+| Feature | Standard |
+|---|---|
+| Any code | Its point style shows it; the label its rule writes, where Label All labels its family. |
+| `GS` ground shot | Surface only: no symbol, no label, never a drafting item. |
+| `ZK` control check shot | Control/Check: no symbol, no label; in the control check report. |
+| `WFH`, `FH` fire hydrant | Its own symbol, correctly rotated; no text label. |
+| Signs (`SN*`, `SIGN`, the Signs family, and a description with the word SIGN) | Their own symbol, rotated, labelled by their point label. Address / house number, private and other descriptive signs: their point style is enough, and nothing turns them without a recorded direction. |
+| Utilities, storm and sewer, trees, control families | Their point style. |
+
+Sign categories come from the sign's code, then its words, in this order:
+
+1. address / house number;
+2. private;
+3. street name;
+4. regulatory;
+5. warning;
+6. other descriptive.
+
+The description is never changed. A private sign is not assumed to face a road.
+
+The Drafting Standard editor lists every row in force. A built-in row keeps its codes, family and
+pattern; switch it off and add your own instead. Save Rules writes only what differs from the
+built-in standard. An office file that changes nothing gets no section, and later corrections to the
+built-in standard still reach it.
+
+```json
+"featureStandard": {
+  "requirements": [
+    { "name": "Cleanout", "codes": ["SSCO"], "label": "Required" },
+    { "name": "Water meter", "codes": ["WMT"], "symbol": "Specific", "symbolStyle": "PMX WATER*" },
+    { "codes": ["SN*", "SIGN"], "family": "Signs", "match": "\\bSIGNS?\\b", "enabled": false }
+  ],
+  "signCategories": [ { "category": "Address", "codes": [], "words": ["HOUSE NUMBER", "LOT NUMBER"] } ]
+}
+```
+
+A standard that cannot work (a bad family, a pattern that is not a regular expression, two default
+rows) is refused when the rules load, with the reason.
+
 ## The point ledger
 
 Every point gets one disposition, with all the evidence behind it. A disposition comes only from
@@ -38,23 +111,26 @@ the drawing:
 |---|---|
 | **Drawn** | FTF objects stamped with the point: label, tag, block, dripline, bench, or a gate label naming the post. A label typed by hand next to the point counts too. |
 | **Linework** | A vertex of, or on, a drawn line of its own feature (approved corrections included). |
-| **Control** | A `controlCodes` code. When the drawing has a control table, the point must be in it. |
-| **Symbol** | Its point style (or its point group's override) draws **the code's own symbol block**. |
-| **Surface** | A TIN vertex coincides with it (plan and elevation, 0.01 ft). The evidence says whether a point group in the surface's definition holds it, or the match is by coordinates only. |
-| **Excluded** | An ignore entry with a documented reason, or a reviewer's decision with a reason. |
-| **Review** | Something it needs is missing, or a decision is open. |
+| **Control** | A `controlCodes` code (the control table, when the drawing has one), or a control check shot. |
+| **Symbol** | Its point style (or its point group's override) draws **the code's own symbol block**, or a style the standard names. |
+| **PointStyle** | Its Civil 3D point style shows it, as its standard has it; or its own Civil 3D label does (`label: PointLabel`). |
+| **Surface** | Designated surface data (its standard, or an ignore entry that expects a surface). Membership is checked only when asked (below). |
+| **PointOnly** | The standard draws nothing for it: the survey point is the record. |
+| **Excluded** | An ignore entry, or a reviewer's decision with a reason. |
+| **Review** | A required deliverable is missing, or a required decision is open. Warnings never hold a point. |
 | **Deleted** | It was recorded before and is no longer in the drawing. |
 
 What each kind of point needs:
 
 | The point is | It needs |
 |---|---|
-| A code with a rule | What the rule plans: label (unless the annotation settings turn it off), tag, block, dripline. If the rule plans nothing, its own symbol. |
-| A bare code | Its own symbol: a block FTF placed, or a point style whose marker is the code's symbol block. That block is one named under Settings > Point Accountability > Symbols, the one the orientation standard gives the code, or a block whose name holds the code as a word (`PMX-CB` for `CB`). **A generic marker (a dot, an X, another code's symbol) is not enough** (decision 1). |
+| A code with a rule | What the rule plans (block, dripline, tag), then what its standard asks: a label as planned or as required, a symbol by point style or its own. |
+| A bare code | What its standard asks. By default its point style is enough (`WMT`, `GYA`, `BOL`, `SSCO`). A code the office labels with its code (`symbolLabels`, as `PP`) needs that label, as Label All draws it. Only a standard with `symbol: Specific` needs the code's own symbol block. |
 | A linework shot | A drawn line of its feature through it, for every figure it is coded onto. |
 | A control code | The control table, when there is one. |
-| An ignored code | A documented reason (decision 2). An entry that expects a surface (`"expect": "surface"`, as `GS` does) also needs a surface built from it. |
-| A code nothing handles | A rule, or the code's review item closed with a reason. |
+| A ground shot, a control check shot | Nothing on the plan. Never a required item. |
+| An ignored code the standard does not name | Nothing. An entry without a reason is a warning to document it. |
+| A code nothing handles | A rule, or the code's review item closed with a reason. A description the standard names by its words is not "a code nothing handles". |
 
 **Represented in CAD** (something shows it) is reported separately from **drafting complete**
 (everything it needs exists or is decided). A hydrant whose label is missing is represented by its
@@ -71,15 +147,55 @@ Each point keeps its history, and the last 100 runs' numbers are kept with the l
 
 ### Review items (source "Points")
 
-| Kind | Meaning |
-|---|---|
-| `point.missingoutput` | Something its rule, its ignore entry or the control table expects is not in the drawing. |
-| `point.missinglinework` | A linework shot on no line of its feature, not already covered by a continuity item. |
-| `point.nosymbol` | A bare code (or a rule that plans nothing) without its own symbol. |
-| `point.duplicate` | Another point within 0.01 ft in plan. Both points are listed. |
-| `point.excludednoreason` | On an ignore list whose entry gives no reason. |
-| `point.deleted` | Recorded before, gone now. |
-| `point.sourcechanged` | Changed in Civil 3D since the last run (information, not required). |
+Severity follows importance:
+
+- **Required action**: a missing or incorrect deliverable. It holds the point for review and blocks
+  Drafting QC Complete.
+- **Warning**: a possible deficiency. It is listed and does not hold the point.
+- **Information**: something accounted for that is worth knowing.
+
+| Kind | Severity | Meaning |
+|---|---|---|
+| `point.missingoutput` | Required | A label, tag, block, dripline or control-table entry its rule or standard requires is not in the drawing. |
+| `point.nosymbol` | Required | Its standard requires a symbol (its own, or a point style it names), and the marker is not it. |
+| `point.missinglinework` | Warning, required | A linework shot on no line of its feature, not already covered by a continuity item. |
+| `point.review` | Warning, required | Its standard asks for every such point to be reviewed. |
+| `point.duplicate` | Warning | Another point within 0.01 ft in plan. Both points are listed. |
+| `point.excludednoreason` | Warning | On an ignore list whose entry gives no reason. |
+| `point.surfaceexcluded` | Warning | (Surface check on) In a surface's definition but left out of its triangulation. |
+| `point.surfaceunverified` | Information | (Surface check on) Surface data no surface can be shown to hold; one item per code, listing its points. |
+| `point.deleted` | Required | Recorded before, gone now. |
+| `point.sourcechanged` | Information | Changed in Civil 3D since the last run. |
+
+A run raises at most one item per point and kind. An item a run no longer finds resolves by itself
+with its history kept. This is how false positives from an earlier build go away. A person's
+decision stays while the point it was made on is unchanged.
+
+### Surface data and the optional surface check
+
+A ground shot is accounted for as surface data whether or not a surface uses it: missing surface
+evidence is not a drafting error, and the point and its description are never changed. Settings >
+Point Accountability > **Verify surface membership** (off by default) also checks each one against
+the drawing's TIN surfaces. The ledger's `Surface` column records the result:
+
+- **designated**: the check is off;
+- **verified**: a TIN vertex at the point, or in a point group the surface is built from;
+- **excluded**: in the definition but not triangulated (a warning);
+- **not verifiable**: information only.
+
+### Control check shots
+
+A `ZK` shot is accounted for as a control check, with no symbol or label. When there are any, the
+check writes `<drawing>.ftf-control-checks.csv`: each check shot paired with the nearest control
+point within Settings > Point Accountability > Control check: control point within (2 ft by
+default), with ΔN, ΔE, horizontal and ΔZ, or a note that none is near.
+
+### Orientation
+
+FTFORIENT reads the same standard. A feature whose standard says `rotation: false` (an address,
+private or other sign) is turned only by a direction the crew recorded: a measured
+azimuth, `FACES N`, or a shot panel. It is never turned toward the nearest road. The report says
+"left as surveyed (no recorded direction; its standard turns it only by one)".
 
 Codes nothing handles and unreadable descriptions stay on the code check's items
 (`code.unknown:<code>`, one per code; `code.unreadable` and `code.invalid`, one per point). The
@@ -196,15 +312,17 @@ or an object. Older files still load:
 ```
 
 Marking a code ignored on Unknown Codes now asks for the reason, and records who and when. An entry
-without a reason puts its points on the review list (Settings > Point Accountability > Ignored codes
-need a reason). The shipped `ZK` and `CONS` have no reason, because their meaning is the office's to
-document.
+without a reason is listed as a warning, so the reason gets written down (Settings > Point
+Accountability > Ignored codes need a reason). An ignore entry only says nothing is drawn: a code its
+drafting standard names (GS, ZK) is accounted for by the standard. The shipped `ZK` is documented as a
+control check shot. `CONS` has no reason, because its meaning is the office's to document.
 
 ## Reports
 
 | File | Contents |
 |---|---|
-| `<drawing>.ftf-points.csv` | Every point ever recorded. Columns: raw description as stored, XYZ, how FTF read it, disposition, represented, drafting complete, expected, found, missing, evidence, issues, decision, first and last seen, deleted. Ends with the run's numbers. |
+| `<drawing>.ftf-points.csv` | Every point ever recorded. Columns: raw description as stored, XYZ, how FTF read it, class, the standard that applied, what it needs, surface status, disposition, represented, drafting complete, expected, found, missing, evidence, issues, decision, first and last seen, deleted. Ends with the run's numbers, warnings counted apart. |
+| `<drawing>.ftf-control-checks.csv` | Each control check shot, the control point it checks, and the differences (written when there are check shots). |
 | `<drawing>.ftf-continuity.csv` | Every continuity finding: intentional breaks included, with their evidence, status and decision. |
 
 The Overview's **Accounted for** row shows the last run's numbers; click it to open FTFREVIEW. The
@@ -229,6 +347,10 @@ A trailing `*` names every open id that starts so (`point.duplicate:*`); commas 
 | What | Status |
 |---|---|
 | Library: continuity, ledger, decisions, ignore notes, reports | Unit tests (`LineContinuityTests`, `PointAccountingTests`, `ReviewDecisionTests`, `IgnoreReasonTests`, `AccountabilityHarnessExpectationTests`). |
+| Drafting standard | Unit tests (`FeatureStandardTests`, `RuleDocumentFeatureStandardTests`) cover: GS with and without a surface; ZK; house number signs; hydrants with their symbol and no label; bare codes shown by an acceptable point style; missing required symbols and labels; configuration changes and back; earlier false positives resolving while decisions are kept; Label All and FTFORIENT reading the same standard. |
+| Drafting standard in Civil 3D 2024 | The accountability harness seeds a bare hydrant, ZK shots, a house number sign and a hydrant whose point style draws its symbol block. STANDARD / RESTORED add a standard to the rules beside the drawing and take it away; SURFACE / SURFACEOFF turn the surface check on and off. **Not yet run in Civil 3D at the time of writing.** If the harness cannot give 1401 a symbol point style, that check is a NOTE, not a pass. |
+| Settings > Point Features > Drafting Standard, Settings > Point Accountability | Compiled against AutoCAD 2024 (`tests/RealApiCompileCheck`). **Untested as UI.** The document they edit is unit tested. |
+| FTFORIENT and the standard | Unit tested only: FTFORIENT is not in FTFRUN, so the headless harness does not run it. |
 | Plugin | Compiles against the real AutoCAD 2024 API (`tests/RealApiCompileCheck`). Civil 3D types are named through aliases; Civil 3D members and names use stand-ins on Linux and are checked against Civil 3D itself only by the Windows build (fb3d1b2 failed there on an ambiguous `DBObject`, now fixed and covered by the checks). |
 | Civil 3D 2024, headless | `tests/LiveSmoke/AccountabilityTestHarness.cs`, a **required** stage of the deploy smoke test (UPDATEFTF puts the previous build back if it fails). Covers the audit's scenarios A1, A2, A4, A6-A11, R1-R4 and R6: FTFRUN twice, approve, recheck, source change, QC refused then marked, erased point and correction. **Not yet run in Civil 3D at the time of writing**: at 68804df the identity check before it stopped (below), so it never started. |
 | Point identity, headless | `tests/LiveSmoke/IdentityTestHarness.cs`, required. IDVERIFY READER compares the reader's points with Civil 3D's own COGO point collection (number, handle, raw description, XYZ), and the field-notes path (FTFLINES's) with the plain one. At 68804df it stopped with no output: it looked `SourcePointReader.Read` up by name, the new `Read(db, tr, notes)` overload made that ambiguous (AmbiguousMatchException), and nothing caught it. Fixed by naming every plugin method by its exact signature (`HarnessContractTests`). **Not yet re-run in Civil 3D.** |

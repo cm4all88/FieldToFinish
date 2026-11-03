@@ -66,6 +66,14 @@ namespace FieldCodes.Review
         public const string PointExcludedNoReason = "point.excludednoreason";
         public const string PointDeleted = "point.deleted";
         public const string PointSourceChanged = "point.sourcechanged";
+        /// <summary>The standard asks for every point of this feature to be reviewed.</summary>
+        public const string PointReview = "point.review";
+        /// <summary>Surface membership check (optional): in a surface's definition but left out of
+        /// its triangulation. Id = kind + point number.</summary>
+        public const string PointSurfaceExcluded = "point.surfaceexcluded";
+        /// <summary>Surface membership check (optional): surface points no surface can be shown to
+        /// hold. One per code; Points lists them.</summary>
+        public const string PointSurfaceUnverified = "point.surfaceunverified";
 
         // Linework continuity. Ids are made from the shots and line ends they are about.
         public const string LineGap = "line.gap";
@@ -129,21 +137,31 @@ namespace FieldCodes.Review
                 "Read the reason, fix it and rerun the command.",
                 null, null, ReviewSeverity.Error, true),
 
-            new ReviewKind(PointMissingOutput, PointsSource, "Point", "Expected output missing",
-                "Draw what is missing (rerun FTFRUN, or place it by hand), or mark it not applicable with the reason it is not needed.",
-                "FTFRUN", "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointMissingOutput, PointsSource, "Point", "Required output missing",
+                "Draw what is missing (rerun FTFRUN, or place it by hand), change the feature's standard (Settings > Point Features) if it does not need it, or mark it not applicable with the reason.",
+                "FTFRUN", "Point Features", ReviewSeverity.Error, true, true),
             new ReviewKind(PointMissingLinework, PointsSource, "Point", "Linework shot on no line of its code",
                 "Draw the line through the shot, approve the proposed correction, or mark it not applicable with the reason.",
                 null, "Point Accountability", ReviewSeverity.Warning, true, true),
-            new ReviewKind(PointNoSymbol, PointsSource, "Point", "Bare code without its own symbol",
-                "Give the point a style whose marker is the code's symbol (description keys), add a rule that draws it, or mark it not applicable with the reason.",
-                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointNoSymbol, PointsSource, "Point", "Required symbol missing",
+                "The feature's standard (Settings > Point Features) requires a symbol the drawing does not show: give the point a style whose marker is that symbol (description keys), add a rule that draws it, change the standard if it is wrong, or mark it not applicable with the reason.",
+                null, "Point Features", ReviewSeverity.Error, true, true),
+            // A possible deficiency: listed for a look, not a missing deliverable.
             new ReviewKind(PointDuplicate, PointsSource, "Point", "Another point at the same position",
                 "Check both shots: delete the duplicate in Civil 3D, or mark it not applicable (two features at one spot).",
-                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+                null, "Point Accountability", ReviewSeverity.Warning, false, true),
             new ReviewKind(PointExcludedNoReason, PointsSource, "Point", "Excluded without a documented reason",
-                "Give the ignore entry a reason (rules.json ignoreCodes, or Unknown Codes > Ignore), or mark the point not applicable with one.",
-                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+                "Give the ignore entry a reason (rules.json ignoreCodes, or Unknown Codes > Ignore), give the code a drafting standard (Point Features), or mark the point not applicable with one.",
+                null, "Point Accountability", ReviewSeverity.Warning, false, true),
+            new ReviewKind(PointReview, PointsSource, "Point", "Feature the standard asks to be reviewed",
+                "Look at the point: the standard for its feature (Settings > Point Features) asks for every one to be reviewed. Accept it with a note, or mark it not applicable.",
+                null, "Point Features", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointSurfaceExcluded, PointsSource, "Point", "Surface point left out of the surface",
+                "The point is in the surface's definition but its triangulation leaves it out (a boundary, an edge limit, a duplicate elevation). Check the surface if it should be in; otherwise nothing to draft.",
+                null, "Point Accountability", ReviewSeverity.Warning, false, true),
+            new ReviewKind(PointSurfaceUnverified, PointsSource, "Point", "Surface membership not verifiable",
+                "Information: these surface points are accounted for as surface data; no surface in the drawing can be shown to hold them (none built, or not from point groups). Nothing to draft.",
+                null, "Point Accountability", ReviewSeverity.Info, false),
             new ReviewKind(PointDeleted, PointsSource, "Point", "Point gone since it was first recorded",
                 "Restore the point if it was deleted by mistake, or mark it not applicable with the reason it was removed.",
                 null, "Point Accountability", ReviewSeverity.Error, true, true),

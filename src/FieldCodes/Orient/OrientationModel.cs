@@ -45,7 +45,11 @@ namespace FieldCodes.Orient
         /// <summary>Nothing reliable: left as it is and listed for review.</summary>
         Review = 5,
         /// <summary>The symbol looks the same at every rotation: nothing to orient.</summary>
-        NotDirectional = 6
+        NotDirectional = 6,
+        /// <summary>Its standard does not require it turned and nothing recorded its direction (a
+        /// private or address sign): left as surveyed, never assumed to face a road, and not a
+        /// review item.</summary>
+        NoSupport = 7
     }
 
     /// <summary>One point to orient.</summary>
@@ -60,6 +64,10 @@ namespace FieldCodes.Orient
         /// <summary>The raw description and the crew's note, for measured directions and for
         /// telling a stop sign from another sign.</summary>
         public string Description { get; set; }
+        /// <summary>False: its drafting standard does not require it turned (a private or address
+        /// sign), so only a direction the crew recorded turns it -- never an inference from the
+        /// roads around it. Null: inferred as its kind allows.</summary>
+        public bool? InferFacing { get; set; }
         /// <summary>Civil 3D's full description (the description key's wording, e.g. "STRAIGHT
         /// ARROW S"); a written direction is looked for here too.</summary>
         public string FullDescription { get; set; }

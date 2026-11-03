@@ -6,6 +6,7 @@ using FieldCodes.Annotation;
 using FieldCodes.Linework;
 using FieldCodes.Orient;
 using FieldCodes.Settings;
+using FieldCodes.Standards;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -30,7 +31,11 @@ namespace FieldCodes.Review
         /// <summary>Excluded with a documented reason: an ignore entry's, or a reviewer's.</summary>
         Excluded = 6,
         /// <summary>It was recorded before and is no longer in the drawing.</summary>
-        Deleted = 7
+        Deleted = 7,
+        /// <summary>Its Civil 3D point style shows it, as its feature's standard has it.</summary>
+        PointStyle = 8,
+        /// <summary>The standard draws nothing for it: the survey point is the record.</summary>
+        PointOnly = 9
     }
 
     /// <summary>One thing that happened to a point: first recorded, changed, deleted, restored.</summary>
@@ -55,6 +60,17 @@ namespace FieldCodes.Review
         [JsonProperty("code", NullValueHandling = NullValueHandling.Ignore)] public string Code { get; set; }
         /// <summary>How FTF read it: "rule TREE", "bare code", "linework FNC1", "ignored: ...".</summary>
         [JsonProperty("read", NullValueHandling = NullValueHandling.Ignore)] public string Reading { get; set; }
+        /// <summary>What the point is: "Surface only", "Control/Check", "Sign (address / house number)".</summary>
+        [JsonProperty("class", NullValueHandling = NullValueHandling.Ignore)] public string Classification { get; set; }
+        /// <summary>The drafting standard that applied (Settings > Point Features), and what it asks for.</summary>
+        [JsonProperty("standard", NullValueHandling = NullValueHandling.Ignore)] public string Standard { get; set; }
+        [JsonProperty("needs", NullValueHandling = NullValueHandling.Ignore)] public string Needs { get; set; }
+        /// <summary>Surface data: designated, verified, excluded, or not verifiable (the last three
+        /// only when surface membership is verified).</summary>
+        [JsonProperty("surface", NullValueHandling = NullValueHandling.Ignore)] public string SurfaceStatus { get; set; }
+        /// <summary>Its standard requires its symbol to be rotated: open orientation items about
+        /// it hold it for review.</summary>
+        [JsonProperty("rotate", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool RotationRequired { get; set; }
 
         [JsonProperty("expected", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Expected { get; set; }
         [JsonProperty("found", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Found { get; set; }
@@ -111,6 +127,8 @@ namespace FieldCodes.Review
         [JsonProperty("by", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<string, int> ByDisposition { get; set; }
         [JsonProperty("gaps")] public int OpenLineItems { get; set; }
+        /// <summary>Points accounted for with an open warning or note (not a required action).</summary>
+        [JsonProperty("warnings")] public int Warnings { get; set; }
 
         public LedgerRun() { ByDisposition = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase); }
 
@@ -123,6 +141,7 @@ namespace FieldCodes.Review
                    Accounted.ToString("N0", CultureInfo.InvariantCulture) + " accounted for" +
                    (parts.Length > 0 ? " (" + string.Join(", ", parts) + ")" : string.Empty) + ", " +
                    Review.ToString("N0", CultureInfo.InvariantCulture) + " for review" +
+                   (Warnings > 0 ? " (" + Warnings.ToString("N0", CultureInfo.InvariantCulture) + " more with a warning to look at)" : string.Empty) +
                    (Deleted > 0 ? ", " + Deleted.ToString("N0", CultureInfo.InvariantCulture) + " deleted since first recorded" : string.Empty) +
                    "; drafting complete for " + DraftingComplete.ToString("N0", CultureInfo.InvariantCulture) +
                    ", represented in CAD " + Represented.ToString("N0", CultureInfo.InvariantCulture) +
@@ -195,6 +214,10 @@ namespace FieldCodes.Review
         public string SymbolName { get; set; }
         public string StyleName { get; set; }
         public string Problem { get; set; }
+        /// <summary>The point's own Civil 3D label is shown (label visible, its point style's
+        /// label component on, a label style set). Null: could not be read.</summary>
+        public bool? LabelShown { get; set; }
+        public string LabelStyleName { get; set; }
     }
 
     /// <summary>A surface the point is part of.</summary>
@@ -275,15 +298,21 @@ namespace FieldCodes.Review
     }
 
     /// <summary>
-    /// Accounts for every point from evidence in the drawing -- never from its code alone:
+    /// Accounts for every point from evidence in the drawing, against what its feature's drafting
+    /// standard (Settings > Point Features, <see cref="FeatureStandard"/>) requires -- never a
+    /// list of its own:
     /// <list type="bullet">
-    /// <item>an unknown code is for review until it has a rule or a documented exclusion;</item>
-    /// <item>a bare code needs its own symbol (a generic marker is not enough);</item>
+    /// <item>a symbol: its own (a generic marker is not enough), any point style marker, or none;</item>
+    /// <item>a label: the one its rule writes, a required one, the point's own Civil 3D label, or none;</item>
+    /// <item>surface data (a ground shot) is accounted for as designated surface data, checked
+    /// against the surfaces only when Verify surface membership is on;</item>
+    /// <item>a control check shot is accounted for as Control/Check;</item>
     /// <item>a linework code needs a drawn line of its feature through it;</item>
-    /// <item>a recognized code needs what its rule plans (label, tag, block, dripline), or its
-    /// symbol when the rule plans nothing;</item>
-    /// <item>an ignored code needs a documented reason, and a surface when its entry says so.</item>
+    /// <item>what its rule plans that FTF draws (tag, block, dripline) must be there;</item>
+    /// <item>an unknown code is for review until it has a rule or a standard.</item>
     /// </list>
+    /// What must be done is a required item; what may be wrong is a warning; what is only worth
+    /// knowing is information. Only required items hold a point for review.
     /// </summary>
     public static class PointAccounting
     {
@@ -380,19 +409,30 @@ namespace FieldCodes.Review
         /// </summary>
         public static LedgerRun Finish(PointLedger ledger, ReviewRegister register, DateTime now, string source)
         {
+            var warned = 0;
             foreach (var entry in ledger.Points)
             {
+                // A symbol the standard requires turned: its open orientation items are about the point.
+                if (entry.RotationRequired && register != null && !entry.Deleted)
+                    foreach (var o in register.Items.Where(i => i.IsOpen && (i.Kind == ReviewKinds.OrientReview || i.Kind == ReviewKinds.MarkingDirection) && Names(i.Points, entry.Number)))
+                        if (!entry.Issues.Contains(o.Id)) entry.Issues.Add(o.Id);
                 var open = new List<ReviewItem>();
+                var warnings = new List<ReviewItem>();
                 var decided = new List<ReviewItem>();
                 foreach (var id in entry.Issues)
                 {
                     var item = register == null ? null : register.Find(id);
                     if (item == null) continue;
-                    if (item.IsOpen) { if (item.Required || item.Kind != ReviewKinds.PointSourceChanged) open.Add(item); }
+                    if (item.IsOpen)
+                    {
+                        // Information (a changed description) never holds a point; a warning is
+                        // something to look at, not a missing deliverable.
+                        if (item.Kind == ReviewKinds.PointSourceChanged) continue;
+                        if (item.Required) open.Add(item); else warnings.Add(item);
+                    }
                     else if (item.IsDecided) decided.Add(item);
                 }
-                // Information only (a changed description) never holds a point open.
-                open.RemoveAll(i => i.Kind == ReviewKinds.PointSourceChanged);
+                if (!entry.Deleted && open.Count == 0 && warnings.Count > 0) warned++;
                 entry.Decision = decided.Count == 0 ? null
                     : string.Join("; ", decided.Select(i => i.Status.ToString() + ": " + (i.Note ?? string.Empty) +
                         (string.IsNullOrWhiteSpace(i.ReviewedBy) ? string.Empty : " (" + i.ReviewedBy +
@@ -411,7 +451,7 @@ namespace FieldCodes.Review
                 if (entry.Disposition == PointDisposition.Review && decided.Count > 0) entry.Disposition = PointDisposition.Excluded;
             }
 
-            var run = new LedgerRun { At = now, Source = source };
+            var run = new LedgerRun { At = now, Source = source, Warnings = warned };
             foreach (var e in ledger.Points)
             {
                 // Deleted points are counted apart (open ones only): they are not in the drawing.
@@ -431,6 +471,12 @@ namespace FieldCodes.Review
             return run;
         }
 
+        private static bool Names(string points, string number)
+        {
+            return !string.IsNullOrWhiteSpace(points) &&
+                   points.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries).Any(n => string.Equals(n.Trim(), number, StringComparison.OrdinalIgnoreCase));
+        }
+
         // ------------------------------------------------------------------ one point
 
         private static void Account(LedgerPoint entry, PointFacts p, AccountingContext ctx, FtfSettings settings,
@@ -442,6 +488,14 @@ namespace FieldCodes.Review
             var token = FieldCodeParser.FirstToken(raw.Trim());
             entry.Code = parsed != null && !string.IsNullOrWhiteSpace(parsed.Code) ? parsed.Code : token;
             var coding = p.Coding;
+
+            // What the office's standard says this feature needs (Settings > Point Features).
+            var req = FeatureRequirements.For(rules, parsed, raw, parsed != null ? parsed.Note : null);
+            entry.Classification = EffectiveRequirement.ClassName(req.Classification) +
+                                   (req.SignCategory != SignCategory.None ? " (" + EffectiveRequirement.SignName(req.SignCategory) + ")" : string.Empty);
+            entry.Standard = req.Source;
+            entry.Needs = req.Describe();
+            entry.RotationRequired = req.Rotation;
 
             // Anything FTF drew for it.
             foreach (var o in p.Outputs)
@@ -459,6 +513,14 @@ namespace FieldCodes.Review
             if (issue != null && issue.Category == CodeIssueCategory.NeedsConfiguration && parsed != null && !parsed.Recognized &&
                 (ctx.Settings ?? settings).Diagnostics != null && (ctx.Settings ?? settings).Diagnostics.NoteFor(token) != null)
                 issue = null;
+            // A feature the standard names (by its code, or by its description: "HOUSE NUMBER 4735
+            // SIGN") is handled by the standard, even where no rule reads its words.
+            if (issue != null && !codeIsFigure &&
+                (issue.Kind == CodeIssueKind.StandardFeature || (issue.Category == CodeIssueCategory.NeedsConfiguration && req.Specific)))
+            {
+                entry.Evidence.Add("no rule reads its words; its drafting standard applies: " + req.Source);
+                issue = null;
+            }
             if (issue != null && issue.Category == CodeIssueCategory.Error)
             {
                 entry.Reading = "error: " + issue.Reason;
@@ -504,15 +566,16 @@ namespace FieldCodes.Review
             // The point code itself (when the description does not start with a figure).
             if (!codeIsFigure && (issue == null || issue.Category != CodeIssueCategory.Error) &&
                 (issue == null || issue.Category != CodeIssueCategory.NeedsConfiguration))
-                PointCode(entry, p, token, ctx, settings, acc, items);
+                PointCode(entry, p, token, req, ctx, settings, acc, items);
             else if (codeIsFigure && parsed != null && parsed.Recognized && !parsed.Ignored)
-                PointCode(entry, p, token, ctx, settings, acc, items);
+                PointCode(entry, p, token, req, ctx, settings, acc, items);
 
             entry.Represented = p.Outputs.Count > 0 || entry.Found.Any(f => f.StartsWith("linework ", StringComparison.Ordinal)) ||
-                                visibleMarker || vertexOfSurface;
+                                visibleMarker || vertexOfSurface || (marker != null && marker.LabelShown == true);
             if (marker != null && marker.Known && marker.Visible)
                 entry.Evidence.Add("marker: " + (marker.StyleName ?? "style") + " (" + (marker.MarkerType ?? "?") +
                                    (string.IsNullOrWhiteSpace(marker.SymbolName) ? string.Empty : " " + marker.SymbolName) + ")");
+            if (!string.IsNullOrWhiteSpace(req.Layer)) entry.Evidence.Add("standard layer " + req.Layer);
             entry.Found = entry.Found.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             // Never a point left for review with nothing anyone can close: if no evidence accounts
             // for it and no item is about it, it gets one.
@@ -528,8 +591,8 @@ namespace FieldCodes.Review
             entry.DraftingComplete = entry.Missing.Count == 0 && entry.Issues.Count == 0;
         }
 
-        private static void PointCode(LedgerPoint entry, PointFacts p, string token, AccountingContext ctx, FtfSettings settings,
-                                      AccountabilitySettings acc, List<ReviewItem> items)
+        private static void PointCode(LedgerPoint entry, PointFacts p, string token, EffectiveRequirement req, AccountingContext ctx,
+                                      FtfSettings settings, AccountabilitySettings acc, List<ReviewItem> items)
         {
             var rules = ctx.Rules;
             var parsed = p.Parsed;
@@ -552,10 +615,12 @@ namespace FieldCodes.Review
 
             if (parsed == null) return;
 
-            // Excluded by an ignore list: documented, or for review. The office's own ignored codes
-            // (Settings > Diagnostics) apply whenever no rule matched, however the parser flagged it.
+            // Excluded by an ignore list -- unless the drafting standard names the feature, which
+            // then says what it needs (GS and ZK are on the ignore list so nothing draws them; their
+            // standard is what accounts for them). The office's own ignored codes (Settings >
+            // Diagnostics) apply whenever no rule matched, however the parser flagged it.
             var officeNote = !parsed.Recognized && settings.Diagnostics != null ? settings.Diagnostics.NoteFor(token) : null;
-            if (parsed.Ignored || officeNote != null)
+            if ((parsed.Ignored || officeNote != null) && !req.Specific)
             {
                 var ruleNote = parsed.Ignored && rules != null ? rules.IgnoreNoteFor(token) : null;
                 var userNote = ruleNote == null ? officeNote ?? (settings.Diagnostics != null ? settings.Diagnostics.NoteFor(token) : null) : null;
@@ -573,79 +638,140 @@ namespace FieldCodes.Review
                     }
                     else if (acc.RequireIgnoreReasons)
                     {
+                        // Excluded all the same: the missing reason is a warning to document it.
+                        entry.Found.Add("excluded");
+                        entry.Evidence.Add("excluded by " + list + " (" + (note.Code ?? token) + "); the entry gives no reason");
                         var item = Item(ReviewKinds.PointExcludedNoReason, entry,
                             Quote(raw) + " is excluded by " + list + " (" + (note.Code ?? token) + ") but the entry gives no reason.");
                         item.Code = note.Code ?? token;
                         items.Add(item);
                         entry.Issues.Add(item.Id);
                     }
-                    if (note.ExpectsSurface) Surface(entry, p, items);
+                    if (note.ExpectsSurface) Surface(entry, p, token, acc, items, "its ignore entry says it is surface data");
                 }
                 return;
             }
+            if (parsed.Ignored) entry.Evidence.Add("on the ignore list (nothing drawn for it); its drafting standard applies");
 
-            // A bare code: its own symbol, or something FTF drew.
-            if (parsed.NoContent)
+            // What its code's rule draws that FTF places: a block, a dripline, a tag, a gate label.
+            Func<string, bool> has = kind => p.Outputs.Any(o => string.Equals(o.Kind, kind, StringComparison.OrdinalIgnoreCase));
+            var symbolLabel = parsed.RuleId == FieldCodeParser.SymbolLabelRuleId;
+            if (parsed.Recognized)
             {
-                entry.Reading = entry.Reading ?? "bare code " + token;
-                Symbol(entry, p, token, ctx, acc, items);
-                return;
+                entry.Reading = entry.Reading == null || entry.Reading.StartsWith("linework", StringComparison.Ordinal)
+                    ? (entry.Reading == null ? string.Empty : entry.Reading + "; ") + (symbolLabel ? "bare code " + token : "rule " + (parsed.RuleId ?? parsed.Code ?? token))
+                    : entry.Reading;
+                if (parsed.InsertBlock && !string.IsNullOrEmpty(parsed.BlockName))
+                    Want(entry, items, "block " + parsed.BlockName, has("Block"), "FTF block " + parsed.BlockName + " is not in the drawing for " + p.Number + " (rerun FTFPOINTS).");
+                if (parsed.HasDripLine)
+                    Want(entry, items, "dripline", has("DripArc"), "The dripline for " + p.Number + " is not in the drawing (rerun FTFDRIP).");
+                var ann = settings.Annotation ?? new AnnotationSettings();
+                if (!string.IsNullOrEmpty(parsed.TagPrefix) && !parsed.HasErrors)
+                {
+                    var decision = AnnotationPolicy.Tag(parsed, ann, ctx.TagScope ?? AnnotationRun.TagScope(ann), rules);
+                    if (decision.Annotate)
+                        Want(entry, items, "tag", has("Tag"), "Tag " + parsed.TagPrefix + "# is not drawn for " + p.Number + " (FTFTAGS).");
+                }
+                // Gate posts: the gate label names the post.
+                var gateCodes = settings.Gates != null && settings.Gates.PostCodes != null ? settings.Gates.PostCodes : new List<string>();
+                if (gateCodes.Any(c => string.Equals((c ?? string.Empty).Trim(), ContinuitySettings.BaseCode(token), StringComparison.OrdinalIgnoreCase)) &&
+                    ctx.GatePostsLabelled.Contains(p.Number))
+                {
+                    entry.Found.Add("gate label");
+                    entry.Evidence.Add("post of a gate FTF labelled");
+                }
             }
+            else if (parsed.NoContent) entry.Reading = entry.Reading ?? "bare code " + token;
+            else if (req.Specific) entry.Reading = entry.Reading ?? "standard " + (req.Entry != null && !string.IsNullOrWhiteSpace(req.Entry.Name) ? req.Entry.Name : token);
 
-            if (!parsed.Recognized) return;
-            entry.Reading = entry.Reading == null || entry.Reading.StartsWith("linework", StringComparison.Ordinal)
-                ? (entry.Reading == null ? string.Empty : entry.Reading + "; ") + "rule " + (parsed.RuleId ?? parsed.Code ?? token) : entry.Reading;
-
-            var planned = 0;
-            var outputs = p.Outputs;
-            Func<string, bool> has = kind => outputs.Any(o => string.Equals(o.Kind, kind, StringComparison.OrdinalIgnoreCase));
-            if (parsed.InsertBlock && !string.IsNullOrEmpty(parsed.BlockName))
+            // What the standard requires.
+            Label(entry, p, req, ctx, settings, items);
+            Symbol(entry, p, token, req, ctx, acc, items);
+            if (req.Surface) Surface(entry, p, token, acc, items, "its drafting standard: " + req.Source);
+            if (req.Disposition == IntendedDisposition.ControlCheck)
             {
-                planned++;
-                Want(entry, items, "block " + parsed.BlockName, has("Block"), "FTF block " + parsed.BlockName + " is not in the drawing for " + p.Number + " (rerun FTFPOINTS).");
+                entry.Found.Add("control check");
+                entry.Evidence.Add("control check shot (" + req.Source + "): in the control check report");
+                if (entry.Reading == null || entry.Reading.StartsWith("bare code", StringComparison.Ordinal) ||
+                    entry.Reading.StartsWith("standard ", StringComparison.Ordinal)) entry.Reading = "control check " + token;
             }
-            if (parsed.HasDripLine)
+            if (req.Review)
             {
-                planned++;
-                Want(entry, items, "dripline", has("DripArc"), "The dripline for " + p.Number + " is not in the drawing (rerun FTFDRIP).");
+                var item = Item(ReviewKinds.PointReview, entry, Quote(raw) + ": the standard (" + req.Source + ") asks for every one to be reviewed" +
+                                (string.IsNullOrWhiteSpace(req.Note) ? "." : ": " + req.Note));
+                items.Add(item);
+                entry.Issues.Add(item.Id);
             }
+            // Intentionally only the survey point: nothing to draw, and nothing else accounts for it.
+            if (entry.Expected.Count == 0 && entry.Found.Count == 0 && !req.Review && entry.Issues.Count == 0)
+            {
+                entry.Found.Add("point only");
+                entry.Evidence.Add("the standard draws nothing for it (" + req.Source + ")");
+            }
+        }
 
-            var ann = settings.Annotation ?? new AnnotationSettings();
+        /// <summary>The label the standard requires: the one its rule writes (where Label All
+        /// labels its family), a required one, the point's own Civil 3D label, or none.</summary>
+        private static void Label(LedgerPoint entry, PointFacts p, EffectiveRequirement req, AccountingContext ctx, FtfSettings settings, List<ReviewItem> items)
+        {
+            var parsed = p.Parsed;
             var forLabel = p.ForLabel ?? parsed;
-            if (!string.IsNullOrEmpty(forLabel.LabelText) && !forLabel.HasErrors)
+            var ftf = p.Outputs.Any(o => string.Equals(o.Kind, "Label", StringComparison.OrdinalIgnoreCase));
+            var labelText = forLabel != null && !string.IsNullOrEmpty(forLabel.LabelText) && !forLabel.HasErrors ? forLabel.LabelDisplay : null;
+            switch (req.Label)
             {
-                var decision = AnnotationPolicy.Label(forLabel, ann, ctx.LabelScope ?? AnnotationRun.LabelScope(ann), rules);
-                if (decision.Annotate)
-                {
-                    planned++;
-                    if (has("Label")) Want(entry, items, "label", true, null);
-                    else if (p.HandLabelled) { entry.Expected.Add("label"); entry.Found.Add("label (typed by hand)"); entry.Evidence.Add("labelled by hand: \"" + forLabel.LabelDisplay + "\" typed nearby"); }
-                    else Want(entry, items, "label", false, "Label \"" + forLabel.LabelDisplay + "\" is not drawn for " + p.Number + " (FTFLABELS, or FTFLABELALL).");
-                }
-                else entry.Evidence.Add("no label expected: " + decision.Reason);
-            }
-            if (!string.IsNullOrEmpty(parsed.TagPrefix) && !parsed.HasErrors)
-            {
-                var decision = AnnotationPolicy.Tag(parsed, ann, ctx.TagScope ?? AnnotationRun.TagScope(ann), rules);
-                if (decision.Annotate)
-                {
-                    planned++;
-                    Want(entry, items, "tag", has("Tag"), "Tag " + parsed.TagPrefix + "# is not drawn for " + p.Number + " (FTFTAGS).");
-                }
-            }
+                case LabelRequirement.None:
+                    if (ftf) entry.Evidence.Add("an FTF label is drawn (the standard does not require one)");
+                    return;
 
-            // Gate posts: the gate label names the post.
-            var gateCodes = settings.Gates != null && settings.Gates.PostCodes != null ? settings.Gates.PostCodes : new List<string>();
-            if (gateCodes.Any(c => string.Equals((c ?? string.Empty).Trim(), ContinuitySettings.BaseCode(token), StringComparison.OrdinalIgnoreCase)) &&
-                ctx.GatePostsLabelled.Contains(p.Number))
-            {
-                entry.Found.Add("gate label");
-                entry.Evidence.Add("post of a gate FTF labelled");
-                planned++;
-            }
+                case LabelRequirement.AsPlanned:
+                {
+                    if (labelText == null) return;
+                    var ann = settings.Annotation ?? new AnnotationSettings();
+                    var decision = AnnotationPolicy.Label(forLabel, ann, ctx.LabelScope ?? AnnotationRun.LabelScope(ann), ctx.Rules);
+                    if (!decision.Annotate) { entry.Evidence.Add("no label expected: " + decision.Reason); return; }
+                    if (ftf) Want(entry, items, "label", true, null);
+                    else if (p.HandLabelled) HandLabel(entry, forLabel);
+                    else Want(entry, items, "label", false, "Label \"" + labelText + "\" is not drawn for " + p.Number + " (FTFLABELS, or FTFLABELALL).");
+                    return;
+                }
 
-            // A rule that plans nothing to draw is shown by its symbol.
-            if (planned == 0) Symbol(entry, p, token, ctx, acc, items);
+                default:
+                {
+                    entry.Expected.Add("label");
+                    if (ftf) { entry.Found.Add("label"); return; }
+                    if (p.HandLabelled && forLabel != null) { HandLabel(entry, forLabel); return; }
+                    var m = p.Marker;
+                    // The point's own label stands in only where it says all FTF's label would.
+                    var saysIt = FeatureRequirements.PointLabelSaysIt(forLabel, p.RawDescription);
+                    if (req.Label == LabelRequirement.PointLabel && saysIt && m != null && m.LabelShown == true &&
+                        (req.LabelStyles.Count == 0 || FeatureStandard.MatchesAny(req.LabelStyle, m.LabelStyleName)))
+                    {
+                        entry.Found.Add("label (point label)");
+                        entry.Evidence.Add("its own Civil 3D label shows it (label style " + (m.LabelStyleName ?? "?") + ")");
+                        return;
+                    }
+                    string why;
+                    if (req.Label == LabelRequirement.PointLabel && !saysIt)
+                        why = "its FTF label (\"" + labelText + "\") says more than the description its Civil 3D label shows";
+                    else if (req.Label == LabelRequirement.PointLabel)
+                        why = m == null || !m.LabelShown.HasValue ? "its Civil 3D label could not be read"
+                            : m.LabelShown == false ? "its Civil 3D label is hidden"
+                            : "its Civil 3D label style " + (m.LabelStyleName ?? "?") + " is not one the standard names (" + req.LabelStyle + ")";
+                    else why = "the standard requires a label";
+                    Missing(entry, items, "label", Quote(p.RawDescription) + ": " + why + ", and no FTF label is drawn" +
+                            (labelText == null ? " (no rule writes its label: label it by hand, or give it a rule)" : " (\"" + labelText + "\": FTFLABELS)") +
+                            ". Standard: " + req.Source + ".");
+                    return;
+                }
+            }
+        }
+
+        private static void HandLabel(LedgerPoint entry, ParsedPoint forLabel)
+        {
+            entry.Expected.Add("label");
+            entry.Found.Add("label (typed by hand)");
+            entry.Evidence.Add("labelled by hand: \"" + forLabel.LabelDisplay + "\" typed nearby");
         }
 
         private static void Want(LedgerPoint entry, List<ReviewItem> items, string what, bool found, string missingReason)
@@ -672,38 +798,64 @@ namespace FieldCodes.Review
             entry.Issues.Add(item.Id);
         }
 
-        /// <summary>A bare code needs its own symbol: a block FTF placed, or a point style whose
-        /// marker is the code's symbol block. A generic marker is not enough.</summary>
-        private static void Symbol(LedgerPoint entry, PointFacts p, string token, AccountingContext ctx, AccountabilitySettings acc, List<ReviewItem> items)
+        /// <summary>The symbol the standard requires: its own (a block FTF placed, or a point style
+        /// whose marker is the code's symbol, or one the standard names), any point style marker,
+        /// or none. A generic marker is flagged only where the standard requires the feature's own.</summary>
+        private static void Symbol(LedgerPoint entry, PointFacts p, string token, EffectiveRequirement req, AccountingContext ctx, AccountabilitySettings acc, List<ReviewItem> items)
         {
+            var block = p.Outputs.Any(o => string.Equals(o.Kind, "Block", StringComparison.OrdinalIgnoreCase));
+            if (req.Symbol == SymbolRequirement.None) return;
             entry.Expected.Add("symbol");
-            if (p.Outputs.Any(o => string.Equals(o.Kind, "Block", StringComparison.OrdinalIgnoreCase)))
-            {
-                entry.Found.Add("symbol");
-                return;
-            }
+            if (block) { entry.Found.Add("symbol"); return; }
+            var m = p.Marker;
             string problem;
-            if (OwnSymbol(p.Marker, token, ctx, acc, out problem))
+            if (req.Symbol == SymbolRequirement.PointStyle)
             {
-                entry.Found.Add("symbol");
-                entry.Evidence.Add("its own symbol: " + p.Marker.SymbolName + " (style " + (p.Marker.StyleName ?? "?") + ")");
-                return;
+                if (m != null && m.Known && m.Visible &&
+                    (req.SymbolStyles.Count == 0 || FeatureStandard.MatchesAny(req.SymbolStyle, m.StyleName) || FeatureStandard.MatchesAny(req.SymbolStyle, m.SymbolName)))
+                {
+                    entry.Found.Add("point style");
+                    entry.Evidence.Add("shown by its point style " + (m.StyleName ?? "?"));
+                    return;
+                }
+                problem = m == null || !m.Known ? "its marker could not be read" + (m != null && !string.IsNullOrWhiteSpace(m.Problem) ? " (" + m.Problem + ")" : string.Empty)
+                        : !m.Visible ? "its point style draws no marker (" + (m.StyleName ?? "style") + ")"
+                        : "its point style " + (m.StyleName ?? "?") + " is not one the standard names (" + req.SymbolStyle + ")";
+            }
+            else
+            {
+                if (OwnSymbol(m, token, ctx, acc, req, out problem))
+                {
+                    entry.Found.Add("symbol");
+                    entry.Evidence.Add("its own symbol: " + (m.SymbolName ?? m.StyleName) + " (style " + (m.StyleName ?? "?") + ")");
+                    return;
+                }
             }
             entry.Missing.Add("symbol");
-            var item = Item(ReviewKinds.PointNoSymbol, entry, Quote(p.RawDescription) + ": " + problem + ".");
+            var item = Item(ReviewKinds.PointNoSymbol, entry, Quote(p.RawDescription) + ": " + problem + ". Standard: " + req.Source + " (" + req.Describe() + ").");
             item.Code = ContinuitySettings.BaseCode(token);
-            item.Fingerprint = Review.Fingerprint.Of(entry.Fingerprint, p.Marker == null ? "-" : (p.Marker.MarkerType ?? "") + "|" + (p.Marker.SymbolName ?? "") + "|" + p.Marker.Visible);
+            item.Fingerprint = Review.Fingerprint.Of(entry.Fingerprint, m == null ? "-" : (m.MarkerType ?? "") + "|" + (m.SymbolName ?? "") + "|" + (m.StyleName ?? "") + "|" + m.Visible);
             items.Add(item);
             entry.Issues.Add(item.Id);
         }
 
-        /// <summary>True when the marker is the code's own symbol block.</summary>
+        /// <summary>True when the marker is the code's own symbol block, or a point style or symbol
+        /// the standard names for it.</summary>
         public static bool OwnSymbol(MarkerFact m, string code, AccountingContext ctx, AccountabilitySettings acc, out string problem)
+        {
+            return OwnSymbol(m, code, ctx, acc, null, out problem);
+        }
+
+        public static bool OwnSymbol(MarkerFact m, string code, AccountingContext ctx, AccountabilitySettings acc, EffectiveRequirement req, out string problem)
         {
             problem = null;
             var bare = ContinuitySettings.BaseCode(code);
             if (m == null || !m.Known) { problem = "its marker could not be read" + (m != null && !string.IsNullOrWhiteSpace(m.Problem) ? " (" + m.Problem + ")" : string.Empty); return false; }
             if (!m.Visible) { problem = "its point style draws no marker (" + (m.StyleName ?? "style") + ")"; return false; }
+            // A point style the standard names as the feature's own.
+            if (req != null && req.SymbolStyles.Count > 0 &&
+                (FeatureStandard.MatchesAny(req.SymbolStyle, m.StyleName) || FeatureStandard.MatchesAny(req.SymbolStyle, m.SymbolName)))
+                return true;
             if (!string.Equals(m.MarkerType, "UseSymbolForMarker", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(m.SymbolName))
             {
                 problem = "its marker is a generic " + (string.Equals(m.MarkerType, "UsePointForMarker", StringComparison.OrdinalIgnoreCase) ? "point" : "custom") +
@@ -720,28 +872,31 @@ namespace FieldCodes.Review
                 if (word == bare) return true;
             problem = "its marker is block " + symbol + " (style " + (m.StyleName ?? "?") + "), which is not " + bare + "'s symbol" +
                       (rule != null && !string.IsNullOrWhiteSpace(rule.Block) ? " (" + rule.Block + ")" : string.Empty) +
-                      " -- name it under Point Accountability > symbol blocks if it is";
+                      " -- name it in the feature's symbol style (Point Features) or under Point Accountability > symbol blocks if it is";
             return false;
         }
 
-        /// <summary>The point must be part of a surface: by the surface's own definition where it
-        /// can be read, not by coincidence alone.</summary>
-        private static void Surface(LedgerPoint entry, PointFacts p, List<ReviewItem> items)
+        /// <summary>
+        /// Surface data. Accounted for as a designated surface point; checked against the surfaces
+        /// only when Verify surface membership is on, and then a verified member, an explicit
+        /// exclusion (a warning), or not verifiable (information, one item per code). A missing
+        /// surface is never a drafting error.
+        /// </summary>
+        private static void Surface(LedgerPoint entry, PointFacts p, string token, AccountabilitySettings acc, List<ReviewItem> items, string why)
         {
-            entry.Expected.Add("surface");
+            entry.Found.Add("surface data");
+            entry.Evidence.Add("designated surface point (" + why + ")");
+            entry.SurfaceStatus = "designated";
+            if (!acc.VerifySurfaceMembership) return;
+
             var defined = p.Surfaces.Where(s => s.InDefinition == true && s.IsVertex).ToList();
-            if (defined.Count > 0)
+            var coincident = p.Surfaces.Where(s => s.IsVertex).ToList();
+            if (defined.Count > 0 || coincident.Count > 0)
             {
-                entry.Found.Add("surface");
+                entry.SurfaceStatus = "verified";
                 foreach (var s in defined)
                     entry.Evidence.Add("surface " + s.Surface + ": in its definition" + (string.IsNullOrWhiteSpace(s.PointGroup) ? string.Empty : " (point group " + s.PointGroup + ")") + " and a TIN vertex");
-                return;
-            }
-            var coincident = p.Surfaces.Where(s => s.IsVertex).ToList();
-            if (coincident.Count > 0)
-            {
-                entry.Found.Add("surface");
-                foreach (var s in coincident)
+                foreach (var s in coincident.Where(c => !defined.Contains(c)))
                     entry.Evidence.Add("surface " + s.Surface + ": a TIN vertex at the point (" +
                                        (s.InDefinition == false ? "not through a point group in its definition: a point file, breakline or edit" : "its definition could not be read") +
                                        "; coordinates only)");
@@ -750,22 +905,46 @@ namespace FieldCodes.Review
             var unused = p.Surfaces.Where(s => s.InDefinition == true).ToList();
             if (unused.Count > 0)
             {
-                Missing(entry, items, "surface", "Point " + p.Number + " is in surface " + unused[0].Surface + "'s definition" +
-                        (string.IsNullOrWhiteSpace(unused[0].PointGroup) ? string.Empty : " (point group " + unused[0].PointGroup + ")") +
-                        " but the triangulation leaves it out (a boundary, an edge limit or a duplicate elevation?).");
+                entry.SurfaceStatus = "excluded";
+                var item = Item(ReviewKinds.PointSurfaceExcluded, entry, "Point " + p.Number + " " + Quote(p.RawDescription) + " is in surface " + unused[0].Surface + "'s definition" +
+                                (string.IsNullOrWhiteSpace(unused[0].PointGroup) ? string.Empty : " (point group " + unused[0].PointGroup + ")") +
+                                " but its triangulation leaves it out (a boundary, an edge limit or a duplicate elevation).");
+                items.Add(item);
+                entry.Issues.Add(item.Id);
                 return;
             }
-            Missing(entry, items, "surface", "Point " + p.Number + " " + Quote(p.RawDescription) + " is surface data but no surface in the drawing is built from it.");
+            entry.SurfaceStatus = "not verifiable";
+            var code = ContinuitySettings.BaseCode(token);
+            var id = ReviewKinds.PointSurfaceUnverified + ":" + code;
+            var group = items.FirstOrDefault(i => i.Id == id);
+            if (group == null)
+            {
+                group = ReviewKinds.New(ReviewKinds.PointSurfaceUnverified, code, null);
+                group.Source = ReviewKinds.PointsSource;
+                group.Code = code;
+                group.Points = string.Empty;
+                items.Add(group);
+            }
+            var numbers = (group.Points ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
+            numbers.Add(p.Number);
+            group.Points = string.Join(", ", numbers.ToArray());
+            group.Reason = numbers.Count + " " + code + " point(s) are designated surface data, but no surface in the drawing can be shown to hold them " +
+                           "(no surface is built from them, or not from point groups). Nothing to draft.";
+            group.Fingerprint = Review.Fingerprint.Of(numbers.ToArray());
+            if (group.X == 0 && group.Y == 0) { group.X = entry.X; group.Y = entry.Y; }
+            if (!entry.Issues.Contains(id)) entry.Issues.Add(id);
         }
 
         private static PointDisposition Strongest(LedgerPoint e)
         {
             if (e.Evidence.Any(x => x.StartsWith("FTF ", StringComparison.Ordinal)) || e.Found.Contains("label (typed by hand)") || e.Found.Contains("gate label")) return PointDisposition.Drawn;
             if (e.Found.Any(f => f.StartsWith("linework ", StringComparison.Ordinal))) return PointDisposition.Linework;
-            if (e.Found.Contains("control") || e.Found.Contains("control table")) return PointDisposition.Control;
+            if (e.Found.Contains("control") || e.Found.Contains("control table") || e.Found.Contains("control check")) return PointDisposition.Control;
             if (e.Found.Contains("symbol")) return PointDisposition.Symbol;
-            if (e.Found.Contains("surface")) return PointDisposition.Surface;
+            if (e.Found.Contains("point style") || e.Found.Contains("label (point label)")) return PointDisposition.PointStyle;
+            if (e.Found.Contains("surface") || e.Found.Contains("surface data")) return PointDisposition.Surface;
             if (e.Found.Contains("excluded")) return PointDisposition.Excluded;
+            if (e.Found.Contains("point only")) return PointDisposition.PointOnly;
             return PointDisposition.Review;
         }
 

@@ -131,6 +131,12 @@ namespace FieldCodes
         [JsonProperty("orientation")]
         public FieldCodes.Orient.OrientationStandard Orientation { get; set; }
 
+        /// <summary>What each feature needs on the plan (symbol, label, surface use, rotation,
+        /// review), by code and family: point accountability, Label All, FTFORIENT and Drafting
+        /// QC all read it. PMX's built-in standard unless the file lists its own requirements.</summary>
+        [JsonProperty("featureStandard")]
+        public FieldCodes.Standards.FeatureStandard FeatureStandard { get; set; }
+
         /// <summary>The project's layer mappings in force (set from the settings by
         /// FtfSettings.ApplyTo, never read from rules.json), so classification knows a mapped
         /// label layer is still a label layer.</summary>
@@ -159,6 +165,7 @@ namespace FieldCodes
             ControlCodes = new List<string>();
             Bench = new BenchRule();
             Orientation = FieldCodes.Orient.OrientationStandard.Pmx();
+            FeatureStandard = FieldCodes.Standards.FeatureStandard.Pmx();
         }
 
         public static RulesConfig Load(string path)
@@ -203,8 +210,11 @@ namespace FieldCodes
             if (Orientation.StopSignCodes == null || Orientation.StopSignCodes.Count == 0) Orientation.StopSignCodes = pmx.StopSignCodes;
             if (Orientation.StopSignWords == null || Orientation.StopSignWords.Count == 0) Orientation.StopSignWords = pmx.StopSignWords;
             if (Orientation.LuminaireCodes == null || Orientation.LuminaireCodes.Count == 0) Orientation.LuminaireCodes = pmx.LuminaireCodes;
+            if (FeatureStandard == null) FeatureStandard = FieldCodes.Standards.FeatureStandard.Pmx();
+            FeatureStandard.FillMissing();
 
             var problems = new List<string>();
+            problems.AddRange(FeatureStandard.Validate());
 
             if (UnitsPerFoot <= 0)
                 problems.Add("unitsPerFoot must be greater than zero.");

@@ -21,7 +21,9 @@ namespace FieldCodes.Orient
         NotDirectional,
         /// <summary>No symbol standard for the code: nothing to rotate against.</summary>
         NoSymbol,
-        Failed
+        Failed,
+        /// <summary>Not required to be turned, and nothing recorded its direction: left as surveyed.</summary>
+        LeftAsSurveyed
     }
 
     /// <summary>The CSV written beside the drawing, and the command-line summary.</summary>
@@ -96,6 +98,7 @@ namespace FieldCodes.Orient
                 case OrientOutcome.Review: return "for review";
                 case OrientOutcome.NotDirectional: return "symmetric (not rotated)";
                 case OrientOutcome.NoSymbol: return "no symbol standard";
+                case OrientOutcome.LeftAsSurveyed: return "left as surveyed (no recorded direction; its standard turns it only by one)";
                 default: return "failed";
             }
         }

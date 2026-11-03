@@ -86,7 +86,7 @@ namespace FieldCodes.Cad
                     if (parsed.HasErrors) continue;
                     if (string.IsNullOrEmpty(parsed.LabelText)) continue;
 
-                    var decision = FieldCodes.Annotation.AnnotationPolicy.Label(parsed, ann, scope, cfg);
+                    var decision = FieldCodes.Annotation.AnnotationPolicy.Label(parsed, ann, scope, cfg, scan.PointLabelShown.Contains(number));
                     if (!decision.Annotate) { skip(decision.Reason); continue; }
                     var style = styler.For(FieldCodes.Styles.StyledKind.Label, parsed);
                     if (!style.Enabled) { skip("label turned off for the feature (" + style.OriginOf("Enabled") + ")"); continue; }

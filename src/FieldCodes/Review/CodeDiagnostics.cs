@@ -49,7 +49,11 @@ namespace FieldCodes.Review
         BareCode = 8,
         /// <summary>A survey control or found monument code (rules.json controlCodes): FTFCONTROL
         /// lists it in the control table, whatever follows the code.</summary>
-        ControlPoint = 9
+        ControlPoint = 9,
+        /// <summary>No rule reads it, but the drafting standard names it (by its code, or by its
+        /// words: "HOUSE NUMBER 4735 SIGN" is a sign) and says what it needs; point accountability
+        /// checks that, so it is not a code nothing handles.</summary>
+        StandardFeature = 10
     }
 
     /// <summary>The verdict for one point.</summary>
@@ -293,6 +297,14 @@ namespace FieldCodes.Review
                 var entry = UserEntry(token);
                 if (entry != null) return IgnoredByUser(entry);
                 if (IsLineFeature(code)) return LineworkIssue(code);
+
+                var standard = FieldCodes.Standards.FeatureRequirements.For(_cfg, p, p.RawDescription, p.Note);
+                if (standard.Specific)
+                    return Issue(CodeIssueCategory.Informational, CodeIssueKind.StandardFeature, code,
+                        "Named by the drafting standard",
+                        "No rule reads \"" + Normalize(p.RawDescription) + "\", but the drafting standard names it (" +
+                        standard.Source + ": " + standard.Describe() + "); point accountability checks what it needs.",
+                        "Nothing to configure; give " + code + " a rule in Settings > Point Features only if it needs a label or block of its own.");
 
                 return Issue(CodeIssueCategory.NeedsConfiguration, CodeIssueKind.NoRule, code,
                     "No rule for code",

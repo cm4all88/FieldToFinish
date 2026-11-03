@@ -73,6 +73,13 @@ namespace FieldCodes.Orient
             {
                 var symbol = _std.SymbolFor(f.Code);
                 OrientationDecision d;
+                // Not required to be turned: only a recorded direction turns it (a sign's shot panel
+                // is decided in Sign()).
+                if (f.InferFacing == false && !f.MeasuredAzimuth.HasValue && f.Kind != OrientKind.Sign)
+                {
+                    result.Decisions.Add(NoSupport(Start(f, symbol)));
+                    continue;
+                }
                 switch (f.Kind)
                 {
                     case OrientKind.Sign: d = Sign(f, symbol, roads, panels, measuredArrows); break;
@@ -129,6 +136,9 @@ namespace FieldCodes.Orient
                 }
                 return Review(d, "panel line measured but the face side is not evident", a1, a2);
             }
+
+            // A private, address or other descriptive sign: never assumed to face a road.
+            if (f.InferFacing == false) return NoSupport(d);
 
             if (symbol != null && symbol.TwoSided)
                 return Review(d, "two-sided sign: record which street it names or its facing (e.g. FACES N)", null, null);
@@ -585,6 +595,17 @@ namespace FieldCodes.Orient
             d.ReviewReason = why;
             d.Azimuth = suggestion;
             d.AlternativeAzimuth = alternative;
+            return d;
+        }
+
+        /// <summary>Left as surveyed: its standard turns it only by a recorded direction, and nothing recorded
+        /// its direction.</summary>
+        internal static OrientationDecision NoSupport(OrientationDecision d)
+        {
+            d.Tier = OrientationTier.NoSupport;
+            d.Confidence = 0;
+            d.Evidence.Add(new Evidence(OrientationTier.NoSupport, 0,
+                "its drafting standard turns it only by a recorded direction, and none is recorded (a measured azimuth, FACES N, a shot panel): left as surveyed, not assumed to face a road"));
             return d;
         }
 

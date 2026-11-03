@@ -359,14 +359,18 @@ function Invoke-IdentityCheck {
       'points read as Civil 3D stores them; FTFLINES names lines from their shots, twice the same; FTFREVIEWCHECK reads linework coding; nothing changed'
 }
 
-# Point accountability and linework continuity (tests\LiveSmoke\AccountabilityTestHarness.cs): 34
+# Point accountability and linework continuity (tests\LiveSmoke\AccountabilityTestHarness.cs): 37
 # synthetic points, plain polylines and a TIN covering the audit's scenarios. FTFRUN must run the
 # checks after itself and find the interrupted fence (probable gap), never join parallel strings or a
-# gate opening, report duplicates, unknown and bare codes, undrawn and skipped shots, an ignore entry
-# without a reason and a ground shot no surface uses; a second FTFRUN must duplicate nothing; an
-# approved correction must be one separate line on the fence layer that a recheck keeps; a decision
-# must reopen when its point moves; FTFQC must refuse, then mark once every item has a reason; an
-# erased point and an erased correction must come back on the list. No seeded line may change.
+# gate opening, report duplicates (a warning), unknown codes, hydrants missing their symbol, undrawn
+# and skipped shots; ground shots and ZK control check shots must never be required actions (ZK goes
+# in the control check report); a house number sign keeps its description and is not a code nothing
+# handles; a hydrant whose point style draws its symbol needs nothing else. A drafting standard added
+# to the rules must raise its required labels, and taking it away must resolve them by themselves;
+# surface verification must be optional and information only. A second FTFRUN must duplicate
+# nothing; an approved correction must be one separate line on the fence layer that a recheck keeps;
+# a decision must reopen when its point moves; FTFQC must refuse, then mark once every item has a
+# reason; an erased point and an erased correction must come back on the list. No seeded line may change.
 function Invoke-AccountabilityCheck {
     Invoke-RequiredCheck 'accountability' 'AccountabilityTestHarness' 'FTF_ACCOUNT_RESULT' @(
         'ACCSEED',
@@ -375,11 +379,23 @@ function Invoke-AccountabilityCheck {
         'ACCVERIFY', 'RUN',
         'FTFRUN', 'Standard',
         'ACCVERIFY', 'AGAIN',
+        'ACCSTANDARD', 'Label',
+        'FTFREVIEWCHECK',
+        'ACCVERIFY', 'STANDARD',
+        'ACCSTANDARD', 'Restore',
+        'FTFREVIEWCHECK',
+        'ACCVERIFY', 'RESTORED',
+        'ACCSURFACE', 'On',
+        'FTFREVIEWCHECK',
+        'ACCVERIFY', 'SURFACE',
+        'ACCSURFACE', 'Off',
+        'FTFREVIEWCHECK',
+        'ACCVERIFY', 'SURFACEOFF',
         '-FTFREVIEW', 'Approve', 'line.gap:FNC:103-105', 'approved in the smoke test',
         'ACCVERIFY', 'APPROVED',
         'FTFREVIEWCHECK',
         'ACCVERIFY', 'KEPT',
-        '-FTFREVIEW', 'NotApplicable', 'point.nosymbol:702', 'cleanout symbol comes from the utility base map',
+        '-FTFREVIEW', 'NotApplicable', 'point.nosymbol:702', 'hydrant symbol comes from the utility base map',
         'ACCMOVE',
         'FTFREVIEWCHECK',
         'ACCVERIFY', 'CHANGED',
@@ -392,8 +408,8 @@ function Invoke-AccountabilityCheck {
         'FTFREVIEWCHECK',
         'ACCVERIFY', 'DELETED',
         'ACCEND'
-    ) @('RUN', 'AGAIN', 'APPROVED', 'KEPT', 'CHANGED', 'REFUSED', 'QC', 'DELETED') `
-      'every point accounted for or on the review list; gaps, skipped shots and undrawn strings found, gates and parallel strings left alone; corrections separate, kept and traceable; decisions reopen when the source changes; QC Complete waits for every required item'
+    ) @('RUN', 'AGAIN', 'STANDARD', 'RESTORED', 'SURFACE', 'SURFACEOFF', 'APPROVED', 'KEPT', 'CHANGED', 'REFUSED', 'QC', 'DELETED') `
+      'every point accounted for or on the review list; ground shots, control check shots and signs by their drafting standard; gaps, skipped shots and undrawn strings found, gates and parallel strings left alone; a changed standard raises and resolves its items; corrections separate, kept and traceable; decisions reopen when the source changes; QC Complete waits for every required item'
 }
 
 try { Invoke-IdentityCheck }

@@ -188,6 +188,19 @@ namespace FieldCodes.Settings
         /// <summary>Write the point ledger beside the drawing (&lt;drawing&gt;.ftf-points.csv).</summary>
         [JsonProperty("writeReport")] public bool WriteReport { get; set; }
 
+        /// <summary>
+        /// Check that surface points (ground shots, and any feature the standard marks as surface
+        /// data) are in a surface: verified member, explicitly excluded (in a surface's definition
+        /// but left out of its triangulation), or not verifiable. Off: a surface point is accounted
+        /// for as designated surface data, whether or not the drawing has a surface. Never a
+        /// drafting error either way: excluded points are warnings, the rest information.
+        /// </summary>
+        [JsonProperty("verifySurfaceMembership")] public bool VerifySurfaceMembership { get; set; }
+
+        /// <summary>A control check shot is paired with the control point within this distance
+        /// (plan, feet) in the control check report.</summary>
+        [JsonProperty("controlCheckSearchFeet")] public double ControlCheckSearchFeet { get; set; }
+
         [JsonProperty("continuity")] public ContinuitySettings Continuity { get; set; }
 
         public AccountabilitySettings() { RestoreDefaults(); }
@@ -200,6 +213,8 @@ namespace FieldCodes.Settings
             SymbolBlocks = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             RequireIgnoreReasons = true;
             WriteReport = true;
+            VerifySurfaceMembership = false;
+            ControlCheckSearchFeet = 2.0;
             Continuity = new ContinuitySettings();
         }
 
@@ -209,6 +224,7 @@ namespace FieldCodes.Settings
             if (Continuity == null) Continuity = new ContinuitySettings();
             if (DuplicateToleranceFeet < 0) problems.Add("Point Accountability: the duplicate tolerance cannot be negative.");
             if (SurfaceToleranceFeet < 0) problems.Add("Point Accountability: the surface tolerance cannot be negative.");
+            if (ControlCheckSearchFeet <= 0) problems.Add("Point Accountability: the control check search distance must be greater than zero.");
             Continuity.Validate(problems);
         }
 

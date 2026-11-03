@@ -194,7 +194,8 @@ namespace FieldCodes
             return plain;
         }
 
-        private const string SymbolLabelRuleId = "symbol-label";
+        /// <summary>The RuleId of a bare code the office labels with its code (symbolLabels).</summary>
+        public const string SymbolLabelRuleId = "symbol-label";
 
         /// <summary>The symbolLabels entry for a bare code; trailing figure digits match the
         /// base code (CB2 -> CB). Null when the code is not listed.</summary>

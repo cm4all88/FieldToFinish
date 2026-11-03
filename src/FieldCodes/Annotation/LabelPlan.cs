@@ -32,6 +32,8 @@ namespace FieldCodes.Annotation
         public bool LabelMovedByHand { get; set; }
         /// <summary>Someone already typed a label for this point (not FTF's).</summary>
         public bool ManualLabelNearby { get; set; }
+        /// <summary>The point's own Civil 3D label is shown.</summary>
+        public bool PointLabelShown { get; set; }
     }
 
     public sealed class PlannedAnnotation
@@ -85,7 +87,7 @@ namespace FieldCodes.Annotation
                 }
                 else if (!string.IsNullOrEmpty(p.LabelText))
                 {
-                    var d = AnnotationPolicy.Label(p, settings, labelScope, rules);
+                    var d = AnnotationPolicy.Label(p, settings, labelScope, rules, c.PointLabelShown);
                     var item = new PlannedAnnotation { PointNumber = p.PointNumber, Code = code, Category = d.Category, Kind = PlanKind.Label, Text = p.LabelText };
                     if (!d.Annotate) { item.Outcome = PlanOutcome.Skip; item.Reason = d.Reason; }
                     else if (c.LabelMovedByHand) { item.Outcome = PlanOutcome.Skip; item.Reason = "moved by hand: kept"; }

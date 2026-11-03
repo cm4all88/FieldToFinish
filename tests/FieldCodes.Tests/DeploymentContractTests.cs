@@ -201,8 +201,13 @@ public sealed class DeploymentContractTests
 
         var accountability = Between(runner, "function Invoke-AccountabilityCheck", "try { Invoke-IdentityCheck }");
         Assert.Contains("Invoke-RequiredCheck 'accountability' 'AccountabilityTestHarness' 'FTF_ACCOUNT_RESULT'", accountability);
-        foreach (var stage in new[] { "RUN", "AGAIN", "APPROVED", "KEPT", "CHANGED", "REFUSED", "QC", "DELETED" })
+        foreach (var stage in new[] { "RUN", "AGAIN", "STANDARD", "RESTORED", "SURFACE", "SURFACEOFF", "APPROVED", "KEPT", "CHANGED", "REFUSED", "QC", "DELETED" })
             Assert.Contains("'ACCVERIFY', '" + stage + "'", accountability);
+        // The drafting standard and the surface check are changed by the harness, then put back.
+        Assert.Contains("'ACCSTANDARD', 'Label',\n        'FTFREVIEWCHECK',\n        'ACCVERIFY', 'STANDARD'", accountability.Replace("\r\n", "\n"));
+        Assert.Contains("'ACCSTANDARD', 'Restore',\n        'FTFREVIEWCHECK',\n        'ACCVERIFY', 'RESTORED'", accountability.Replace("\r\n", "\n"));
+        Assert.Contains("'ACCSURFACE', 'On',\n        'FTFREVIEWCHECK',\n        'ACCVERIFY', 'SURFACE'", accountability.Replace("\r\n", "\n"));
+        Assert.Contains("'ACCSURFACE', 'Off',\n        'FTFREVIEWCHECK',\n        'ACCVERIFY', 'SURFACEOFF'", accountability.Replace("\r\n", "\n"));
         Assert.Contains("'FTFRUN', 'Standard'", accountability);
         Assert.Contains("'-FTFREVIEW', 'Approve', 'line.gap:FNC:103-105'", accountability);
         Assert.Contains("'FTFQC', 'Complete'", accountability);
@@ -232,6 +237,8 @@ public sealed class DeploymentContractTests
         Assert.Contains("FieldCodes.Cad is loaded \" + loaded.Count + \" times", harness);
         Assert.Contains("if (stage == \"RUN\") { RequireRanOnce(\"FTFRUN\"); RequireRanOnce(\"FTFREVIEWCHECK\");", harness);
         Assert.Contains("else if (stage == \"APPROVED\") { RequireRanOnce(\"-FTFREVIEW\");", harness);
+        foreach (var stage in new[] { "STANDARD", "RESTORED", "SURFACE", "SURFACEOFF" })
+            Assert.Contains("else if (stage == \"" + stage + "\") { RequireRanOnce(\"FTFREVIEWCHECK\");", harness);
         Assert.Contains("else if (stage == \"QC\") { RequireRanOnce(\"-FTFREVIEW\"); RequireRanOnce(\"FTFQC\");", harness);
         Assert.Contains("Enum.Parse(kinds, \"LineCorrection\")", harness);
         Assert.Contains("Enum.Parse(kinds, \"LineGapProposal\")", harness);

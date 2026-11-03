@@ -25,6 +25,9 @@ namespace FieldCodes.Cad
         public readonly List<string> Order = new List<string>();
         public readonly HashSet<string> FtfLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public readonly HashSet<string> FtfTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Points whose own Civil 3D label is shown (a feature the standard labels by its
+        /// point label gets no FTF label then).</summary>
+        public readonly HashSet<string> PointLabelShown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> KeptByHand = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public ManualAnnotationIndex Manual;
         public double ManualRadius;
@@ -46,6 +49,8 @@ namespace FieldCodes.Cad
                 scan.Points[number] = parsed;
                 scan.Anchors[number] = CadUtil.Flatten(cogo.Location);
                 scan.Order.Add(number);
+                string labelStyle;
+                if (Compare.CogoPointPlotting.LabelShown(cogo, db, tr, out labelStyle) == true) scan.PointLabelShown.Add(number);
             }
             foreach (var pair in Ownership.FindOwned(db, tr, s => s.Kind == FtfEntityKind.Label || s.Kind == FtfEntityKind.Tag))
             {
@@ -84,7 +89,8 @@ namespace FieldCodes.Cad
                 HasFtfLabel = FtfLabels.Contains(n),
                 HasFtfTag = FtfTags.Contains(n),
                 LabelMovedByHand = KeptByHand.Contains(n),
-                ManualLabelNearby = !string.IsNullOrEmpty(Points[n].LabelText) && HasHandLabel(n, Points[n].LabelText)
+                ManualLabelNearby = !string.IsNullOrEmpty(Points[n].LabelText) && HasHandLabel(n, Points[n].LabelText),
+                PointLabelShown = PointLabelShown.Contains(n)
             });
             return AnnotationPlan.Build(candidates, settings, labelScope, tagScope, includeTags, _rules);
         }

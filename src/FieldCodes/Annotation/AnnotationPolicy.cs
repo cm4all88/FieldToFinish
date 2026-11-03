@@ -101,6 +101,13 @@ namespace FieldCodes.Annotation
             return AnnotationCategory.OtherPoints;
         }
 
+        /// <summary>The code is one FTF knows a family for (CB, WFH, SN...).</summary>
+        public static bool KnowsCode(string code)
+        {
+            var c = BareCode(code);
+            return c.Length > 0 && ByCode.ContainsKey(c);
+        }
+
         private static string BareCode(string code)
         {
             if (string.IsNullOrWhiteSpace(code)) return string.Empty;
@@ -157,7 +164,7 @@ namespace FieldCodes.Annotation
         /// <summary>Whether this point gets a descriptive label. <paramref name="scope"/> is
         /// the families this run covers (Label All's selection, or a Process preset's).</summary>
         public static AnnotationDecision Label(ParsedPoint p, AnnotationSettings settings, ICollection<AnnotationCategory> scope,
-                                               RulesConfig rules = null)
+                                               RulesConfig rules = null, bool pointLabelShown = false)
         {
             var s = settings ?? new AnnotationSettings();
             var category = CategoryOf(p, rules);
@@ -170,6 +177,19 @@ namespace FieldCodes.Annotation
                 if (s.TreeAnnotation == TreeAnnotation.None) return AnnotationDecision.No(category, "tree annotation is off");
             }
             if (MarkedNoLabel(p, s)) return AnnotationDecision.No(category, "marked no label");
+            // The feature's drafting standard (Settings > Point Features) says no label: FTF draws
+            // none, and point accountability expects none -- the same answer everywhere.
+            if (rules != null)
+            {
+                var req = FieldCodes.Standards.FeatureRequirements.For(rules, p, p.RawDescription, p.Note);
+                if (req.Label == FieldCodes.Standards.LabelRequirement.None)
+                    return AnnotationDecision.No(category, "its drafting standard draws no label (" + req.Source + ")");
+                // Labelled by the point's own Civil 3D label: an FTF label only where that is hidden,
+                // or where FTF's label says more than the description the point label shows.
+                if (req.Label == FieldCodes.Standards.LabelRequirement.PointLabel && pointLabelShown &&
+                    FieldCodes.Standards.FeatureRequirements.PointLabelSaysIt(p, p.RawDescription))
+                    return AnnotationDecision.No(category, "its own Civil 3D label shows it (" + req.Source + ")");
+            }
             return AnnotationDecision.Yes(category);
         }
 

@@ -34,6 +34,7 @@ namespace FieldCodes.Cad
         public int CorrectionsErased;
         public string PointsCsv;
         public string ContinuityCsv;
+        public string ControlChecksCsv;
         public readonly List<string> Notes = new List<string>();
 
         /// <summary>"Accounted for 1,080 / 1,115; 15 for review; 2 linework continuity items (FTFREVIEW)".</summary>
@@ -319,6 +320,9 @@ namespace FieldCodes.Cad
         {
             var e = Compare.CogoPointPlotting.Resolve(cogo, db, tr);
             var fact = new MarkerFact { Known = e.MarkerKnown, Visible = e.MarkerVisible, Problem = e.Problem };
+            string labelStyle;
+            fact.LabelShown = Compare.CogoPointPlotting.LabelShown(cogo, db, tr, out labelStyle);
+            fact.LabelStyleName = labelStyle;
             bool visible;
             try { visible = cogo.Visible; } catch (System.Exception) { visible = true; }
             if (!visible) fact.Visible = false;
@@ -563,7 +567,7 @@ namespace FieldCodes.Cad
             // Proposals: redrawn every run, for what is still open.
             summary.Proposals = LineCorrections.DrawProposals(db, tr, cfg, acc, register);
 
-            if (acc.WriteReport) WriteReports(db, accounting.Ledger, continuityResult, register, summary);
+            if (acc.WriteReport) WriteReports(db, accounting.Ledger, continuityResult, register, summary, acc.ControlCheckSearchFeet, cfg.UnitsPerFoot);
             return summary;
         }
 
@@ -576,7 +580,8 @@ namespace FieldCodes.Cad
             return LineContinuity.Analyze(copy);
         }
 
-        private static void WriteReports(Database db, PointLedger ledger, ContinuityResult continuity, ReviewRegister register, AccountabilitySummary summary)
+        private static void WriteReports(Database db, PointLedger ledger, ContinuityResult continuity, ReviewRegister register, AccountabilitySummary summary,
+                                         double controlCheckSearchFeet, double unitsPerFoot)
         {
             var saved = UtilityCommands.SavedDrawingPath(db);                 // an unsaved drawing's Filename is its template
             var points = FieldCodes.Reporting.AccountabilityReport.PointsPathFor(saved);
@@ -588,6 +593,13 @@ namespace FieldCodes.Cad
                 summary.PointsCsv = points;
                 File.WriteAllText(lines, FieldCodes.Reporting.AccountabilityReport.RenderContinuity(continuity, register), new UTF8Encoding(true));
                 summary.ContinuityCsv = lines;
+                // Control check shots (ZK) against the control they were shot on.
+                if (ledger.Points.Any(p => !p.Deleted && p.Found.Contains("control check")))
+                {
+                    var checks = FieldCodes.Reporting.AccountabilityReport.ControlChecksPathFor(saved);
+                    File.WriteAllText(checks, FieldCodes.Reporting.AccountabilityReport.RenderControlChecks(ledger, controlCheckSearchFeet, unitsPerFoot), new UTF8Encoding(true));
+                    summary.ControlChecksCsv = checks;
+                }
             }
             catch (IOException ex) { summary.Notes.Add("Could not write the reports: " + ex.Message); }
             catch (UnauthorizedAccessException ex) { summary.Notes.Add("Could not write the reports: " + ex.Message); }

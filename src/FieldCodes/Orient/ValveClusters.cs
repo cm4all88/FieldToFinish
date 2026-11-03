@@ -33,7 +33,8 @@ namespace FieldCodes.Orient
         {
             foreach (var kind in new[] { OrientKind.WaterValve, OrientKind.GasValve })
             {
-                var valves = result.Decisions.Where(d => d.Feature.Kind == kind).ToList();
+                // A valve whose standard does not require it turned is never inferred from its neighbours.
+                var valves = result.Decisions.Where(d => d.Feature.Kind == kind && d.Feature.InferFacing != false).ToList();
                 foreach (var cluster in Clusters(valves))
                 {
                     var open = cluster.Where(d => d.Tier >= OrientationTier.Review).ToList();

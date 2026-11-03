@@ -314,6 +314,10 @@ namespace FieldCodes.Cad.Setup
             var save = new Button { Text = "Save Rules", AutoSize = true, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold) };
             var discard = new Button { Text = "Discard Edits", AutoSize = true };
             _restoreFactory = new Button { Text = "Restore Factory Defaults", AutoSize = true };
+            var standard = new Button { Text = "Drafting Standard...", AutoSize = true };
+            Tip(standard, "What each field code and family needs on the plan (symbol, label, surface, rotation, review, styles, exceptions), " +
+                          "read by point accountability, Label All, FTFLABELS and FTFORIENT alike. Staged here; Save Rules writes it.");
+            standard.Click += (s, e) => StandardClicked();
             save.Click += (s, e) => { StageEdits(); SaveClicked(); };
             discard.Click += (s, e) => ReloadClicked(true);
             _restoreFactory.Click += (s, e) => RestoreFactoryClicked();
@@ -321,6 +325,7 @@ namespace FieldCodes.Cad.Setup
             Tip(_restoreFactory, "Replaces the office configuration with the shipped rules -- a separate, deliberate act.");
             buttons.Controls.Add(save);
             buttons.Controls.Add(discard);
+            buttons.Controls.Add(standard);
             buttons.Controls.Add(_restoreFactory);
             full(buttons);
 
@@ -718,6 +723,33 @@ namespace FieldCodes.Cad.Setup
             }
         }
 
+        /// <summary>Settings > Point Features > Drafting Standard: edits the staged document's
+        /// featureStandard; Save Rules writes it with the rest.</summary>
+        private void StandardClicked()
+        {
+            if (_document == null) return;
+            StageEdits();
+            try
+            {
+                using (var form = new FeatureStandardForm(_document))
+                {
+                    if (form.ShowDialog(_grid != null ? _grid.FindForm() : null) != DialogResult.OK) return;
+                }
+            }
+            catch (ConfigException ex)
+            {
+                _problems.ForeColor = Color.FromArgb(170, 0, 0);
+                _problems.Text = ex.Message;
+                return;
+            }
+            SetDirty(true);
+            RefreshCandidate();
+            RunPreview();
+            _problems.ForeColor = SystemColors.ControlText;
+            _problems.Text = "Drafting standard staged" + (_document.FeatureStandardIsBuiltIn() ? " (the built-in PMX standard)" : string.Empty) +
+                             ": Save Rules writes it.";
+        }
+
         private void RestoreFactoryClicked()
         {
             if (_resolution == null || string.IsNullOrEmpty(_resolution.FactoryPath)) return;
@@ -752,8 +784,10 @@ namespace FieldCodes.Cad.Setup
                 var rule = parsed.RuleId == null ? null
                     : _candidate.Codes.FirstOrDefault(c => string.Equals(c.Id, parsed.RuleId, StringComparison.OrdinalIgnoreCase));
                 var title = rule != null && !string.IsNullOrEmpty(rule.Description) ? rule.Description : parsed.RuleId;
+                var standard = FieldCodes.Standards.FeatureRequirements.For(_candidate, parsed, text);
                 _preview.Text = FeaturePreview.Render(parsed, title) + Environment.NewLine +
-                                "Label All family: " + AnnotationPolicy.Name(AnnotationPolicy.CategoryOf(parsed, _candidate));
+                                "Label All family: " + AnnotationPolicy.Name(AnnotationPolicy.CategoryOf(parsed, _candidate)) + Environment.NewLine +
+                                "Drafting standard: " + standard.Source + " -- " + standard.Describe() + " (Drafting Standard...)";
             }
             catch (System.Exception ex)
             {

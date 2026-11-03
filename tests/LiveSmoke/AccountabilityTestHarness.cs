@@ -1,22 +1,32 @@
 // Headless Civil 3D checks for point accountability and linework continuity, driven by
 // deploy\smoke-test.ps1 as a BLOCKING stage: a failure makes UPDATEFTF put the previous build back.
 //
-// ACCSEED     a fresh drawing gets 34 synthetic COGO points (invented local coordinates) and the plain
+// ACCSEED     a fresh drawing gets 37 synthetic COGO points (invented local coordinates) and the plain
 //             polylines drawn through them (the TBC-export reality), plus a TIN surface:
 //               A1  interrupted fence 101-103 / 105-107, "PP" 104 between, 105 re-begun   -> probable gap
 //               A2  gate: fence ends at FGP posts 202 / 203, 6 ft apart                  -> intentional, no item
 //               A4  FNC1 401-402 and FNC2 403-404, 3 ft apart                             -> never joined
-//               A6  601 / 602 SSCO 0.004 apart                                            -> duplicates
-//               A7  701 "XYZQ 12" (no rule), 702 bare SSCO with the template's marker    -> unknown, no symbol
+//               A6  601 / 602 SSCO 0.004 apart                                            -> duplicates (a warning)
+//               A7  701 "XYZQ 12" (no rule), 702 bare WFH with the template's marker     -> unknown; required symbol missing
 //               A8  EP 801-805 with no line                                               -> missing segment
-//               A9  GS 901-903 TIN vertices, ZK 904 (ignored, no reason), GS 905 off the TIN
-//               A10 FIP 5/8 1001 (control)                                                -> control
-//               A11 WFH 12 1101 (a rule that plans a label)
+//               A9  GS 901-903 TIN vertices, GS 905 off the TIN                           -> surface data, no item
+//               A10 FIP 5/8 1001 (control); ZK 1002 beside it, ZK 904 alone              -> control; control checks
+//               A11 WFH 12 1101 with a generic marker                                     -> symbol missing, no label wanted
+//               SG  1301 "HOUSE NUMBER 4735 SIGN"                                         -> address sign, its description kept
+//               HY  WFH 14 1401 whose point style draws a hydrant block                  -> accounted for by its symbol
 //               MV  FNC 1201-1203, the line skips 1202                                     -> missing vertex
 // ACCVERIFY   first requires that the named command ran exactly once since the previous stage, then:
 //               RUN       after FTFRUN: the checks ran after it; the expected items, ledger dispositions,
-//                         previews on a non-plotted layer, reports beside the drawing
+//                         previews on a non-plotted layer, reports beside the drawing (the control check
+//                         report among them); no ground shot or control check shot is a required action
 //               AGAIN     FTFRUN again: the same open items, the same FTF objects by kind (no duplicates)
+//               STANDARD  ACCSTANDARD Label + FTFREVIEWCHECK: the drafting standard in the rules now requires
+//                         a label on SSCO, so 601 / 602 each have a required missing-label item
+//               RESTORED  ACCSTANDARD Restore + FTFREVIEWCHECK: those items resolved by themselves, their
+//                         history kept, and the open point items exactly as after RUN
+//               SURFACE   ACCSURFACE On + FTFREVIEWCHECK: surface membership verified for 901-903; 905 listed
+//                         once, as information, under point.surfaceunverified:GS
+//               SURFACEOFF ACCSURFACE Off + FTFREVIEWCHECK: that item resolved, 905 designated again
 //               APPROVED  -FTFREVIEW Approve: one separate correction on the fence layer, item Corrected,
 //                         its preview gone
 //               KEPT      FTFREVIEWCHECK: the correction kept, still one, the item still Corrected
@@ -27,6 +37,10 @@
 //                         the gap reopened ("correction erased")
 //             and at every stage that no seeded line changed and no point changed except the ones the
 //             harness itself moved or erased.
+// ACCSTANDARD Label / Restore: adds a drafting standard (featureStandard) to the rules.json beside the
+//             drawing, then puts the file back as it was. The plugin re-reads rules whose file changed.
+// ACCSURFACE  On / Off: turns Settings > Point Accountability > verify surface membership on in the
+//             ftf-settings.json beside the drawing, then puts the file back as it was.
 // ACCMOVE     moves 702 one foot east (the harness, standing in for a surveyor's edit).
 // ACCERASE    erases point 1001 and the approved correction.
 // ACCEND      writes the verdict and COMPLETE.
@@ -61,6 +75,12 @@ namespace FtfAccountTest
         private const string AppName = "FTF_FIELDTOFINISH";
         private const string Fence = "V-SURF-FENC-E";
         private const string GapId = "line.gap:FNC:103-105";
+        private const string HydrantBlock = "FTF-SMOKE-WFH";
+        // The drafting standard ACCSTANDARD adds, and the settings ACCSURFACE writes (the same text as
+        // AccountabilityHarnessExpectationTests, which runs them through the library first).
+        private const string CleanoutStandard = @"{ ""requirements"": [ { ""name"": ""Cleanout"", ""codes"": [""SSCO""], ""label"": ""Required"" } ] }";
+        private const string SurfaceSettings = @"{ ""version"": ""1"", ""accountability"": { ""verifySurfaceMembership"": true } }";
+        private static readonly string[] GroundAndCheckShots = { "901", "902", "903", "904", "905", "1002" };
 
         private static int _failures;
         private static int _passes;
@@ -84,6 +104,10 @@ namespace FtfAccountTest
         private static List<string> _openAfterRun;
         private static Dictionary<short, int> _ownedAfterRun;
         private static string _correctionHandle;
+        private static string _hydrantStyleProblem = "not set up";
+        private static string _rulesOriginal;
+        private static string _settingsOriginal;
+        private static List<string> _openPointItemsAfterRun;
         private static readonly Dictionary<string, int> SeenStarted = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, int> SeenFinished = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -313,19 +337,25 @@ namespace FtfAccountTest
 
                 // A6 duplicates, A7 unknown and bare
                 Point(tr, cdoc, 601, 0, 300, 100, "SSCO"); Point(tr, cdoc, 602, 0.004, 300, 100, "SSCO");
-                Point(tr, cdoc, 701, 0, 400, 100, "XYZQ 12"); Point(tr, cdoc, 702, 30, 400, 100, "SSCO");
+                Point(tr, cdoc, 701, 0, 400, 100, "XYZQ 12"); Point(tr, cdoc, 702, 30, 400, 100, "WFH");
 
                 // A8 EP with no line
                 for (var i = 0; i < 5; i++)
                     Point(tr, cdoc, (uint)(801 + i), i * 10.0, 500, 100, i == 0 ? "EP B" : i == 4 ? "EP E" : "EP");
 
-                // A9 ground shots, an ignore entry without a reason
+                // A9 ground shots; A10 a control check shot with no control point near it
                 Point(tr, cdoc, 901, 0, 600, 100, "GS"); Point(tr, cdoc, 902, 10, 600, 101, "GS"); Point(tr, cdoc, 903, 0, 610, 102, "GS");
                 Point(tr, cdoc, 904, 30, 600, 100, "ZK"); Point(tr, cdoc, 905, 100, 650, 100, "GS");
 
-                // A10 control, A11 a rule that plans a label
+                // A10 control and its check shot, A11 a hydrant with the template's generic marker
                 Point(tr, cdoc, 1001, 0, 700, 100, "FIP 5/8");
+                Point(tr, cdoc, 1002, 0.03, 700.04, 100.02, "ZK");
                 Point(tr, cdoc, 1101, 0, 800, 100, "WFH 12");
+
+                // SG a homeowner's house number sign; HY a hydrant whose point style draws its symbol
+                Point(tr, cdoc, 1301, 0, 1000, 100, "HOUSE NUMBER 4735 SIGN");
+                var hydrant = Point(tr, cdoc, 1401, 0, 1100, 100, "WFH 14");
+                HydrantStyle(db, tr, cdoc, hydrant);
 
                 // MV the line skips 1202
                 Point(tr, cdoc, 1201, 0, 900, 100, "FNC B"); Point(tr, cdoc, 1202, 10, 903, 100, "FNC"); Point(tr, cdoc, 1203, 20, 900, 100, "FNC E");
@@ -344,7 +374,7 @@ namespace FtfAccountTest
             }
             _pointSnapshot = PointSnapshot(db);
             _lineSnapshot = LineSnapshot(db);
-            Check(ed, CountPoints(db) == 34, "34 synthetic COGO points seeded (" + CountPoints(db) + ")");
+            Check(ed, CountPoints(db) == 37, "37 synthetic COGO points seeded (" + CountPoints(db) + ")");
             Record("SEEDED");
         }
 
@@ -368,6 +398,10 @@ namespace FtfAccountTest
 
             if (stage == "RUN") { RequireRanOnce("FTFRUN"); RequireRanOnce("FTFREVIEWCHECK"); AfterRun(db, ed); }
             else if (stage == "AGAIN") { RequireRanOnce("FTFRUN"); RequireRanOnce("FTFREVIEWCHECK"); Again(db, ed); }
+            else if (stage == "STANDARD") { RequireRanOnce("FTFREVIEWCHECK"); WithStandard(db, ed); }
+            else if (stage == "RESTORED") { RequireRanOnce("FTFREVIEWCHECK"); Restored(db, ed); }
+            else if (stage == "SURFACE") { RequireRanOnce("FTFREVIEWCHECK"); SurfaceOn(db, ed); }
+            else if (stage == "SURFACEOFF") { RequireRanOnce("FTFREVIEWCHECK"); SurfaceOff(db, ed); }
             else if (stage == "APPROVED") { RequireRanOnce("-FTFREVIEW"); Approved(db, ed); }
             else if (stage == "KEPT") { RequireRanOnce("FTFREVIEWCHECK"); Kept(db, ed); }
             else if (stage == "CHANGED") { RequireRanOnce("-FTFREVIEW"); RequireRanOnce("FTFREVIEWCHECK"); Changed(db, ed); }
@@ -395,28 +429,70 @@ namespace FtfAccountTest
                   "A2: the gate opening is not a review item");
             Check(ed, !Items(register).Any(i => S(i, "Id").Contains("FNC1") || S(i, "Id").Contains("FNC2")),
                   "A4: parallel strings FNC1 / FNC2 are never joined");
-            Check(ed, item("point.duplicate:601") != null && item("point.duplicate:602") != null, "A6: both duplicates are review items");
+            var dup = item("point.duplicate:601");
+            Check(ed, dup != null && item("point.duplicate:602") != null && !(bool)P(dup, "Required"),
+                  "A6: both duplicates are listed, as a warning rather than a required action (" + Describe(dup) + ")");
             Check(ed, item("code.unknown:XYZQ") != null, "A7: the code nothing handles is a review item");
-            Check(ed, item("point.nosymbol:702") != null, "A7: a bare code with the template's generic marker needs its own symbol");
+            var bare = item("point.nosymbol:702");
+            Check(ed, bare != null && (bool)P(bare, "Required"), "A7: a bare hydrant with the template's generic marker is missing its required symbol (" + Describe(bare) + ")");
             Check(ed, item("line.missingsegment:EP:801-805") != null, "A8: the coded EP string with no line is a missing segment");
             Check(ed, item("line.missingvertex:FNC:1201-1202-1203") != null, "MV: the line that skips 1202 is a missing vertex");
-            Check(ed, item("point.excludednoreason:904") != null, "A9: ZK, ignored without a reason, is a review item");
-            Check(ed, item("point.missingoutput:905") != null, "A9: a ground shot no surface is built from is a review item");
+            var shotItems = Items(register).Where(i => GroundAndCheckShots.Any(n => Names(i, n))).ToList();
+            Check(ed, !shotItems.Any(i => (bool)P(i, "Required")),
+                  "A9/A10: no ground shot or control check shot is a required action (" + string.Join(", ", shotItems.Select(i => S(i, "Id")).ToArray()) + ")");
+            Check(ed, !Items(register).Any(i => Names(i, "905") || Names(i, "904") || Names(i, "1002")),
+                  "A9/A10: a ground shot off the TIN and the control check shots are not on the list (surface verification is off)");
 
             var ledger = Ledger(db);
-            Check(ed, ledger != null && Count(P(ledger, "Points")) == 34, "the point ledger holds every point (" + (ledger == null ? 0 : Count(P(ledger, "Points"))) + ")");
-            Check(ed, Disposition(ledger, "901") == "Surface", "A9: a ground shot at a TIN vertex is accounted for by the surface (" + Disposition(ledger, "901") + ")");
+            Check(ed, ledger != null && Count(P(ledger, "Points")) == 37, "the point ledger holds every point (" + (ledger == null ? 0 : Count(P(ledger, "Points"))) + ")");
+            foreach (var n in new[] { "901", "902", "903", "905" })
+                Check(ed, Disposition(ledger, n) == "Surface" && S(Point(ledger, n), "SurfaceStatus") == "designated" && S(Point(ledger, n), "Classification") == "Surface only",
+                      "A9: GS " + n + " is surface data, surface only, with or without a surface (" + Disposition(ledger, n) + ", " + S(Point(ledger, n), "SurfaceStatus") + ")");
             var evidence = string.Join("; ", Strings(P(Point(ledger, "901"), "Evidence")).ToArray());
             Note(ed, "surface evidence for 901: " + evidence);
             Check(ed, Disposition(ledger, "1001") == "Control", "A10: FIP 5/8 is a control point (" + Disposition(ledger, "1001") + ")");
+            foreach (var n in new[] { "904", "1002" })
+                Check(ed, Disposition(ledger, n) == "Control" && S(Point(ledger, n), "Reading") == "control check ZK" && S(Point(ledger, n), "Classification") == "Control/Check",
+                      "A10: ZK " + n + " is a control check shot (" + Disposition(ledger, n) + ", " + S(Point(ledger, n), "Reading") + ")");
+            Check(ed, Disposition(ledger, "601") == "PointStyle", "A6: a duplicate's point style still accounts for it (" + Disposition(ledger, "601") + ")");
             Check(ed, Disposition(ledger, "103") == "Linework" && Disposition(ledger, "105") == "Linework", "the fence shots are on their lines");
             Check(ed, Disposition(ledger, "803") == "Review" && Strings(P(Point(ledger, "803"), "Issues")).Contains("line.missingsegment:EP:801-805"),
                   "A8: an EP shot with no line is for review, held by the missing-segment item");
-            var labelled = Owned(db).Any(o => o.Value == _labelKind && Tag(o.Key, 2) == "1101");
-            Check(ed, labelled ? Disposition(ledger, "1101") == "Drawn" : item("point.missingoutput:1101") != null,
-                  "A11: the hydrant is " + (labelled ? "labelled by FTFRUN and accounted for as drawn" : "not labelled and its missing label is a review item"));
+
+            // A11: the hydrant's standard asks for its symbol and no text label.
+            var hydrantSymbol = item("point.nosymbol:1101");
+            Check(ed, hydrantSymbol != null && (bool)P(hydrantSymbol, "Required"), "A11: a hydrant with a generic marker is missing its required symbol (" + Describe(hydrantSymbol) + ")");
+            Check(ed, item("point.missingoutput:1101") == null, "A11: no missing label for the hydrant: its standard wants none");
+            Check(ed, !Owned(db).Any(o => o.Value == _labelKind && (Tag(o.Key, 2) == "1101" || Tag(o.Key, 2) == "1401" || Tag(o.Key, 2) == "702")),
+                  "A11: FTFRUN drew no text label for a hydrant");
+
+            // HY: a hydrant whose point style draws its symbol is accounted for by it.
+            if (_hydrantStyleProblem == null)
+                Check(ed, Disposition(ledger, "1401") == "Symbol" && !Items(register).Any(i => Names(i, "1401")),
+                      "HY: a hydrant whose point style draws its symbol is accounted for, with nothing to review (" + Disposition(ledger, "1401") + "; " +
+                      string.Join("; ", Strings(P(Point(ledger, "1401"), "Evidence")).ToArray()) + ")");
+            else Note(ed, "HY: NOT VERIFIED in Civil 3D -- the harness could not set up 1401's symbol point style (" + _hydrantStyleProblem + ")");
+
+            // SG: the house number sign keeps its description, is an address sign, not a code nothing handles.
+            var sign = Point(ledger, "1301");
+            Check(ed, sign != null && S(sign, "RawDescription") == "HOUSE NUMBER 4735 SIGN" && S(sign, "Classification") == "Sign (address / house number)",
+                  "SG: 1301 keeps its description and is an address / house number sign (" + S(sign, "Classification") + ")");
+            Check(ed, item("code.unknown:HOUSE") == null, "SG: HOUSE is not a code nothing handles: the standard names the sign by its words");
+            var signLabel = item("point.missingoutput:1301");
+            if (Disposition(ledger, "1301") == "PointStyle" && Strings(P(sign, "Found")).Contains("label (point label)"))
+            {
+                Check(ed, signLabel == null, "SG: its own Civil 3D point label shows it; no separate label is required");
+                Note(ed, "SG: 1301's point label is shown: " + string.Join("; ", Strings(P(sign, "Evidence")).ToArray()));
+            }
+            else
+            {
+                Check(ed, signLabel != null && S(signLabel, "Reason").Contains("label is hidden"),
+                      "SG: with its point label hidden, the missing label is a required item that says so (" + Describe(signLabel) + ": " + S(signLabel, "Reason") + ")");
+                Note(ed, "SG: the template's point label for 1301 is hidden, so its description shows nowhere on the plan");
+            }
+
             var run = P(ledger, "LastRun");
-            Check(ed, run != null && (int)P(run, "Points") == 34 && (int)P(run, "Review") > 0 && (int)P(run, "Accounted") > 0,
+            Check(ed, run != null && (int)P(run, "Points") == 37 && (int)P(run, "Review") > 0 && (int)P(run, "Accounted") > 0,
                   "the run's numbers: " + (run == null ? "none" : Convert.ToString(Call(_plugin, DescribeRunSignature, run))));
 
             var proposals = Owned(db).Where(o => o.Value == _proposalKind).ToList();
@@ -429,8 +505,15 @@ namespace FtfAccountTest
             var name = Path.GetFileNameWithoutExtension(db.Filename);
             Check(ed, File.Exists(Path.Combine(dir, name + ".ftf-points.csv")) && File.Exists(Path.Combine(dir, name + ".ftf-continuity.csv")),
                   "the point ledger and continuity reports are written beside the drawing");
+            var checks = Path.Combine(dir, name + ".ftf-control-checks.csv");
+            var rows = File.Exists(checks) ? File.ReadAllLines(checks).ToList() : new List<string>();
+            Check(ed, rows.Any(r => r.StartsWith("1002,ZK,", StringComparison.Ordinal) && r.Contains(",1001,FIP 5/8,")),
+                  "A10: the control check report pairs check shot 1002 with control point 1001 (" + (rows.Count == 0 ? "no report" : rows.Count + " rows") + ")");
+            Check(ed, rows.Any(r => r.StartsWith("904,ZK,", StringComparison.Ordinal) && r.Contains("no control point within")),
+                  "A10: and says check shot 904 has no control point near it");
 
             _openAfterRun = open.Select(i => S(i, "Id")).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            _openPointItemsAfterRun = OpenPointItems(register);
             _ownedAfterRun = OwnedByKind(db);
         }
 
@@ -441,6 +524,64 @@ namespace FtfAccountTest
             var owned = OwnedByKind(db);
             var same = owned.Count == _ownedAfterRun.Count && owned.All(p => _ownedAfterRun.ContainsKey(p.Key) && _ownedAfterRun[p.Key] == p.Value);
             Check(ed, same, "the same FTF objects by kind: nothing duplicated (" + string.Join(", ", owned.Select(p => p.Key + "x" + p.Value).ToArray()) + ")");
+        }
+
+        private static void WithStandard(AcDb.Database db, Editor ed)
+        {
+            var register = Register(db);
+            var ledger = Ledger(db);
+            foreach (var n in new[] { "601", "602" })
+            {
+                var missing = Items(register).FirstOrDefault(i => S(i, "Id") == "point.missingoutput:" + n);
+                Check(ed, missing != null && S(missing, "Status") == "Open" && (bool)P(missing, "Required") &&
+                          S(missing, "Reason").Contains("the standard requires a label") && S(missing, "Reason").Contains("Cleanout (SSCO)"),
+                      "STANDARD: the drafting standard now requires a label on SSCO " + n + ": a required item (" + Describe(missing) + ")");
+                Check(ed, Disposition(ledger, n) == "Review", "STANDARD: " + n + " is for review until it is labelled (" + Disposition(ledger, n) + ")");
+            }
+        }
+
+        private static void Restored(AcDb.Database db, Editor ed)
+        {
+            var register = Register(db);
+            var ledger = Ledger(db);
+            foreach (var n in new[] { "601", "602" })
+            {
+                var missing = Items(register).FirstOrDefault(i => S(i, "Id") == "point.missingoutput:" + n);
+                var history = missing == null ? new List<string>() : Objects(P(missing, "History")).Select(h => S(h, "Action")).ToList();
+                Check(ed, missing != null && S(missing, "Status") == "Resolved" && history.Contains("opened") && history.Contains("resolved"),
+                      "RESTORED: with the standard back, " + n + "'s item resolved by itself, its history kept (" + Describe(missing) + ": " + string.Join(", ", history.ToArray()) + ")");
+                Check(ed, Disposition(ledger, n) == "PointStyle", "RESTORED: " + n + " is accounted for by its point style again (" + Disposition(ledger, n) + ")");
+            }
+            var now = OpenPointItems(register);
+            Check(ed, string.Join("|", now.ToArray()) == string.Join("|", _openPointItemsAfterRun.ToArray()),
+                  "RESTORED: the open point items are exactly those after RUN (" + now.Count + " now, " + _openPointItemsAfterRun.Count + " then)");
+            var ids = Items(register).Select(i => S(i, "Id")).ToList();
+            Check(ed, ids.Count == ids.Distinct().Count(), "RESTORED: one item per point and kind, however many checks ran");
+        }
+
+        private static void SurfaceOn(AcDb.Database db, Editor ed)
+        {
+            var register = Register(db);
+            var ledger = Ledger(db);
+            foreach (var n in new[] { "901", "902", "903" })
+                Check(ed, Disposition(ledger, n) == "Surface" && S(Point(ledger, n), "SurfaceStatus") == "verified",
+                      "SURFACE: GS " + n + " is verified in the TIN (" + S(Point(ledger, n), "SurfaceStatus") + "; " +
+                      string.Join("; ", Strings(P(Point(ledger, n), "Evidence")).Where(e => e.StartsWith("surface ")).ToArray()) + ")");
+            Check(ed, Disposition(ledger, "905") == "Surface" && S(Point(ledger, "905"), "SurfaceStatus") == "not verifiable",
+                  "SURFACE: GS 905 off the TIN is still surface data, not verifiable (" + S(Point(ledger, "905"), "SurfaceStatus") + ")");
+            var unverified = Items(register).FirstOrDefault(i => S(i, "Id") == "point.surfaceunverified:GS");
+            Check(ed, unverified != null && S(unverified, "Status") == "Open" && !(bool)P(unverified, "Required") && S(unverified, "Severity") == "Info" && S(unverified, "Points") == "905",
+                  "SURFACE: 905 is listed once, as information, not a required action (" + Describe(unverified) + ", " + S(unverified, "Severity") + ", points " + S(unverified, "Points") + ")");
+            Check(ed, !Items(register).Any(i => S(i, "Status") == "Open" && (bool)P(i, "Required") && GroundAndCheckShots.Any(n => Names(i, n))),
+                  "SURFACE: still no required action for a ground shot or a control check shot");
+        }
+
+        private static void SurfaceOff(AcDb.Database db, Editor ed)
+        {
+            var register = Register(db);
+            var unverified = Items(register).FirstOrDefault(i => S(i, "Id") == "point.surfaceunverified:GS");
+            Check(ed, unverified != null && S(unverified, "Status") == "Resolved", "SURFACEOFF: the surface note resolved when the check was turned off (" + Describe(unverified) + ")");
+            Check(ed, S(Point(Ledger(db), "905"), "SurfaceStatus") == "designated", "SURFACEOFF: 905 is designated surface data again");
         }
 
         private static void Approved(AcDb.Database db, Editor ed)
@@ -510,6 +651,72 @@ namespace FtfAccountTest
         }
 
         // ================================================================ edits the harness makes
+
+        [CommandMethod("ACCSTANDARD")]
+        public void Standard()
+        {
+            Guard("ACCSTANDARD", delegate { StandardBody(); });
+        }
+
+        private static void StandardBody()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            var what = doc.Editor.GetString("\nLabel or Restore: ").StringResult.Trim().ToUpperInvariant();
+            var path = Path.Combine(Path.GetDirectoryName(doc.Database.Filename), "rules.json");
+            if (!File.Exists(path)) Fatal("ACCSTANDARD: no rules.json beside the drawing (" + path + ")");
+            if (what == "LABEL")
+            {
+                _rulesOriginal = File.ReadAllText(path);
+                if (_rulesOriginal.Contains("\"featureStandard\"")) Fatal("ACCSTANDARD: the rules beside the drawing already have a featureStandard; the stage needs the factory rules");
+                var text = _rulesOriginal.TrimEnd();
+                if (!text.EndsWith("}", StringComparison.Ordinal)) Fatal("ACCSTANDARD: rules.json does not end with }");
+                Rewrite(path, text.Substring(0, text.Length - 1).TrimEnd() + ",\r\n  \"featureStandard\": " + CleanoutStandard + "\r\n}\r\n");
+                Record("STANDARD added to the rules beside the drawing: " + CleanoutStandard);
+            }
+            else if (what == "RESTORE")
+            {
+                if (_rulesOriginal == null) Fatal("ACCSTANDARD Restore before Label");
+                Rewrite(path, _rulesOriginal);
+                Record("STANDARD the rules beside the drawing are the factory rules again");
+            }
+            else Fatal("ACCSTANDARD: expected Label or Restore, not " + what);
+        }
+
+        [CommandMethod("ACCSURFACE")]
+        public void Surface()
+        {
+            Guard("ACCSURFACE", delegate { SurfaceBody(); });
+        }
+
+        private static void SurfaceBody()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            var what = doc.Editor.GetString("\nOn or Off: ").StringResult.Trim().ToUpperInvariant();
+            var path = Path.Combine(Path.GetDirectoryName(doc.Database.Filename), "ftf-settings.json");
+            if (what == "ON")
+            {
+                _settingsOriginal = File.Exists(path) ? File.ReadAllText(path) : null;
+                Rewrite(path, SurfaceSettings);
+                Record("SURFACE settings beside the drawing: " + SurfaceSettings);
+            }
+            else if (what == "OFF")
+            {
+                if (_settingsOriginal == null) { if (File.Exists(path)) File.Delete(path); }
+                else Rewrite(path, _settingsOriginal);
+                Record("SURFACE settings beside the drawing put back");
+            }
+            else Fatal("ACCSURFACE: expected On or Off, not " + what);
+        }
+
+        /// <summary>Writes the file and moves its time on at least two seconds: the plugin re-reads a
+        /// rules or settings file whose time changed, whatever the file system's clock resolution.</summary>
+        private static void Rewrite(string path, string text)
+        {
+            var before = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+            File.WriteAllText(path, text, new UTF8Encoding(false));
+            var now = DateTime.UtcNow;
+            File.SetLastWriteTimeUtc(path, before != DateTime.MinValue && now < before.AddSeconds(2) ? before.AddSeconds(2) : now);
+        }
 
         [CommandMethod("ACCMOVE")]
         public void Move()
@@ -611,6 +818,19 @@ namespace FtfAccountTest
             return p == null ? "(not in the ledger)" : S(p, "Disposition");
         }
 
+        /// <summary>True when the item is about the point: its id ends with the number, or it lists it.</summary>
+        private static bool Names(object item, string number)
+        {
+            return S(item, "Id").EndsWith(":" + number, StringComparison.Ordinal) ||
+                   S(item, "Points").Split(',').Select(x => x.Trim()).Contains(number);
+        }
+
+        private static List<string> OpenPointItems(object register)
+        {
+            return Items(register).Where(i => S(i, "Status") == "Open" && S(i, "Source") == "Points").Select(i => S(i, "Id"))
+                                  .OrderBy(x => x, StringComparer.Ordinal).ToList();
+        }
+
         private static string Describe(object item)
         {
             if (item == null) return "not found";
@@ -689,12 +909,75 @@ namespace FtfAccountTest
             }
         }
 
-        private static void Point(AcDb.Transaction tr, CivApp.CivilDocument cdoc, uint number, double x, double y, double z, string description)
+        private static AcDb.ObjectId Point(AcDb.Transaction tr, CivApp.CivilDocument cdoc, uint number, double x, double y, double z, string description)
         {
             var id = cdoc.CogoPoints.Add(new Point3d(x, y, z), description, false);
             var cp = (CivDb.CogoPoint)tr.GetObject(id, AcDb.OpenMode.ForWrite);
             try { cp.PointNumber = number; }
             catch (System.Exception ex) { Fatal("could not set point number " + number + ": " + ex.Message); }
+            return id;
+        }
+
+        /// <summary>
+        /// HY: a block FTF-SMOKE-WFH, a point style of that name whose marker is the block
+        /// (MarkerType UseSymbolForMarker, MarkerSymbolName), and 1401 given that style -- a hydrant
+        /// drafted the way the office template does it. Read and set by reflection, so a Civil 3D
+        /// that names them differently is reported (NOTE, and 1401's check is not counted as passed)
+        /// rather than a harness that does not compile.
+        /// </summary>
+        private static void HydrantStyle(AcDb.Database db, AcDb.Transaction tr, CivApp.CivilDocument cdoc, AcDb.ObjectId pointId)
+        {
+            Step("ACCSEED: point style " + HydrantBlock + " for 1401");
+            try
+            {
+                var bt = (AcDb.BlockTable)tr.GetObject(db.BlockTableId, AcDb.OpenMode.ForRead);
+                if (!bt.Has(HydrantBlock))
+                {
+                    bt.UpgradeOpen();
+                    var btr = new AcDb.BlockTableRecord { Name = HydrantBlock };
+                    bt.Add(btr);
+                    tr.AddNewlyCreatedDBObject(btr, true);
+                    var circle = new AcDb.Circle(Point3d.Origin, Vector3d.ZAxis, 0.5);
+                    btr.AppendEntity(circle);
+                    tr.AddNewlyCreatedDBObject(circle, true);
+                }
+                var pointStyles = P(P(cdoc, "Styles"), "PointStyles");
+                if (pointStyles == null) throw new InvalidOperationException("CivilDocument.Styles.PointStyles is not there");
+                var add = pointStyles.GetType().GetMethods().FirstOrDefault(m => m.Name == "Add" && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(string));
+                if (add == null) throw new InvalidOperationException("PointStyles has no Add(string)");
+                var styleId = (AcDb.ObjectId)Invoke(add, pointStyles, HydrantBlock);
+                var style = tr.GetObject(styleId, AcDb.OpenMode.ForWrite);
+                var markerType = Writable(style, "MarkerType");
+                markerType.SetValue(style, Enum.Parse(markerType.PropertyType, "UseSymbolForMarker"), null);
+                Writable(style, "MarkerSymbolName").SetValue(style, HydrantBlock, null);
+                var point = tr.GetObject(pointId, AcDb.OpenMode.ForWrite);
+                Writable(point, "StyleId").SetValue(point, styleId, null);
+                _hydrantStyleProblem = null;
+                Note(Ed, "HY: 1401's point style " + HydrantBlock + " draws block " + HydrantBlock + " as its marker (" + S(style, "MarkerType") + ")");
+            }
+            catch (System.Exception ex)
+            {
+                var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                _hydrantStyleProblem = inner.GetType().Name + ": " + inner.Message;
+                Note(Ed, "HY: could not give 1401 a symbol point style, so its check is not run: " + _hydrantStyleProblem);
+            }
+        }
+
+        private static object Invoke(MethodInfo m, object target, params object[] args)
+        {
+            try { return m.Invoke(target, args); }
+            catch (TargetInvocationException ex)
+            {
+                if (ex.InnerException != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        private static PropertyInfo Writable(object o, string name)
+        {
+            var p = o.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance).FirstOrDefault(x => x.Name == name && x.CanWrite);
+            if (p == null) throw new InvalidOperationException(o.GetType().FullName + " has no settable " + name);
+            return p;
         }
 
         private static CivDb.CogoPoint FindPoint(AcDb.Database db, AcDb.Transaction tr, uint number)

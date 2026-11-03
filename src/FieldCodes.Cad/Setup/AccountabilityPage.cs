@@ -18,6 +18,8 @@ namespace FieldCodes.Cad.Setup
         private CheckBox _run;
         private TextBox _duplicate;
         private TextBox _surface;
+        private CheckBox _verifySurface;
+        private TextBox _controlCheck;
         private CheckBox _reasons;
         private CheckBox _report;
         private TextBox _symbols;
@@ -32,25 +34,34 @@ namespace FieldCodes.Cad.Setup
         protected override void BuildBody()
         {
             Heading("Every point accounted for");
-            Note("After processing, FTF accounts for every survey point from what the drawing holds for it -- " +
-                 "an FTF label, tag, block or dripline; a drawn line of its feature through it; its own symbol; " +
-                 "a surface built from it; the control table; or an exclusion with a documented reason. " +
-                 "What is missing goes on the review list, and Drafting QC Complete waits until each item is " +
-                 "drawn or closed with a reason. The ledger keeps every point ever recorded, so a deleted point is " +
-                 "reported. Nothing here writes a point or a survey line.");
+            Note("After processing, FTF accounts for every survey point against its feature's drafting standard " +
+                 "(Settings > Point Features > Drafting Standard): an FTF label, tag, block or dripline; a drawn line of its " +
+                 "feature through it; its symbol or its point style; its own Civil 3D label; surface data; a control or control " +
+                 "check shot; the point alone where the standard draws nothing; or an exclusion with a documented reason. " +
+                 "A missing or wrong deliverable is a required action, and Drafting QC Complete waits until each is drawn or " +
+                 "closed with a reason; a possible problem is a warning, listed but never holding a point. The ledger keeps every " +
+                 "point ever recorded, so a deleted point is reported. Nothing here writes a point or a survey line.");
             _run = CheckRow("Run after processing",
                 "FTFRUN, the window's Process page and FTFLABELALL run the checks when they finish. FTFREVIEWCHECK and FTFQC always run them.");
             _duplicate = TextRow("Duplicate points within (ft)", "Two points closer than this in plan are reported as duplicates.");
+            _verifySurface = CheckRow("Verify surface membership",
+                "Off (the default): a ground shot is accounted for as surface data whether or not a surface uses it -- surface data is not a drafting deliverable. " +
+                "On: each one is also checked against the drawing's TIN surfaces: verified (a vertex, or in a point group the surface is built from), " +
+                "excluded by the surface's own definition (a warning), or not verifiable (listed once per code, as information).");
             _surface = TextRow("Surface vertex within (ft)", "A TIN vertex this close to a point, in plan and elevation, is the point.");
+            _controlCheck = TextRow("Control check: control point within (ft)",
+                "A control check shot (ZK) is paired with the nearest control point this close in plan, in <drawing>.ftf-control-checks.csv.");
             _reasons = CheckRow("Ignored codes need a reason",
-                "A code on an ignore list without a reason (rules.json ignoreCodes, Settings > Diagnostics) puts its points on the review list.");
+                "A code on an ignore list without a reason (rules.json ignoreCodes, Settings > Diagnostics) is listed as a warning, so the reason gets written down.");
             _report = CheckRow("Write the point ledger beside the drawing",
-                "<drawing>.ftf-points.csv (every point, how it is accounted for) and <drawing>.ftf-continuity.csv.");
+                "<drawing>.ftf-points.csv (every point, its class, standard and how it is accounted for), <drawing>.ftf-continuity.csv " +
+                "and, when there are control check shots, <drawing>.ftf-control-checks.csv.");
 
             Heading("Symbols");
-            Note("A bare code is accounted for by its marker only when the marker is the code's own symbol block: one named " +
-                 "here, the one the orientation standard gives the code, or one whose name holds the code as a word (PMX-CB for CB). " +
-                 "A dot, an X or another code's symbol never counts. One line per code: CODE = BLOCK, BLOCK* ...");
+            Note("A bare code is accounted for by its point style unless its drafting standard requires its own symbol (Symbol: Specific, " +
+                 "as for a fire hydrant). Then the marker must be the code's own symbol block: one named in the standard's symbol style, " +
+                 "one named here, the one the orientation standard gives the code, or one whose name holds the code as a word (PMX-CB for CB); " +
+                 "a dot, an X or another code's symbol does not count. One line per code: CODE = BLOCK, BLOCK* ...");
             _symbols = AddFullWidth(new TextBox { Multiline = true, Height = 80, Width = 520, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true });
             _symbols.TextChanged += (o, e) => MarkChanged();
 
@@ -97,6 +108,8 @@ namespace FieldCodes.Cad.Setup
             _run.Checked = a.RunAfterProcessing;
             _duplicate.Text = Fmt(a.DuplicateToleranceFeet);
             _surface.Text = Fmt(a.SurfaceToleranceFeet);
+            _verifySurface.Checked = a.VerifySurfaceMembership;
+            _controlCheck.Text = Fmt(a.ControlCheckSearchFeet);
             _reasons.Checked = a.RequireIgnoreReasons;
             _report.Checked = a.WriteReport;
             _symbols.Text = string.Join(Environment.NewLine, (a.SymbolBlocks ?? new Dictionary<string, List<string>>())
@@ -129,6 +142,10 @@ namespace FieldCodes.Cad.Setup
             v = a.SurfaceToleranceFeet;
             ReadDouble(_surface, "Point Accountability: surface vertex within", x => x >= 0, "cannot be negative", problems, ref v);
             a.SurfaceToleranceFeet = v;
+            a.VerifySurfaceMembership = _verifySurface.Checked;
+            v = a.ControlCheckSearchFeet;
+            ReadDouble(_controlCheck, "Point Accountability: control check, control point within", x => x > 0, "must be more than 0", problems, ref v);
+            a.ControlCheckSearchFeet = v;
             a.RequireIgnoreReasons = _reasons.Checked;
             a.WriteReport = _report.Checked;
 

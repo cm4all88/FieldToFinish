@@ -116,6 +116,11 @@ namespace FieldCodes.Cad
 
                     // The office sign rule reads its number as the field azimuth ("SN 135").
                     var parsed = notes.Parse(parser, cogo);
+                    // Its drafting standard: a feature whose standard says outright not to turn it by
+                    // inference (an address or private sign) is turned only by a recorded direction.
+                    // A standard that says nothing leaves FTFORIENT's own rules to decide.
+                    var requirement = FieldCodes.Standards.FeatureRequirements.For(cfg, parsed, raw, f.Note);
+                    if (requirement.RotationDeclined) f.InferFacing = false;
                     if (parsed.RotationDegrees.HasValue && parsed.RotationIsAzimuth && f.Kind != OrientKind.Other)
                     {
                         f.MeasuredAzimuth = Angles.NormalizeDegrees(90.0 - parsed.RotationDegrees.Value);
@@ -233,6 +238,7 @@ namespace FieldCodes.Cad
                 if (d.Symbol == null) { outcomes[d] = OrientOutcome.NoSymbol; continue; }
                 if (!d.Symbol.Directional || d.Tier == OrientationTier.NotDirectional) { outcomes[d] = OrientOutcome.NotDirectional; continue; }
                 if (d.Tier == OrientationTier.Review) { outcomes[d] = OrientOutcome.Review; continue; }
+                if (d.Tier == OrientationTier.NoSupport) { outcomes[d] = OrientOutcome.LeftAsSurveyed; continue; }
                 if (!d.Applies(std.ApplyMinimumConfidence, std.ApplyWeakestTier)) { outcomes[d] = OrientOutcome.BelowThreshold; continue; }
 
                 var record = Record.Read(cogo);

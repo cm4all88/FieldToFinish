@@ -75,6 +75,37 @@ namespace FieldCodes.Cad.Compare
             return e;
         }
 
+        /// <summary>
+        /// Whether the point's own label is shown: the label is visible on the point, the point
+        /// style (its point group's when that overrides it) draws its label component, and it has
+        /// a label style. Null: could not be read. <paramref name="labelStyleName"/>: the label
+        /// style's name, read by reflection (null when not readable).
+        /// </summary>
+        public static bool? LabelShown(CogoPoint point, Database db, Transaction tr, out string labelStyleName)
+        {
+            labelStyleName = null;
+            try
+            {
+                if (!point.IsLabelVisible) return false;
+                var e = Resolve(point, db, tr);
+                if (e.Problem != null || e.StyleId.IsNull) return null;
+                var style = tr.GetObject(e.StyleId, OpenMode.ForRead) as PointStyle;
+                if (style == null) return null;
+                if (!style.GetDisplayStylePlan(PointDisplayStyleType.Label).Visible) return false;
+                var labelStyle = ReadProperty(point, "LabelStyleId");
+                if (labelStyle is ObjectId)
+                {
+                    if (((ObjectId)labelStyle).IsNull) return false;
+                    var obj = tr.GetObject((ObjectId)labelStyle, OpenMode.ForRead);
+                    labelStyleName = Convert.ToString(ReadProperty(obj, "Name"));
+                }
+                return true;
+            }
+            // Read for every point by FTFLABELS and point accountability: whatever goes wrong here
+            // means "could not be read" (reported as such), never a command that stops.
+            catch (System.Exception) { return null; }
+        }
+
         /// <summary>Does the point plot: its marker on the layer its style puts it on, or
         /// its label (taken to sit on the point's layer; a label style with its own fixed
         /// layer is why nonplot points get their label hidden rather than relocated).</summary>

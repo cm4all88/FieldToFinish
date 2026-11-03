@@ -55,9 +55,10 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
     [Fact]
     public void ARecognizedCodeNeedsWhatItsRulePlans()
     {
-        var labelled = P("10", "WFH 12");
+        // A post: its standard (the default) takes the label its rule writes.
+        var labelled = P("10", "POST 12");
         labelled.Outputs.Add(new OutputFact { Kind = "Label", Handle = "L10" });
-        var bare = P("11", "WFH 13");                       // its label is not in the drawing
+        var bare = P("11", "POST 13");                      // its label is not in the drawing
         var a = Account(null, new[] { labelled, bare }, Ctx());
 
         var ok = a.ledger.Find("10")!;
@@ -73,7 +74,8 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
         Assert.False(missing.DraftingComplete);             // ... but the drafting is not done
         var item = Assert.Single(a.items, i => i.Kind == ReviewKinds.PointMissingOutput);
         Assert.Equal("point.missingoutput:11", item.Id);
-        Assert.Contains("HYDRANT 13", item.Reason);
+        Assert.Contains("POST 13", item.Reason);
+        Assert.True(ReviewKinds.Get(item.Kind)!.Required);
     }
 
     [Fact]
@@ -81,43 +83,52 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
     {
         var settings = new FtfSettings();
         settings.Annotation.Categories = new List<AnnotationCategory>();
-        var hydrant = P("12", "WFH 14");
-        hydrant.Marker = Symbol("PMX-WFH");
-        var a = Account(null, new[] { hydrant }, Ctx(settings));
+        var pole = P("12", "PP 1236");
+        var a = Account(null, new[] { pole }, Ctx(settings));
         var e = a.ledger.Find("12")!;
         Assert.DoesNotContain("label", e.Expected);
         Assert.Contains(e.Evidence, x => x.StartsWith("no label expected"));
-        Assert.Equal(PointDisposition.Symbol, e.Disposition);   // the rule planned only a label: its symbol shows it
+        Assert.Equal(PointDisposition.PointStyle, e.Disposition);   // its point style shows it
+        Assert.Empty(a.items);
     }
 
     [Fact]
-    public void A7_ABareCodeNeedsItsOwnSymbolNotAGenericMarker()
+    public void A7_ABareCodeIsShownByItsPointStyleUnlessItsStandardRequiresItsOwnSymbol()
     {
+        // SSCO: no standard of its own (Storm and sewer family): any visible point style marker.
         var generic = P("20", "SSCO");
-        var own = P("21", "SSCO");
-        own.Marker = Symbol("PMX-SSCO");
-        var other = P("22", "SSCO");
+        var hidden = P("19", "SSCO");
+        hidden.Marker = new MarkerFact { Known = true, Visible = false, MarkerType = "UseCustomMarker", StyleName = "Hidden" };
+        // WFH: the hydrant standard requires the hydrant's own symbol.
+        var hydrantGeneric = P("25", "WFH");
+        var own = P("21", "WFH");
+        own.Marker = Symbol("PMX-WFH");
+        var other = P("22", "WFH");
         other.Marker = Symbol("PMX-CB");
-        var none = P("23", "SSCO");
-        none.Marker = new MarkerFact { Known = true, Visible = false, MarkerType = "UseSymbolForMarker", SymbolName = "PMX-SSCO", StyleName = "Hidden" };
+        var none = P("23", "WFH");
+        none.Marker = new MarkerFact { Known = true, Visible = false, MarkerType = "UseSymbolForMarker", SymbolName = "PMX-WFH", StyleName = "Hidden" };
         Assert.True(generic.Parsed.NoContent);
-        var a = Account(null, new[] { generic, own, other, none }, Ctx());
+        var a = Account(null, new[] { generic, hidden, hydrantGeneric, own, other, none }, Ctx());
 
-        Assert.Equal(PointDisposition.Review, a.ledger.Find("20")!.Disposition);
-        Assert.Contains("generic custom marker", a.items.Single(i => i.Id == "point.nosymbol:20").Reason);
+        Assert.Equal(PointDisposition.PointStyle, a.ledger.Find("20")!.Disposition);
+        Assert.DoesNotContain(a.items, i => i.Id == "point.nosymbol:20");
+        Assert.Contains("draws no marker", a.items.Single(i => i.Id == "point.nosymbol:19").Reason);
+        Assert.Contains("generic custom marker", a.items.Single(i => i.Id == "point.nosymbol:25").Reason);
+        Assert.Contains("Fire hydrant", a.items.Single(i => i.Id == "point.nosymbol:25").Reason);
         Assert.Equal(PointDisposition.Symbol, a.ledger.Find("21")!.Disposition);
         Assert.Contains("block PMX-CB", a.items.Single(i => i.Id == "point.nosymbol:22").Reason);
         Assert.Contains("draws no marker", a.items.Single(i => i.Id == "point.nosymbol:23").Reason);
         Assert.False(a.ledger.Find("23")!.Represented);
+        Assert.All(a.items.Where(i => i.Kind == ReviewKinds.PointNoSymbol), i => Assert.True(a.register.Find(i.Id)!.Required));
     }
 
     [Fact]
     public void ASymbolNamedInSettingsCounts()
     {
         var settings = new FtfSettings();
-        settings.Accountability.SymbolBlocks["SSCO"] = new List<string> { "CLEANOUT*" };
-        var p = P("24", "SSCO");
-        p.Marker = Symbol("CLEANOUT-6IN");
+        settings.Accountability.SymbolBlocks["WFH"] = new List<string> { "HYDRANT*" };
+        var p = P("24", "WFH");
+        p.Marker = Symbol("HYDRANT-STD");
         Assert.Equal(PointDisposition.Symbol, Account(null, new[] { p }, Ctx(settings)).ledger.Find("24")!.Disposition);
     }
 
@@ -172,10 +183,8 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
         Assert.Contains("on EP line L1", b.ledger.Find("302")!.Evidence);
     }
 
-    [Fact]
-    public void A9_IgnoredCodesNeedAReasonAndGroundShotsASurface()
+    private (PointFacts inDefinition, PointFacts coincident, PointFacts leftOut, PointFacts nowhere) GroundShots()
     {
-        Assert.Equal("surface", _fx.Config.IgnoreNoteFor("GS")!.Expect);
         var inDefinition = P("50", "GS");
         inDefinition.Surfaces.Add(new SurfaceFact { Surface = "EG", InDefinition = true, PointGroup = "TOPO", IsVertex = true });
         var coincident = P("51", "GS2");
@@ -183,22 +192,95 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
         var leftOut = P("52", "GS");
         leftOut.Surfaces.Add(new SurfaceFact { Surface = "EG", InDefinition = true, PointGroup = "TOPO", IsVertex = false });
         var nowhere = P("53", "GS");
-        var noReason = P("54", "ZK");
-        var noted = P("55", "NOTE");
+        return (inDefinition, coincident, leftOut, nowhere);
+    }
 
-        var a = Account(null, new[] { inDefinition, coincident, leftOut, nowhere, noReason, noted }, Ctx());
-        Assert.Equal(PointDisposition.Surface, a.ledger.Find("50")!.Disposition);
+    [Fact]
+    public void A9_GroundShotsAreSurfaceDataWithOrWithoutASurface()
+    {
+        // Surface membership is not checked by default: every GS is designated surface data, with
+        // or without a surface in the drawing, and never a review item.
+        var (inDefinition, coincident, leftOut, nowhere) = GroundShots();
+        var a = Account(null, new[] { inDefinition, coincident, leftOut, nowhere }, Ctx());
+        foreach (var n in new[] { "50", "51", "52", "53" })
+        {
+            var e = a.ledger.Find(n)!;
+            Assert.Equal(PointDisposition.Surface, e.Disposition);
+            Assert.Equal("designated", e.SurfaceStatus);
+            Assert.Equal("Surface only", e.Classification);
+            Assert.True(e.DraftingComplete);
+            Assert.Equal("GS", e.RawDescription.Split(' ')[0].TrimEnd('2'));       // the description as shot
+        }
+        Assert.Empty(a.items);
+        Assert.DoesNotContain(a.ledger.Find("53")!.Expected, x => x == "symbol" || x == "label" || x == "surface");
+    }
+
+    [Fact]
+    public void A9_SurfaceMembershipIsAnOptionalCheckAndNeverADraftingError()
+    {
+        var settings = new FtfSettings();
+        settings.Accountability.VerifySurfaceMembership = true;
+        var (inDefinition, coincident, leftOut, nowhere) = GroundShots();
+        var a = Account(null, new[] { inDefinition, coincident, leftOut, nowhere }, Ctx(settings));
+
+        Assert.Equal("verified", a.ledger.Find("50")!.SurfaceStatus);
         Assert.Contains(a.ledger.Find("50")!.Evidence, e => e.Contains("in its definition") && e.Contains("TOPO"));
+        Assert.Equal("verified", a.ledger.Find("51")!.SurfaceStatus);
         Assert.Contains(a.ledger.Find("51")!.Evidence, e => e.Contains("coordinates only"));
-        Assert.Contains("triangulation leaves it out", a.items.Single(i => i.Id == "point.missingoutput:52").Reason);
-        Assert.Contains("no surface", a.items.Single(i => i.Id == "point.missingoutput:53").Reason);
-        Assert.Contains(a.items, i => i.Id == "point.excludednoreason:54");
+        Assert.Equal("excluded", a.ledger.Find("52")!.SurfaceStatus);
+        var excluded = a.register.Find("point.surfaceexcluded:52")!;
+        Assert.Contains("triangulation leaves it out", excluded.Reason);
+        Assert.Equal(ReviewSeverity.Warning, excluded.Severity);
+        Assert.False(excluded.Required);
+        Assert.Equal("not verifiable", a.ledger.Find("53")!.SurfaceStatus);
+        var unverified = a.register.Find("point.surfaceunverified:GS")!;
+        Assert.Equal("53", unverified.Points);
+        Assert.Equal(ReviewSeverity.Info, unverified.Severity);
+        Assert.False(unverified.Required);
+        // Accounted for as surface data whatever the check says; nothing for the required queue.
+        Assert.All(new[] { "50", "51", "52", "53" }, n => Assert.Equal(PointDisposition.Surface, a.ledger.Find(n)!.Disposition));
+        Assert.Empty(a.register.RequiredOpen);
+    }
+
+    [Fact]
+    public void A9_ZkIsAControlCheckShotAndNotesAreExcludedWithTheirReason()
+    {
+        var control = P("60", "FIP 5/8", 0, 700, 100);
+        var check = P("61", "ZK", 0.03, 700.04, 100.02);
+        var far = P("62", "ZK", 50, 900, 100);
+        var noted = P("55", "NOTE");
+        var a = Account(null, new[] { control, check, far, noted }, Ctx());
+        var zk = a.ledger.Find("61")!;
+        Assert.Equal(PointDisposition.Control, zk.Disposition);
+        Assert.Equal("Control/Check", zk.Classification);
+        Assert.Contains("control check", zk.Found);
+        Assert.DoesNotContain("label", zk.Expected);
+        Assert.DoesNotContain("symbol", zk.Expected);
+        Assert.DoesNotContain(a.items, i => i.Points == "61" || i.Points == "62");
         Assert.Equal(PointDisposition.Excluded, a.ledger.Find("55")!.Disposition);
         Assert.Contains(a.ledger.Find("55")!.Evidence, e => e.Contains("Field note shot"));
 
+        var csv = FieldCodes.Reporting.AccountabilityReport.RenderControlChecks(a.ledger, 2.0, 1.0).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(FieldCodes.Reporting.AccountabilityReport.ControlChecksHeader, csv[0]);
+        Assert.Equal(3, csv.Length);
+        var paired = csv.Single(l => l.StartsWith("61,"));
+        Assert.Contains(",60,FIP 5/8,0.040,0.030,0.050,0.020,", paired);
+        Assert.Contains("no control point within 2 ft", csv.Single(l => l.StartsWith("62,")));
+        Assert.All(csv, l => Assert.Equal(12, l.Split(',').Length));
+    }
+
+    [Fact]
+    public void AnIgnoredCodeWithoutAReasonIsAWarningNotARequiredAction()
+    {
+        // CONS: on the shipped ignore list without a reason, and no standard of its own.
+        var a = Account(null, new[] { P("54", "CONS") }, Ctx());
+        var item = a.register.Find("point.excludednoreason:54")!;
+        Assert.False(item.Required);
+        Assert.Equal(ReviewSeverity.Warning, item.Severity);
+        Assert.NotEqual(PointDisposition.Review, a.ledger.Find("54")!.Disposition);
         var lenient = new FtfSettings();
         lenient.Accountability.RequireIgnoreReasons = false;
-        Assert.DoesNotContain(Account(null, new[] { P("54", "ZK") }, Ctx(lenient)).items, i => i.Kind == ReviewKinds.PointExcludedNoReason);
+        Assert.DoesNotContain(Account(null, new[] { P("54", "CONS") }, Ctx(lenient)).items, i => i.Kind == ReviewKinds.PointExcludedNoReason);
     }
 
     [Fact]
@@ -244,13 +326,13 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
     public void AChangedPointIsRecordedAndItsDecisionsReopen()
     {
         var register = new ReviewRegister();
-        var first = Account(null, new[] { P("80", "SSCO") }, Ctx(), register);
-        Assert.True(register.MarkNotApplicable("point.nosymbol:80", "cleanout shown by the utility plan", "JD", DateTime.Now, out _));
-        var again = Account(PointLedger.FromJson(first.ledger.ToJson()), new[] { P("80", "SSCO") }, Ctx(), register);
+        var first = Account(null, new[] { P("80", "WFH") }, Ctx(), register);
+        Assert.True(register.MarkNotApplicable("point.nosymbol:80", "hydrant shown by the utility plan", "JD", DateTime.Now, out _));
+        var again = Account(PointLedger.FromJson(first.ledger.ToJson()), new[] { P("80", "WFH") }, Ctx(), register);
         Assert.Equal(ReviewItemStatus.NotApplicable, register.Find("point.nosymbol:80")!.Status);
         Assert.Equal(PointDisposition.Excluded, again.ledger.Find("80")!.Disposition);   // documented by a person
 
-        var moved = P("80", "SSCO", 800.5, 0);
+        var moved = P("80", "WFH", 800.5, 0);
         var third = Account(PointLedger.FromJson(again.ledger.ToJson()), new[] { moved }, Ctx(), register);
         Assert.Contains(third.items, i => i.Id == "point.sourcechanged:80" && i.Reason.Contains("moved 0.5"));
         var reopened = register.Find("point.nosymbol:80")!;
@@ -264,9 +346,9 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
     [Fact]
     public void TheRunCountsDispositionsAndTheReportListsEveryPoint()
     {
-        var hydrant = P("90", "WFH 7");
-        hydrant.Outputs.Add(new OutputFact { Kind = "Label", Handle = "LB" });
-        var a = Account(null, new[] { hydrant, P("91", "SSCO"), P("92", "NOTE") }, Ctx());
+        var post = P("90", "POST 7");
+        post.Outputs.Add(new OutputFact { Kind = "Label", Handle = "LB" });
+        var a = Account(null, new[] { post, P("91", "WFH"), P("92", "NOTE") }, Ctx());
         Assert.Equal(3, a.run.Points);
         Assert.Equal(2, a.run.Accounted);
         Assert.Equal(1, a.run.Review);
@@ -276,9 +358,37 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
         var csv = FieldCodes.Reporting.AccountabilityReport.RenderPoints(a.ledger);
         var lines = csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
         Assert.StartsWith("Point,Handle,RawDescription", lines[0]);
-        Assert.Contains(lines, l => l.StartsWith("91,H91,SSCO,") && l.Contains(",Review,"));
+        Assert.Contains(lines, l => l.StartsWith("91,H91,WFH,") && l.Contains(",Review,") && l.Contains("Fire hydrant"));
         Assert.Contains(lines, l => l.Contains("Summary: 3 points"));
-        Assert.Equal(FieldCodes.Reporting.AccountabilityReport.PointsHeader.Split(',').Length, lines[1].Split(',').Length);
+        Assert.All(lines.Skip(1).Where(l => !l.Contains("Summary:")), l => Assert.Equal(FieldCodes.Reporting.AccountabilityReport.PointsHeader.Split(',').Length, CsvFields(l).Count));
+        var header = FieldCodes.Reporting.AccountabilityReport.PointsHeader.Split(',').ToList();
+        var hydrant = CsvFields(lines.Single(l => l.StartsWith("91,")));
+        Assert.Equal("Utility", hydrant[header.IndexOf("Class")]);
+        Assert.StartsWith("Fire hydrant (WFH, FH)", hydrant[header.IndexOf("Standard")]);
+        Assert.Contains("its own symbol", hydrant[header.IndexOf("Needs")]);
+    }
+
+    /// <summary>One CSV line into fields, honouring quotes.</summary>
+    internal static List<string> CsvFields(string line)
+    {
+        var fields = new List<string>();
+        var sb = new System.Text.StringBuilder();
+        var quoted = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (quoted)
+            {
+                if (ch == '"' && i + 1 < line.Length && line[i + 1] == '"') { sb.Append('"'); i++; }
+                else if (ch == '"') quoted = false;
+                else sb.Append(ch);
+            }
+            else if (ch == '"') quoted = true;
+            else if (ch == ',') { fields.Add(sb.ToString()); sb.Clear(); }
+            else sb.Append(ch);
+        }
+        fields.Add(sb.ToString());
+        return fields;
     }
 
     [Fact]
@@ -299,7 +409,9 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
     [Fact]
     public void APointNothingAccountsForAlwaysHasAnItem()
     {
-        var a = Account(null, new[] { P("1", "SSCO") }, Ctx());
+        var hidden = P("1", "SSCO");
+        hidden.Marker = new MarkerFact { Known = false, Problem = "style unreadable" };
+        var a = Account(null, new[] { hidden, P("2", "WFH"), P("3", "XYZQ 12") }, Ctx());
         var e = a.ledger.Find("1")!;
         Assert.Equal(PointDisposition.Review, e.Disposition);
         Assert.NotEmpty(e.Issues);                                       // something a person can close
@@ -440,15 +552,29 @@ public sealed class ReviewDecisionTests
     }
 
     [Fact]
-    public void TheNewKindsAreRequiredByDefaultExceptSourceChanged()
+    public void ItemKindsAreRequiredOnlyForMissingOrWrongDeliverables()
     {
-        foreach (var k in new[] { ReviewKinds.PointMissingOutput, ReviewKinds.PointMissingLinework, ReviewKinds.PointNoSymbol, ReviewKinds.PointDuplicate,
-                                  ReviewKinds.PointExcludedNoReason, ReviewKinds.PointDeleted, ReviewKinds.LineGap, ReviewKinds.LineMissingVertex, ReviewKinds.LineMissingSegment })
+        // Required action: something the plan must have is missing or wrong.
+        foreach (var k in new[] { ReviewKinds.PointMissingOutput, ReviewKinds.PointMissingLinework, ReviewKinds.PointNoSymbol, ReviewKinds.PointDeleted,
+                                  ReviewKinds.PointReview, ReviewKinds.LineGap, ReviewKinds.LineMissingVertex, ReviewKinds.LineMissingSegment })
         {
             Assert.True(ReviewKinds.Get(k)!.Required, k);
             Assert.True(ReviewKinds.Get(k)!.NeedsNote, k);
         }
-        Assert.False(ReviewKinds.Get(ReviewKinds.PointSourceChanged)!.Required);
+        // Warning: a possible deficiency to look at, not in the required queue.
+        foreach (var k in new[] { ReviewKinds.PointDuplicate, ReviewKinds.PointExcludedNoReason, ReviewKinds.PointSurfaceExcluded })
+        {
+            Assert.False(ReviewKinds.Get(k)!.Required, k);
+            Assert.Equal(ReviewSeverity.Warning, ReviewKinds.Get(k)!.Severity);
+        }
+        // Information: accounted for, nothing to draft.
+        foreach (var k in new[] { ReviewKinds.PointSourceChanged, ReviewKinds.PointSurfaceUnverified })
+        {
+            Assert.False(ReviewKinds.Get(k)!.Required, k);
+            Assert.Equal(ReviewSeverity.Info, ReviewKinds.Get(k)!.Severity);
+        }
+        Assert.Equal(ReviewSeverity.Error, ReviewKinds.Get(ReviewKinds.PointMissingOutput)!.Severity);
+        Assert.Equal(ReviewSeverity.Error, ReviewKinds.Get(ReviewKinds.PointNoSymbol)!.Severity);
     }
 
     [Fact]
@@ -474,7 +600,8 @@ public sealed class IgnoreReasonTests : IClassFixture<RulesFixture>
         Assert.Contains("GS", _fx.Config.IgnoreCodes);
         Assert.Equal("surface", _fx.Config.IgnoreNoteFor("GS12")!.Expect);
         Assert.True(_fx.Config.IgnoreNoteFor("NOTE")!.HasReason);
-        Assert.False(_fx.Config.IgnoreNoteFor("ZK")!.HasReason);           // left for the office to document
+        Assert.Contains("Control check shot", _fx.Config.IgnoreNoteFor("ZK")!.Reason);   // what the drafting standard says it is
+        Assert.False(_fx.Config.IgnoreNoteFor("CONS")!.HasReason);         // left for the office to document
         Assert.Null(_fx.Config.IgnoreNoteFor("FNC"));
         Assert.True(_fx.Parse("GS", "1").Ignored);                            // still never drawn
     }

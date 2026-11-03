@@ -226,7 +226,7 @@ namespace FieldCodes.Editing
     /// written to a temp file, and swapped in with a backup. The original file as it
     /// was before the very first edit is kept permanently alongside.
     /// </summary>
-    public sealed class RuleDocument
+    public sealed partial class RuleDocument
     {
         /// <summary>Kept forever: the file as it was before the editor's first write.</summary>
         public const string OriginalBackupSuffix = ".original.bak";

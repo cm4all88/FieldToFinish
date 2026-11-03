@@ -22,6 +22,19 @@ public sealed class RulesFixture
 
     public ParsedPoint Parse(string description, string pointNumber = "1")
         => Parser.Parse(pointNumber, description);
+
+    /// <summary>The shipped rules with a featureStandard section added, as an office rules file
+    /// (or the accountability harness's ACCSTANDARD) would add it.</summary>
+    public static RulesConfig WithFeatureStandard(string featureStandardJson)
+    {
+        var text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "rules.json")).TrimEnd();
+        if (!text.EndsWith("}", StringComparison.Ordinal)) throw new InvalidOperationException("rules.json does not end with }");
+        text = text.Substring(0, text.Length - 1).TrimEnd() + ",\n  \"featureStandard\": " + featureStandardJson + "\n}\n";
+        var path = Path.Combine(Path.GetTempPath(), "ftf-rules-" + Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(path, text);
+        try { return RulesConfig.Load(path); }
+        finally { File.Delete(path); }
+    }
 }
 
 public static class Canon
