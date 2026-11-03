@@ -6,7 +6,7 @@ namespace FieldCodes.Tests;
 
 /// <summary>
 /// Exhibit labels and area wording, checked against the office's Exhibit B for
-/// 28052700104300: its line table holds L1 13.19' N87°55'53"W (the commencement tie),
+/// A delivered permanent easement exhibit: its line table holds L1 13.19' N87°55'53"W (the commencement tie),
 /// L2 13.62' N44°26'09"E and L3 65.10' N87°55'53"W (the terminus tie); the long courses
 /// are labelled on the line.
 /// </summary>

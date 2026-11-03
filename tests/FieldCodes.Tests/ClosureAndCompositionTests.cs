@@ -6,7 +6,7 @@ namespace FieldCodes.Tests;
 /// <summary>
 /// CAD closure vs course (legal) closure, exclusions with cuts and interior holes, portion
 /// exclusions, multiple components. Stated-course checks use the office's Exhibit B for
-/// 28052700104300 (N44°26'09"E 13.62', N01°22'31"E 244.44', N52°36'35"E 83.48').
+/// a delivered permanent easement (N44°26'09"E 13.62', N01°22'31"E 244.44', N52°36'35"E 83.48').
 /// </summary>
 public sealed class ClosureAndCompositionTests
 {

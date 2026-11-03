@@ -6,7 +6,7 @@ namespace FieldCodes.Tests;
 
 /// <summary>
 /// Pavement arrows whose direction of travel the crew wrote: "ASTO N" / "ASTO S" (points 10075 and
-/// 10076 in the PH10 drawing, both drawn pointing the same way before). The written direction
+/// 10076 in the reference drawing, both drawn pointing the same way before). The written direction
 /// decides which way along the lane; the road decides the exact angle, following curves and
 /// picking the approach street at an intersection; the block's own zero is taken off. Scenes are
 /// synthetic (no project coordinates); X is east, Y is north, azimuths clockwise from north.
@@ -57,7 +57,7 @@ public sealed class PavementArrowDirectionTests
         return Angles.NormalizeDegrees(d.MarkerRotation!.Value * 180 / Math.PI);
     }
 
-    /// <summary>A two-way road running 17.6 degrees east of north (as the PH10 road does at those
+    /// <summary>A two-way road running 17.6 degrees east of north (as the reference drawing's road does at those
     /// two arrows), centre line through the origin.</summary>
     private static Scene SkewedRoad()
     {

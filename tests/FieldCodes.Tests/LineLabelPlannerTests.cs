@@ -69,7 +69,7 @@ public sealed class LineLabelPlannerTests : IClassFixture<RulesFixture>
     [Fact]
     public void AShortFeatureGetsOneLabelAtItsMidpoint()
     {
-        // The 148.8 ft chain link fence from the Gig Harbor inventory.
+        // The 148.8 ft chain link fence from a real project's linework inventory.
         var labels = LineLabelPlanner.Plan(new StraightPath(148.8), Options());
 
         var label = Assert.Single(labels);

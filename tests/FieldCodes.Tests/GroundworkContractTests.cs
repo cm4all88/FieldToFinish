@@ -54,6 +54,38 @@ public sealed class GroundworkContractTests
         Assert.Contains("KindNumber(\"TrimCloud\")", File.ReadAllText(Path.Combine(dir, "CompareTestHarness.cs")));
     }
 
+    [Fact]
+    public void RealDrawingCasesStayOutsideThePublicRepository()
+    {
+        // The cases name real projects, parcels and clients; they live in C:\dev\FTF-RealWorld\cases.
+        var cases = Path.Combine(RepoRoot(), "tests", "RealWorld", "cases");
+        var tracked = Directory.GetFiles(cases).Select(Path.GetFileName).OrderBy(n => n).ToArray();
+        Assert.All(tracked, n => Assert.True(n == "README.md" || n!.StartsWith("example-", StringComparison.Ordinal), n + " is not synthetic"));
+        Assert.Contains("tests/RealWorld/cases/*", File.ReadAllText(Path.Combine(RepoRoot(), ".gitignore")));
+
+        var runner = Read("tests", "RealWorld", "run-all-cases.ps1");
+        Assert.Contains("cases\\cases.psd1", runner);
+        Assert.DoesNotMatch(@"refs\\\w+\\[^']*\.dwg", runner);   // no drawing names in the runner
+    }
+
+    [Fact]
+    public void NoTestScriptCarriesAPersonalWindowsPath()
+    {
+        var offenders = new List<string>();
+        foreach (var file in Directory.GetFiles(Path.Combine(RepoRoot(), "tests"), "*.*", SearchOption.AllDirectories))
+        {
+            if (file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) ||
+                file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)) continue;
+            var ext = Path.GetExtension(file).ToLowerInvariant();
+            if (ext != ".scr" && ext != ".ps1" && ext != ".cs" && ext != ".txt" && ext != ".md") continue;
+            // Generated on every run by run-ui.ps1 and ignored by git: it holds the runner's own path.
+            if (Path.GetFileName(file) == "run-ui.scr") continue;
+            // A made-up user name in a test (C:\Users\x) is fine; a real one is not.
+            if (Regex.IsMatch(File.ReadAllText(file), @"C:\\Users\\(?!Public\b|x\b|example\b)[A-Za-z]{2,}")) offenders.Add(Path.GetFileName(file));
+        }
+        Assert.True(offenders.Count == 0, "Use %APPDATA% or a generated path: " + string.Join(", ", offenders));
+    }
+
     private static string RepoRoot()
     {
         var dir = AppContext.BaseDirectory;

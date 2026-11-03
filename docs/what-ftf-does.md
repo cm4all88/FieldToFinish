@@ -262,7 +262,7 @@ are "required" is a table on Settings > Review and QC.
    Requiring fence evidence, and flagging rather than guessing when two pairings are plausible,
    keeps wrong labels off the plan. The same goes for widths: post spacing is not a measured clear
    opening, and the label shouldn't pretend it is.
-5. **Check claims against the real drawing.** In my PH10 copy, points 10075 and 10076 are stripe
+5. **Check claims against the real drawing.** In my copy of the reference drawing, points 10075 and 10076 are stripe
    shots, not `ASTO N`/`ASTO S`. The code sheet has HGL for hedges, but the rules had no hedge
    feature and no layer for it. Real data keeps showing that the description and the drawing
    differ.

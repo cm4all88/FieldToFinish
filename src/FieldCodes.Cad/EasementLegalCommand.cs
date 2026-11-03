@@ -87,7 +87,7 @@ namespace FieldCodes.Cad
                 new LegalField { Caption = "Exhibit", Hint = "EXHIBIT A", Get = i => i.ExhibitLabel, Set = (i, v) => i.ExhibitLabel = v },
                 new LegalField
                 {
-                    Caption = "That portion of", Hint = "PARCEL 3, SNOHOMISH COUNTY SHORT PLAT NO. SP-330 (7-79), RECORDED UNDER AUDITOR'S FILE NUMBER ..., BEING A PORTION OF ...",
+                    Caption = "That portion of", Hint = "PARCEL 3, ... COUNTY SHORT PLAT NO. ..., RECORDED UNDER AUDITOR'S FILE NUMBER ..., BEING A PORTION OF ...",
                     Get = i => i.ParcelDescription, Set = (i, v) => i.ParcelDescription = v, Multiline = true
                 }
             };

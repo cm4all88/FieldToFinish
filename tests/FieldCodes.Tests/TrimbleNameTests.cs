@@ -5,12 +5,12 @@ namespace FieldCodes.Tests;
 
 /// <summary>
 /// TrimbleName XData: the one piece of source identity the TBC export was found to
-/// preserve (FTFLINEMETA on 553-2750-051-SV-BASE, 49 of 398 line entities). It
+/// preserve (FTFLINEMETA on a real project drawing, 49 of 398 line entities). It
 /// carries the TBC feature name -- "Edge of Pavement", "Top of Slope" -- not the raw
 /// field coding, so it is matched exactly against a configured code, name or label
 /// and NEVER fuzzily. Precedence: figure name, then TrimbleName, then layer.
 ///
-/// Every value in these tests is real: it appeared verbatim in the Gig Harbor
+/// Every value in these tests is real: it appeared verbatim in that real
 /// metadata inspection -- except "ASPH L", the hypothetical future export that
 /// preserves raw coding, which must fire the directional path automatically.
 /// </summary>

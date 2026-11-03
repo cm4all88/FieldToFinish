@@ -159,7 +159,7 @@ Every FTF object carries a stamp (`Ownership.cs:250-307`). Its "point number" sl
 - **Linework control codes:** `rules.json:17` says the PMX codes (B U E C P T G RT X CIR OC HO VO SO RPN CPN) are "Recorded for reference; NOT parsed here".
   - `LineHeights.LineCodes` / `ParameterCodes` (`Linework/LineHeights.cs:33-42`) are skip lists for reading heights, not a parser.
   - Tokens that collide: `EC` (a line command and the edge-of-concrete code), `R` (a parameter code and RIGHT), `L` (LEFT).
-- **Real data (PH10, kept outside the repo):**
+- **Real data (the reference drawing, kept outside the repo):**
   - Linework is 2D polylines only: no survey figures, feature lines or surfaces.
   - The crew interleaves strings. In extraction order the shots run `FNC1 B` … (many other codes) … `FNC1 E`, then `FNC1 B` again 4 shots later.
   - Fence heights there are in the **field notes** (`6.0 WOOD`, `6.5 TALL`), not the description.
@@ -250,7 +250,7 @@ Review sub-kinds, each with a stable id `kind:<point number>`:
   - XYZ;
   - disposition and evidence;
   - first and last audited.
-- **Storage:** a new `DrawingStore` key `ACCOUNT` (JSON, about 1,100 rows for PH10).
+- **Storage:** a new `DrawingStore` key `ACCOUNT` (JSON, about 1,100 rows for the reference drawing).
 - **Snapshots** let FTF show a later edit to a point (`point.sourcechanged`) and keep the text as the crew shot it.
 - **Collector:** CAD, one read-only pass. Points, parse results, stamps grouped by point number, the line-vertex identity index, TIN vertex sets, the control list, ignore reasons and register decisions.
 - **Counts:** shown on the Overview and in `LASTRUN`, for example "1,115 points: 1,080 accounted for (by disposition), 20 excluded with reasons, 15 for review". These replace "Skipped on purpose".
@@ -401,7 +401,7 @@ Steps 1-5 are the accountability and continuity work. Step 7 can be reordered or
 
    Not changed; **your decision** (replace with synthetic values going forward; whether history matters).
 4. **FTFLINES can disagree with the label passes.** It identifies lines without point notes, so a line can be named differently there than by FTFLINELABELS and the gate pass.
-5. **Fence heights from field notes are missing.** They are read only from the raw description, but in PH10 they are in the field notes.
+5. **Fence heights from field notes are missing.** They are read only from the raw description, but in the reference drawing they are in the field notes.
 
 ---
 
@@ -417,13 +417,13 @@ Steps 1-5 are the accountability and continuity work. Step 7 can be reordered or
   - `RequireRanOnce` through `FtfCommandTrace`;
   - run by a new `Invoke-AccountabilityCheck` in `deploy/smoke-test.ps1` that **exits 1 on failure** (unlike the style check), so UPDATEFTF rolls back;
   - pinned in `DeploymentContractTests`.
-- **Seed data:** points with `CogoPoints.Add` plus a point number; linework as `Polyline` and `Polyline3d` built through the shots. This is the TBC-export reality of PH10. TIN surfaces are seeded with `TinSurface.Create` + `AddVertices`, as the contour harness does.
+- **Seed data:** points with `CogoPoints.Add` plus a point number; linework as `Polyline` and `Polyline3d` built through the shots. This is the TBC-export reality of the reference drawing. TIN surfaces are seeded with `TinSurface.Create` + `AddVertices`, as the contour harness does.
 - **Survey figures:** no harness can create them, and nothing shows a survey database can be created headless. Plan:
   1. Build one **synthetic** fixture drawing in Civil 3D from a synthetic field book: invented coordinates, no client data, a README stating its origin. Commit it as `tests/LiveSmoke/fixtures/figures-synthetic.dwg`.
   2. Check `SurveyFigure.Name`, `GetPoints(AllPoints)`, figure numbers and that figures are untouched.
   3. If the Survey API can build the fixture by script, prove that first in a separate spike.
 - **Window tests:** an `acad.exe /b` harness like `RowLotsUiTestHarness` drives `ReviewForm`. This is developer-run, 10-15 minutes.
-- **Real drawing:** PH10 and others under `C:\dev\FTF-RealWorld` (never committed) through `tests/RealWorld/run-real.ps1`. The report records only counts and false-positive notes.
+- **Real drawing:** the reference drawing and others under `C:\dev\FTF-RealWorld` (never committed) through `tests/RealWorld/run-real.ps1`. The report records only counts and false-positive notes.
 
 ### 8.2 Scenarios and what each must prove
 
@@ -463,4 +463,4 @@ Steps 1-5 are the accountability and continuity work. Step 7 can be reordered or
 5. **Required for QC.** Which new kinds are required by default. Proposed: all point kinds except `sourcechanged`; `line.gap` probable and possible.
 6. **Committed project data** (section 7 item 3): replace it with synthetic data going forward? Rewrite history or not?
 7. **Survey-figure fixture.** OK to build it by hand once in Civil 3D from a synthetic field book?
-8. **Observation dates.** Where do your crews' dates live: a user-defined property, the survey database, or the field book name (PH10's field books are named by date, e.g. `20261016-JAM`)?
+8. **Observation dates.** Where do your crews' dates live: a user-defined property, the survey database, or the field book name (the reference drawing's field books are named by date and crew)?

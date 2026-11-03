@@ -6,7 +6,7 @@ namespace FieldCodes.Tests;
 
 /// <summary>
 /// The production cleanup pass, from issues the real drawings exposed: a commencement tie that follows a
-/// right-of-way margin drawn as a line and a curve (Kenmore 710), a lot drawn as separate lines, honest width
+/// right-of-way margin drawn as a line and a curve (exhibit set B), a lot drawn as separate lines, honest width
 /// dimensions, the north arrow of a turned view, exhibit hatch scale, viewport content choices, office wording
 /// options and the grouped QA summary.
 /// </summary>
@@ -17,7 +17,7 @@ public sealed class ProductionCleanupTests
     private static P2 P(double x, double y) => new(x, y);
     private static Course L(double x0, double y0, double x1, double y1) => Course.Line(P(x0, y0), P(x1, y1));
 
-    // ------------------------------------------------------------------ Kenmore 710 (C4)
+    // ------------------------------------------------------------------ exhibit set B, curve TCE
 
     private static readonly P2 Center = P(1294138.9871, 283167.8494);
     private static P2 OnArc(double degrees) => Center + P(Math.Cos(degrees * Math.PI / 180), Math.Sin(degrees * Math.PI / 180)) * 210.5;
@@ -196,7 +196,7 @@ public sealed class ProductionCleanupTests
     [Fact]
     public void LotLinesThatRunPastTheCornersEncloseOneLotAndSayWhatWasSetAside()
     {
-        // Silver Lake Parcel 3: the east line runs on past both corners; the north side is two polylines.
+        // Exhibit set A, parcel 3: the east line runs on past both corners; the north side is two polylines.
         var chain = CurveChain.Enclosed(new List<IList<Course>>
         {
             new List<Course> { L(1317997.8764, 325831.6925, 1318345.1364, 325819.1493) },
@@ -295,7 +295,7 @@ public sealed class ProductionCleanupTests
     [Fact]
     public void TheC2PermanentEasementIsDimensionedOnItsFullWidthCourseOnly()
     {
-        // Silver Lake 104300 after the lengthwise trim along the section line (baseline geometry report).
+        // Exhibit set A permanent easement after the lengthwise trim along the section line (baseline geometry report).
         var route = new List<Course> { L(1317996.603, 325778.648, 1318062.932, 325829.343) };
         var boundary = new List<Course>
         {

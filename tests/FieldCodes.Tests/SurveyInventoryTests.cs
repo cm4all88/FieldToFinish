@@ -4,7 +4,7 @@ namespace FieldCodes.Tests;
 
 /// <summary>
 /// The feature catalog's ground truth, pinned as tests: every point-feature code
-/// actually observed in the 553-2750-051-SV-BASE survey (765 points), classified
+/// actually observed in a real project survey (765 points), classified
 /// exactly as the engine handles it today.
 ///
 /// The decisive empirical fact this file preserves: in the real survey, EVERY

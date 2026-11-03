@@ -298,7 +298,7 @@ public sealed class StripTrimRegressionTests
 }
 
 /// <summary>
-/// The Parcel 3 sewer easement from Exhibit B (28052700104100): POB on the south line,
+/// The Parcel 3 sewer easement from a delivered Exhibit B: POB on the south line,
 /// N52°36'35"E 60.16', N01°22'31"E 277.76' to the north line, a 15' permanent easement and a
 /// 25' temporary construction easement on the same centerline, commencing 65.10' along the
 /// south line at the SW corner of Parcel 3. The exhibit shows 5,069 SF for the permanent easement.

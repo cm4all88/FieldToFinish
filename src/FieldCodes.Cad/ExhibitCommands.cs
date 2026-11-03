@@ -225,7 +225,7 @@ namespace FieldCodes.Cad
             var fields = new List<KeyValuePair<string, Action<string>>>
             {
                 new KeyValuePair<string, Action<string>>("Exhibit title <" + info.Title + ">", v => info.Title = v),
-                new KeyValuePair<string, Action<string>>("Location (e.g. NE 1/4 OF SECTION 27, TOWNSHIP 28 N, RANGE 5 E, W.M.)", v => info.Location = v),
+                new KeyValuePair<string, Action<string>>("Location (e.g. NE 1/4 OF SECTION 1, TOWNSHIP 1 N, RANGE 1 E, W.M.)", v => info.Location = v),
                 new KeyValuePair<string, Action<string>>("Project", v => info.Project = v),
                 new KeyValuePair<string, Action<string>>("Parcel" + (string.IsNullOrWhiteSpace(info.Parcel) ? string.Empty : " <" + info.Parcel + ">"), v => info.Parcel = v),
                 new KeyValuePair<string, Action<string>>("Owner", v => info.Owner = v),

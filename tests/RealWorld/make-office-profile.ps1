@@ -16,7 +16,7 @@ $s = New-Object FieldCodes.Settings.FtfSettings
 $x = $s.Exhibits
 $office = 'U:\PSO\Shared\Divisions\00Survey\OFC_RSC\Equipment & Software\Autocad\C3D2024'
 
-# Sheet and plotting: every delivered exhibit (Silver Lake 2026-05, Kenmore 2026-07) and the office template's 8x11 EXHIBIT layout.
+# Sheet and plotting: every delivered exhibit (set A 2026-05, set B 2026-07) and the office template's 8x11 EXHIBIT layout.
 $x.SheetWidthIn = 8.5; $x.SheetHeightIn = 11; $x.MarginIn = 1.0
 $x.PlotDevice = 'AutoCAD PDF (High Quality Print).pc3'
 $x.MediaName = 'ANSI_full_bleed_A_(8.50_x_11.00_Inches)'
@@ -43,8 +43,8 @@ $x.ScaleBarBlock = 'G-ScalebarFig'; $x.ScaleBarVisibility = '1" = {scale}''';  $
 $x.SheetBlocks = 'PMXLogo@1.054,1.973@G-BORD-LOGO@Visibility1=Puyallup,scale=0.68'
 $x.SymbolLayer = 'G-BORD-XLIT'
 
-# Viewport: the reference exhibit's (28052700104100) main viewport, locked, on the no-plot XX-VPRT layer.
-# (The Kenmore exhibits use a shorter viewport, 1.043,3.21 6.374 x 5.747 on 00-VP, leaving a band for tables and legend.)
+# Viewport: the reference exhibit's (set A strip) main viewport, locked, on the no-plot XX-VPRT layer.
+# (The set B exhibits use a shorter viewport, 1.043,3.21 6.374 x 5.747 on 00-VP, leaving a band for tables and legend.)
 $x.ViewportLeftIn = 1.07; $x.ViewportBottomIn = 1.922; $x.ViewportWidthIn = 6.39; $x.ViewportHeightIn = 6.996
 $x.ViewportLayer = 'XX-VPRT'; $x.LockViewport = $true
 $x.Scales = '10,20,30,40,50,60,100,200,300,400,500,600,1000'
@@ -52,7 +52,7 @@ $x.Orientation = 'NorthUp'
 $x.FitMargin = 0.08               # the office exhibits fill the viewport closely (104300 at 1" = 60')
 # First match wins. Parcel, ROW, section and control layers have no Hide rule: they stay as context.
 # Office exhibits show no topography; the survey base's topo, TIN and point layers are hidden, improvements (V-SURF) only where
-# they are a source of the easement (an excluded building, say). V-TEXT-ESMT/FEE/TCE hold other exhibits' labels (Kenmore).
+# they are a source of the easement (an excluded building, say). V-TEXT-ESMT/FEE/TCE hold other exhibits' labels (set B).
 $x.ViewportLayerRules = 'V-ESMT-*=Relevant; V-CTRL-PMX_-PNTS-E=Show; V-CTRL-OTHE-PNTS-E=Hide; *-PNTS-E=Hide; V-TOPO-*=Hide; V-TINN-*=Hide; V-SURF-*=Relevant; C-BNDY-LIMT*=Hide; V-TEXT-ESMT*=Hide; V-TEXT-FEE*=Hide; V-TEXT-TCE*=Hide'
 
 # Annotation: Survey text (romans, 0.75 wide) at 0.08; leaders xPMX SURV Text Arrow Anno; dimensions PMX SURV ANNO.
@@ -65,7 +65,7 @@ $x.DrawParcelLabel = $false
 $x.NarrowStripLabel = 'NoLeader'
 $x.StripLabelAlong = $false      # 104100 and 104300: "APPROX EASEMENT AREA = ..." horizontal, beside the strip, no leader
 
-# Tables and legend: below the viewport, above the logo, as on the Kenmore exhibits.
+# Tables and legend: below the viewport, above the logo, as on the set B exhibits.
 $x.LineTableTitle = 'LINE TABLE'; $x.LineTableColumns = 'LINE NO.={id}|DISTANCE={distance}|BEARING={bearing}'
 $x.CurveTableTitle = 'CURVE TABLE'; $x.CurveTableColumns = 'CURVE NO.={id}|LENGTH={length}|RADIUS={radius}|DELTA={delta}'
 $x.LineTableX = 1.12; $x.LineTableY = 3.12
@@ -77,7 +77,7 @@ $x.NotesX = 1.12; $x.NotesY = 2.0; $x.Notes = ''
 # Easement drafting in model space: the office's layer and hatch for the permanent easement, its area wording.
 $e = $s.Easements
 # The V-ESMT family, one sub-layer per kind of object, so an exhibit can show the permanent easement and hide the
-# temporary one in its viewport (as the Kenmore exhibits do with their own per-easement layers).
+# temporary one in its viewport (as the set B exhibits do with their own per-easement layers).
 $e.BoundaryLayer = 'V-ESMT-E'; $e.SidelineLayer = 'V-ESMT-E'; $e.CenterlineLayer = 'V-ESMT-CNTR-E'
 $e.HatchLayer = 'V-ESMT-PATT-E'
 $e.TextLayer = 'V-ESMT-TEXT-E'; $e.DimensionLayer = 'V-ESMT-DIMS-E'; $e.TableLayer = 'V-ESMT-TABL-E'
@@ -85,10 +85,10 @@ $e.TemporaryLayer = 'V-ESMT-TEMP-E'; $e.TemporaryHatchLayer = 'V-ESMT-TEMP-PATT-
 $e.TemporaryTextLayer = 'V-ESMT-TEMP-TEXT-E'; $e.TemporaryDimensionLayer = 'V-ESMT-TEMP-DIMS-E'
 $e.AreaLayer = 'V-ESMT-CONS-E'
 $e.HatchPattern = 'ANSI31'
-# A temporary construction easement is hatched in its own pattern, as the Kenmore TCE is.
+# A temporary construction easement is hatched in its own pattern, as the set B TCE is.
 $e.TemporaryHatchPattern = 'ANSI37'
 # The reference exhibits set the permanent easement's hatch colour on the object (red) and leave the
-# temporary one ByLayer: dumps\SV-2169171001-ESMT-28052700104100.txt hatch "... associative True color red".
+# temporary one ByLayer: the set A strip exhibit's dump: hatch "... associative True color red".
 $e.HatchColor = 'red'
 # The office drawings have no easement annotation layers to copy, so a layer FTF creates follows their
 # annotation convention instead: V-TEXT / V-TEXT-E / V-PROP-TEXT are green at 0.40, V-TEXT-TABL cyan at 0.40,
@@ -111,27 +111,27 @@ $x.TableColumnScale = 0.65          # Survey text is narrow (0.75 width factor)
 # Production cleanup choices (2026-09), each from what the delivered exhibits show -- confirm with the office:
 $x.NorthArrowProperty = 'Angle1'    # G-ScalebarFig's rotation parameter turns its north arrow (BLKDUMP of PMX-Survey-Layouts.dwt)
 $x.HatchSpacingIn = 0.0625
-$x.HatchSpacings = 'ANSI31=0.03125; ANSI37=0.0977'   # 104100: ANSI31 annotative 0.25 prints 1/32"; Kenmore: ANSI37 at 31.25, 1" = 40' prints 0.098"
+$x.HatchSpacings = 'ANSI31=0.03125; ANSI37=0.0977'   # set A strip: ANSI31 annotative 0.25 prints 1/32"; set B: ANSI37 at 31.25, 1" = 40' prints 0.098"
 $x.OverheadPower = 'Hide'; $x.OverheadPowerLayers = 'V-UTIL-POWR-OVHD*'    # 104100 froze V-UTIL-POWR-OVHD-E in its viewport
-$x.OtherHatches = 'Relevant'; $x.OtherHatchLayers = 'C-PROP-RWAY-PATT*; C-BNDY-LIMT-PATT*'   # Kenmore froze other exhibits' fee and TCE hatches
-$x.StampMode = 'Placeholder'; $x.StampX = 6.512; $x.StampY = 2.06; $x.StampSizeIn = 1.5   # Kenmore's WA-stamp-here place
+$x.OtherHatches = 'Relevant'; $x.OtherHatchLayers = 'C-PROP-RWAY-PATT*; C-BNDY-LIMT-PATT*'   # set B froze other exhibits' fee and TCE hatches
+$x.StampMode = 'Placeholder'; $x.StampX = 6.512; $x.StampY = 2.06; $x.StampSizeIn = 1.5   # set B's WA-stamp-here place
 $x.StampLibrary = Join-Path $office 'Symbols\pmxSurveyStamps.dwg'
 $x.AreaLabelFormat = 'APPROX {purpose} EASEMENT AREA = {sqft} SF'
-$x.LineTableHeadings = 'DISTANCE/BEARING'     # Silver Lake
+$x.LineTableHeadings = 'DISTANCE/BEARING'     # set A
 $x.TableSpots = ''
 
 New-Item -ItemType Directory -Force (Split-Path -Parent $Out) | Out-Null
 $s.Save($Out)
 "wrote $Out"
 
-# Second office layout, from the Kenmore exhibits (2026-07): a shorter viewport on 00-VP leaves a band below it
+# Second office layout, from the set B exhibits (2026-07): a shorter viewport on 00-VP leaves a band below it
 # for the line and curve tables side by side, between the logo, the scale bar and the stamp area.
 $x.ViewportLeftIn = 1.043; $x.ViewportBottomIn = 3.21; $x.ViewportWidthIn = 6.374; $x.ViewportHeightIn = 5.747
 $x.ViewportLayer = '00-VP'
 $x.LineTableX = 1.12; $x.LineTableY = 3.15
 $x.CurveTableX = 3.08; $x.CurveTableY = 3.15
 $x.DrawLegend = $false
-$x.LineTableHeadings = 'LENGTH/DIRECTION'     # Kenmore
+$x.LineTableHeadings = 'LENGTH/DIRECTION'     # set B
 $x.TableSpots = '3.08,3.15; 5.0,3.15'         # beside the other table, clear of the logo, when a long table would run into it
 $tables = Join-Path (Split-Path -Parent $Out) 'PMX SURVEY EXHIBIT TABLES.json'
 $s.Save($tables)

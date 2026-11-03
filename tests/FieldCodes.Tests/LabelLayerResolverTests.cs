@@ -5,7 +5,7 @@ namespace FieldCodes.Tests;
 
 /// <summary>
 /// Label-layer resolution, pinned against the REAL layer table dumped from
-/// 553-2750-051-SV-BASE (177 layers; the relevant ones below verbatim). The
+/// a real project base drawing (177 layers; the relevant ones below verbatim). The
 /// office standard the data shows: linework V-GROUP-FEAT-E pairs with text
 /// V-GROUP-FEAT-TEXT-E, and less specific features fall back to the group text
 /// layer (V-SURF-FENC-CHNL-E pairs with V-SURF-FENC-TEXT-E). The resolver only

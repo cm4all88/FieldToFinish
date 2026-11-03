@@ -55,7 +55,7 @@ namespace FieldCodes.Linework
     /// <summary>
     /// Resolves the layer a line label belongs on. The drawing's ACTUAL layer table
     /// is the authority -- the patterns below were read from the office's real
-    /// standard (553-2750-051-SV-BASE, 177 layers), where existing linework
+    /// standard (a real project base drawing, 177 layers), where existing linework
     /// V-&lt;GROUP&gt;-&lt;FEAT&gt;-E pairs with text V-&lt;GROUP&gt;-&lt;FEAT&gt;-TEXT-E, and less
     /// specific features fall back to the group's text layer (V-SURF-FENC-CHNL-E
     /// pairs with V-SURF-FENC-TEXT-E).

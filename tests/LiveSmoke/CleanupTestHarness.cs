@@ -1,4 +1,4 @@
-// Headless checks for the production cleanup pass, on state plane coordinates like the Kenmore drawings:
+// Headless checks for the production cleanup pass, on state plane coordinates like the office's exhibit drawings:
 //
 // CLEANSEED     the NE 192nd St south margin as a line and a separate curve (R 210.50), a lot drawn as four
 //               separate lines plus a stray line touching one corner, an overhead power line, and a stamp block.
@@ -341,7 +341,7 @@ namespace FtfCleanupTest
                         var messages = string.Join(" | ", exhibit.Review.Select(n => n.Message).ToArray());
                         ed.WriteMessage("\n   TEST_TB: " + string.Join(", ", a.Select(kv => kv.Key + "=" + kv.Value).ToArray()));
                         Check(ed, a.Count == 5, "the office title block is placed with its attributes");
-                        Check(ed, a.ContainsKey("JOBNO") && a["JOBNO"] == "5543744009" && a.ContainsKey("NOTE") && a["NOTE"] == "LOT C", "mapped fields carry the exhibit's own values (job number, parcel)");
+                        Check(ed, a.ContainsKey("JOBNO") && a["JOBNO"] == "1234500002" && a.ContainsKey("NOTE") && a["NOTE"] == "LOT C", "mapped fields carry the exhibit's own values (job number, parcel)");
                         Check(ed, a.ContainsKey("APPROVEDBY") && a["APPROVEDBY"] == "XX" && messages.Contains("APPROVEDBY was not filled"),
                               "the approval field is never filled by FTF, even when an older profile maps it");
                         Check(ed, a.ContainsKey("DRAWNBY") && a["DRAWNBY"] == string.Empty && messages.Contains("DRAWNBY was not filled"),

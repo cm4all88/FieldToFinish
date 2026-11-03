@@ -58,7 +58,7 @@ public sealed class ExhibitTitleBlockRulesTests
         Assert.NotNull(ExhibitSettings.AttributeRefusal("CheckedBy", "JRD"));
         Assert.NotNull(ExhibitSettings.AttributeRefusal("DrawnBy", "CMM"));
         // Ordinary fields may carry a fixed value.
-        Assert.Null(ExhibitSettings.AttributeRefusal("JobNo", "2169171001"));
+        Assert.Null(ExhibitSettings.AttributeRefusal("JobNo", "1234500001"));
     }
 
     [Fact]
@@ -87,9 +87,9 @@ public sealed class ExhibitTitleBlockRulesTests
     [Fact]
     public void RebuildMemoryIsSavedAndOldExhibitsReadWithout()
     {
-        var item = new ExhibitItem { Key = "BORDER", Kind = "TITLEBLOCK", Attributes = new Dictionary<string, string> { { "JobNo", "2169171001" } }, HandPosition = true };
+        var item = new ExhibitItem { Key = "BORDER", Kind = "TITLEBLOCK", Attributes = new Dictionary<string, string> { { "JobNo", "1234500001" } }, HandPosition = true };
         var back = JsonConvert.DeserializeObject<ExhibitItem>(JsonConvert.SerializeObject(item))!;
-        Assert.Equal("2169171001", back.Attributes!["JobNo"]);
+        Assert.Equal("1234500001", back.Attributes!["JobNo"]);
         Assert.True(back.HandPosition);
 
         var old = JsonConvert.DeserializeObject<ExhibitItem>("{\"key\":\"LABEL:x:1\",\"kind\":\"LABEL\",\"text\":\"N 10.00'\"}")!;

@@ -8,7 +8,7 @@ namespace FieldCodes.Tests;
 /// the raw field coding the TBC export erased from the linework -- "FOG B" vs
 /// "LNDY B" on the same flattened stripe layer, "RWRK B" wall subtypes, "ASPH L"
 /// directional intent. The notes must AGREE (set intersection) or nothing is
-/// claimed. Descriptions come from the real 553-2750-051 survey grammar.
+/// claimed. Descriptions come from a real project survey's grammar.
 /// </summary>
 public sealed class PointNotesTests : IClassFixture<RulesFixture>
 {
@@ -104,7 +104,7 @@ public sealed class PointNotesTests : IClassFixture<RulesFixture>
 
     // ---------------------------- the same flattened layer, different labels
 
-    /// <summary>The channelization slice of the real Gig Harbor layer table.</summary>
+    /// <summary>The channelization slice of a real project's layer table.</summary>
     private static readonly HashSet<string> ChanLayers = LabelLayerResolver.BuildCatalog(
         new[] { "V-CHAN-STRP-E", "V-CHAN-STRP-TEXT-E", "V-CHAN-MRKG-TEXT-E" });
 

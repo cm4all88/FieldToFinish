@@ -2083,7 +2083,7 @@ namespace FtfUiTest
                 if (form == null) return;
                 var names = new Dictionary<string, string>
                 {
-                    { "That portion of", "LOT 2, TEST SHORT PLAT NO. 1, BEING A PORTION OF SECTION 27, TOWNSHIP 28 NORTH, RANGE 5 EAST, W.M." },
+                    { "That portion of", "LOT 2, TEST SHORT PLAT NO. 1, BEING A PORTION OF SECTION 1, TOWNSHIP 1 NORTH, RANGE 1 EAST, W.M." },
                     { "Commencing at", "THE NORTHWEST CORNER OF SAID LOT 2" },
                     { "Point of Beginning is on", "THE NORTH LINE OF SAID LOT 2" },
                     { "Terminus is on", "THE EAST LINE OF SAID LOT 2" },
@@ -2138,10 +2138,10 @@ namespace FtfUiTest
                 Check(FindButton(form, "Create exhibit") != null && FindButton(form, "Create exhibit").Enabled, "nothing is required before Create exhibit");
                 if (boxes.Count == 15)
                 {
-                    boxes[1].Text = "NE 1/4 OF SECTION 27, TOWNSHIP 28 N, RANGE 5 E, W.M.";
+                    boxes[1].Text = "NE 1/4 OF SECTION 1, TOWNSHIP 1 N, RANGE 1 E, W.M.";
                     boxes[4].Text = "UI TEST OWNER";
                     boxes[5].Text = "280527001";
-                    boxes[11].Text = "2169171001";
+                    boxes[11].Text = "1234500001";
                     boxes[13].Text = "UIT";
                 }
                 ShotForm(form, "24-exhibit-information");
@@ -2159,7 +2159,7 @@ namespace FtfUiTest
                 Check(x.Items.Any(i => i.Key == "NORTH") && x.Items.Any(i => i.Key == "SCALEBAR") && x.Items.Any(i => i.Key == "TITLE") && x.Items.Any(i => i.Key.StartsWith("AREA:", StringComparison.Ordinal)),
                       "north arrow, scale bar, title and area label are on the sheet");
                 Check(x.Info.Owner == "UI TEST OWNER" && x.Info.Apn == "280527001" && x.Info.Location.StartsWith("NE 1/4", StringComparison.Ordinal)
-                      && x.Info.ProjectNumber == "2169171001" && x.Info.CheckedBy == "UIT", "what was typed in the window is stored with the exhibit");
+                      && x.Info.ProjectNumber == "1234500001" && x.Info.CheckedBy == "UIT", "what was typed in the window is stored with the exhibit");
                 Check(!x.Review.Any(r => r.Severity == "Error"), "the default sheet has no errors for a single strip easement");
             }, 5000);
             add("inspect this exhibit layout", () => Send("FTFEXHIBITINSPECT  "), 2500);

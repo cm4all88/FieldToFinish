@@ -243,7 +243,7 @@ dotnet test FieldToFinish.sln
 
 ### Verified against a real drawing
 
-`553-2750-051-SV-BASE` (Gig Harbor SW Park), 765 CogoPoints:
+A real project base drawing (identifiers withheld), 765 CogoPoints:
 
 ```
 ignored (topo)  : 746
@@ -1106,7 +1106,7 @@ by FTFLABELLINE, the bulk pass and the review, so they cannot disagree):
    specific first, used ONLY if that exact layer exists: `V-CHAN-STRP-E ->
    V-CHAN-STRP-TEXT-E`; `V-SURF-FENC-CHNL-E -> V-SURF-FENC-TEXT-E` (no CHNL text
    layer exists); `V-ALGN-CNTR-E -> V-ALGN-TEXT`. The pattern was read from the
-   real 177-layer table of 553-2750-051-SV-BASE, not invented.
+   real 177-layer table of a project base drawing, not invented.
 3. The family's single text layer, when exactly one exists.
 4. The configured default -- and only then. Several plausible family layers
    (V-SURF-HDRL-E has nine surface text layers and no derivable one): FTF
@@ -1201,7 +1201,7 @@ No side is ever guessed, and no side is ever inferred spatially from nearby poin
 (XData, extension dictionaries, hyperlinks, registered applications) before
 concluding the coding is gone.
 
-**What the inspection actually found (553-2750-051-SV-BASE, 2026-08):** 49 of 398
+**What the inspection actually found (a real project base drawing, 2026-08):** 49 of 398
 line entities carry `TrimbleName` XData -- the TBC feature *name* ("Edge of
 Pavement", "Top of Slope", "FL ASPH CURB", "Building"), not the raw field coding,
 and never a LEFT/RIGHT token. No other metadata survives: no extension
@@ -1215,7 +1215,7 @@ future export ever preserve raw coding ("ASPH L") in TrimbleName, the code match
 AND the directional modifier fire with no FTF change at all.
 
 **UPSTREAM IMPROVEMENT (recorded):** the TBC export used for
-553-2750-051-SV-BASE flattened figure identity -- wall/curb subtypes collapsed to
+That drawing's TBC export flattened figure identity -- wall/curb subtypes collapsed to
 generic layers and figure names were lost entirely; only TrimbleName XData
 survived, on a minority of entities and without directional tokens. Exporting
 Civil 3D survey figures (or preserving figure names / raw source coding -- ideally

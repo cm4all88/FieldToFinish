@@ -55,10 +55,10 @@ public sealed class OfficeStandardTests
         var x = new ExhibitSettings { TitleBlockAttributes = "JobNo={projectNumber}; SheetNo={sheetNo}; SheetOf={sheetOf}; DrawnBy={preparedBy}" };
         var map = x.AttributeMap();
         Assert.Equal(new[] { "JobNo", "SheetNo", "SheetOf", "DrawnBy" }, map.Select(m => m.Key));
-        var info = new ExhibitInfo { Sheet = "2 OF 3", ProjectNumber = "2169171001", PreparedBy = "cmm" };
+        var info = new ExhibitInfo { Sheet = "2 OF 3", ProjectNumber = "1234500001", PreparedBy = "cmm" };
         Assert.Equal("2", info.Fill("{sheetNo}"));
         Assert.Equal("3", info.Fill("{sheetOf}"));
-        Assert.Equal("2169171001", info.Fill(map[0].Value));
+        Assert.Equal("1234500001", info.Fill(map[0].Value));
         Assert.Equal("CMM", info.Fill("{preparedBy}"));
         Assert.Equal(string.Empty, info.Fill("{checkedBy}"));                                           // blank stays blank, not "{checkedBy}"
         Assert.Equal("1", new ExhibitInfo { Sheet = "1 OF 1" }.Fill("{sheetOf}"));
