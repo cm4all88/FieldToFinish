@@ -525,7 +525,8 @@ namespace FtfAccountTest
                 var p = FindPoint(db, tr, 702);
                 if (p == null) Fatal("point 702 is gone.");
                 p.UpgradeOpen();
-                p.Location = new Point3d(p.Location.X + 1, p.Location.Y, p.Location.Z);
+                // CogoPoint.Location is read-only in Civil 3D; a point moves by its easting.
+                p.Easting = p.Easting + 1;
                 tr.Commit();
             }
             _pointSnapshot = PointSnapshot(db);

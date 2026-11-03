@@ -121,7 +121,9 @@ namespace Autodesk.Civil.DatabaseServices
         public string RawDescription { get; set; }
         public string FullDescription { get; }
         public string DescriptionFormat { get; set; }
-        public Point3d Location { get; set; }
+        // Read-only in AeccDbMgd (CS0200 when assigned, as the Windows build of the accountability
+        // harness found at 6aca731): a point moves by Easting, Northing and Elevation.
+        public Point3d Location { get; }
         public double Easting { get; set; }
         public double Northing { get; set; }
         public double Elevation { get; set; }
