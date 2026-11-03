@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Runs tools/check-before-push.sh before git pushes anything. Enable it in a working copy with
+#   git config core.hooksPath tools/githooks
+# Skip it once, knowingly, with git push --no-verify.
+exec "$(git rev-parse --show-toplevel)/tools/check-before-push.sh"

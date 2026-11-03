@@ -25,5 +25,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\CadCompileCheck\Stubs\Civil.cs" Link="Civil.cs" />
+    <Compile Include="..\..\CadCompileCheck\Stubs\CivilShadows.cs" Link="CivilShadows.cs" />
+    <Compile Include="..\..\CadCompileCheck\Stubs\CivilApiNames.g.cs" Link="CivilApiNames.g.cs" Condition="Exists('..\..\CadCompileCheck\Stubs\CivilApiNames.g.cs')" />
   </ItemGroup>
 </Project>

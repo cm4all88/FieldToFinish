@@ -8,13 +8,16 @@ using System.Reflection;
 using System.Text;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
-using Autodesk.Civil.ApplicationServices;
-using Autodesk.Civil.DatabaseServices;
 using FieldCodes.Linework;
 using FieldCodes.Review;
 using FieldCodes.Settings;
 
 using AcEntity = Autodesk.AutoCAD.DatabaseServices.Entity;
+// Civil 3D types are named through aliases only: Autodesk.Civil.DatabaseServices also declares
+// DBObject, Entity and other AutoCAD names, so importing it beside Autodesk.AutoCAD.DatabaseServices
+// makes those names ambiguous (CS0104) in the real Windows build.
+using CivApp = Autodesk.Civil.ApplicationServices;
+using CivDb = Autodesk.Civil.DatabaseServices;
 
 namespace FieldCodes.Cad
 {
@@ -166,15 +169,15 @@ namespace FieldCodes.Cad
                 if (id.IsErased) continue;
                 var entity = tr.GetObject(id, OpenMode.ForRead, false, true) as AcEntity;
                 var curve = entity as Curve;
-                if (curve == null || entity is CogoPoint) continue;
+                if (curve == null || entity is CivDb.CogoPoint) continue;
                 var stamp = Ownership.Read(entity);
                 var isCorrection = stamp != null && stamp.Kind == FtfEntityKind.LineCorrection;
                 if (stamp != null && stamp.Kind != FtfEntityKind.DraftLine && !isCorrection) continue;   // FTF's annotation is not survey linework
 
                 string figureName = null;
                 string type;
-                var figure = entity as FeatureLine;
-                if (figure != null) { figureName = figure.Name; type = entity is SurveyFigure ? "Survey Figure" : "Feature Line"; }
+                var figure = entity as CivDb.FeatureLine;
+                if (figure != null) { figureName = figure.Name; type = entity is CivDb.SurveyFigure ? "Survey Figure" : "Feature Line"; }
                 else if (entity is Polyline || entity is Polyline2d || entity is Polyline3d) type = "Polyline";
                 else if (entity is Line) type = "Line";
                 else if (entity is Arc) type = "Arc";
@@ -312,7 +315,7 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>What a point's marker is: the style (or its point group's override), its type and block.</summary>
-        private static MarkerFact Marker(CogoPoint cogo, Database db, Transaction tr, IDictionary<ObjectId, MarkerFact> cache)
+        private static MarkerFact Marker(CivDb.CogoPoint cogo, Database db, Transaction tr, IDictionary<ObjectId, MarkerFact> cache)
         {
             var e = Compare.CogoPointPlotting.Resolve(cogo, db, tr);
             var fact = new MarkerFact { Known = e.MarkerKnown, Visible = e.MarkerVisible, Problem = e.Problem };
@@ -412,19 +415,19 @@ namespace FieldCodes.Cad
         {
             var found = new List<SurfaceRead>();
             ObjectIdCollection ids;
-            try { ids = CivilDocument.GetCivilDocument(db).GetSurfaceIds(); }
+            try { ids = CivApp.CivilDocument.GetCivilDocument(db).GetSurfaceIds(); }
             catch (System.Exception) { return found; }
             foreach (ObjectId id in ids)
             {
                 if (id.IsNull || id.IsErased) continue;
-                TinSurface surface;
-                try { surface = tr.GetObject(id, OpenMode.ForRead, false, true) as TinSurface; }
+                CivDb.TinSurface surface;
+                try { surface = tr.GetObject(id, OpenMode.ForRead, false, true) as CivDb.TinSurface; }
                 catch (System.Exception) { continue; }
                 if (surface == null) continue;
                 var read = new SurfaceRead { Name = surface.Name, Tolerance = tolerance };
                 try
                 {
-                    foreach (TinSurfaceTriangle t in surface.GetTriangles(false))
+                    foreach (CivDb.TinSurfaceTriangle t in surface.GetTriangles(false))
                     {
                         read.AddVertex(t.Vertex1.Location);
                         read.AddVertex(t.Vertex2.Location);

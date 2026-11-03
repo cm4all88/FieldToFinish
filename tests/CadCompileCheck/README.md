@@ -30,7 +30,9 @@ only Autodesk's assemblies and the Windows Runtime are.
 | `Stubs/Geometry.cs` | The Ge types (points, vectors, matrices, curves), plus `Extents2d` / `Extents3d`, which AcDbMgd declares in DatabaseServices |
 | `Stubs/Extra.cs` | The AdWindows ribbon, `ProgressMeter`, xref spatial filters, regions, `CompositeCurve3d` |
 | `Stubs/WinRt.cs` | The Windows 10 SDK contracts (OCR, PDF rendering) used by FTFRECORD |
-| `Stubs/Civil.cs` | Civil 3D (AeccDbMgd): the Civil document, COGO points, styles, settings, alignments, surfaces, feature lines, pipe networks. Kept apart so `tests/RealApiCompileCheck` can compile the plugin against the real AutoCAD assemblies plus this file alone |
+| `Stubs/Civil.cs` | Civil 3D (AeccDbMgd): the Civil document, COGO points, styles, settings, alignments, surfaces, feature lines, pipe networks. Kept apart so `tests/RealApiCompileCheck` can compile the plugin against the real AutoCAD assemblies plus the Civil files alone |
+| `Stubs/CivilShadows.cs` | Civil 3D names the plugin does not use but AutoCAD or .NET also declare (`DBObject`, `Entity`, `Section`, `Assembly`), so a bare use is ambiguous here as in the real build |
+| `Stubs/CivilApiNames.g.cs` | Written by `tools/CivilApiNames` on a Civil 3D machine: a placeholder for every other public Civil 3D type. Not committed yet; until it is, only the names above are checked |
 
 The stubs follow the real AcDbMgd / AcMgd / AcCoreMgd / AdWindows / AeccDbMgd signatures
 (namespace, declaring type, parameter types, return type, static or instance) for the
@@ -56,3 +58,21 @@ shares with System.Drawing or WinForms (`Font`, `Region`, `Image`...) is not amb
 is in the real build. `tests/RealApiCompileCheck` compiles against Autodesk's real AutoCAD 2024
 reference assemblies and catches it; `AmbiguousTypeNameTests` in the unit tests catches the
 common case on any machine.
+
+The same holds between Civil 3D and AutoCAD, and Civil 3D's assemblies are not published, so
+there is no real assembly to compile against. `DBObject` in `Accountability.cs`
+(`Autodesk.Civil.DatabaseServices.DBObject` and `Autodesk.AutoCAD.DatabaseServices.DBObject`)
+passed here and stopped UPDATEFTF at fb3d1b2. Three things now stop the next one:
+
+- **Aliases.** A plugin file names Civil 3D types through an alias
+  (`using CivDb = Autodesk.Civil.DatabaseServices;`, then `CivDb.CogoPoint`), which nothing can
+  make ambiguous. `AmbiguousTypeNameTests` fails on a plain `using Autodesk.Civil...;` (or
+  `Autodesk.Aec`) in any file but the older ones listed in it, which build on Windows as they are.
+- **Known clashes.** `CivilShadows.cs` declares the Civil names known to clash, so the compile
+  checks fail on them; the lint's table holds the same names and checks they are declared.
+- **Every name.** `tools/CivilApiNames`, run once on a Civil 3D machine, writes a placeholder for
+  every public Civil 3D type into `CivilApiNames.g.cs`. With it committed, a bare Civil name that
+  clashes with anything fails here, in any file.
+
+What is still only checked by the Windows build: Civil 3D *members* (a property or method the
+stand-in declares differently, or that does not exist), because only names are generated.

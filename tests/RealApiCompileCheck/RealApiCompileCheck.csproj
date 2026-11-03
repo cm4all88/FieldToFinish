@@ -53,6 +53,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\CadCompileCheck\Stubs\Civil.cs" Link="Stubs\Civil.cs" />
+    <!-- Civil 3D names that AutoCAD or .NET also declare, so a bare use is ambiguous here as in
+         the real build; and, once tools/CivilApiNames has been run on a Civil 3D machine, every
+         other public Civil 3D type name. -->
+    <Compile Include="..\CadCompileCheck\Stubs\CivilShadows.cs" Link="Stubs\CivilShadows.cs" />
+    <Compile Include="..\CadCompileCheck\Stubs\CivilApiNames.g.cs" Link="Stubs\CivilApiNames.g.cs" Condition="Exists('..\CadCompileCheck\Stubs\CivilApiNames.g.cs')" />
     <!-- The whole plugin, every file, as CadCompileCheck takes it. -->
     <Compile Include="..\..\src\FieldCodes.Cad\**\*.cs" Exclude="..\..\src\FieldCodes.Cad\obj\**;..\..\src\FieldCodes.Cad\bin\**" LinkBase="FieldCodes.Cad" />
   </ItemGroup>

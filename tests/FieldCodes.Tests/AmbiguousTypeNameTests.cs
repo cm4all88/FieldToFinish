@@ -13,8 +13,16 @@ namespace FieldCodes.Tests;
 /// The table is every public type name the real AutoCAD 2024 assemblies (AcDbMgd, AcCoreMgd,
 /// AcMgd, AdWindows from the AutoCAD.NET 24.3.0 package) share with the .NET Framework
 /// namespaces the plugin imports, found by reflection over those assemblies; plus the
-/// Civil 3D names that clash with AutoCAD's. tests/RealApiCompileCheck compiles against the
-/// real assemblies and is the authority; this is the quick check that needs nothing installed.
+/// Civil 3D names known to clash with AutoCAD's or .NET's. tests/RealApiCompileCheck compiles
+/// against the real assemblies and is the authority; this is the quick check that needs nothing
+/// installed.
+///
+/// Civil 3D's assemblies are not published, so no table of Civil names can be known complete
+/// here: DBObject in Accountability.cs (fb3d1b2) was missing from it and reached the Windows
+/// build. A file therefore names Civil 3D types through aliases
+/// (<c>using CivDb = Autodesk.Civil.DatabaseServices;</c>), which nothing can make ambiguous.
+/// Only the files that already imported a Civil namespace plainly, and build on Windows, may
+/// keep doing so (<see cref="PlainCivilImports"/>); a new file cannot.
 /// </summary>
 public sealed class AmbiguousTypeNameTests
 {
@@ -61,11 +69,41 @@ public sealed class AmbiguousTypeNameTests
         ("View", new[] { "Autodesk.AutoCAD.GraphicsSystem" }, new[] { "System.Windows.Forms" }),
         ("Visibility", new[] { "Autodesk.AutoCAD.DatabaseServices" }, new[] { "System.Windows" }),
         ("Window", new[] { "Autodesk.AutoCAD.Windows" }, new[] { "System.Windows" }),
-        // Civil 3D (AeccDbMgd) declares these in its DatabaseServices too.
+        // Civil 3D (AeccDbMgd) declares these in its DatabaseServices too. Each has a stand-in in
+        // tests/CadCompileCheck/Stubs (Civil.cs or CivilShadows.cs), so the compile checks fail
+        // on it as the Windows build does (EveryCivilNameInTheTableIsDeclaredInTheStandIns).
+        ("DBObject", new[] { "Autodesk.Civil.DatabaseServices" }, new[] { "Autodesk.AutoCAD.DatabaseServices" }),
         ("Entity", new[] { "Autodesk.Civil.DatabaseServices" }, new[] { "Autodesk.AutoCAD.DatabaseServices" }),
         ("Surface", new[] { "Autodesk.Civil.DatabaseServices" }, new[] { "Autodesk.AutoCAD.DatabaseServices" }),
         ("Section", new[] { "Autodesk.Civil.DatabaseServices" }, new[] { "Autodesk.AutoCAD.DatabaseServices" }),
+        ("Assembly", new[] { "Autodesk.Civil.DatabaseServices" }, new[] { "System.Reflection" }),
+        ("Label", new[] { "Autodesk.Civil.DatabaseServices" }, new[] { "System.Windows.Forms", "System.Windows.Controls" }),
     };
+
+    /// <summary>
+    /// The files that import a Civil 3D namespace plainly (<c>using Autodesk.Civil...;</c>). They
+    /// predate the alias rule and build on Windows as they are. The list only shrinks: a file
+    /// moved to aliases must come off it, and no file may be added. Every other file names Civil
+    /// types through an alias.
+    /// </summary>
+    internal static readonly string[] PlainCivilImports =
+    {
+        "src/FieldCodes.Cad/BenchCommands.cs",
+        "src/FieldCodes.Cad/CadUtil.cs",
+        "src/FieldCodes.Cad/CogoNotes.cs",
+        "src/FieldCodes.Cad/Compare/CogoPointPlotting.cs",
+        "src/FieldCodes.Cad/Compare/CompareDrawingReader.cs",
+        "src/FieldCodes.Cad/Compare/CompareLayerManager.cs",
+        "src/FieldCodes.Cad/Compare/PlotVisibility.cs",
+        "src/FieldCodes.Cad/InsertedBlocks.cs",
+        "src/FieldCodes.Cad/OrientationCommands.cs",
+        "src/FieldCodes.Cad/TreeCommands.cs",
+        "src/FieldCodes.Cad/UtilityCadService.cs",
+        "src/FieldCodes.Cad/UtilityCommands.cs",
+        "tests/LiveSmoke/CompareTestHarness.cs",
+    };
+
+    private static readonly Regex PlainCivilUsing = new(@"^\s*using\s+(Autodesk\.(?:Civil|Aec)(?:\.[\w.]+)?)\s*;", RegexOptions.Multiline);
 
     private static readonly Regex UsingNamespace = new(@"^\s*using\s+([A-Za-z_][\w.]*)\s*;", RegexOptions.Multiline);
     private static readonly Regex UsingAlias = new(@"^\s*using\s+([A-Za-z_]\w*)\s*=", RegexOptions.Multiline);
@@ -149,30 +187,132 @@ public sealed class AmbiguousTypeNameTests
             yield return f;
     }
 
+    /// <summary>The ambiguous bare names in one file's text.</summary>
+    internal static IEnumerable<string> Ambiguities(string label, string text)
+    {
+        var imported = new HashSet<string>(UsingNamespace.Matches(text).Select(m => m.Groups[1].Value));
+        var aliased = new HashSet<string>(UsingAlias.Matches(text).Select(m => m.Groups[1].Value));
+        string? code = null;
+        foreach (var (name, autodesk, other) in Clashes)
+        {
+            if (aliased.Contains(name)) continue;
+            var a = autodesk.Where(imported.Contains).ToList();
+            var b = other.Where(imported.Contains).ToList();
+            if (a.Count == 0 || b.Count == 0) continue;
+            code ??= CodeOnly(text);
+            foreach (var line in BareUses(code, name).Distinct())
+                yield return string.Format("{0}({1}): '{2}' is declared in both {3} and {4}; write the full name (or add 'using {2} = ...;')",
+                    label, line, name, string.Join(", ", a), string.Join(", ", b));
+        }
+    }
+
+    /// <summary>The Civil 3D namespaces a file imports plainly, when it may not.</summary>
+    internal static IEnumerable<string> ForbiddenCivilImports(string label, string text)
+    {
+        if (PlainCivilImports.Contains(label)) yield break;
+        var code = CodeOnly(text);
+        foreach (Match m in PlainCivilUsing.Matches(code))
+            yield return string.Format("{0}({1}): 'using {2};' -- name Civil 3D types through an alias instead (using CivDb = Autodesk.Civil.DatabaseServices;). " +
+                                       "Civil 3D declares DBObject, Entity and other names AutoCAD and .NET declare too, and its assemblies are not here to check against.",
+                label, code.Take(m.Index).Count(ch => ch == '\n') + 1, m.Groups[1].Value);
+    }
+
+    private static string Label(string root, string file) => Path.GetRelativePath(root, file).Replace('\\', '/');
+
     [Fact]
     public void NoPluginFileUsesATypeNameTwoOfItsNamespacesDeclare()
     {
         var root = Root();
-        var problems = new List<string>();
-        foreach (var file in Sources(root))
+        var problems = Sources(root).SelectMany(f => Ambiguities(Label(root, f), File.ReadAllText(f))).ToList();
+        Assert.True(problems.Count == 0, "Ambiguous type names (CS0104 in the real build):\n" + string.Join("\n", problems));
+    }
+
+    [Fact]
+    public void OnlyTheListedOlderFilesImportACivilNamespacePlainly()
+    {
+        var root = Root();
+        var problems = Sources(root).SelectMany(f => ForbiddenCivilImports(Label(root, f), File.ReadAllText(f))).ToList();
+        Assert.True(problems.Count == 0, "Plain Civil 3D imports:\n" + string.Join("\n", problems));
+    }
+
+    [Fact]
+    public void TheListOfOlderFilesOnlyShrinks()
+    {
+        // A file that no longer imports a Civil namespace plainly comes off the list, so the
+        // exemption cannot be reused by new code put in its place.
+        var root = Root();
+        foreach (var label in PlainCivilImports)
         {
-            var text = File.ReadAllText(file);
-            var imported = new HashSet<string>(UsingNamespace.Matches(text).Select(m => m.Groups[1].Value));
-            var aliased = new HashSet<string>(UsingAlias.Matches(text).Select(m => m.Groups[1].Value));
-            string? code = null;
-            foreach (var (name, autodesk, other) in Clashes)
+            var path = Path.Combine(root, label);
+            Assert.True(File.Exists(path), label + " is listed in PlainCivilImports but no longer exists; take it off the list.");
+            Assert.True(PlainCivilUsing.IsMatch(CodeOnly(File.ReadAllText(path))),
+                label + " no longer imports a Civil 3D namespace plainly; take it off PlainCivilImports.");
+        }
+        Assert.Equal(PlainCivilImports.Length, PlainCivilImports.Distinct().Count());
+    }
+
+    [Fact]
+    public void EveryCivilNameInTheTableIsDeclaredInTheStandIns()
+    {
+        // So the compile checks fail on it too, as the real build does, not only this lint.
+        var root = Root();
+        var declared = StandInDeclarations(root);
+        foreach (var (name, autodesk, _) in Clashes)
+            foreach (var ns in autodesk.Where(n => n.StartsWith("Autodesk.Civil", StringComparison.Ordinal)))
+                Assert.True(declared.Contains(ns + "." + name),
+                    ns + "." + name + " is in the clash table but no Civil stand-in declares it; add it to tests/CadCompileCheck/Stubs/CivilShadows.cs.");
+    }
+
+    /// <summary>Namespace-qualified names of the types the Civil stand-ins declare.</summary>
+    private static HashSet<string> StandInDeclarations(string root)
+    {
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        var stubs = Path.Combine(root, "tests", "CadCompileCheck", "Stubs");
+        foreach (var file in new[] { "Civil.cs", "CivilShadows.cs", "CivilApiNames.g.cs" }.Select(f => Path.Combine(stubs, f)).Where(File.Exists))
+        {
+            string? ns = null;
+            foreach (var line in CodeOnly(File.ReadAllText(file)).Split('\n'))
             {
-                if (aliased.Contains(name)) continue;
-                var a = autodesk.Where(imported.Contains).ToList();
-                var b = other.Where(imported.Contains).ToList();
-                if (a.Count == 0 || b.Count == 0) continue;
-                code ??= CodeOnly(text);
-                foreach (var line in BareUses(code, name).Distinct())
-                    problems.Add(string.Format("{0}({1}): '{2}' is declared in both {3} and {4}; write the full name (or add 'using {2} = ...;')",
-                        Path.GetRelativePath(root, file), line, name, string.Join(", ", a), string.Join(", ", b)));
+                var n = Regex.Match(line, @"^\s*namespace\s+([\w.]+)");
+                if (n.Success) { ns = n.Groups[1].Value; continue; }
+                foreach (Match t in Regex.Matches(line, @"\b(?:class|struct|enum|interface)\s+(\w+)"))
+                    if (ns != null) declared.Add(ns + "." + t.Groups[1].Value);
             }
         }
-        Assert.True(problems.Count == 0, "Ambiguous type names (CS0104 in the real build):\n" + string.Join("\n", problems));
+        return declared;
+    }
+
+    [Fact]
+    public void TheCheckFindsTheDBObjectThatBrokeTheWindowsBuild()
+    {
+        // Accountability.cs as it was at fb3d1b2: AutoCAD's and Civil 3D's DatabaseServices both
+        // imported, DBObject used bare (CS0104 at 361,55 and 478,44 in the Windows build).
+        const string before =
+            "using System.Collections.Generic;\nusing System.Reflection;\n" +
+            "using Autodesk.AutoCAD.DatabaseServices;\nusing Autodesk.Civil.ApplicationServices;\nusing Autodesk.Civil.DatabaseServices;\n" +
+            "class SurfaceRead {\n  public readonly List<KeyValuePair<string, DBObject>> Groups = new List<KeyValuePair<string, DBObject>>();\n" +
+            "  static bool? ContainsPoint(DBObject group, uint number) { return null; }\n" +
+            "  void Read(Transaction tr, ObjectId id) { var s = tr.GetObject(id, OpenMode.ForRead) as TinSurface; }\n}\n";
+        const string label = "src/FieldCodes.Cad/Accountability.cs";
+        var found = Ambiguities(label, before).ToList();
+        Assert.Equal(2, found.Count);
+        Assert.Contains(found, p => p.StartsWith(label + "(7): 'DBObject' is declared in both Autodesk.Civil.DatabaseServices and Autodesk.AutoCAD.DatabaseServices", StringComparison.Ordinal));
+        Assert.Contains(found, p => p.StartsWith(label + "(8): 'DBObject'", StringComparison.Ordinal));
+        // And the file is not one of the older ones, so its plain Civil imports are refused even
+        // for a name the table does not hold.
+        Assert.Equal(new[] { 4, 5 }, ForbiddenCivilImports(label, before).Select(p => int.Parse(Regex.Match(p, @"\((\d+)\)").Groups[1].Value)).ToArray());
+
+        // The correction: Civil 3D through aliases, DBObject is AutoCAD's.
+        var after = before.Replace("using Autodesk.Civil.ApplicationServices;\nusing Autodesk.Civil.DatabaseServices;\n",
+                                   "using CivApp = Autodesk.Civil.ApplicationServices;\nusing CivDb = Autodesk.Civil.DatabaseServices;\n")
+                          .Replace("as TinSurface", "as CivDb.TinSurface");
+        Assert.Empty(Ambiguities(label, after));
+        Assert.Empty(ForbiddenCivilImports(label, after));
+        // A listed older file may keep its plain import; the table still guards its bare names.
+        Assert.Empty(ForbiddenCivilImports("src/FieldCodes.Cad/CadUtil.cs", before));
+        Assert.Equal(2, Ambiguities("src/FieldCodes.Cad/CadUtil.cs", before).Count());
+        // A commented-out import is not an import.
+        Assert.Empty(ForbiddenCivilImports(label, "// using Autodesk.Civil.DatabaseServices;\nclass X {}"));
     }
 
     [Fact]

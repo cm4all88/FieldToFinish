@@ -1,3 +1,6 @@
 # cmd.exe needs CRLF in a .bat: with LF endings a goto can miss its label.
 *.bat text eol=crlf
 *.cmd text eol=crlf
+# bash (Git for Windows runs hooks with it) needs LF: a CR at a line end breaks the script.
+*.sh text eol=lf
+tools/githooks/* text eol=lf

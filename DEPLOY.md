@@ -36,7 +36,16 @@ whole plugin against API stand-ins, so a bad merge fails before anyone builds on
 reference assemblies from NuGet, catching what stand-ins cannot, such as a type name that is
 ambiguous between AutoCAD and System.Drawing), and `dotnet build tests/SmokeHarnessCompileCheck`
 (which compiles the Civil 3D harnesses the smoke test compiles, as C# 5 against the same assemblies,
-so a harness that would stop every UPDATEFTF fails first). Then `UPDATEFTF` picks it up.
+so a harness that would stop every UPDATEFTF fails first). `tools/check-before-push.sh` runs all of
+them; `git config core.hooksPath tools/githooks` makes git run it before every push. Then
+`UPDATEFTF` picks it up.
+
+None of these has Civil 3D's own assemblies. Plugin files name Civil 3D types through aliases
+(`using CivDb = Autodesk.Civil.DatabaseServices;`), and the lint refuses a plain Civil import in a
+new file, so a Civil name cannot clash with an AutoCAD one there (`DBObject` stopped UPDATEFTF at
+fb3d1b2 that way). Civil 3D *members* are still checked only by the Windows build. Running
+`tools/CivilApiNames` once on a Civil 3D machine and committing its output makes the checks know
+every Civil 3D type name (`tools/CivilApiNames/README.md`).
 
 ## First time on a computer
 
