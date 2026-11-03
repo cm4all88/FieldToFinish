@@ -88,6 +88,7 @@ namespace FieldCodes.Cad
                 ParsedPoint parsed;
                 try { parsed = notes.Parse(parser, cogo); }
                 catch (Autodesk.AutoCAD.Runtime.Exception) { continue; }
+                TreeCommands.MissingBlock(db, tr, parsed);
                 points.Add(new ReviewPoint
                 {
                     Number = cogo.PointNumber.ToString(CultureInfo.InvariantCulture),

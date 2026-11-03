@@ -49,6 +49,20 @@ namespace FtfCompareTest
             ed.WriteMessage("\n  [VERIFY {0}] {1}", ok ? "PASS" : "FAIL", what);
         }
 
+        /// <summary>An FTF ownership kind's number, read from the loaded plugin's own enum. Never a
+        /// literal: kinds 35-38 were renumbered once (they are FTFRECORD's now; compare and trim
+        /// are 45-48), and literals silently counted the wrong objects.</summary>
+        private static short KindNumber(string name)
+        {
+            foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (a.GetName().Name != "FieldCodes.Cad") continue;
+                Type kinds = a.GetType("FieldCodes.Cad.FtfEntityKind");
+                if (kinds != null) return Convert.ToInt16(Enum.Parse(kinds, name));
+            }
+            throw new InvalidOperationException("FieldCodes.Cad.FtfEntityKind not found: is FTF loaded?");
+        }
+
         private static string Here()
         {
             return Path.GetDirectoryName(typeof(CompareTestCommands).Assembly.Location);
@@ -290,6 +304,7 @@ namespace FtfCompareTest
                 AcDb.LayerTable lt = (AcDb.LayerTable)tr.GetObject(db.LayerTableId, AcDb.OpenMode.ForRead);
                 var byKey = new Dictionary<string, List<string>>();
                 int pieces = 0, clouds = 0;
+                short trimSplit = KindNumber("TrimSplit"), trimCloud = KindNumber("TrimCloud");
                 string poleLayer = null, textLayer = null, xrefLayer = null;
                 AcDb.BlockTableRecord ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForRead);
                 foreach (AcDb.ObjectId id in ms)
@@ -304,8 +319,8 @@ namespace FtfCompareTest
                         {
                             if (tv.TypeCode != 1070) continue;
                             short kind = Convert.ToInt16(tv.Value);
-                            if (kind == 37) { pieces++; owned = true; }
-                            if (kind == 38) { clouds++; owned = true; }
+                            if (kind == trimSplit) { pieces++; owned = true; }
+                            if (kind == trimCloud) { clouds++; owned = true; }
                         }
                         xd.Dispose();
                     }
@@ -490,6 +505,7 @@ namespace FtfCompareTest
                 var byKey = new Dictionary<string, List<string>>();   // "LINE y=1000" -> layers
                 int splits = 0;
                 int clouds = 0;
+                short compareSplit = KindNumber("CompareSplit"), compareCloud = KindNumber("CompareCloud");
                 string symmhDefinition = null;
                 string symmhLayer = null;
                 string pole1Style = null;
@@ -503,13 +519,13 @@ namespace FtfCompareTest
                     AcDb.ResultBuffer xd = e.GetXDataForApplication(FtfApp);
                     if (xd != null)
                     {
-                        // kind 35 = CompareSplit, 36 = CompareCloud (revision cloud or its note)
+                        // CompareSplit and CompareCloud (revision cloud or its note)
                         foreach (AcDb.TypedValue tv in xd)
                         {
                             if (tv.TypeCode != 1070) continue;
                             short kind = Convert.ToInt16(tv.Value);
-                            if (kind == 35) splits++;
-                            if (kind == 36) clouds++;
+                            if (kind == compareSplit) splits++;
+                            if (kind == compareCloud) clouds++;
                         }
                         xd.Dispose();
                     }

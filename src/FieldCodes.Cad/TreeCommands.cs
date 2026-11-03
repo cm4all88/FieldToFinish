@@ -80,6 +80,15 @@ namespace FieldCodes.Cad
                         continue;
                     }
 
+                    // A rule that inserts a block whose definition is missing is an error, not a
+                    // recognized point: counted once, as an error (it used to be counted as both).
+                    if (MissingBlock(db, tr, parsed))
+                    {
+                        skipped++;
+                        rows.Add(RowFor(cogo, parsed, "Error"));
+                        continue;
+                    }
+
                     recognized++;
 
                     if (parsed.HasWarnings)
@@ -102,15 +111,6 @@ namespace FieldCodes.Cad
                     }
 
                     var blockId = CadUtil.FindBlock(db, tr, parsed.BlockName);
-                    if (blockId.IsNull)
-                    {
-                        skipped++;
-                        parsed.Add(Severity.Error, "BLOCK",
-                            string.Format("Block '{0}' is not defined in this drawing.",
-                                          parsed.BlockName));
-                        rows.Add(RowFor(cogo, parsed, "Error"));
-                        continue;
-                    }
 
                     PlaceBlock(db, tr, cogo, parsed, blockId, cfg.Version, orient);
                     placed++;
@@ -444,6 +444,22 @@ namespace FieldCodes.Cad
                 Diagnostics = string.Join(" | ",
                     parsed.Diagnostics.Select(d => d.ToString()).ToArray())
             };
+        }
+
+        /// <summary>
+        /// True, with a BLOCK error added to the point, when its rule inserts a block the
+        /// drawing does not define. One check for FTFPOINTS, the Overview counts and the review
+        /// list, so a missing block is an error everywhere -- not "processed" in one place and
+        /// an error in another.
+        /// </summary>
+        internal static bool MissingBlock(Database db, Transaction tr, ParsedPoint parsed)
+        {
+            if (parsed == null || !parsed.Recognized || parsed.HasErrors) return false;
+            if (!parsed.InsertBlock || string.IsNullOrEmpty(parsed.BlockName)) return false;
+            if (!CadUtil.FindBlock(db, tr, parsed.BlockName).IsNull) return false;
+            parsed.Add(Severity.Error, "BLOCK",
+                string.Format("Block '{0}' is not defined in this drawing.", parsed.BlockName));
+            return true;
         }
 
         internal static void WriteReport(Database db, Editor ed, IList<ExceptionRow> rows,

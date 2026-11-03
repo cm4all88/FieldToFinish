@@ -818,10 +818,24 @@ namespace FtfUiTest
 
         // Counts in the drawing ------------------------------------------------
 
+        /// <summary>An FTF ownership kind's number from the loaded plugin's own enum, never a literal.</summary>
+        private static int KindNumber(string name)
+        {
+            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (a.GetName().Name != "FieldCodes.Cad") continue;
+                Type kinds = a.GetType("FieldCodes.Cad.FtfEntityKind");
+                if (kinds != null) return Convert.ToInt32(Enum.Parse(kinds, name));
+            }
+            throw new InvalidOperationException("FieldCodes.Cad.FtfEntityKind not found: is FTF loaded?");
+        }
+
         private static Dictionary<string, int> Counts()
         {
             var result = new Dictionary<string, int> { { "pipe", 0 }, { "pipelabel", 0 }, { "structurelabel", 0 }, { "hand", 0 } };
             var doc = AcApp.DocumentManager.MdiActiveDocument;
+            int pipeKind = KindNumber("UtilityPipe"), pipeLabelKind = KindNumber("UtilityPipeLabel"),
+                structureLabelKind = KindNumber("StructureLabel");
 
             using (var tr = doc.Database.TransactionManager.StartOpenCloseTransaction())
             {
@@ -831,9 +845,9 @@ namespace FtfUiTest
                     var e = tr.GetObject(id, AcDb.OpenMode.ForRead) as AcDb.Entity;
                     if (e == null) continue;
                     var kind = KindOf(e);
-                    if (kind == 19) result["pipe"]++;
-                    else if (kind == 20) result["pipelabel"]++;
-                    else if (kind == 21) result["structurelabel"]++;
+                    if (kind == pipeKind) result["pipe"]++;
+                    else if (kind == pipeLabelKind) result["pipelabel"]++;
+                    else if (kind == structureLabelKind) result["structurelabel"]++;
                     else if (kind < 0 && e is AcDb.Line && e.Layer == "V-UTIL-STRM-E") result["hand"]++;
                 }
 

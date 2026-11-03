@@ -87,6 +87,7 @@ namespace FieldCodes.Cad
                 foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
                 {
                     var parsed = notes.Parse(parser, cogo);
+                    TreeCommands.MissingBlock(db, tr, parsed);
 
                     result.Rows.Add(builder.Build(parsed));
                 }

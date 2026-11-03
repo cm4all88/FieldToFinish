@@ -120,7 +120,11 @@ namespace FieldCodes.Cad
                             : null);
 
                     foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
-                        status.Tally.Add(diagnostics.Classify(notes.Parse(parser, cogo)));
+                    {
+                        var parsed = notes.Parse(parser, cogo);
+                        TreeCommands.MissingBlock(db, tr, parsed);   // the same error FTFPOINTS reports
+                        status.Tally.Add(diagnostics.Classify(parsed));
+                    }
 
                     status.TotalPoints = status.Tally.Total;
                     status.Recognized = status.Tally.Processed;

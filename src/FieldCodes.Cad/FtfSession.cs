@@ -192,10 +192,14 @@ namespace FieldCodes.Cad
             var ed = doc.Editor;
             var db = doc.Database;
 
+            // Every FTF command run through here is countable by the Civil 3D smoke harnesses
+            // (started and finished exactly once), not only FTFVERSION and FTFCONTOUR.
+            FtfCommandTrace.Start(commandName);
             using (doc.LockDocument())
             {
                 RunInTransaction(commandName, db, ed, body);
                 if (LastRunError == null) RegenIfPending(ed);
+                if (LastRunError == null) FtfCommandTrace.Finish(commandName);
 
                 // A command that did not finish goes on the review list until it does.
                 if (LastRunError != null) ReviewStore.CommandFailed(db, commandName, LastRunError);
