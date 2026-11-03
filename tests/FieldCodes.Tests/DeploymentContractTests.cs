@@ -79,6 +79,27 @@ public sealed class DeploymentContractTests
     }
 
     [Fact]
+    public void TheRestoreAfterAFailedSmokeTestIsInTheLog()
+    {
+        // At 6aca731 the screen said "Restored: ..." but the log, written with Write-Host only, did
+        // not: the log showed only reg.exe's output and a blank stderr line logged as
+        // "System.Management.Automation.RemoteException".
+        var code = Code(Read("UPDATEFTF.ps1"));
+        Assert.Matches(@"function Say\(\[string\]\$text, \[string\]\$color\) \{ Write-Host \$text -ForegroundColor \$color; Log \$text \}", code);
+        var restore = Regex.Match(code, @"function Restore-Backup[\s\S]*?\r?\n\}\r?\n").Value;
+        Assert.Contains("Say \"   Putting the previous FTF back ($why)...\"", restore);
+        Assert.Contains("Say (\"   Restored: \" + (Describe-Build (Read-BuildInfo $installedDir)))", restore);
+        Assert.Contains("Say \"   The failed build is kept for diagnosis in $failedDir\"", restore);
+        // Every message of the restore goes to the log, not only to the screen.
+        Assert.DoesNotMatch(@"Write-Host [\(""]", restore);
+        // A startup entry that does not import is said, with how to import it by hand.
+        Assert.Contains("if ($imported.Code -ne 0) { Say", restore);
+        // A stderr line is logged as its text.
+        var native = Regex.Match(code, @"function Invoke-Native[\s\S]*?\r?\n\}\r?\n").Value;
+        Assert.Contains("if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { \"$_\" }", native);
+    }
+
+    [Fact]
     public void OnlyAnUnmodifiedBuildOfTheCommitIsAccepted()
     {
         var update = Code(Read("UPDATEFTF.ps1"));

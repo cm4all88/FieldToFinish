@@ -112,6 +112,8 @@ function Step([string]$title) { Write-Host ''; Write-Host "== $title" -Foregroun
 function Ok([string]$text) { Write-Host "   OK    $text" -ForegroundColor Green; Log "   OK    $text" }
 function Info([string]$text) { Write-Host "         $text"; Log "         $text" }
 function Warn([string]$text) { Write-Host "   WARN  $text" -ForegroundColor Yellow; Log "   WARN  $text" }
+# A line for the screen and the log alike, in a colour: what a restore did must be in the log too.
+function Say([string]$text, [string]$color) { Write-Host $text -ForegroundColor $color; Log $text }
 
 function Fail([string]$text, [string[]]$details) {
     Write-Host ''
@@ -138,7 +140,9 @@ function Invoke-Native([string]$exe, [string[]]$arguments, [switch]$Echo, [strin
     $lines = New-Object System.Collections.Generic.List[string]
     try {
         & $exe @arguments 2>&1 | ForEach-Object {
-            $line = "$_"
+            # A stderr line arrives as an ErrorRecord; its text is the message (a blank line would
+            # otherwise be logged as "System.Management.Automation.RemoteException").
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
             $lines.Add($line)
             if ($Echo) { Write-Host "         $line" }
         }
@@ -626,7 +630,7 @@ if (Test-Path $installedDir) {
 
 function Restore-Backup([string]$why) {
     Write-Host ''
-    Write-Host "   Putting the previous FTF back ($why)..." -ForegroundColor Yellow
+    Say "   Putting the previous FTF back ($why)..." 'Yellow'
     $failedDir = Join-Path $state ("failed\" + (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$short")
     if (Test-Path $installedDir) {
         New-Item -ItemType Directory -Force -Path $failedDir | Out-Null
@@ -636,16 +640,17 @@ function Restore-Backup([string]$why) {
     if ($script:backup) {
         Copy-Item -LiteralPath (Join-Path $script:backup 'FieldToFinish.bundle') -Destination $pluginsRoot -Recurse -Force
         foreach ($reg in @(Get-ChildItem $script:backup -Filter 'startup-*.reg' -ErrorAction SilentlyContinue)) {
-            [void](Invoke-Native 'reg.exe' @('import', $reg.FullName))
+            $imported = Invoke-Native 'reg.exe' @('import', $reg.FullName)
+            if ($imported.Code -ne 0) { Say ("   Could not restore the Civil 3D startup entry from $($reg.Name) (reg.exe exit $($imported.Code)); import it by hand: reg import `"$($reg.FullName)`"") 'Red' }
         }
-        Write-Host ("   Restored: " + (Describe-Build (Read-BuildInfo $installedDir))) -ForegroundColor Yellow
+        Say ("   Restored: " + (Describe-Build (Read-BuildInfo $installedDir))) 'Yellow'
     } else {
         foreach ($entry in @(Get-StartupEntries | Where-Object { -not $_.Machine -and $_.Name -eq 'FieldToFinish' })) {
             Remove-Item -Path $entry.Key -Recurse -Force -ErrorAction SilentlyContinue
         }
-        Write-Host '   There was no FTF installed before; the failed build was removed again.' -ForegroundColor Yellow
+        Say '   There was no FTF installed before; the failed build was removed again.' 'Yellow'
     }
-    Write-Host "   The failed build is kept for diagnosis in $failedDir" -ForegroundColor Yellow
+    Say "   The failed build is kept for diagnosis in $failedDir" 'Yellow'
 }
 
 Step "Install $short"
