@@ -14,7 +14,15 @@
 
   "//lineworkCodes": "Codes whose points define linework, not features. Civil 3D builds these into figures via the Figure Prefix Database; this tool labels the resulting polylines, so the points need no rule and are not reported as unhandled. GENERATED FROM the office figure prefix database at C3D2024\\Survey\\SurveySettings\\Civil3D parametrix.fdb_xdef (122 prefixes, revision stamp 2025-10-01) - regenerate from that file rather than editing by hand, and it stays correct for every job rather than the one it was seeded from.",
 
-  "//lineworkControlCodes": "Recorded for reference; NOT parsed here. From Civil3D PMX-Universal.f2f_xdef: B begin, U continue, E end, C close, P begin curve, T end curve, G rectangle, RT right turn, X extend, CIR circle, OC point on curve, HO/VO/SO horizontal/vertical/stop offset, RPN recall point, CPN connect point. Delimiter is a space, field code escape is /, auto-begin is on. This is why a description reads 'EC RMP B' or chains figures as 'BLD B EC B BLD1 B'. Civil 3D matches figures by prefix, so EC1 and EC2 are separate strings sharing the EC prefix - which is why the trailing-digit grouping below is correct.",
+  "//lineworkControlCodes": "Parsed since Step 1 of point accountability: see lineworkCommands below, which holds the same codes as data. From Civil3D PMX-Universal.f2f_xdef: B begin, U continue, E end, C close, P begin curve, T end curve, G rectangle, RT right turn, X extend, CIR circle, OC point on curve, HO/VO/SO horizontal/vertical/stop offset, RPN recall point, CPN connect point. Delimiter is a space, field code escape is /, auto-begin is on. This is why a description reads 'EC RMP B' or chains figures as 'BLD B EC B BLD1 B'. Civil 3D matches figures by prefix, so EC1 and EC2 are separate strings sharing the EC prefix - which is why the trailing-digit grouping below is correct.",
+
+  "//lineworkCommands": "The linework command codes FTF reads (LineworkCoding): which figure a shot is on, with its number (FNC1 is not FNC), and whether it begins, ends or closes it. Copied from PMX-Universal.f2f_xdef; a token may appear once only. Numbers after HO/VO/SO, RPN, CPN, G and CIR are their parameters; other numbers are values (a fence height). A word escaped with the escape character is plain text.",
+  "lineworkCommands": {
+    "begin": [ "B" ], "end": [ "E" ], "close": [ "C" ], "continue": [ "U" ],
+    "curveBegin": [ "P" ], "curveEnd": [ "T" ], "rectangle": [ "G" ], "rightTurn": [ "RT" ],
+    "extend": [ "X" ], "circle": [ "CIR" ], "pointOnCurve": [ "OC" ], "offset": [ "HO", "VO", "SO" ],
+    "recallPoint": [ "RPN" ], "connectPoint": [ "CPN" ], "escape": "/"
+  },
 
   "lineworkCodes": [
     "AFL", "ASPH", "BANK", "BAR", "BENCHL", "BIKE", "BLC", "BLD", "BLE", "BRABUT", "BREJ",

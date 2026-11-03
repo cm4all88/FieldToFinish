@@ -58,6 +58,13 @@ namespace FieldCodes
         public List<LineFeatureRule> LineFeatures { get; set; }
 
         /// <summary>
+        /// The office's Civil 3D linework command codes (B begin, E end, C close...), read by
+        /// <see cref="FieldCodes.Linework.LineworkCoding"/>. Absent: the PMX-Universal set.
+        /// </summary>
+        [JsonProperty("lineworkCommands")]
+        public FieldCodes.Linework.LineworkCommandSettings LineworkCommands { get; set; }
+
+        /// <summary>
         /// Bare symbol codes that get a label anyway. The office rule stands -- a
         /// bare code draws nothing -- EXCEPT for codes listed here, which label the
         /// symbol with the code itself ("CB" beside the catch basin) on the same
@@ -179,6 +186,8 @@ namespace FieldCodes
             // An orientation section that names only some parts keeps PMX's for the rest.
             var pmx = FieldCodes.Orient.OrientationStandard.Pmx();
             if (Orientation == null) Orientation = pmx;
+            if (LineworkCommands == null) LineworkCommands = FieldCodes.Linework.LineworkCommandSettings.Pmx();
+            else LineworkCommands.FillMissing();
             if (Orientation.Symbols == null || Orientation.Symbols.Count == 0) Orientation.Symbols = pmx.Symbols;
             if (Orientation.Lines == null || Orientation.Lines.Count == 0) Orientation.Lines = pmx.Lines;
             if (Orientation.StopSignCodes == null || Orientation.StopSignCodes.Count == 0) Orientation.StopSignCodes = pmx.StopSignCodes;
@@ -189,6 +198,10 @@ namespace FieldCodes
 
             if (UnitsPerFoot <= 0)
                 problems.Add("unitsPerFoot must be greater than zero.");
+
+            // A linework command listed for two meanings would make "E" begin and end at once.
+            foreach (var clash in FieldCodes.Linework.LineworkCommandSettings.Clashes(LineworkCommands))
+                problems.Add("lineworkCommands: '" + clash + "' is listed for more than one command.");
 
             // Ignore entries are bare codes, not regexes: they come from a survey code
             // list, and letting a stray character there silently swallow tree points

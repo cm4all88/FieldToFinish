@@ -77,39 +77,35 @@ namespace FieldCodes.Review
         }
 
         /// <summary>
-        /// Words after a linework code that are not a Civil 3D line command, a number, another
-        /// linework code or a gate post: "FNC CL" or "EP XYZ B". One item per code and word, listing
-        /// its points; the drafter decides whether it is the crew's note or a miscoded line.
+        /// Words after a linework code that are not a linework command, a number, a side or another
+        /// known code: "FNC CL" or "EP XYZ B". Read with the same parser as every linework check
+        /// (<see cref="LineworkCoding"/>), configured from the office's command set. One item per
+        /// code and word, listing its points; the drafter decides whether it is the crew's note or a
+        /// miscoded line. Words before the first figure ("FGP" in "FGP FNC") are the point's own code.
         /// </summary>
         public static IList<ReviewItem> LineworkModifiers(IEnumerable<ReviewPoint> points, ICollection<string> lineworkCodes,
-                                                          ICollection<string> otherKnownCodes)
+                                                          ICollection<string> otherKnownCodes,
+                                                          LineworkCommandSettings commands = null)
         {
             var items = new List<ReviewItem>();
             if (lineworkCodes == null || lineworkCodes.Count == 0) return items;
-            var linework = new HashSet<string>(lineworkCodes.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()),
-                                               StringComparer.OrdinalIgnoreCase);
             var known = new HashSet<string>((otherKnownCodes ?? new List<string>()).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()),
                                             StringComparer.OrdinalIgnoreCase);
             var found = new Dictionary<string, List<ReviewPoint>>(StringComparer.OrdinalIgnoreCase);
             foreach (var p in points ?? Enumerable.Empty<ReviewPoint>())
             {
                 if (p == null || string.IsNullOrWhiteSpace(p.Description)) continue;
-                var tokens = p.Description.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                var code = LineHeights.CodeOf(tokens[0]);
-                if (!linework.Contains(code)) continue;
-                for (var i = 1; i < tokens.Length; i++)
-                {
-                    var t = tokens[i].ToUpperInvariant();
-                    if (LineHeights.LineCodes.Contains(t)) continue;
-                    if (LineHeights.ParameterCodes.Contains(t)) { while (i + 1 < tokens.Length && IsNumber(tokens[i + 1])) i++; continue; }
-                    if (IsNumber(t)) continue;
-                    var bare = LineHeights.CodeOf(t);
-                    if (linework.Contains(bare) || known.Contains(bare)) continue;
-                    var key = code + " " + t;
-                    List<ReviewPoint> list;
-                    if (!found.TryGetValue(key, out list)) { list = new List<ReviewPoint>(); found[key] = list; }
-                    if (!list.Contains(p)) list.Add(p);
-                }
+                var shot = LineworkCoding.Parse(p.Description, lineworkCodes, commands);
+                foreach (var figure in shot.Figures)
+                    foreach (var word in figure.Words)
+                    {
+                        var w = word.ToUpperInvariant();
+                        if (known.Contains(LineHeights.CodeOf(w))) continue;
+                        var key = figure.Code + " " + w;
+                        List<ReviewPoint> list;
+                        if (!found.TryGetValue(key, out list)) { list = new List<ReviewPoint>(); found[key] = list; }
+                        if (!list.Contains(p)) list.Add(p);
+                    }
             }
 
             foreach (var pair in found.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
@@ -117,7 +113,7 @@ namespace FieldCodes.Review
                 var list = pair.Value;
                 var parts = pair.Key.Split(' ');
                 var item = ReviewKinds.New(ReviewKinds.CodeModifier, pair.Key,
-                    "\"" + parts[1] + "\" after " + parts[0] + " is not a line command (B, E, C...), a number or a code FTF knows (" +
+                    "\"" + parts[1] + "\" after " + parts[0] + " is not a linework command (B, E, C...), a number or a code FTF knows (" +
                     list.Count.ToString(CultureInfo.InvariantCulture) + " point(s), e.g. \"" + list[0].Description.Trim() + "\")");
                 item.Issue = "Linework word not recognised: " + pair.Key;
                 item.Points = Points(list.Select(p => p.Number));
@@ -207,14 +203,6 @@ namespace FieldCodes.Review
             var list = numbers.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList();
             var shown = string.Join(", ", list.Take(12).ToArray());
             return list.Count > 12 ? shown + " (+" + (list.Count - 12).ToString(CultureInfo.InvariantCulture) + " more)" : shown;
-        }
-
-        private static bool IsNumber(string t)
-        {
-            double v;
-            var s = t.TrimEnd('\'');
-            if (s.EndsWith("FT", StringComparison.OrdinalIgnoreCase)) s = s.Substring(0, s.Length - 2);
-            return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v);
         }
     }
 }

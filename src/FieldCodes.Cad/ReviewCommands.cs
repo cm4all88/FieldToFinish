@@ -115,7 +115,7 @@ namespace FieldCodes.Cad
             }
             foreach (var s in cfg.SymbolLabels ?? new List<SymbolLabelRule>()) known.Add(s.Code);
             foreach (var m in cfg.SpanMarkers ?? new List<SpanMarkerRule>()) known.Add(m.Token);
-            var modifiers = ReviewChecks.LineworkModifiers(points, cfg.LineworkCodes ?? new List<string>(), known);
+            var modifiers = ReviewChecks.LineworkModifiers(points, cfg.LineworkCodes ?? new List<string>(), known, cfg.LineworkCommands);
 
             codeItems = codes.Count;
             modifierItems = modifiers.Count;
