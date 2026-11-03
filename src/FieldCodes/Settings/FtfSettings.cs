@@ -136,6 +136,8 @@ namespace FieldCodes.Settings
         [JsonProperty("styles")] public FieldCodes.Styles.StyleSettings Styles { get; set; }
         [JsonProperty("workflows")] public WorkflowSettings Workflows { get; set; }
         [JsonProperty("layerStandards")] public LayerStandardsSettings LayerStandards { get; set; }
+        [JsonProperty("gates")] public GateSettings Gates { get; set; }
+        [JsonProperty("review")] public ReviewSettings Review { get; set; }
 
         /// <summary>The resolution this object was resolved into, so a save to one of its
         /// level files writes that level's differences rather than a complete copy.</summary>
@@ -169,6 +171,8 @@ namespace FieldCodes.Settings
             Styles = new FieldCodes.Styles.StyleSettings();
             Workflows = new WorkflowSettings();
             LayerStandards = new LayerStandardsSettings();
+            Gates = new GateSettings();
+            Review = new ReviewSettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -181,7 +185,7 @@ namespace FieldCodes.Settings
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
                     Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation,
-                    Styles, Workflows, LayerStandards
+                    Styles, Workflows, LayerStandards, Gates, Review
                 };
             }
         }
@@ -378,6 +382,10 @@ namespace FieldCodes.Settings
             if (Annotation.Categories == null) Annotation.Categories = new List<AnnotationCategory>(AnnotationSettings.DefaultCategories());
             if (Annotation.NoLabelWords == null) Annotation.NoLabelWords = new List<string>();
             if (Diagnostics == null) Diagnostics = new DiagnosticsSettings();
+            if (Gates == null) Gates = new GateSettings();
+            if (Gates.PostCodes == null || Gates.PostCodes.Count == 0) Gates.PostCodes = new List<string> { "FGP" };
+            if (Review == null) Review = new ReviewSettings();
+            if (Review.Required == null) Review.Required = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             if (Styles == null) Styles = new FieldCodes.Styles.StyleSettings();
             Styles.FillMissing();
             if (Workflows == null) Workflows = new WorkflowSettings();

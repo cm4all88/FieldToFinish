@@ -25,7 +25,7 @@ namespace FieldCodes.Cad
     /// UNTESTED against a drawing; planning, identification and label resolution are
     /// unit tested.
     /// </summary>
-    public sealed class LineworkCommands
+    public sealed partial class LineworkCommands
     {
         /// <summary>
         /// Stamped into the tag slot of labels placed interactively by FTFLABELLINE.
@@ -134,6 +134,9 @@ namespace FieldCodes.Cad
                         kept++;
                         return false;
                     }
+                    // Gate labels are the gate pass's to keep, replace or remove (it keeps the
+                    // ones moved or reworded by hand).
+                    if (IsGateTag(s.TagText)) return false;
                     return true;
                 });
                 if (removed > 0)
@@ -163,6 +166,12 @@ namespace FieldCodes.Cad
                 // reads, so a fence polyline on the layer FNC and FHW share is named by the
                 // shots it was drawn through.
                 var noteIndex = BuildNoteIndex(db, tr);
+                var heightIssues = new List<HeightIssue>();
+                var lineItems = new Dictionary<string, FieldCodes.Review.ReviewItem>(StringComparer.Ordinal);
+
+                // Gate posts are the gate pass's (after the lines): the older two-marked-shots
+                // rule keeps only the span markers that are not gate posts.
+                var spanMarkers = SpanMarkersWithoutGates(cfg.SpanMarkers, settings.Gates);
 
                 // Labels placed by hand, by feature code. A line carrying one -- on it, or at
                 // the side offset from it -- is the surveyor's, and the pass leaves it be.
@@ -199,8 +208,20 @@ namespace FieldCodes.Cad
                     var candidates = StagedCandidates(db, tr, curve, catalog, out how, noteIndex);
                     if (candidates == null || candidates.Count == 0) continue;
 
+                    // A fence's height, read off its shots ("FNC B 3.5") and carried along it until
+                    // another shot records a different one: each label says the height where it sits.
+                    // Read for every fence, labelled here or not, so an unreadable one is reported.
+                    var heights = string.IsNullOrWhiteSpace(ls.HeightFormat) || !LineHeights.Applies(candidates[0])
+                        ? null : RecordedHeights(curve, candidates, noteIndex, ls.HeightMaxFeet, report.Problems,
+                                                 settings.Gates.PostCodes, heightIssues);
+
                     var labelText = LineworkCatalog.UnanimousLabel(candidates);
-                    if (labelText == null) { report.NotLabelled(candidates, entity.Layer); continue; }
+                    if (labelText == null)
+                    {
+                        report.NotLabelled(candidates, entity.Layer);
+                        UnidentifiedLine(lineItems, entity, candidates);
+                        continue;
+                    }
 
                     if (HasManualLabel(curve, candidates, manual, manualReach)) { report.AlreadyByHand++; continue; }
 
@@ -214,7 +235,7 @@ namespace FieldCodes.Cad
                         {
                             var gateLayer = LabelLayerResolver.Resolve(entity.Layer, candidates,
                                 layerCatalog, ls.DefaultLabelLayer).Layer;
-                            report.GateLabels += PlaceSpanLabels(db, tr, null, curve, cfg.SpanMarkers, ls,
+                            report.GateLabels += PlaceSpanLabels(db, tr, null, curve, spanMarkers, ls,
                                                                  textHeight, styleId, CadUtil.EnsureLayer(db, tr, gateLayer),
                                                                  gateLayer, candidates[0].Code, cfg.Version,
                                                                  noteIndex, null);
@@ -266,10 +287,6 @@ namespace FieldCodes.Cad
                     var layerId = CadUtil.EnsureLayer(db, tr, layer);
 
                     var planned = LineLabelPlanner.Plan(path, options);
-                    // A fence's height, read off its shots ("FNC B 3.5") and carried along it until
-                    // another shot records a different one: each label says the height where it sits.
-                    var heights = string.IsNullOrWhiteSpace(ls.HeightFormat) || !LineHeights.Applies(candidates[0])
-                        ? null : RecordedHeights(curve, candidates, noteIndex, ls.HeightMaxFeet, report.Problems);
                     foreach (var plan in planned)
                     {
                         var text = heights == null || heights.Count == 0 ? labelText
@@ -284,14 +301,27 @@ namespace FieldCodes.Cad
                     // Gates: two shots noted with a span marker (FGP) along the line get a
                     // GATE label between them, as FTFLABELLINE places. Stamped as this pass's
                     // own output, so the next run regenerates rather than duplicates them.
-                    report.GateLabels += PlaceSpanLabels(db, tr, null, curve, cfg.SpanMarkers, ls,
+                    report.GateLabels += PlaceSpanLabels(db, tr, null, curve, spanMarkers, ls,
                                                          textHeight, styleId, layerId, layer,
                                                          candidates[0].Code, cfg.Version,
                                                          noteIndex, null);
                 }
 
+                // Gates: posts paired into gates and labelled between them, after every fence
+                // is known. Unsure pairs go to the review list.
+                var gates = RunGatePass(db, tr, ed, settings, cfg, styler, noteIndex, ObjectId.Null);
+                report.GateLabels += gates.Placed;
+
+                // Fence heights that could not be read, lines identified but not labelled: on the
+                // drawing's review list (FTFREVIEW) until a drafter deals with them.
+                ReviewStore.Report(db, tr, FieldCodes.Review.ReviewChecks.FenceHeightsSource,
+                                   HeightReviewItems(db, tr, heightIssues), true, settings.Review);
+                ReviewStore.Report(db, tr, FieldCodes.Review.ReviewChecks.LineLabelsSource,
+                                   lineItems.Values, true, settings.Review);
+
                 foreach (var line in report.Lines(ls.MinLengthFeet))
                     ed.WriteMessage("\nFTFLINELABELS: " + line);
+                WriteGateOutcome(ed, "FTFLINELABELS", gates);
                 if (turnedOff > 0)
                     ed.WriteMessage("\nFTFLINELABELS: {0} line(s) not labelled: their label is turned off " +
                                     "(Settings > Style Assignments).", turnedOff);
@@ -358,8 +388,19 @@ namespace FieldCodes.Cad
                 {
                     if (PlaceOneInteractiveLabel(doc, tr, picked.ObjectId, catalog, ls,
                                                  unitsPerFoot, cfg.Version,
-                                                 cfg.SpanMarkers))
+                                                 SpanMarkersWithoutGates(cfg.SpanMarkers, settings.Gates)))
+                    {
                         placedCount++;
+                        // The gates in this fence ride along, labelled between their posts.
+                        if (settings.Gates.Enabled)
+                        {
+                            var styler = new AnnotationStyler(db, tr, settings, cfg);
+                            var gates = RunGatePass(db, tr, ed, settings, cfg, styler, null, picked.ObjectId);
+                            if (gates.Placed + gates.Unchanged + gates.KeptByHand > 0)
+                                ed.WriteMessage("\n{0} gate label(s) on this fence ({1} new).",
+                                                gates.Placed + gates.Unchanged + gates.KeptByHand, gates.Placed);
+                        }
+                    }
                     tr.Commit();
                 }
             }
@@ -1369,6 +1410,70 @@ namespace FieldCodes.Cad
             return placedTotal;
         }
 
+        /// <summary>A fence height that could not be read, where and why.</summary>
+        private sealed class HeightIssue
+        {
+            public Point3d At;
+            public string Description;
+            public string Problem;
+        }
+
+        /// <summary>Review items for unreadable fence heights, each tied to its shot.</summary>
+        private static IList<FieldCodes.Review.ReviewItem> HeightReviewItems(Database db, Transaction tr, IList<HeightIssue> issues)
+        {
+            var items = new List<FieldCodes.Review.ReviewItem>();
+            if (issues == null || issues.Count == 0) return items;
+            var shots = new Dictionary<string, List<Autodesk.Civil.DatabaseServices.CogoPoint>>(StringComparer.Ordinal);
+            foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
+            {
+                var key = Bucket(cogo.Location);
+                List<Autodesk.Civil.DatabaseServices.CogoPoint> list;
+                if (!shots.TryGetValue(key, out list)) { list = new List<Autodesk.Civil.DatabaseServices.CogoPoint>(); shots[key] = list; }
+                list.Add(cogo);
+            }
+            foreach (var issue in issues)
+            {
+                List<Autodesk.Civil.DatabaseServices.CogoPoint> here;
+                var cogo = shots.TryGetValue(Bucket(issue.At), out here)
+                    ? here.FirstOrDefault(c => c.RawDescription == issue.Description) ?? here[0]
+                    : null;
+                items.Add(FieldCodes.Review.ReviewChecks.FenceHeight(
+                    cogo == null ? null : cogo.PointNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    cogo == null ? null : cogo.Handle.ToString(), issue.At.X, issue.At.Y, issue.Problem));
+            }
+            return items;
+        }
+
+        /// <summary>One review item per layer and set of candidate features FTF could not label.</summary>
+        private static void UnidentifiedLine(Dictionary<string, FieldCodes.Review.ReviewItem> items, AcEntity entity,
+                                             IList<LineFeatureRule> candidates)
+        {
+            var codes = string.Join("/", candidates.Select(c => c.Code).Distinct().ToArray());
+            var key = entity.Layer + ":" + codes;
+            FieldCodes.Review.ReviewItem item;
+            if (!items.TryGetValue(key, out item))
+            {
+                var choices = LineworkCatalog.DisagreeingChoices(candidates);
+                item = FieldCodes.Review.ReviewKinds.New(FieldCodes.Review.ReviewKinds.LineUnidentified, key,
+                    choices.Count > 0
+                        ? "lines on " + entity.Layer + " could be " + string.Join(" or ", candidates.Select(c => c.Code + " (" + c.Label + ")").ToArray())
+                        : "lines on " + entity.Layer + " are " + codes + ", which has no label configured");
+                item.Issue = choices.Count > 0 ? "Line could be more than one feature" : "Line feature has no label";
+                item.FeatureType = "Line";
+                Extents3d box;
+                try
+                {
+                    box = entity.GeometricExtents;
+                    item.X = (box.MinPoint.X + box.MaxPoint.X) / 2;
+                    item.Y = (box.MinPoint.Y + box.MaxPoint.Y) / 2;
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                items[key] = item;
+            }
+            if (item.Handles.Count < 50) item.Handles.Add(entity.Handle.ToString());
+            item.Points = item.Handles.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) + " line(s)";
+        }
+
         /// <summary>
         /// The heights a line's own shots record, by distance along it: at each vertex, the shot
         /// there whose code is this feature's ("FNC B 3.5" on a fence). A number that cannot be a
@@ -1376,10 +1481,12 @@ namespace FieldCodes.Cad
         /// </summary>
         private static IList<RecordedHeight> RecordedHeights(Curve curve, IList<LineFeatureRule> features,
                                                              Dictionary<string, List<string>> index, double maxFeet,
-                                                             IList<string> problems)
+                                                             IList<string> problems, ICollection<string> stopCodes = null,
+                                                             IList<HeightIssue> issues = null)
         {
             var codes = new HashSet<string>(features.SelectMany(f => new[] { f.Code }.Concat(f.Aliases ?? new List<string>()))
                                                     .Where(c => !string.IsNullOrWhiteSpace(c)), StringComparer.OrdinalIgnoreCase);
+            if (stopCodes == null) stopCodes = new FieldCodes.Settings.GateSettings().PostCodes;
             var heights = new List<RecordedHeight>();
             foreach (var vertex in VerticesOf(curve))
             {
@@ -1387,13 +1494,14 @@ namespace FieldCodes.Cad
                 if (index == null || !index.TryGetValue(Bucket(vertex), out shots)) continue;
                 foreach (var description in shots)
                 {
-                    var code = LineHeights.CodeOf(description);
-                    if (!codes.Contains(code)) continue;
+                    // The fence's code anywhere in the shot ("FGP FNC B 5" is a gate post on the
+                    // fence); the height is the number after it, before a gate post's own code.
                     string written, problem;
-                    var feet = LineHeights.Read(description, maxFeet, out written, out problem);
+                    var feet = LineHeights.Read(description, codes, stopCodes, maxFeet, out written, out problem);
                     if (problem != null)
                     {
                         problems.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture, "fence height at {0:0.00}, {1:0.00}: {2}", vertex.X, vertex.Y, problem));
+                        if (issues != null) issues.Add(new HeightIssue { At = vertex, Description = description, Problem = problem });
                         continue;
                     }
                     if (!feet.HasValue) continue;
@@ -1546,8 +1654,10 @@ namespace FieldCodes.Cad
                 {
                     // Nearest point on the source geometry and the tangent there --
                     // curves get the local tangent at the placement spot.
+                    // Measured in plan (projected along Z): a 3D polyline or survey figure
+                    // hundreds of feet up must follow the cursor, not its lowest point.
                     var flat = new Point3d(_cursor.X, _cursor.Y, 0.0);
-                    var closest = _curve.GetClosestPointTo(flat, false);
+                    var closest = _curve.GetClosestPointTo(flat, Vector3d.ZAxis, false);
                     var parameter = _curve.GetParameterAtPoint(closest);
                     var derivative = _curve.GetFirstDerivative(parameter);
                     station = _curve.GetDistanceAtParameter(parameter);
@@ -1773,10 +1883,11 @@ namespace FieldCodes.Cad
         /// rounding, width and mask from the style; position and angle from the line, as
         /// always. Stamped with the style so FTFRESTYLE can update it later.
         /// </summary>
-        private static void PlaceStyledLineLabel(Database db, Transaction tr, AnnotationStyler styler,
+        private static ObjectId PlaceStyledLineLabel(Database db, Transaction tr, AnnotationStyler styler,
                                                  FieldCodes.Styles.ResolvedAnnotationStyle style,
                                                  PlannedLineLabel plan, string labelText,
-                                                 ObjectId layerId, string sourceCode, string rulesVersion)
+                                                 ObjectId layerId, string sourceCode, string rulesVersion,
+                                                 string tagText = null)
         {
             var position = new Point3d(plan.X, plan.Y, 0.0);
             var t = style.Text;
@@ -1791,11 +1902,12 @@ namespace FieldCodes.Cad
 
                 if (t.Mask == FieldCodes.Styles.MaskMode.Wipeout)
                     PlaceLineMask(db, tr, text, position, plan.RotationRadians,
-                                  height, layerId, sourceCode, rulesVersion, null);
+                                  height, layerId, sourceCode, rulesVersion, tagText);
 
                 styler.Finish(text, t);
                 Ownership.Stamp(text, sourceCode, rulesVersion, FtfEntityKind.LineLabel, position,
-                                null, AnnotationStyler.StyleKey(style), labelText, contents);
+                                tagText, AnnotationStyler.StyleKey(style), labelText, contents);
+                return text.ObjectId;
             }
         }
 

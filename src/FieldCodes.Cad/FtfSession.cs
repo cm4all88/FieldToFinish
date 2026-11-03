@@ -196,6 +196,10 @@ namespace FieldCodes.Cad
             {
                 RunInTransaction(commandName, db, ed, body);
                 if (LastRunError == null) RegenIfPending(ed);
+
+                // A command that did not finish goes on the review list until it does.
+                if (LastRunError != null) ReviewStore.CommandFailed(db, commandName, LastRunError);
+                else ReviewStore.CommandSucceeded(db, commandName);
             }
         }
 

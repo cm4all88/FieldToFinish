@@ -2629,6 +2629,12 @@ namespace FieldCodes.Cad.Ui
             ShowPage(name);
         }
 
+        /// <summary>Opens one settings page from outside (the review list's "Its settings").</summary>
+        public void OpenSettings(string section)
+        {
+            OpenSettingsSection(section);
+        }
+
         private void ShowStatus()
         {
             if (_status == null)

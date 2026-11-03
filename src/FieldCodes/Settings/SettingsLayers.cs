@@ -1172,7 +1172,9 @@ namespace FieldCodes.Settings
                 { "cleanup", "Advanced Settings" },
                 { "compare", "Survey Comparison" },
                 { "annotation", "Label All" },
-                { "diagnostics", "Diagnostics" }
+                { "diagnostics", "Diagnostics" },
+                { "gates", "Gates" },
+                { "review", "Review and QC" }
             };
 
         private static readonly HashSet<string> Acronyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

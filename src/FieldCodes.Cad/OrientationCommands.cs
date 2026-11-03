@@ -128,6 +128,16 @@ namespace FieldCodes.Cad
                 ReadLinework(db, tr, std, scene);
                 var result = new OrientationEngine(std).Run(scene);
                 var outcomes = Apply(db, tr, std, result, points, preview, overwriteExisting);
+                if (!preview)
+                {
+                    // Arrows whose direction could not be decided, symbols needing review, points
+                    // that could not be turned: on the review list until a drafter deals with them.
+                    var handles = points.ToDictionary(p => p.Key, p => p.Value.Handle.ToString(), StringComparer.OrdinalIgnoreCase);
+                    var review = FieldCodes.Review.ReviewChecks.Orientation(result, outcomes, handles);
+                    ReviewStore.Report(db, tr, FieldCodes.Review.ReviewChecks.OrientationSource, review, true, settings.Review);
+                    if (review.Count > 0)
+                        ed.WriteMessage("\nFTFORIENT: {0} symbol(s) on the review list (FTFREVIEW).", review.Count);
+                }
                 var qc = DrawQc(db, tr, cfg.Version, std, result);
                 // Blocks FTF inserted whose rule says "follow the marker" turn with it now, not
                 // only on the next FTFPOINTS.

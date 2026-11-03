@@ -191,7 +191,11 @@ namespace FieldCodes.Commands
                     Tool("Point Labels", "FTFLABELS", "Labels",
                         "Places point labels, masks and leaders around existing work. A label moved by hand stays where you put it."),
                     Tool("Update Styles", "FTFRESTYLE", "Restyle",
-                        "Brings FTF's existing labels, tags and line labels up to the current text and leader styles, in place. Previews first; never moves a label or touches anything FTF did not draw.")),
+                        "Brings FTF's existing labels, tags and line labels up to the current text and leader styles, in place. Previews first; never moves a label or touches anything FTF did not draw."),
+                    Tool("Gates", "FTFGATES", "Gates",
+                        "Pairs the gate posts (FGP) along the fences and labels each gate between its posts with its width, such as 6' GATE. Unsure pairs go to the review list; no post is moved."),
+                    Tool("Pair a Gate", "FTFGATE", "GatePair",
+                        "Pick two gate posts to label the gate between them: confirms a pair FTF was unsure of, or changes one it made. Reruns keep it.")),
 
                 Panel("Trees",
                     Large("Driplines", "FTFDRIP", "Drip",
@@ -224,6 +228,10 @@ namespace FieldCodes.Commands
                         "Lists every layer FTF uses whose colour, linetype, lineweight or plot setting differs from its standard, then asks before changing anything. Never touches entities.")),
 
                 Panel("Reports",
+                    Tool("Review List", "FTFREVIEW", "Review",
+                        "Everything FTF could not decide, in one list: unknown codes, unpaired gate posts, unreadable fence heights, arrows needing review. Zoom to each, fix it, or mark it not applicable with a reason."),
+                    Tool("Drafting QC", "FTFQC", "QcComplete",
+                        "Marks the drawing Drafting QC Complete, refused while required review items are open. Never blocks saving or drafting."),
                     Tool("Linework", "FTFLINES", "Lines",
                         "A read-only inventory of the drawing's linework: what FTF recognises and what it does not. Nothing is changed."),
                     Tool("Blocks", "FTFBLOCKS", "Blocks",

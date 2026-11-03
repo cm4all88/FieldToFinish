@@ -33,11 +33,13 @@ namespace FieldCodes.Linework
         public static readonly IList<string> LineCodes = new List<string>
         {
             "B", "BEG", "BEGIN", "E", "END", "C", "CLS", "CLOSE", "OC", "BC", "EC", "PC", "PT", "CC",
-            "ST", "SP", "ESP", "BS", "ES", "CONT", "CNT", "T", "P"
+            "ST", "SP", "ESP", "BS", "ES", "CONT", "CNT", "T", "P",
+            // PMX-Universal.f2f_xdef: continue, rectangle, right turn, extend, circle.
+            "U", "G", "RT", "X", "CIR"
         }.AsReadOnly();
 
         /// <summary>Line codes followed by their own numbers (rectangle sides, offsets).</summary>
-        public static readonly IList<string> ParameterCodes = new List<string> { "R", "RECT", "OFF", "OS", "HO", "VO" }.AsReadOnly();
+        public static readonly IList<string> ParameterCodes = new List<string> { "R", "RECT", "OFF", "OS", "HO", "VO", "SO", "RPN", "CPN" }.AsReadOnly();
 
         private static readonly Regex Number = new Regex(@"^(?<v>[0-9]+(?:\.[0-9]+)?)\s*(?:'|FT|FEET|FOOT)?$",
                                                          RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -53,15 +55,23 @@ namespace FieldCodes.Linework
             problem = null;
             if (string.IsNullOrWhiteSpace(description)) return null;
             var tokens = description.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            return ReadTokens(tokens.Skip(1).ToList(), description, maxFeet, out written, out problem);
+        }
+
+        private static double? ReadTokens(IList<string> tokens, string description, double maxFeet,
+                                          out string written, out string problem)
+        {
+            written = null;
+            problem = null;
             double? found = null;
-            for (var i = 1; i < tokens.Length; i++)
+            for (var i = 0; i < tokens.Count; i++)
             {
                 var t = tokens[i];
                 if (LineCodes.Contains(t.ToUpperInvariant())) continue;
                 // A line code that takes numbers (a rectangle's width, an offset): they are not heights.
                 if (ParameterCodes.Contains(t.ToUpperInvariant()))
                 {
-                    while (i + 1 < tokens.Length && Number.IsMatch(tokens[i + 1])) i++;
+                    while (i + 1 < tokens.Count && Number.IsMatch(tokens[i + 1])) i++;
                     continue;
                 }
                 var m = Number.Match(t);
@@ -71,8 +81,10 @@ namespace FieldCodes.Linework
                 if (found.HasValue)
                 {
                     if (Math.Abs(found.Value - v) > 1e-9)
+                    {
                         problem = "two heights in \"" + description.Trim() + "\" (" + written + " and " + t + "); neither was used";
-                    if (problem != null) return null;
+                        return null;
+                    }
                     continue;
                 }
                 if (v < 0.5 || v > maxFeet)
@@ -85,6 +97,55 @@ namespace FieldCodes.Linework
                 written = m.Groups["v"].Value;
             }
             return found;
+        }
+
+        /// <summary>
+        /// The height recorded after this feature's own code, wherever the code sits in the
+        /// description: "FGP FNC B 5" is a gate post shot on the fence, and 5 is the fence's
+        /// height. Reading stops at <paramref name="stopCodes"/> (a gate post's own code and
+        /// its width: "FNC B 5 FGP 12" is a 5 ft fence and a 12 ft gate). Null when the
+        /// description does not carry one of <paramref name="codes"/>.
+        /// </summary>
+        public static double? Read(string description, ICollection<string> codes, ICollection<string> stopCodes,
+                                   double maxFeet, out string written, out string problem)
+        {
+            written = null;
+            problem = null;
+            var after = TokensAfter(description, codes, stopCodes);
+            if (after == null) return null;
+            return ReadTokens(after, description, maxFeet, out written, out problem);
+        }
+
+        /// <summary>
+        /// The words after the first of <paramref name="codes"/> in a description (a fused
+        /// figure number allowed: FNC1), up to the next of <paramref name="stopCodes"/>.
+        /// Null when none of the codes is there.
+        /// </summary>
+        public static IList<string> TokensAfter(string description, ICollection<string> codes, ICollection<string> stopCodes)
+        {
+            if (string.IsNullOrWhiteSpace(description) || codes == null || codes.Count == 0) return null;
+            var tokens = description.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                if (!ContainsCode(codes, CodeOf(tokens[i]))) continue;
+                var after = new List<string>();
+                for (var j = i + 1; j < tokens.Length; j++)
+                {
+                    if (stopCodes != null && ContainsCode(stopCodes, CodeOf(tokens[j]))) break;
+                    if (ContainsCode(codes, CodeOf(tokens[j]))) break;
+                    after.Add(tokens[j]);
+                }
+                return after;
+            }
+            return null;
+        }
+
+        private static bool ContainsCode(ICollection<string> codes, string code)
+        {
+            if (string.IsNullOrEmpty(code)) return false;
+            foreach (var c in codes)
+                if (string.Equals(c == null ? null : c.Trim(), code, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
 
         /// <summary>The height in force at a station: the last one recorded at or before it.

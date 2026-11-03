@@ -837,4 +837,168 @@ namespace FieldCodes.Settings
                 "Cleanup: hand-moved tolerance cannot be negative.", problems);
         }
     }
+
+    // ------------------------------------------------------------------- gates
+
+    /// <summary>
+    /// Gates: two gate posts (FGP) paired into an opening and labelled between them with the
+    /// width ("6' GATE"). FTFGATES runs it on its own; the automatic line label pass and Label
+    /// All run it too. Anything FTF cannot pair with confidence goes to the review list.
+    /// </summary>
+    public sealed class GateSettings : ISettingsSection
+    {
+        public string Title { get { return "Gates"; } }
+        public string AffectedCommands { get { return "FTFGATES, FTFGATE, FTFLINELABELS, FTFLABELALL"; } }
+
+        [JsonProperty("enabled")] public bool Enabled { get; set; }
+
+        /// <summary>Codes that mean a gate post, the code sheet's (FGP) and the crew's own
+        /// aliases. Matched as a whole word anywhere in the description ("FGP FNC").</summary>
+        [JsonProperty("postCodes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> PostCodes { get; set; }
+
+        /// <summary>A post this close to a fence line (ft) is on that fence.</summary>
+        [JsonProperty("fenceReachFeet")] public double FenceReachFeet { get; set; }
+
+        /// <summary>Posts farther apart than this (ft) are never considered one gate.</summary>
+        [JsonProperty("searchFeet")] public double SearchFeet { get; set; }
+
+        /// <summary>Under this width (ft) a gate goes to review, unless a narrow-gate label is set.</summary>
+        [JsonProperty("narrowBelowFeet")] public double NarrowBelowFeet { get; set; }
+
+        /// <summary>From the narrow limit up to this width (ft) the label is the plain one ("GATE").</summary>
+        [JsonProperty("plainBelowFeet")] public double PlainBelowFeet { get; set; }
+
+        /// <summary>Over this width (ft) a gate goes to review.</summary>
+        [JsonProperty("maxWidthFeet")] public double MaxWidthFeet { get; set; }
+
+        /// <summary>The label of a gate between the narrow and plain limits.</summary>
+        [JsonProperty("plainText")] public string PlainText { get; set; }
+
+        /// <summary>The label of a wider gate: {width} is the width, rounded.</summary>
+        [JsonProperty("widthFormat")] public string WidthFormat { get; set; }
+
+        /// <summary>The label of a gate under the narrow limit; empty sends it to review.</summary>
+        [JsonProperty("narrowText")] public string NarrowText { get; set; }
+
+        /// <summary>The width is rounded to this step (ft): 1 gives whole feet, 0.5 half feet.</summary>
+        [JsonProperty("roundToFeet")] public double RoundToFeet { get; set; }
+
+        /// <summary>Most decimal places shown in the width (trailing zeros dropped).</summary>
+        [JsonProperty("decimals")] public int Decimals { get; set; }
+
+        /// <summary>A width the crew wrote on a post ("FGP 12") is used when within this (ft) of
+        /// the post spacing; further off, the gate goes to review.</summary>
+        [JsonProperty("recordedToleranceFeet")] public double RecordedToleranceFeet { get; set; }
+
+        /// <summary>Pair posts that are not near any fence line (otherwise they go to review).</summary>
+        [JsonProperty("pairWithoutFence")] public bool PairWithoutFence { get; set; }
+
+        /// <summary>A post with two possible partners whose distances are within this percent
+        /// of each other is ambiguous, and goes to review.</summary>
+        [JsonProperty("ambiguityPercent")] public double AmbiguityPercent { get; set; }
+
+        /// <summary>The label layer; empty uses the fence's own label layer.</summary>
+        [JsonProperty("labelLayer")] public string LabelLayer { get; set; }
+
+        public GateSettings() { RestoreDefaults(); }
+
+        public void RestoreDefaults()
+        {
+            Enabled = true;
+            PostCodes = new List<string> { "FGP" };
+            FenceReachFeet = 2.0;
+            SearchFeet = 30.0;
+            NarrowBelowFeet = 4.5;
+            PlainBelowFeet = 5.0;
+            MaxWidthFeet = 25.0;
+            PlainText = "GATE";
+            WidthFormat = "{width}' GATE";
+            NarrowText = string.Empty;
+            RoundToFeet = 1.0;
+            Decimals = 0;
+            RecordedToleranceFeet = 1.0;
+            PairWithoutFence = false;
+            AmbiguityPercent = 25.0;
+            LabelLayer = string.Empty;
+        }
+
+        public void Validate(ICollection<string> problems)
+        {
+            if (PostCodes == null || PostCodes.Count == 0 || PostCodes.TrueForAll(string.IsNullOrWhiteSpace))
+                problems.Add("Gates: name at least one gate post code (FGP).");
+            Require.Positive(FenceReachFeet, "Gates: the fence reach must be greater than zero.", problems);
+            Require.Positive(SearchFeet, "Gates: the search distance must be greater than zero.", problems);
+            Require.NotNegative(NarrowBelowFeet, "Gates: the narrow limit cannot be negative.", problems);
+            if (!(PlainBelowFeet >= NarrowBelowFeet))
+                problems.Add("Gates: the plain GATE limit must be at least the narrow limit.");
+            if (!(MaxWidthFeet > PlainBelowFeet))
+                problems.Add("Gates: the widest gate must be more than the plain GATE limit.");
+            if (!(SearchFeet >= MaxWidthFeet))
+                problems.Add("Gates: the search distance must be at least the widest gate.");
+            if (string.IsNullOrWhiteSpace(WidthFormat) || WidthFormat.IndexOf("{width}", StringComparison.OrdinalIgnoreCase) < 0)
+                problems.Add("Gates: the width label must contain {width}, e.g. \"{width}' GATE\".");
+            if (string.IsNullOrWhiteSpace(PlainText))
+                problems.Add("Gates: the plain gate label cannot be empty.");
+            Require.Positive(RoundToFeet, "Gates: the rounding step must be greater than zero.", problems);
+            if (Decimals < 0 || Decimals > 3)
+                problems.Add("Gates: decimals must be 0 to 3.");
+            else if (RoundToFeet > 0 && Math.Abs(RoundToFeet * Math.Pow(10, Decimals) - Math.Round(RoundToFeet * Math.Pow(10, Decimals))) > 1e-9)
+                problems.Add("Gates: rounding to " + RoundToFeet.ToString("0.###", CultureInfo.InvariantCulture) +
+                             " ft needs more decimals than " + Decimals.ToString(CultureInfo.InvariantCulture) + ".");
+            Require.NotNegative(RecordedToleranceFeet, "Gates: the recorded width tolerance cannot be negative.", problems);
+            if (!(AmbiguityPercent >= 0 && AmbiguityPercent <= 100))
+                problems.Add("Gates: the ambiguity margin must be 0 to 100 percent.");
+        }
+    }
+
+    // ------------------------------------------------------------- review and QC
+
+    /// <summary>
+    /// The review list: which kinds of item must be closed before a drawing can be marked
+    /// Drafting QC Complete. Nothing here blocks saving or drafting.
+    /// </summary>
+    public sealed class ReviewSettings : ISettingsSection
+    {
+        public string Title { get { return "Review and QC"; } }
+        public string AffectedCommands { get { return "FTFREVIEW, FTFQC"; } }
+
+        /// <summary>Drafting QC Complete is refused while required items are open.</summary>
+        [JsonProperty("blockQcComplete")] public bool BlockQcComplete { get; set; }
+
+        /// <summary>Per kind ("gate.unpaired"): true when it must be closed before QC Complete.
+        /// A kind not listed takes its built-in default.</summary>
+        [JsonProperty("required")]
+        public Dictionary<string, bool> Required { get; set; }
+
+        /// <summary>The name recorded when a drafter accepts an item or marks it not
+        /// applicable; empty uses the Windows sign-in name.</summary>
+        [JsonProperty("reviewerName")] public string ReviewerName { get; set; }
+
+        public ReviewSettings() { RestoreDefaults(); }
+
+        public void RestoreDefaults()
+        {
+            BlockQcComplete = true;
+            Required = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            ReviewerName = string.Empty;
+        }
+
+        /// <summary>Whether items of this kind must be closed before QC Complete.</summary>
+        public bool IsRequired(string kind)
+        {
+            bool required;
+            if (!string.IsNullOrWhiteSpace(kind) && Required != null && Required.TryGetValue(kind, out required)) return required;
+            var k = FieldCodes.Review.ReviewKinds.Get(kind);
+            return k != null && k.Required;
+        }
+
+        public void Validate(ICollection<string> problems)
+        {
+            if (Required == null) Required = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in Required.Keys)
+                if (FieldCodes.Review.ReviewKinds.Get(key) == null)
+                    problems.Add("Review and QC: \"" + key + "\" is not a kind of review item.");
+        }
+    }
 }

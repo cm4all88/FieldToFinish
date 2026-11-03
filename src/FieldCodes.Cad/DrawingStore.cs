@@ -277,6 +277,25 @@ namespace FieldCodes.Cad
                       Newtonsoft.Json.JsonConvert.SerializeObject(register ?? new Dictionary<string, string>()));
         }
 
+        // ------------------------------------------------------------ review list
+
+        private const string ReviewKey = "REVIEW";
+
+        /// <summary>The drawing's review list (FTFREVIEW); an empty one when there is none.</summary>
+        public static FieldCodes.Review.ReviewRegister ReadReview(Database db, Transaction tr)
+        {
+            if (db == null || tr == null) return new FieldCodes.Review.ReviewRegister();
+            return FieldCodes.Review.ReviewRegister.FromJson(ReadText(tr, RootDictionary(tr, db, false), ReviewKey));
+        }
+
+        /// <summary>Replaces the review list. Part of the caller's transaction, so it saves with
+        /// the drawing and is undone with it.</summary>
+        public static void WriteReview(Database db, Transaction tr, FieldCodes.Review.ReviewRegister register)
+        {
+            if (register == null) return;
+            WriteText(tr, RootDictionary(tr, db, true), ReviewKey, register.ToJson());
+        }
+
         // --------------------------------------------------------------- last run
 
         private const string LastRunKey = "LASTRUN";

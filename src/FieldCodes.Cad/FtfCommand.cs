@@ -58,6 +58,13 @@ namespace FieldCodes.Cad
             }
         }
 
+        /// <summary>Opens the window on one settings page ("Gates", "Review and QC").</summary>
+        internal static void ShowSettings(string section)
+        {
+            ShowWindow(null);
+            if (_window != null && !_window.IsDisposed) _window.OpenSettings(section);
+        }
+
         /// <summary>
         /// Opens the Field to Finish window. Deliberately does NOT process anything:
         /// processing is a button in the window, or FTFRUN for the command line.

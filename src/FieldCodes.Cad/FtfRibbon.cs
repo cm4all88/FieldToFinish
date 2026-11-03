@@ -834,6 +834,34 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>Gates: a fence with an opening between two posts, its label in the gap.</summary>
+        public static ImageSource Gates(int px) { return Render(px, GatesGlyph); }
+
+        private static void GatesGlyph(DrawingContext dc)
+        {
+            dc.DrawLine(GrayPen(Regular), P(2, 22), P(10, 22));
+            dc.DrawLine(GrayPen(Regular), P(22, 22), P(30, 22));
+            dc.DrawRectangle(Blue, null, new Rect(8.5, 15, 3.5, 11));
+            dc.DrawRectangle(Blue, null, new Rect(20, 15, 3.5, 11));
+            dc.DrawRectangle(Gray, null, new Rect(12.5, 7, 7, 4));
+        }
+
+        /// <summary>Pair a Gate: the gate glyph with a plus -- two posts you pick.</summary>
+        public static ImageSource GatePair(int px) { return Badged(px, GatesGlyph, PlusBadge); }
+
+        /// <summary>Review: a list with a flag on its open item.</summary>
+        public static ImageSource Review(int px) { return Render(px, ReviewGlyph); }
+
+        private static void ReviewGlyph(DrawingContext dc)
+        {
+            for (var y = 7; y <= 25; y += 6) dc.DrawRectangle(Gray, null, new Rect(12, y - 1.5, 16, 3));
+            dc.DrawLine(BluePen(Regular), P(5, 4), P(5, 27));
+            Path(dc, Blue, null, true, P(5, 4), P(11, 7), P(5, 10));
+        }
+
+        /// <summary>Drafting QC Complete: the review list with a tick.</summary>
+        public static ImageSource QcComplete(int px) { return Badged(px, ReviewGlyph, TickBadge); }
+
         /// <summary>A staircase.</summary>
         public static ImageSource Stairs(int px)
         {

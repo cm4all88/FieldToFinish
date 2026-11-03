@@ -29,6 +29,8 @@ command it types, so any button can also be typed.
 | Labels | Label Everything (large) | `FTFLABELALL` |
 | | Point Labels | `FTFLABELS` |
 | | Update Styles | `FTFRESTYLE` |
+| | Gates | `FTFGATES` |
+| | Pair a Gate | `FTFGATE` |
 | Trees | Driplines (large) | `FTFDRIP` |
 | | Tree Tags | `FTFTAGS` |
 | | Tree Schedule | `FTFTABLE` |
@@ -41,7 +43,9 @@ command it types, so any button can also be typed.
 | | Office Update | `FTFUPDATE` |
 | | Check Standards | `FTFCHECKSTANDARDS` |
 | | Update Layers | `FTFLAYERUPDATE` |
-| Reports | Linework | `FTFLINES` |
+| Reports | Review List | `FTFREVIEW` |
+| | Drafting QC | `FTFQC` |
+| | Linework | `FTFLINES` |
 | | Blocks | `FTFBLOCKS` |
 | | Rules File | `FTFWHERE` |
 
