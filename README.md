@@ -411,6 +411,7 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `FTFDRAWLINE` | Drafts cadastral / record lines with bearing/distance annotation — the separate drafting world, see below | n/a |
 | `FTFDRAFTCLEAN` | Cleanup for the drafted world: annotation by default, geometry only on explicit confirmation | n/a |
 | `FTFLABELALL` | Label Everything: every recognised line (gates included), every point, then draw order; lists what it could not label | yes |
+| `FTFLABELBETWEEN` (`FTFB`) | A label centred between two picked edges, or two sides of one line (a U-shaped hedge); any linework, 3D polylines included; the edges are only read | yes |
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | Between-edges label for a driveway: the first edge's layer type plus DWY (`ASPH DWY`) | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
@@ -522,10 +523,39 @@ feet, `[ ]` and `\P` as above).
 - The outline goes on `V-SURF-LAND-E` and the label on `V-SURF-LAND-TEXT-E` (PMX keeps
   benches with landscape features); `bench.layer` / `bench.labelLayer` change them.
 
+## Between two edges: FTFLABELBETWEEN
+
+`FTFLABELBETWEEN` (`FTFB`) labels the space between two edges: a walk between its
+edges, a hedge between its sides. Pick the first edge, then the second, where you want
+the label; the preview starts centred between the two picked places, slides along the
+space between them as you move the cursor, and a click places it.
+
+- **Two lines, or two parts of one line.** The second pick may be on the same object as
+  the first: a hedge drawn as one 3D polyline up one side, across and down the other is
+  picked on its two long sides and gets `HEDGE` centred between them. Each side is the
+  run of the line around its pick, up to the bend between them (the bottom of the U, the
+  crown of a horseshoe), so the label rides between the sides and is never put at the
+  middle of the whole polyline, which is on the bottom of the U. A closed outline works
+  the same way. Two picks on one straight run of a line (one segment, or segments in
+  line) have nothing between them and are refused.
+- **Any linework:** lines, 2D polylines, 3D polylines at any elevation, arcs and bulges,
+  survey figures and feature lines, U shapes, horseshoes, sides that are not parallel
+  and sides of many segments. Everything is measured in plan (X and Y): the label sits
+  midway between the nearest point of each side under the cursor, reading along their
+  averaged direction (sides drawn in opposite directions, as a U's always are, are
+  turned to agree) and never upside down. The lines' elevations never move it.
+- **The wording** is the first edge's feature's between-wording (`ASPHALT` between
+  asphalt edges), `W` cycling its alternates. An edge no rule identifies, or a feature
+  with no wording, asks what it should say; `T` types different wording at any time.
+  Layer, text style, height, rotation and mask come from Settings > Line Labels, as for
+  `FTFLABELLINE`; the label is kept by the line-label pass like any hand-placed one.
+- **The source is never modified.** Both edges are only read; nothing is exploded,
+  converted, moved or redrawn. FTF adds one MTEXT label and its mask.
+
 ## Driveways: FTFLABELDRIVEWAY
 
 `FTFLABELDRIVEWAY` (`FTFDWY`) is `FTFLABELBETWEEN` for a driveway: pick its two
-edges, slide the label along the midline, click. The wording is the first edge's
+edges (or two sides of one line), slide the label along the midline, click. The wording is the first edge's
 **surface type read from its layer** with DWY after it: an edge on `V-SURF-ASPH-E`
 labels `ASPH DWY`, on `V-SURF-CONC-E` `CONC DWY`, on `V-SURF-GRVL-E` `GRVL DWY`. The
 type is the layer's last field once a one-letter status field (`-E`) is set aside,

@@ -685,11 +685,13 @@ namespace FieldCodes.Cad
 
         /// <summary>
         /// Labels the space BETWEEN two edges: a driveway between its two
-        /// edge-of-asphalt lines, a path between its edges. Pick both edges, slide
-        /// the preview -- it stays centred on the midline, following the edges'
-        /// averaged direction -- and click to place. Wording switches alternates,
-        /// exactly like FTFLABELLINE. Both edges stay read-only; the label carries
-        /// the manual mark so the bulk pass never touches it.
+        /// edge-of-asphalt lines, a path between its edges -- or two parts of ONE line,
+        /// such as a hedge drawn as a single U-shaped 3D polyline, picked on its two
+        /// sides. Pick both edges, slide the preview -- it starts centred between the
+        /// picked places and stays centred, following the sides' averaged direction,
+        /// measured in plan -- and click to place. Wording switches alternates, exactly
+        /// like FTFLABELLINE; T types your own. Both edges stay read-only; the label
+        /// carries the manual mark so the bulk pass never touches it.
         /// </summary>
         [CommandMethod("FTFLABELBETWEEN", CommandFlags.Modal)]
         [CommandMethod("FTFB", CommandFlags.Modal)]
@@ -742,17 +744,12 @@ namespace FieldCodes.Cad
             while (true)
             {
                 var first = PickEdge(ed, "\nSelect the first edge (Enter/Esc to finish): ");
-                if (first == ObjectId.Null) break;
+                if (first == null) break;
 
-                var second = PickEdge(ed, "\nSelect the second edge: ");
-                if (second == ObjectId.Null) break;
-
-                if (first == second)
-                {
-                    ed.WriteMessage("\nThat is the same line twice. Pick the two " +
-                                    "edges of the feature.");
-                    continue;
-                }
+                // The same line again is fine: a hedge drawn as one U-shaped 3D polyline is
+                // labelled between its two legs. WHERE each pick lands names the side.
+                var second = PickEdge(ed, "\nSelect the second edge (or the other side of the same line): ");
+                if (second == null) break;
 
                 using (doc.LockDocument())
                 using (var tr = db.TransactionManager.StartTransaction())
@@ -904,32 +901,181 @@ namespace FieldCodes.Cad
             return choices.FirstOrDefault(c => string.Equals(c.Code.Trim(), answer.StringResult, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static ObjectId PickEdge(Editor ed, string message)
+        /// <summary>One FTFLABELBETWEEN pick: the line, and WHERE on it, in world coordinates.
+        /// The place matters as much as the line -- two picks on one U-shaped hedge name its
+        /// two legs.</summary>
+        private sealed class EdgePick
+        {
+            public ObjectId Id;
+            public Point3d At;
+        }
+
+        /// <summary>Null when the person finishes (Enter or Esc).</summary>
+        private static EdgePick PickEdge(Editor ed, string message)
         {
             var options = new PromptEntityOptions(message) { AllowNone = true };
             var picked = ed.GetEntity(options);
-            return picked.Status == PromptStatus.OK ? picked.ObjectId : ObjectId.Null;
+            if (picked.Status != PromptStatus.OK) return null;
+
+            // The pick point arrives in the current UCS; the lines are read in world coordinates.
+            return new EdgePick
+            {
+                Id = picked.ObjectId,
+                At = picked.PickedPoint.TransformBy(ed.CurrentUserCoordinateSystem)
+            };
+        }
+
+        /// <summary>What kind of line a pick landed on, for the command's messages.</summary>
+        private static string BetweenKindOf(Curve curve)
+        {
+            if (curve is Autodesk.Civil.DatabaseServices.SurveyFigure) return "survey figure";
+            if (curve is Autodesk.Civil.DatabaseServices.FeatureLine) return "feature line";
+            if (curve is Polyline3d) return "3D polyline";
+            if (curve is Polyline || curve is Polyline2d) return "polyline";
+            if (curve is Arc) return "arc";
+            if (curve is Autodesk.AutoCAD.DatabaseServices.Line) return "line";
+            return curve.GetType().Name.ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// A source line's trace in plan, for FTFLABELBETWEEN: every vertex exactly, arcs and
+        /// bulges filled in with short chords, Z handed over but never used. Read through the
+        /// distance queries every Curve answers -- a 2D polyline, a 3D polyline at any elevation,
+        /// a survey figure or feature line (its vertices from GetPoints, as everywhere else in
+        /// FTF). The line is only read: nothing is exploded, converted or written.
+        /// </summary>
+        private static PlanPath BetweenPathOf(Curve curve)
+        {
+            const int arcPieces = 24;
+            var points = new List<PlanPoint>();
+
+            double startDistance, endDistance;
+            try
+            {
+                startDistance = curve.GetDistanceAtParameter(curve.StartParam);
+                endDistance = curve.GetDistanceAtParameter(curve.EndParam);
+            }
+            catch (System.Exception)
+            {
+                startDistance = endDistance = 0.0;
+            }
+
+            if (endDistance > startDistance)
+            {
+                // The corners: a polyline's vertex at every whole parameter, a figure's every
+                // point, otherwise the two ends.
+                var stations = new List<double> { startDistance, endDistance };
+                if (curve is Polyline || curve is Polyline2d || curve is Polyline3d)
+                {
+                    for (var p = Math.Ceiling(curve.StartParam); p < curve.EndParam; p += 1.0)
+                    {
+                        try { stations.Add(curve.GetDistanceAtParameter(p)); }
+                        catch (Autodesk.AutoCAD.Runtime.Exception) { }
+                    }
+                }
+                else
+                {
+                    foreach (var vertex in VerticesOf(curve))
+                    {
+                        // The vertex is ON the line in 3D, so its nearest point is itself.
+                        try { stations.Add(curve.GetDistAtPoint(curve.GetClosestPointTo(vertex, false))); }
+                        catch (System.Exception) { }
+                    }
+                }
+                stations.Sort();
+
+                Func<double, Point3d?> at = d =>
+                {
+                    try { return curve.GetPointAtDist(Math.Max(startDistance, Math.Min(endDistance, d))); }
+                    catch (System.Exception) { return null; }
+                };
+
+                Point3d? previous = null;
+                var previousStation = double.NegativeInfinity;
+                foreach (var station in stations)
+                {
+                    if (station - previousStation < 1e-9) continue;
+                    var here = at(station);
+                    if (here == null) continue;
+
+                    // A segment whose middle is off its chord in plan is an arc (a bulge, a
+                    // figure's curve, a spline-fit polyline): fill it in.
+                    if (previous != null)
+                    {
+                        var mid = at((previousStation + station) / 2.0);
+                        if (mid != null)
+                        {
+                            var chordX = (previous.Value.X + here.Value.X) / 2.0;
+                            var chordY = (previous.Value.Y + here.Value.Y) / 2.0;
+                            var off = Math.Sqrt((mid.Value.X - chordX) * (mid.Value.X - chordX) +
+                                                (mid.Value.Y - chordY) * (mid.Value.Y - chordY));
+                            if (off > Math.Max(1e-6, (station - previousStation) * 1e-4))
+                            {
+                                for (var k = 1; k < arcPieces; k++)
+                                {
+                                    var inner = at(previousStation + (station - previousStation) * k / arcPieces);
+                                    if (inner != null)
+                                        points.Add(new PlanPoint(inner.Value.X, inner.Value.Y, inner.Value.Z));
+                                }
+                            }
+                        }
+                    }
+
+                    points.Add(new PlanPoint(here.Value.X, here.Value.Y, here.Value.Z));
+                    previous = here;
+                    previousStation = station;
+                }
+            }
+
+            // A line that will not answer distance queries: its corners, joined straight.
+            if (points.Count < 2)
+            {
+                points.Clear();
+                foreach (var vertex in VerticesOf(curve))
+                    points.Add(new PlanPoint(vertex.X, vertex.Y, vertex.Z));
+            }
+
+            return new PlanPath(points);
         }
 
         private static bool PlaceOneBetweenLabel(
             Autodesk.AutoCAD.ApplicationServices.Document doc, Transaction tr,
-            ObjectId firstId, ObjectId secondId, LineworkCatalog catalog,
+            EdgePick first, EdgePick second, LineworkCatalog catalog,
             FieldCodes.Settings.LineLabelSettings ls, string rulesVersion, bool driveway)
         {
             var ed = doc.Editor;
             var db = doc.Database;
 
-            var curveA = tr.GetObject(firstId, OpenMode.ForRead, false, true) as Curve;
-            var curveB = tr.GetObject(secondId, OpenMode.ForRead, false, true) as Curve;
+            // FOR READ, both of them, and never upgraded: the edges are only measured. Two
+            // picks on the same line are two places on one object, opened once.
+            var oneLine = first.Id == second.Id;
+            var curveA = tr.GetObject(first.Id, OpenMode.ForRead, false, true) as Curve;
+            var curveB = oneLine
+                ? curveA
+                : tr.GetObject(second.Id, OpenMode.ForRead, false, true) as Curve;
             if (curveA == null || curveB == null)
             {
-                ed.WriteMessage("\nBoth picks must be lines, polylines, arcs or figures.");
+                ed.WriteMessage("\nBoth picks must be lines, polylines, 3D polylines, arcs or " +
+                                "figures.");
                 return false;
             }
             if (Ownership.Read(curveA) != null || Ownership.Read(curveB) != null)
             {
                 ed.WriteMessage("\nOne of those is FTF's own output. Pick the source " +
                                 "edges themselves.");
+                return false;
+            }
+
+            // Where the picks landed, in plan, and the run of linework around each: the two
+            // sides the label goes between. Refused before anything is asked.
+            var pathA = BetweenPathOf(curveA);
+            var sides = oneLine
+                ? LabelBetween.OneLine(pathA, first.At.X, first.At.Y, second.At.X, second.At.Y)
+                : LabelBetween.TwoLines(pathA, first.At.X, first.At.Y,
+                                        BetweenPathOf(curveB), second.At.X, second.At.Y);
+            if (sides.Problem != null)
+            {
+                ed.WriteMessage("\n{0} Nothing was placed.", sides.Problem);
                 return false;
             }
 
@@ -959,28 +1105,39 @@ namespace FieldCodes.Cad
             }
             else
             {
-                if (candidates == null)
-                {
-                    ed.WriteMessage(
-                        "\nThe first edge is not a configured line feature (layer " +
-                        "\"{0}\"). Pick the feature's own edge first -- nothing was " +
-                        "placed.", curveA.Layer);
-                    return false;
-                }
-
                 // Between two edges the label names the SURFACE -- ASPHALT, not EDGE OF
                 // PAVEMENT -- from the feature's configured between-wordings.
-                wordings = LineworkCatalog.BetweenChoices(candidates);
+                wordings = candidates == null
+                    ? new List<string>()
+                    : LineworkCatalog.BetweenChoices(candidates);
                 if (wordings.Count == 0)
                 {
-                    ed.WriteMessage(
-                        "\nIdentified, but no labelling standard is configured for " +
-                        "{0}. Nothing was placed.", candidates[0].Code);
-                    return false;
+                    // Nothing configured says what this is (a hedge on a layer nobody has
+                    // set up, a feature with no wording): the drafter says it, as FTFLABELLINE
+                    // asks. Nothing is remembered.
+                    if (candidates == null)
+                        ed.WriteMessage("\nThe first edge is not a configured line feature " +
+                                        "(layer \"{0}\").", curveA.Layer);
+                    else
+                        ed.WriteMessage("\nIdentified as {0}, but no single labelling standard " +
+                                        "applies to it.", candidates[0].Code);
+
+                    var typed = AskForWording(ed);
+                    if (typed == null)
+                    {
+                        ed.WriteMessage("\nNothing was placed.");
+                        return false;
+                    }
+                    wordings = new List<string> { typed };
+                    if (candidates == null)
+                    {
+                        candidates = new List<LineFeatureRule>();
+                        how = "typed";
+                    }
                 }
             }
             var labelText = wordings[0];
-            var sourceCode = candidates.Count > 0 ? candidates[0].Code : "DWY";
+            var sourceCode = candidates.Count > 0 ? candidates[0].Code : driveway ? "DWY" : string.Empty;
 
             var layerCatalog = FtfLineworkService.LayerNames(db, tr);
             var resolution = LabelLayerResolver.Resolve(curveA.Layer, candidates,
@@ -992,9 +1149,13 @@ namespace FieldCodes.Cad
                     .Distinct().ToArray())
                 : curveA.Layer;
             ed.WriteMessage("\nFeature: {0} (first edge, by {1})", featureName, how);
-            ed.WriteMessage("\nBetween: {0} and {1}", curveA.Layer, curveB.Layer);
+            if (oneLine)
+                ed.WriteMessage("\nBetween: two parts of one {0} on {1}", BetweenKindOf(curveA), curveA.Layer);
+            else
+                ed.WriteMessage("\nBetween: {0} on {1} and {2} on {3}", BetweenKindOf(curveA), curveA.Layer,
+                                BetweenKindOf(curveB), curveB.Layer);
             ed.WriteMessage("\nLabel layer: {0}", resolution.Describe());
-            ed.WriteMessage("\nLabel: {0}{1}", labelText,
+            ed.WriteMessage("\nLabel: {0}{1}  (type T to type your own)", labelText,
                 wordings.Count > 1
                     ? "  (type W for: " + string.Join(" / ",
                           wordings.Skip(1).ToArray()) + ")"
@@ -1013,11 +1174,20 @@ namespace FieldCodes.Cad
                 preview.Attachment = AttachmentPoint.MiddleCenter;
                 preview.Location = Point3d.Origin;
 
-                var jig = new LineBetweenJig(preview, curveA, curveB, db,
-                                             ls.AlignToLine, wordings);
+                // The preview starts centred between the picked parts and follows the cursor
+                // along the space between them.
+                var jig = new LineBetweenJig(preview, sides, ls.AlignToLine, wordings);
                 var dragged = ed.Drag(jig);
                 while (dragged.Status == PromptStatus.Keyword)
+                {
+                    if (jig.TypingRequested)
+                    {
+                        jig.TypingRequested = false;
+                        var typed = AskForWording(ed);
+                        if (typed != null) jig.UseTypedWording(typed);
+                    }
                     dragged = ed.Drag(jig);
+                }
 
                 if (dragged.Status != PromptStatus.OK || jig.Plan == null)
                 {
@@ -1028,12 +1198,14 @@ namespace FieldCodes.Cad
                 var layerId = CadUtil.EnsureLayer(db, tr, resolution.Layer);
                 Ownership.EnsureRegApp(db, tr);
 
+                // A new MTEXT (and its mask) only; both edges were only ever read.
                 PlaceLineLabel(db, tr, jig.Plan, jig.CurrentWording, textHeight,
                                styleId, layerId, resolution.Layer, ls.DrawMask,
                                sourceCode, rulesVersion, ManualLineLabelMark);
 
-                ed.WriteMessage("\nPlaced \"{0}\" on layer {1}, centred between the " +
-                                "edges.", jig.CurrentWording, resolution.Layer);
+                ed.WriteMessage("\nPlaced \"{0}\" on layer {1}, centred between {2}.",
+                                jig.CurrentWording, resolution.Layer,
+                                oneLine ? "the two picked parts of the line" : "the edges");
                 return true;
             }
         }
@@ -1191,37 +1363,56 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>
-        /// The between-edges preview: for each cursor sample, the nearest point on
-        /// EACH edge and the tangent there; the label sits at their midpoint,
-        /// following the averaged direction. Both curves are only ever read.
+        /// The between-edges preview: for each cursor sample, the nearest point IN PLAN on
+        /// each picked side and the direction there; the label sits at their midpoint,
+        /// following the averaged direction (LabelBetween.Place, the same calculation the
+        /// start position uses). It works on the sides' plan traces, read once, so the
+        /// lines' elevations never pull the label about and the lines themselves are never
+        /// touched.
         /// </summary>
         private sealed class LineBetweenJig : EntityJig
         {
-            private readonly Curve _curveA;
-            private readonly Curve _curveB;
+            private const string TypeKeyword = "Text";
+
+            private readonly BetweenSides _sides;
             private readonly bool _alignToLine;
-            private readonly IList<string> _wordings;
+            private readonly List<string> _wordings;
             private int _wordingIndex;
             private Point3d _cursor;
 
             public PlannedLineLabel Plan { get; private set; }
+
+            /// <summary>The person typed T: the command asks for the wording, then drags on.</summary>
+            public bool TypingRequested { get; set; }
 
             public string CurrentWording
             {
                 get { return _wordings[_wordingIndex % _wordings.Count]; }
             }
 
-            public LineBetweenJig(MText preview, Curve curveA, Curve curveB,
-                                  Database db, bool alignToLine, IList<string> wordings)
+            public LineBetweenJig(MText preview, BetweenSides sides, bool alignToLine,
+                                  IList<string> wordings)
                 : base(preview)
             {
-                _curveA = curveA;
-                _curveB = curveB;
+                _sides = sides;
                 _alignToLine = alignToLine;
                 _wordings = wordings != null && wordings.Count > 0
-                    ? wordings
+                    ? new List<string>(wordings)
                     : new List<string> { preview.Contents };
                 _cursor = new Point3d(double.NaN, double.NaN, 0.0);
+
+                // Centred between the picked parts before the cursor moves at all.
+                Plan = LabelBetween.Start(sides, alignToLine);
+                preview.Location = new Point3d(Plan.X, Plan.Y, 0.0);
+                preview.Rotation = Plan.RotationRadians;
+            }
+
+            /// <summary>Puts typed wording on the cursor; W still cycles the configured ones.</summary>
+            public void UseTypedWording(string text)
+            {
+                _wordings.RemoveAll(w => string.Equals(w, text, StringComparison.OrdinalIgnoreCase));
+                _wordings.Insert(0, text);
+                _wordingIndex = 0;
             }
 
             protected override SamplerStatus Sampler(JigPrompts prompts)
@@ -1231,12 +1422,16 @@ namespace FieldCodes.Cad
                     "\" (click to place): ");
                 options.UserInputControls = UserInputControls.Accept3dCoordinates;
                 if (_wordings.Count > 1) options.Keywords.Add("Wording");
+                options.Keywords.Add(TypeKeyword);
 
                 var result = prompts.AcquirePoint(options);
 
                 if (result.Status == PromptStatus.Keyword)
                 {
-                    _wordingIndex++;
+                    if (string.Equals(result.StringResult, TypeKeyword, StringComparison.OrdinalIgnoreCase))
+                        TypingRequested = true;
+                    else
+                        _wordingIndex++;
                     return SamplerStatus.OK;
                 }
 
@@ -1252,30 +1447,10 @@ namespace FieldCodes.Cad
 
             protected override bool Update()
             {
-                double ax, ay, aDir, bx, by, bDir;
-                try
-                {
-                    var flat = new Point3d(_cursor.X, _cursor.Y, 0.0);
-
-                    var closestA = _curveA.GetClosestPointTo(flat, false);
-                    var paramA = _curveA.GetParameterAtPoint(closestA);
-                    var derivA = _curveA.GetFirstDerivative(paramA);
-                    ax = closestA.X; ay = closestA.Y;
-                    aDir = Math.Atan2(derivA.Y, derivA.X);
-
-                    var closestB = _curveB.GetClosestPointTo(flat, false);
-                    var paramB = _curveB.GetParameterAtPoint(closestB);
-                    var derivB = _curveB.GetFirstDerivative(paramB);
-                    bx = closestB.X; by = closestB.Y;
-                    bDir = Math.Atan2(derivB.Y, derivB.X);
-                }
-                catch (Autodesk.AutoCAD.Runtime.Exception)
-                {
-                    return false;
-                }
-
-                Plan = LineLabelPlanner.PlaceBetween(ax, ay, aDir, bx, by, bDir,
-                                                     _alignToLine);
+                // Before the first cursor sample (a keyword typed straight away) the label
+                // stays where it started, centred between the picks.
+                if (!double.IsNaN(_cursor.X))
+                    Plan = LabelBetween.Place(_sides, _cursor.X, _cursor.Y, _alignToLine);
 
                 var text = (MText)Entity;
                 if (!string.Equals(text.Contents, CurrentWording, StringComparison.Ordinal))
