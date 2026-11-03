@@ -46,7 +46,10 @@ namespace FieldCodes.Review
         /// <summary>Marked ignored in settings (diagnostics.ignoredCodes).</summary>
         IgnoredByUser = 7,
         /// <summary>Only the code: the Civil 3D symbol stands as-is.</summary>
-        BareCode = 8
+        BareCode = 8,
+        /// <summary>A survey control or found monument code (rules.json controlCodes): FTFCONTROL
+        /// lists it in the control table, whatever follows the code.</summary>
+        ControlPoint = 9
     }
 
     /// <summary>The verdict for one point.</summary>
@@ -150,6 +153,9 @@ namespace FieldCodes.Review
         public int IgnoredByUser { get; set; }
         public int BareCodes { get; set; }
 
+        /// <summary>Survey control and found monuments (FTFCONTROL's).</summary>
+        public int ControlPoints { get; set; }
+
         public int Errors { get { return BlankDescriptions + ParseFailures + InvalidData; } }
 
         /// <summary>Points FTF acts on: everything that matched a rule, plus the ones
@@ -159,7 +165,7 @@ namespace FieldCodes.Review
         /// <summary>Linework, never-draw, ignored by you and bare codes -- normal.</summary>
         public int SkippedIntentionally
         {
-            get { return Linework + IgnoredByRules + IgnoredByUser + BareCodes; }
+            get { return Linework + IgnoredByRules + IgnoredByUser + BareCodes + ControlPoints; }
         }
 
         /// <summary>Distinct codes behind <see cref="NeedsConfiguration"/>.</summary>
@@ -186,6 +192,7 @@ namespace FieldCodes.Review
                 case CodeIssueKind.Linework: Linework++; break;
                 case CodeIssueKind.IgnoredByRules: IgnoredByRules++; break;
                 case CodeIssueKind.IgnoredByUser: IgnoredByUser++; break;
+                case CodeIssueKind.ControlPoint: ControlPoints++; break;
                 default: BareCodes++; break;
             }
         }
@@ -258,6 +265,15 @@ namespace FieldCodes.Review
 
                 return IgnoredByRules(code);
             }
+
+            // Survey control and found monuments are FTFCONTROL's, with or without data after
+            // the code (FIP 5/8): never a code nothing handles.
+            if ((p.NoContent || p.Unhandled) && _cfg.ControlCodes != null &&
+                _cfg.ControlCodes.Any(c => string.Equals((c ?? string.Empty).Trim(), token, StringComparison.OrdinalIgnoreCase)))
+                return Issue(CodeIssueCategory.Informational, CodeIssueKind.ControlPoint, code,
+                    "Control point",
+                    "A survey control or found monument code: FTFCONTROL lists it in the control table.",
+                    "Nothing to do; run FTFCONTROL for the table.");
 
             if (p.NoContent)
             {

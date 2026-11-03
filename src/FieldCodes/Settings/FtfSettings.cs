@@ -138,6 +138,7 @@ namespace FieldCodes.Settings
         [JsonProperty("layerStandards")] public LayerStandardsSettings LayerStandards { get; set; }
         [JsonProperty("gates")] public GateSettings Gates { get; set; }
         [JsonProperty("review")] public ReviewSettings Review { get; set; }
+        [JsonProperty("accountability")] public AccountabilitySettings Accountability { get; set; }
 
         /// <summary>The resolution this object was resolved into, so a save to one of its
         /// level files writes that level's differences rather than a complete copy.</summary>
@@ -173,6 +174,7 @@ namespace FieldCodes.Settings
             LayerStandards = new LayerStandardsSettings();
             Gates = new GateSettings();
             Review = new ReviewSettings();
+            Accountability = new AccountabilitySettings();
         }
 
         /// <summary>Every section, in the order the setup window shows them.</summary>
@@ -185,7 +187,7 @@ namespace FieldCodes.Settings
                 {
                     General, Trees, Drip, Labels, LineLabels, Drafting, Tags, DrawOrder,
                     Spots, Contours, Sheets, Dips, Easements, RightOfWay, Lots, Exhibits, RecordSurvey, Cleanup, Compare, Annotation,
-                    Styles, Workflows, LayerStandards, Gates, Review
+                    Styles, Workflows, LayerStandards, Gates, Review, Accountability
                 };
             }
         }
@@ -385,6 +387,8 @@ namespace FieldCodes.Settings
             if (Gates == null) Gates = new GateSettings();
             if (Gates.PostCodes == null || Gates.PostCodes.Count == 0) Gates.PostCodes = new List<string> { "FGP" };
             if (Review == null) Review = new ReviewSettings();
+            if (Accountability == null) Accountability = new AccountabilitySettings();
+            if (Accountability.Continuity == null) Accountability.Continuity = new ContinuitySettings();
             if (Review.Required == null) Review.Required = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             if (Styles == null) Styles = new FieldCodes.Styles.StyleSettings();
             Styles.FillMissing();

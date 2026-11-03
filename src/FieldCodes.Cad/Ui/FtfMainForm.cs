@@ -572,7 +572,7 @@ namespace FieldCodes.Cad.Ui
                 new[]
                 {
                     "COGO points", "Eligible for FTF", "  processed", "  errors",
-                    "Need configuration", "Skipped on purpose", "FTF objects",
+                    "Need configuration", "Skipped on purpose", "Accounted for", "FTF objects",
                     "Last processed", "Last outcome"
                 }), 0, 0);
             columns.Controls.Add(StatsBlock("THIS SESSION",
@@ -584,6 +584,9 @@ namespace FieldCodes.Cad.Ui
             WireJump(_drawingStats["errors"], UnknownErrors);
             WireJump(_drawingStats["Need configuration"], UnknownConfiguration);
             WireJump(_drawingStats["Skipped on purpose"], UnknownInformational);
+            var accounted = _drawingStats["Accounted for"];
+            accounted.Cursor = Cursors.Hand;
+            accounted.Click += (s, e) => new ReviewCommands().FtfReview();
 
             _overviewConfig = new Label
             {
@@ -1096,6 +1099,8 @@ namespace FieldCodes.Cad.Ui
 
                 Log(string.Format("Done: {0} stage(s) completed{1}.", result.Completed,
                     result.Failed > 0 ? ", " + result.Failed + " failed" : string.Empty));
+                var checks = PostRunChecks.AfterProcessing("FTF window: " + plan.Title + (result.StoppedEarly ? " (stopped early)" : string.Empty));
+                if (checks != null) Log(checks.OneLine());
 
                 var lines = new List<string> { DateTime.Now.ToString("yyyy-MM-dd HH:mm") + "  " + plan.Title };
                 lines.AddRange(plan.Adjustments);
@@ -1911,6 +1916,25 @@ namespace FieldCodes.Cad.Ui
             OpenSettingsSection("Point Features");
         }
 
+        /// <summary>Asks why a code is ignored; null when cancelled or left blank.</summary>
+        private string AskIgnoreReason(string code)
+        {
+            using (var form = new Form { Text = "Why is " + code + " ignored?", Width = 480, Height = 150, StartPosition = FormStartPosition.CenterParent,
+                                          FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
+            {
+                var label = new Label { Text = "The reason is recorded with the code (who and when too):", Dock = DockStyle.Top, Height = 22 };
+                var box = new TextBox { Dock = DockStyle.Top };
+                var ok = new Button { Text = "Ignore " + code, DialogResult = DialogResult.OK, Dock = DockStyle.Bottom };
+                form.Controls.Add(ok);
+                form.Controls.Add(box);
+                form.Controls.Add(label);
+                form.AcceptButton = ok;
+                if (form.ShowDialog(this) != DialogResult.OK) return null;
+                var text = (box.Text ?? string.Empty).Trim();
+                return text.Length == 0 ? null : text;
+            }
+        }
+
         /// <summary>
         /// Marks a code ignored (or not) and saves it: to the settings file in force
         /// when that is the drawing's folder, a profile or your own settings, otherwise
@@ -1918,6 +1942,14 @@ namespace FieldCodes.Cad.Ui
         /// </summary>
         private void SetCodeIgnored(string code, bool ignore)
         {
+            // An exclusion is documented: the reason is kept with the entry (Point Accountability
+            // lists the points of a code ignored without one).
+            string reason = null;
+            if (ignore)
+            {
+                reason = AskIgnoreReason(code);
+                if (reason == null) { Log(code + " was not ignored: a reason is needed."); return; }
+            }
             InAutoCad(null, () =>
             {
                 var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -1929,7 +1961,7 @@ namespace FieldCodes.Cad.Ui
                 if (settings.Diagnostics == null)
                     settings.Diagnostics = new FieldCodes.Settings.DiagnosticsSettings();
 
-                var changed = ignore ? settings.Diagnostics.Ignore(code) : settings.Diagnostics.Unignore(code);
+                var changed = ignore ? settings.Diagnostics.Ignore(code, reason, Environment.UserName, DateTime.Now) : settings.Diagnostics.Unignore(code);
                 if (!changed)
                 {
                     Log(ignore ? code + " is already ignored." : code + " was not ignored.");
@@ -2711,8 +2743,18 @@ namespace FieldCodes.Cad.Ui
                     ? "0"
                     : N(t.SkippedIntentionally) + " (" + Parts(
                           Part(t.Linework, "linework"), Part(t.IgnoredByRules, "never-draw"),
-                          Part(t.IgnoredByUser, "ignored by you"), Part(t.BareCodes, "bare codes")) + ")",
+                          Part(t.IgnoredByUser, "ignored by you"), Part(t.BareCodes, "bare codes"), Part(t.ControlPoints, "control")) + ")",
                 normal);
+            // Skipped on purpose says how codes were read; Accounted for says what the drawing
+            // holds for every point (the point ledger), which is what QC relies on.
+            var accounting = _status.Accounting;
+            SetStat(_drawingStats, "Accounted for",
+                accounting == null
+                    ? "Not checked yet (FTFREVIEWCHECK)"
+                    : N(accounting.Accounted) + " of " + N(accounting.Points) + "; " + N(accounting.Review) + " for review" +
+                      (accounting.Deleted > 0 ? ", " + N(accounting.Deleted) + " deleted" : string.Empty) +
+                      (accounting.OpenLineItems > 0 ? "; " + N(accounting.OpenLineItems) + " linework item(s)" : string.Empty),
+                accounting == null ? CaptionGray : accounting.Review > 0 || accounting.Deleted > 0 || accounting.OpenLineItems > 0 ? Amber : normal);
             SetStat(_drawingStats, "FTF objects",
                 _status.OwnedEntities == 0
                     ? "None"
@@ -2857,6 +2899,8 @@ namespace FieldCodes.Cad.Ui
 
                 if (result.Failed == 0)
                     Log("Safe to run again at any time; every stage replaces its own output.");
+                var checks = PostRunChecks.AfterProcessing("FTF window" + (result.StoppedEarly ? " (stopped early)" : string.Empty));
+                if (checks != null) Log(checks.OneLine());
 
                 // The drawing changed, so the dry-run preview is stale until rescanned.
                 _reviewScanned = false;

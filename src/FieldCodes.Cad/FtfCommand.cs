@@ -142,12 +142,19 @@ namespace FieldCodes.Cad
                     return AskToContinue(ed, step.Name);
                 });
 
+            // Point accountability and linework continuity, after every run -- a run that stopped
+            // early too (the summary says so). Writes only the review list, the ledger and the
+            // non-plotted previews; one U undoes the run and its checks together.
+            ed.WriteMessage("\n\n--- Point accountability and linework continuity{0} ---", result.StoppedEarly ? " (after a run that stopped early)" : string.Empty);
+            var checks = PostRunChecks.AfterProcessing("FTFRUN " + choice + (result.StoppedEarly ? " (stopped early)" : string.Empty));
+
             // The drawing remembers its last processing run (Overview > Last processed).
             try { FtfStatusService.RecordRun(result, FtfStatusService.Gather(), "FTFRUN " + choice, null); }
             catch (System.Exception ex) { ed.WriteMessage("\n(Could not record the run in the drawing: {0})", ex.Message); }
 
             ed.WriteMessage("\n\n=== Finished: {0} of {1} step(s) ===\n",
                             result.Completed, total);
+            if (checks != null) ed.WriteMessage("{0}\n", checks.OneLine());
 
             if (result.Failed == 0)
                 ed.WriteMessage("Run FTFRUN again at any time; every step deletes its own " +

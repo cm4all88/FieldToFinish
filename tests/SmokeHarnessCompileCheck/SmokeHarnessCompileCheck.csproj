@@ -36,5 +36,6 @@
     <Compile Include="..\LiveSmoke\StyleTestHarness.cs" Link="StyleTestHarness.cs" />
     <Compile Include="..\LiveSmoke\IdentityTestHarness.cs" Link="IdentityTestHarness.cs" />
     <Compile Include="..\LiveSmoke\FigureFixtureHarness.cs" Link="FigureFixtureHarness.cs" />
+    <Compile Include="..\LiveSmoke\AccountabilityTestHarness.cs" Link="AccountabilityTestHarness.cs" />
   </ItemGroup>
 </Project>

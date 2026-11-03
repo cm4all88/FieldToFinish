@@ -5,6 +5,7 @@
 - **Scope:** a read-only audit. No code was changed.
 - **References:** paths are relative to the repository root. Line numbers are at `cab20cd`.
 - **Verification status:** everything in `src/FieldCodes.Cad` compiles against the real AutoCAD 2024 API. Except where noted, it has not run in Civil 3D.
+- **Status (2026-11-03):** implemented with the decisions recorded after review. See `docs/point-accountability.md` for what was built, how it works, and what has and has not been verified in Civil 3D. This audit is kept as written.
 
 ---
 

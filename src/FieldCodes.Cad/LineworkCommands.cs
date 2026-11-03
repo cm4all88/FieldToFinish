@@ -1495,7 +1495,12 @@ namespace FieldCodes.Cad
         /// position, so vertices can look their creating shots up.</summary>
         private static SourcePointIndex BuildNoteIndex(Database db, Transaction tr)
         {
-            return SourcePointReader.Read(db, tr);
+            // The crew's notes too (Settings > Point Labels > Read notes from), for fence heights
+            // written in the field notes rather than the description.
+            CogoNotes notes = null;
+            try { notes = CogoNotes.For(db, tr, FtfSession.SettingsFor(db, FtfSession.Rules(db))); }
+            catch (ConfigException) { notes = null; }
+            return SourcePointReader.Read(db, tr, notes);
         }
 
         /// <summary>
@@ -1645,7 +1650,7 @@ namespace FieldCodes.Cad
             foreach (var vertex in VerticesOf(curve))
             {
                 if (index == null) break;
-                foreach (var description in index.DescriptionsAt(vertex.X, vertex.Y))
+                foreach (var description in index.DescriptionsWithNotesAt(vertex.X, vertex.Y))
                 {
                     // The fence's code anywhere in the shot ("FGP FNC B 5" is a gate post on the
                     // fence); the height is the number after it, before a gate post's own code.

@@ -416,7 +416,8 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `FTFGATES` | Pairs gate posts (FGP) along the fences and labels each gate between its posts with its width (`6' GATE`); unsure pairs go to the review list. See "Gates" | yes (labels moved or reworded by hand are kept; never duplicates) |
 | `FTFGATE` | Pick two gate posts: confirms or changes a pair, labels the gate between them | yes (replaces its own) |
 | `FTFREVIEW` | The review list: everything FTF could not decide, with zoom, fix, settings, recheck, not applicable and accept. See "Review list and Drafting QC" | n/a |
-| `FTFREVIEWCHECK` | Rechecks the codes for the review list (unknown codes, unreadable descriptions, linework words); read-only | yes |
+| `FTFREVIEWCHECK` | Rechecks everything the review list is built from: codes, linework continuity and point accountability. Writes only the review list, the point ledger, the non-plotted proposal previews and the reports | yes |
+| `-FTFREVIEW` | The review list on the command line: List, Approve a proposed correction, NotApplicable / Accept with a reason, Reopen, Zoom (for scripts and the keyboard) | n/a |
 | `FTFQC` | Marks the drawing Drafting QC Complete, refused while required review items are open | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
@@ -742,9 +743,14 @@ needs a drafter is lost in command-line history:
 | Gates | unpaired posts, posts that could pair more than one way, widths out of range, recorded widths that disagree, posts away from every fence |
 | FTFORIENT | pavement markings whose direction could not be decided, symbols needing review or below the confidence to apply, points that could not be turned |
 | Any FTF command | a command that did not finish (closed when it next finishes) |
+| Point accountability (after FTFRUN, the window, FTFLABELALL; FTFREVIEWCHECK; FTFQC) | points missing what they need (a label, a block, their own symbol, a line, a surface, the control table), duplicates, exclusions without a reason, points deleted since they were first recorded; see `docs/point-accountability.md` |
+| Linework continuity (the same) | gaps in coded strings, interrupted strings begun again, lines that skip a coded shot, coded shots with no line, each with its evidence and a proposed correction |
 
-Codes ignored on purpose (the ignore list, codes you marked ignored), ordinary Civil 3D
-linework and bare codes are never on it.
+Every point is accounted for from what the drawing holds for it (the point ledger,
+`docs/point-accountability.md`): an ignored code needs a documented reason, a bare code its
+own symbol, a linework shot a drawn line of its feature. Approving a proposed correction
+draws a separate line on the feature's layer; the survey linework is never changed. A
+decision reopens when the point or line it was made on changes.
 
 Each item shows the point number or entity, the feature, the issue, why, what to do,
 its severity, whether it is required, and its status. In FTFREVIEW: **Zoom to** (double

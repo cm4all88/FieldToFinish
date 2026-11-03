@@ -29,18 +29,42 @@ namespace FieldCodes.Settings
         /// <summary>Bare field codes, as shot. A trailing sequence number is matched
         /// too, so XYZ covers XYZ2 -- the same rule as the rules file's code lists.</summary>
         [JsonProperty("ignoredCodes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonConverter(typeof(NotedCodeListConverter))]
         public List<string> IgnoredCodes { get; set; }
+
+        /// <summary>Why the office ignores a code, who decided and when (an entry written as an
+        /// object); null when no entry covers the code, an empty note when the entry has none.</summary>
+        public CodeNote NoteFor(string code)
+        {
+            var entry = EntryFor(code);
+            if (entry == null) return null;
+            return NotedCodeList.NoteFor(IgnoredCodes, entry) ?? new CodeNote { Code = entry };
+        }
+
+        /// <summary>Ignores a code with the reason, who and when (Unknown Codes > Ignore).</summary>
+        public bool Ignore(string code, string reason, string by, DateTime? at)
+        {
+            var added = Ignore(code);
+            if (string.IsNullOrWhiteSpace(code)) return false;
+            var c = code.Trim().ToUpperInvariant();
+            if (!IsPlainCode(c)) return false;
+            var noted = IgnoredCodes as NotedCodeList;
+            if (noted == null) { noted = new NotedCodeList(IgnoredCodes); IgnoredCodes = noted; }
+            if (!string.IsNullOrWhiteSpace(reason))
+                noted.SetNote(new CodeNote { Code = c, Reason = reason.Trim(), By = string.IsNullOrWhiteSpace(by) ? null : by.Trim(), At = at });
+            return added || !string.IsNullOrWhiteSpace(reason);
+        }
 
         public DiagnosticsSettings() { RestoreDefaults(); }
 
         public void RestoreDefaults()
         {
-            IgnoredCodes = new List<string>();
+            IgnoredCodes = new NotedCodeList();
         }
 
         public void Validate(ICollection<string> problems)
         {
-            if (IgnoredCodes == null) IgnoredCodes = new List<string>();
+            if (IgnoredCodes == null) IgnoredCodes = new NotedCodeList();
 
             foreach (var code in IgnoredCodes)
             {
@@ -104,7 +128,7 @@ namespace FieldCodes.Settings
             if (string.IsNullOrWhiteSpace(code)) return false;
             var c = code.Trim().ToUpperInvariant();
             if (!IsPlainCode(c)) return false;
-            if (IgnoredCodes == null) IgnoredCodes = new List<string>();
+            if (IgnoredCodes == null) IgnoredCodes = new NotedCodeList();
             if (IgnoredCodes.Any(x => string.Equals((x ?? string.Empty).Trim(), c,
                                                     StringComparison.OrdinalIgnoreCase)))
                 return false;

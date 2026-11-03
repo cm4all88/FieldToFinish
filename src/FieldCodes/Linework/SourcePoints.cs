@@ -22,6 +22,10 @@ namespace FieldCodes.Linework
 
         public bool HasDescription { get { return !string.IsNullOrWhiteSpace(RawDescription); } }
 
+        /// <summary>The crew's note read from outside the raw description (a point property or the
+        /// full description, as Settings > Point Labels > Read notes from says), or null.</summary>
+        public string Note { get; set; }
+
         public override string ToString()
         {
             return string.Format(CultureInfo.InvariantCulture, "{0} \"{1}\" ({2:0.###}, {3:0.###}, {4:0.###})",
@@ -111,6 +115,18 @@ namespace FieldCodes.Linework
         public IList<string> DescriptionsAt(double x, double y)
         {
             return At(x, y).Where(p => p.HasDescription).Select(p => p.RawDescription).ToList();
+        }
+
+        /// <summary>The descriptions with the crew's note after them (where one was read), for
+        /// values the crew may write in either place -- a fence height in the field notes ("6.0
+        /// WOOD"). Line identification keeps to <see cref="DescriptionsAt"/>.</summary>
+        public IList<string> DescriptionsWithNotesAt(double x, double y)
+        {
+            return At(x, y).Where(p => p.HasDescription)
+                           .Select(p => string.IsNullOrWhiteSpace(p.Note) || p.RawDescription.IndexOf(p.Note.Trim(), StringComparison.OrdinalIgnoreCase) >= 0
+                               ? p.RawDescription
+                               : p.RawDescription.TrimEnd() + " " + p.Note.Trim())
+                           .ToList();
         }
 
         /// <summary>The shots a polyline was drawn through, one entry per vertex: the points at that

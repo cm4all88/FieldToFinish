@@ -340,33 +340,81 @@ namespace FieldCodes.Cad.Setup
     {
         private System.Windows.Forms.ListBox _codes;
 
+        /// <summary>One ignored code and the documented reason for it.</summary>
+        private sealed class Entry
+        {
+            public string Code;
+            public CodeNote Note;
+            public override string ToString()
+            {
+                return Note != null && Note.HasReason ? Code + "  --  " + Note.Reason : Code + "  (no reason given)";
+            }
+        }
+
         public override string Title { get { return "Diagnostics"; } }
         public override string AffectedCommands { get { return "FTFPOINTS and the FTF window's Unknown Codes, Overview and Reports"; } }
 
         protected override void BuildBody()
         {
             Heading("Codes you marked as intentionally ignored");
-            _codes = new System.Windows.Forms.ListBox { Width = 220, Height = 160, IntegralHeight = false, Sorted = true };
+            _codes = new System.Windows.Forms.ListBox { Width = 420, Height = 160, IntegralHeight = false, Sorted = true };
             var remove = new System.Windows.Forms.Button { Text = "Stop Ignoring" };
             remove.Click += (s, e) =>
             {
                 if (_codes.SelectedItem != null) { _codes.Items.Remove(_codes.SelectedItem); MarkChanged(); }
             };
-            AddWithSideButtons(_codes, SideButtons(remove));
+            var reason = new System.Windows.Forms.Button { Text = "Reason..." };
+            reason.Click += (s, e) =>
+            {
+                var entry = _codes.SelectedItem as Entry;
+                if (entry == null) return;
+                var text = AskReason(entry.Code, entry.Note != null ? entry.Note.Reason : string.Empty);
+                if (text == null) return;
+                var index = _codes.SelectedIndex;
+                entry.Note = new CodeNote { Code = entry.Code, Reason = text, By = Environment.UserName, At = DateTime.Now };
+                _codes.Items[index] = entry;
+                MarkChanged();
+            };
+            AddWithSideButtons(_codes, SideButtons(remove, reason));
             Note("Add codes from Unknown Codes > Mark Ignored. A code also covers its sequence numbers (XYZ covers XYZ2). " +
-                 "Errors (blank or unreadable descriptions) are never hidden by this list.");
+                 "Errors (blank or unreadable descriptions) are never hidden by this list. " +
+                 "Give every code a reason: Point Accountability lists the points of a code ignored without one for review.");
+        }
+
+        private string AskReason(string code, string current)
+        {
+            using (var form = new System.Windows.Forms.Form { Text = "Why is " + code + " ignored?", Width = 460, Height = 140,
+                       StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
+                       FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
+            {
+                var box = new System.Windows.Forms.TextBox { Dock = System.Windows.Forms.DockStyle.Top, Text = current ?? string.Empty };
+                var ok = new System.Windows.Forms.Button { Text = "OK", DialogResult = System.Windows.Forms.DialogResult.OK, Dock = System.Windows.Forms.DockStyle.Bottom };
+                form.Controls.Add(ok);
+                form.Controls.Add(box);
+                form.AcceptButton = ok;
+                if (form.ShowDialog(_codes) != System.Windows.Forms.DialogResult.OK) return null;
+                var text = (box.Text ?? string.Empty).Trim();
+                return text.Length == 0 ? null : text;
+            }
         }
 
         public override void LoadFrom(FtfSettings s)
         {
             _codes.Items.Clear();
-            foreach (var c in s.Diagnostics != null ? s.Diagnostics.Codes() : new List<string>()) _codes.Items.Add(c);
+            foreach (var c in s.Diagnostics != null ? s.Diagnostics.Codes() : new List<string>())
+                _codes.Items.Add(new Entry { Code = c, Note = s.Diagnostics.NoteFor(c) });
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
         {
             if (s.Diagnostics == null) s.Diagnostics = new DiagnosticsSettings();
-            s.Diagnostics.IgnoredCodes = _codes.Items.Cast<object>().Select(o => o.ToString()).ToList();
+            var list = new NotedCodeList();
+            foreach (var entry in _codes.Items.OfType<Entry>())
+            {
+                list.Add(entry.Code);
+                if (entry.Note != null && entry.Note.HasReason) list.SetNote(entry.Note);
+            }
+            s.Diagnostics.IgnoredCodes = list;
         }
 
         public override void RestoreDefaults(FtfSettings s)

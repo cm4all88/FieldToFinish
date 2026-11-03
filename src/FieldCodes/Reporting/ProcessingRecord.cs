@@ -65,6 +65,12 @@ namespace FieldCodes.Reporting
         /// <summary>FTF-owned objects in the drawing after the run.</summary>
         [JsonProperty("ownedObjects")] public int OwnedObjects { get; set; }
 
+        // point accountability straight after the run (null on runs before it existed)
+        [JsonProperty("accountedFor", NullValueHandling = NullValueHandling.Ignore)] public int? AccountedFor { get; set; }
+        [JsonProperty("forReview", NullValueHandling = NullValueHandling.Ignore)] public int? ForReview { get; set; }
+        [JsonProperty("lineworkItems", NullValueHandling = NullValueHandling.Ignore)] public int? LineworkItems { get; set; }
+        [JsonProperty("accountability", NullValueHandling = NullValueHandling.Ignore)] public string Accountability { get; set; }
+
         public ProcessingRecord()
         {
             Version = 1;
@@ -142,6 +148,8 @@ namespace FieldCodes.Reporting
                 "Afterwards: {0} point(s), {1} processed, {2} error(s), {3} needing configuration, " +
                 "{4} skipped intentionally; {5} FTF object(s).",
                 Points, Processed, Errors, NeedsConfiguration, Skipped, OwnedObjects));
+            if (!string.IsNullOrEmpty(Accountability))
+                sb.AppendLine().Append("Point accountability: ").Append(Accountability);
             return sb.ToString();
         }
 
@@ -213,7 +221,9 @@ namespace FieldCodes.Reporting
                 { "ControlTable", "control tables" },
                 { "UtilityPipe", "dip pipes" },
                 { "UtilityPipeLabel", "pipe labels" },
-                { "StructureLabel", "structure labels" }
+                { "StructureLabel", "structure labels" },
+                { "LineGapProposal", "proposed linework corrections (not plotted)" },
+                { "LineCorrection", "approved linework corrections" }
             };
 
         public static string NameOf(string kind)

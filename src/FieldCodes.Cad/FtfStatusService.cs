@@ -43,6 +43,9 @@ namespace FieldCodes.Cad
         /// <summary>The last processing run stored in the drawing, or null.</summary>
         public ProcessingRecord LastRun { get; set; }
 
+        /// <summary>The last point accountability run (the point ledger), or null when it never ran.</summary>
+        public LedgerRun Accounting { get; set; }
+
         /// <summary>Which settings file is in force, in words, with its path.</summary>
         public string SettingsText { get; set; }
 
@@ -137,6 +140,7 @@ namespace FieldCodes.Cad
                 CountOwned(status, Ownership.FindOwnedInLayouts(db, tr, null, null));
 
                 status.LastRun = DrawingStore.ReadLastRun(db, tr);
+                status.Accounting = DrawingStore.ReadLedger(db, tr).LastRun;
                 tr.Commit();
             }
 
@@ -203,6 +207,15 @@ namespace FieldCodes.Cad
                 using (doc.LockDocument())
                 using (var tr = doc.Database.TransactionManager.StartTransaction())
                 {
+                    // The accountability that ran after it (PostRunChecks), when it did.
+                    var accounting = DrawingStore.ReadLedger(doc.Database, tr).LastRun;
+                    if (accounting != null && (DateTime.Now - accounting.At).TotalMinutes < 30)
+                    {
+                        record.AccountedFor = accounting.Accounted;
+                        record.ForReview = accounting.Review;
+                        record.LineworkItems = accounting.OpenLineItems;
+                        record.Accountability = accounting.Describe();
+                    }
                     DrawingStore.WriteLastRun(doc.Database, tr, record);
                     tr.Commit();
                 }

@@ -130,6 +130,11 @@ namespace FieldCodes.Cad
                     ed.WriteMessage("\n{0} identified line(s) were not labelled; the reasons are listed under FTFLINELABELS above.", report.Unlabelled);
             }
             foreach (var f in failed) ed.WriteMessage("\nFAILED -- " + f);
+
+            // What the labels now account for, and what is still open.
+            ed.WriteMessage("\n--- Point accountability and linework continuity ---");
+            var checks = PostRunChecks.AfterProcessing("FTFLABELALL");
+            if (checks != null) ed.WriteMessage("\n{0}", checks.OneLine());
             ed.WriteMessage(failed.Count == 0
                 ? "\nLabels placed or moved by hand were kept. Run FTFLABELALL again any time; it replaces only its own labels.\n"
                 : "\nFix the failure above and run FTFLABELALL again; nothing it already placed duplicates.\n");

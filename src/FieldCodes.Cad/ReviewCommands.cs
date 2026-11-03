@@ -201,8 +201,10 @@ namespace FieldCodes.Cad
             }
         }
 
-        /// <summary>Rechecks the codes (read-only): unknown codes, unreadable descriptions, invalid
-        /// values, unrecognised linework words. Only the review list changes.</summary>
+        /// <summary>Rechecks everything the review list is built from: the codes (unknown codes,
+        /// unreadable descriptions, invalid values, unrecognised linework words), linework
+        /// continuity and point accountability. Never writes a point or a line of the survey: only
+        /// the review list, the point ledger, the non-plotted proposal previews and the reports.</summary>
         [CommandMethod("FTFREVIEWCHECK", CommandFlags.Modal)]
         public void FtfReviewCheck()
         {
@@ -210,14 +212,125 @@ namespace FieldCodes.Cad
             {
                 var cfg = FtfSession.Rules(db);
                 var settings = FtfSession.SettingsFor(db, cfg);
-                int codes, modifiers;
-                var added = ReviewStore.CheckCodes(db, tr, cfg, settings, out codes, out modifiers);
+                var summary = PostRunChecks.Run(db, tr, cfg, settings, "FTFREVIEWCHECK");
+                ed.WriteMessage("\nFTFREVIEWCHECK:");
+                PostRunChecks.Print(ed, summary);
                 var register = DrawingStore.ReadReview(db, tr);
-                ed.WriteMessage("\nFTFREVIEWCHECK: {0} code item(s), {1} linework word item(s); {2} new. " +
-                                "{3} open item(s), {4} required. FTFREVIEW lists them.\n",
-                                codes, modifiers, added, register.Open.Count, register.RequiredOpen.Count);
+                ed.WriteMessage("{0} open item(s), {1} required. FTFREVIEW lists them.\n", register.Open.Count, register.RequiredOpen.Count);
             });
             if (_form != null && !_form.IsDisposed) _form.Reload();
+        }
+
+        /// <summary>
+        /// The review list on the command line (for scripts and the keyboard): List the open items,
+        /// Approve a proposed correction, mark items NotApplicable or Accept them with a reason, Reopen
+        /// them, or Zoom to one. Items are named by id; a trailing * names every id that starts so
+        /// (point.duplicate:*), and several can be given separated by commas.
+        /// </summary>
+        [CommandMethod("-FTFREVIEW", CommandFlags.Modal)]
+        public void FtfReviewCommandLine()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var ed = doc.Editor;
+            var ask = new PromptKeywordOptions("\nReview [List/Approve/NotApplicable/Accept/Reopen/Zoom] <List>: ") { AllowNone = true };
+            foreach (var k in new[] { "List", "Approve", "NotApplicable", "Accept", "Reopen", "Zoom" }) ask.Keywords.Add(k);
+            ask.Keywords.Default = "List";
+            var answer = ed.GetKeywords(ask);
+            if (answer.Status != PromptStatus.OK && answer.Status != PromptStatus.None) return;
+            var action = answer.Status == PromptStatus.None ? "List" : answer.StringResult;
+
+            var which = Text(ed, action == "List" ? "\nShow items whose id starts with <all open>: " : "\nItem id(s) (a trailing * for all that start so): ", action == "List");
+            if (which == null) return;
+            string note = null;
+            if (action == "Approve" || action == "NotApplicable" || action == "Accept")
+            {
+                note = Text(ed, action == "NotApplicable" ? "\nWhy does it not apply: " : "\nNote (recorded with your name): ", false);
+                if (note == null) return;
+            }
+
+            ReviewItem zoom = null;
+            FtfSession.Run("-FTFREVIEW", (db, tr, e) =>
+            {
+                var cfg = FtfSession.Rules(db);
+                var settings = FtfSession.SettingsFor(db, cfg);
+                var register = DrawingStore.ReadReview(db, tr);
+                var by = LineworkCommands.Reviewer(settings.Review);
+                var now = DateTime.Now;
+                var ids = Match(register, which, action == "List" || action == "Approve" || action == "NotApplicable" || action == "Accept" || action == "Zoom");
+                switch (action)
+                {
+                    case "List":
+                        foreach (var i in ids.Take(300))
+                            e.WriteMessage("\n  {0}{1}  {2}  [{3}]{4}", i.Required ? "* " : "  ", i.Id, ReviewRegister.Describe(i), i.Status,
+                                           i.HasProposal && i.IsOpen ? " (correction proposed)" : string.Empty);
+                        e.WriteMessage("\n{0} item(s); * = required before Drafting QC Complete.\n", ids.Count);
+                        return;
+                    case "Approve":
+                        foreach (var i in ids)
+                        {
+                            string handle, problem;
+                            if (LineCorrections.Approve(db, tr, cfg, register, i.Id, note, by, out handle, out problem))
+                                e.WriteMessage("\n  {0}: correction drawn ({1}).", i.Id, handle);
+                            else e.WriteMessage("\n  {0}: not approved -- {1}", i.Id, problem);
+                        }
+                        break;
+                    case "NotApplicable":
+                    {
+                        string problem;
+                        var n = register.MarkNotApplicable(ids.Select(i => i.Id), note, by, now, out problem);
+                        e.WriteMessage("\n  {0} item(s) marked not applicable.{1}", n, problem == null ? string.Empty : " " + problem);
+                        break;
+                    }
+                    case "Accept":
+                        foreach (var i in ids)
+                        {
+                            string problem;
+                            if (register.Accept(i.Id, note, by, now, out problem)) e.WriteMessage("\n  {0}: accepted.", i.Id);
+                            else e.WriteMessage("\n  {0}: not accepted -- {1}", i.Id, problem);
+                        }
+                        break;
+                    case "Reopen":
+                        foreach (var i in ids) { register.Reopen(i.Id, by, now); e.WriteMessage("\n  {0}: reopened.", i.Id); }
+                        break;
+                    case "Zoom":
+                        zoom = ids.FirstOrDefault();
+                        return;
+                }
+                DrawingStore.WriteReview(db, tr, register);
+                e.WriteMessage("\n{0} open, {1} required and open.\n", register.Open.Count, register.RequiredOpen.Count);
+            });
+            if (zoom != null && !ReviewStore.ZoomTo(doc, zoom)) ed.WriteMessage("\n{0} has no location in the drawing.\n", zoom.Id);
+            if (_form != null && !_form.IsDisposed) _form.Reload();
+        }
+
+        private static string Text(Editor ed, string prompt, bool allowEmpty)
+        {
+            var o = new PromptStringOptions(prompt) { AllowSpaces = true };
+            var r = ed.GetString(o);
+            if (r.Status != PromptStatus.OK) return null;
+            var t = (r.StringResult ?? string.Empty).Trim();
+            if (t.Length == 0 && !allowEmpty) return null;
+            return t;
+        }
+
+        /// <summary>Items named by id; "x*" names every id that starts with x; commas separate several.
+        /// An empty pattern names every open item.</summary>
+        internal static List<ReviewItem> Match(ReviewRegister register, string pattern, bool openOnly)
+        {
+            var found = new List<ReviewItem>();
+            var parts = (pattern ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).Where(p => p.Length > 0).ToList();
+            foreach (var i in register.Items)
+            {
+                if (openOnly && !i.IsOpen && parts.Count == 0) continue;
+                var hit = parts.Count == 0 || parts.Any(p => p.EndsWith("*", StringComparison.Ordinal)
+                    ? i.Id.StartsWith(p.Substring(0, p.Length - 1), StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(i.Id, p, StringComparison.OrdinalIgnoreCase));
+                if (!hit) continue;
+                if (openOnly && !i.IsOpen && parts.Any(p => p.EndsWith("*", StringComparison.Ordinal))) continue;
+                found.Add(i);
+            }
+            return found;
         }
 
         /// <summary>
@@ -234,6 +347,10 @@ namespace FieldCodes.Cad
             {
                 var cfg = FtfSession.Rules(db);
                 var settings = FtfSession.SettingsFor(db, cfg);
+                // Never judged on a stale list: the checks run first, so a point or a line changed
+                // since the last run cannot slip past Drafting QC Complete.
+                var checks = PostRunChecks.Run(db, tr, cfg, settings, "FTFQC");
+                ed.WriteMessage("\nFTFQC: checks rerun. {0}", checks.OneLine());
                 var register = DrawingStore.ReadReview(db, tr);
                 ed.WriteMessage("\nFTFQC: {0} open review item(s), {1} required.", register.Open.Count, register.RequiredOpen.Count);
                 foreach (var item in register.RequiredOpen.Take(15))

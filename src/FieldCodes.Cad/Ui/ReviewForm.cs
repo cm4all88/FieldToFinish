@@ -53,7 +53,7 @@ namespace FieldCodes.Cad.Ui
             _source = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
             _source.SelectedIndexChanged += (s, e) => { if (!_loading) Fill(); };
             top.Controls.Add(_source);
-            top.Controls.Add(Button("Recheck codes", "Rechecks unknown codes, unreadable descriptions and linework words (FTFREVIEWCHECK). Read-only.",
+            top.Controls.Add(Button("Recheck all", "Rechecks the codes, linework continuity and point accountability (FTFREVIEWCHECK). Writes only the review list, the point ledger and the QC previews.",
                 () => Run("FTFREVIEWCHECK"), false));
             top.Controls.Add(Button("Refresh", "Reads the list from the drawing again.", Reload, false));
             top.Controls.Add(Button("Drafting QC Complete...", "Marks the drawing Drafting QC Complete (FTFQC); refused while required items are open.",
@@ -69,26 +69,28 @@ namespace FieldCodes.Cad.Ui
                 View = View.Details,
                 FullRowSelect = true,
                 HideSelection = false,
-                MultiSelect = false,
+                MultiSelect = true,
                 GridLines = true
             };
-            foreach (var c in new[] { "Point / entity", "Feature", "Issue", "Why", "What to do", "Severity", "Required", "Status", "Note" })
+            foreach (var c in new[] { "Point / entity", "Feature", "Code", "Issue", "Why", "What to do", "Severity", "Required", "Status", "Note" })
                 _list.Columns.Add(c);
-            _list.Columns[0].Width = 110; _list.Columns[1].Width = 90; _list.Columns[2].Width = 220; _list.Columns[3].Width = 300;
-            _list.Columns[4].Width = 260; _list.Columns[5].Width = 70; _list.Columns[6].Width = 64; _list.Columns[7].Width = 96; _list.Columns[8].Width = 200;
+            _list.Columns[0].Width = 110; _list.Columns[1].Width = 80; _list.Columns[2].Width = 60; _list.Columns[3].Width = 220; _list.Columns[4].Width = 300;
+            _list.Columns[5].Width = 240; _list.Columns[6].Width = 70; _list.Columns[7].Width = 64; _list.Columns[8].Width = 96; _list.Columns[9].Width = 200;
             _list.SelectedIndexChanged += (s, e) => ShowSelected();
             _list.DoubleClick += (s, e) => Zoom();
 
-            _detail = new Label { Dock = DockStyle.Bottom, AutoSize = false, Height = 54, Padding = new Padding(10, 4, 8, 4) };
+            _detail = new Label { Dock = DockStyle.Bottom, AutoSize = false, Height = 96, Padding = new Padding(10, 4, 8, 4) };
 
             var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(8, 4, 8, 8), WrapContents = true };
             actions.Controls.Add(Button("Zoom to", "Zooms to it and selects what it is about (double-click a row does the same).", Zoom, true));
             actions.Controls.Add(Button("Fix...", "Runs the command that corrects it (FTFGATE for a gate, FTFORIENT for a symbol...).", Fix, true));
             actions.Controls.Add(Button("Its settings", "Opens the settings page that governs it.", OpenItsSettings, true));
             actions.Controls.Add(Button("Recheck", "Runs the check that raised it again; an item it no longer finds is resolved.", Recheck, true));
-            actions.Controls.Add(Button("Not applicable...", "Closes it with your reason; reruns keep it closed.", NotApplicable, true));
-            actions.Controls.Add(Button("Accept", "Records that you reviewed it and accept it as drawn.", Accept, true));
-            actions.Controls.Add(Button("Reopen", "Puts it back on the open list.", Reopen, true));
+            actions.Controls.Add(Button("Approve correction...", "Draws FTF's proposed correction as a separate line on the feature's layer (the survey linework is never changed) and closes the item.", ApproveCorrection, true));
+            actions.Controls.Add(Button("Not applicable...", "Closes the selected items with one reason; reruns keep them closed unless their source changes.", NotApplicable, true));
+            actions.Controls.Add(Button("Accept...", "Records that you reviewed the selected items and accept them as drawn (point and linework items need a note).", Accept, true));
+            actions.Controls.Add(Button("Reopen", "Puts the selected items back on the open list.", Reopen, true));
+            actions.Controls.Add(Button("Select same kind", "Selects every listed item of the same kind and code, for one decision on all of them.", SelectSame, true));
 
             Controls.Add(_list);
             Controls.Add(_summary);
@@ -162,6 +164,7 @@ namespace FieldCodes.Cad.Ui
                 {
                     string.IsNullOrWhiteSpace(i.Points) ? (i.Handles.Count > 0 ? "entity " + i.Handles[0] : "-") : i.Points,
                     i.FeatureType ?? string.Empty,
+                    i.Code ?? string.Empty,
                     i.Issue ?? string.Empty,
                     i.Reason ?? string.Empty,
                     i.SuggestedAction ?? string.Empty,
@@ -192,6 +195,7 @@ namespace FieldCodes.Cad.Ui
             switch (s)
             {
                 case ReviewItemStatus.NotApplicable: return "Not applicable";
+                case ReviewItemStatus.Corrected: return "Corrected";
                 default: return s.ToString();
             }
         }
@@ -207,16 +211,76 @@ namespace FieldCodes.Cad.Ui
             return _list.SelectedItems.Count == 0 ? null : _list.SelectedItems[0].Tag as ReviewItem;
         }
 
+        private List<ReviewItem> SelectedAll()
+        {
+            return _list.SelectedItems.Cast<ListViewItem>().Select(r => r.Tag as ReviewItem).Where(i => i != null).ToList();
+        }
+
         private void ShowSelected()
         {
             var i = Selected();
+            var count = _list.SelectedItems.Count;
             foreach (var b in _itemButtons) b.Enabled = i != null;
-            _detail.Text = i == null
-                ? "Select an item. Double-click zooms to it."
-                : (i.Source + " -- " + ReviewRegister.Describe(i) + ": " + i.Reason + Environment.NewLine +
-                   "What to do: " + i.SuggestedAction +
-                   (string.IsNullOrEmpty(i.FixCommand) ? string.Empty : "  (Fix runs " + i.FixCommand + ")") +
-                   "   First found " + i.FirstSeen.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + ".");
+            if (i == null) { _detail.Text = "Select an item (Ctrl or Shift for several). Double-click zooms to it."; return; }
+            var text = new System.Text.StringBuilder();
+            if (count > 1) text.Append(count.ToString(CultureInfo.InvariantCulture)).Append(" items selected; showing the first.  ");
+            text.Append(i.Source).Append(" -- ").Append(ReviewRegister.Describe(i)).Append(": ").Append(i.Reason);
+            if (!string.IsNullOrEmpty(i.Confidence)) text.Append("  [").Append(i.Confidence).Append("]");
+            text.Append(Environment.NewLine).Append("What to do: ").Append(i.SuggestedAction);
+            if (!string.IsNullOrEmpty(i.FixCommand)) text.Append("  (Fix runs ").Append(i.FixCommand).Append(")");
+            if (i.HasProposal && i.IsOpen) text.Append("  A proposed correction is previewed on the QC layer.");
+            if (i.Evidence != null && i.Evidence.Count > 0)
+                text.Append(Environment.NewLine).Append("Evidence: ").Append(string.Join("; ", i.Evidence.Take(5).ToArray()));
+            if (i.History != null && i.History.Count > 0)
+                text.Append(Environment.NewLine).Append("History: ").Append(string.Join("; ", i.History.Skip(Math.Max(0, i.History.Count - 4))
+                    .Select(h => h.At.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " " + h.Action + (string.IsNullOrWhiteSpace(h.By) || h.By == "FTF" ? string.Empty : " by " + h.By)).ToArray()));
+            else text.Append("   First found ").Append(i.FirstSeen.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)).Append(".");
+            _detail.Text = text.ToString();
+        }
+
+        private void SelectSame()
+        {
+            var i = Selected();
+            if (i == null) return;
+            _list.BeginUpdate();
+            foreach (ListViewItem row in _list.Items)
+            {
+                var other = row.Tag as ReviewItem;
+                row.Selected = other != null && other.Kind == i.Kind && string.Equals(other.Code ?? string.Empty, i.Code ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            }
+            _list.EndUpdate();
+            ShowSelected();
+        }
+
+        private void ApproveCorrection()
+        {
+            var i = Selected();
+            if (i == null) return;
+            if (!i.HasProposal || !i.IsOpen)
+            {
+                MessageBox.Show(this, "FTF has no correction to draw for this item" + (i.IsOpen ? "." : " (it is not open)."), "FieldToFinish Review");
+                return;
+            }
+            var note = Ask("Approve correction", "Approve the proposed correction for \"" + ReviewRegister.Describe(i) + "\"? A separate line is drawn on " +
+                           (i.TargetLayer ?? "the current layer") + "; the survey linework is not changed. Your note (recorded with your name):");
+            if (note == null) return;
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var db = doc.Database;
+            string handle = null, problem = null;
+            using (doc.LockDocument())
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var cfg = FtfSession.Rules(db);
+                var register = DrawingStore.ReadReview(db, tr);
+                if (LineCorrections.Approve(db, tr, cfg, register, i.Id, note, LineworkCommands.Reviewer(_settings != null ? _settings.Review : null), out handle, out problem))
+                {
+                    DrawingStore.WriteReview(db, tr, register);
+                    tr.Commit();
+                }
+            }
+            if (problem != null) MessageBox.Show(this, "Not approved: " + problem, "FieldToFinish Review", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Reload();
         }
 
         private void Zoom()
@@ -276,35 +340,53 @@ namespace FieldCodes.Cad.Ui
                 case ReviewChecks.FenceHeightsSource:
                 case ReviewChecks.LineLabelsSource: return "FTFLINELABELS";
                 case ReviewStore.CommandsSource: return i.FixCommand;
+                case ReviewKinds.PointsSource:
+                case ReviewKinds.ContinuitySource: return "FTFREVIEWCHECK";
                 default: return null;
             }
         }
 
         private void NotApplicable()
         {
-            var i = Selected();
-            if (i == null) return;
-            var reason = Ask("Not applicable", "Why does \"" + ReviewRegister.Describe(i) + "\" not apply? (recorded with your name)");
+            var all = SelectedAll();
+            if (all.Count == 0) return;
+            var what = all.Count == 1 ? "\"" + ReviewRegister.Describe(all[0]) + "\"" : all.Count.ToString(CultureInfo.InvariantCulture) + " selected items";
+            var reason = Ask("Not applicable", "Why does " + what + " not apply? (recorded with your name; it reopens if the source changes)");
             if (reason == null) return;
             Change((r, by, now) =>
             {
                 string problem;
-                if (!r.MarkNotApplicable(i.Id, reason, by, now, out problem)) throw new InvalidOperationException(problem);
+                r.MarkNotApplicable(all.Select(x => x.Id), reason, by, now, out problem);
+                if (problem != null) throw new InvalidOperationException(problem);
             });
         }
 
         private void Accept()
         {
-            var i = Selected();
-            if (i == null) return;
-            Change((r, by, now) => r.Accept(i.Id, null, by, now));
+            var all = SelectedAll();
+            if (all.Count == 0) return;
+            string note = null;
+            if (all.Any(x => { var k = ReviewKinds.Get(x.Kind); return k != null && k.NeedsNote; }))
+            {
+                note = Ask("Accept", "Why is " + (all.Count == 1 ? "\"" + ReviewRegister.Describe(all[0]) + "\"" : "each selected item") +
+                           " accepted as drawn? Point and linework items need a documented disposition.");
+                if (note == null) return;
+            }
+            Change((r, by, now) =>
+            {
+                foreach (var x in all)
+                {
+                    string problem;
+                    if (!r.Accept(x.Id, note, by, now, out problem)) throw new InvalidOperationException(problem);
+                }
+            });
         }
 
         private void Reopen()
         {
-            var i = Selected();
-            if (i == null) return;
-            Change((r, by, now) => r.Reopen(i.Id));
+            var all = SelectedAll();
+            if (all.Count == 0) return;
+            Change((r, by, now) => { foreach (var x in all) r.Reopen(x.Id, by, now); });
         }
 
         /// <summary>Changes the list in the drawing (one undoable transaction) and shows it.</summary>

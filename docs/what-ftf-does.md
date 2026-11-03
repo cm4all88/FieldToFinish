@@ -133,7 +133,8 @@ These hold for every command below:
 | Command | What it does |
 |---|---|
 | `FTFREVIEW` | The review list: one place for everything that needs a drafter. Each row shows the point or entity, feature, issue, why, what to do, severity, whether it's required, and status. You can zoom to it and select it, run its fix command, open its settings, recheck it, mark it not applicable (a reason is required), accept it, or reopen it. Stored in the drawing. |
-| `FTFREVIEWCHECK` | Rechecks the codes (read-only): unknown codes, blank or unreadable descriptions, invalid values, and unknown words after a linework code. |
+| `FTFREVIEWCHECK` | Rechecks everything: codes, linework continuity and point accountability (see `docs/point-accountability.md`). Also runs after FTFRUN, the window's processing and FTFLABELALL, and before FTFQC. |
+| `-FTFREVIEW` | The review list on the command line: list, approve a proposed correction, not applicable / accept with a reason, reopen, zoom. |
 | `FTFQC` | Marks the drawing Drafting QC Complete. It is refused while required items are open, and a new required item takes the mark off again. Saving and drafting are never blocked. |
 | FTF window pages | Unknown Codes (errors, needs configuration, informational), Overview, Reports (CSV exports), Lines (why each line is or isn't labelled), Standards (where every value comes from). |
 | `FTFLINES` / `FTFBLOCKS` / `FTFWHERE` / `FTFLINEMETA` | Read-only reports: linework inventory, block check, where the rules file was found, and line metadata. |
@@ -302,8 +303,8 @@ In rough order of value:
 4. **Build the Survey Production Checklist on the review list.** The QC Complete mark and the
    required items are ready. A checklist page could add the manual steps (title block, stamp,
    north arrow, plot check) beside the automatic ones.
-5. **Run the code recheck automatically** at the end of FTFRUN and Label All, so the review list
-   is always current without remembering FTFREVIEWCHECK.
+5. ~~Run the code recheck automatically~~ Done: point accountability and linework continuity run
+   after FTFRUN, the window's processing and Label All, and before FTFQC.
 6. **Export the review list** to CSV or PDF as a QC record, with who closed what and why.
 7. **Double gates.** Three posts in a row, where the middle one is a centre post, could become
    `12' DOUBLE GATE` when the crew codes the centre post (say `FGPC`) instead of being flagged as

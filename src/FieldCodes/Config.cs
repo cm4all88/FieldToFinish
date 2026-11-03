@@ -37,7 +37,17 @@ namespace FieldCodes
         /// trailing sequence number is matched automatically, so "EC" also covers EC2.
         /// </summary>
         [JsonProperty("ignoreCodes")]
+        [JsonConverter(typeof(NotedCodeListConverter))]
         public List<string> IgnoreCodes { get; set; }
+
+        /// <summary>Why a code is ignored and what holds its points instead, from an entry written as
+        /// <c>{ "code": "GS", "reason": "...", "expect": "surface" }</c>; null for a code no entry
+        /// covers, an empty note for an entry without one.</summary>
+        public CodeNote IgnoreNoteFor(string code)
+        {
+            if (NotedCodeList.EntryFor(IgnoreCodes, code) == null) return null;
+            return NotedCodeList.NoteFor(IgnoreCodes, code) ?? new CodeNote { Code = NotedCodeList.EntryFor(IgnoreCodes, code) };
+        }
 
         [JsonIgnore]
         public IList<Regex> IgnorePatterns { get; private set; }
@@ -137,7 +147,7 @@ namespace FieldCodes
             Codes = new List<CodeRule>();
             Modifiers = new List<ModifierRule>();
             LabelPlacement = new LabelPlacementRule();
-            IgnoreCodes = new List<string>();
+            IgnoreCodes = new NotedCodeList();
             IgnorePatterns = new List<Regex>();
             LineworkCodes = new List<string>();
             LineworkPatterns = new List<Regex>();

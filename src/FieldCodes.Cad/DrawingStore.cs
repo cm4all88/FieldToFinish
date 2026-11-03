@@ -296,6 +296,24 @@ namespace FieldCodes.Cad
             WriteText(tr, RootDictionary(tr, db, true), ReviewKey, register.ToJson());
         }
 
+        // ------------------------------------------------------------- point ledger
+
+        private const string LedgerKey = "ACCOUNT";
+
+        /// <summary>The drawing's point ledger (point accountability); an empty one when there is none.</summary>
+        public static FieldCodes.Review.PointLedger ReadLedger(Database db, Transaction tr)
+        {
+            if (db == null || tr == null) return new FieldCodes.Review.PointLedger();
+            return FieldCodes.Review.PointLedger.FromJson(ReadText(tr, RootDictionary(tr, db, false), LedgerKey));
+        }
+
+        /// <summary>Replaces the point ledger, in the caller's transaction (saved and undone with the drawing).</summary>
+        public static void WriteLedger(Database db, Transaction tr, FieldCodes.Review.PointLedger ledger)
+        {
+            if (ledger == null) return;
+            WriteText(tr, RootDictionary(tr, db, true), LedgerKey, ledger.ToJson());
+        }
+
         // --------------------------------------------------------------- last run
 
         private const string LastRunKey = "LASTRUN";

@@ -149,7 +149,19 @@ namespace FieldCodes.Cad
         // PointNumber = the point, or "node"/"link" for intersections and inferred connections.
 
         /// <summary>FTFORIENT QC graphic on a non-plot layer.</summary>
-        OrientQc = 52
+        OrientQc = 52,
+
+        // Linework continuity (point accountability). TagText = the review item id.
+
+        /// <summary>The preview of a proposed linework correction (dashed connector and note) on
+        /// a non-plotted QC layer. Redrawn by every accountability run; never plotted.</summary>
+        LineGapProposal = 53,
+
+        /// <summary>An approved linework correction: a separate line on the feature's layer that
+        /// FTF drew when a person approved the proposal. TagText = "linefix:" + the review item id;
+        /// the stamp's contents hash is its geometry, so an edit by hand is known and kept. The
+        /// original survey linework is never changed. FTFCLEAN leaves it alone.</summary>
+        LineCorrection = 54
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

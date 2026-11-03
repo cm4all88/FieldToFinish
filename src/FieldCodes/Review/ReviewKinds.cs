@@ -19,11 +19,17 @@ namespace FieldCodes.Review
         public ReviewSeverity Severity { get; private set; }
         public bool Required { get; private set; }
 
+        /// <summary>Accepting it needs a note: point accountability and linework continuity
+        /// items are closed only with a documented disposition.</summary>
+        public bool NeedsNote { get; private set; }
+
         public ReviewKind(string id, string source, string feature, string title, string action,
-                          string fix, string settingsPage, ReviewSeverity severity, bool required)
+                          string fix, string settingsPage, ReviewSeverity severity, bool required,
+                          bool needsNote = false)
         {
             Id = id; Source = source; FeatureType = feature; Title = title; Action = action;
             FixCommand = fix; SettingsPage = settingsPage; Severity = severity; Required = required;
+            NeedsNote = needsNote;
         }
     }
 
@@ -51,6 +57,23 @@ namespace FieldCodes.Review
         public const string MarkingDirection = "orient.marking";
         public const string SettingMissing = "settings.missing";
         public const string CommandError = "error.command";
+
+        // Point accountability (Points). Id = kind + point number.
+        public const string PointMissingOutput = "point.missingoutput";
+        public const string PointMissingLinework = "point.missinglinework";
+        public const string PointNoSymbol = "point.nosymbol";
+        public const string PointDuplicate = "point.duplicate";
+        public const string PointExcludedNoReason = "point.excludednoreason";
+        public const string PointDeleted = "point.deleted";
+        public const string PointSourceChanged = "point.sourcechanged";
+
+        // Linework continuity. Ids are made from the shots and line ends they are about.
+        public const string LineGap = "line.gap";
+        public const string LineMissingVertex = "line.missingvertex";
+        public const string LineMissingSegment = "line.missingsegment";
+
+        public const string PointsSource = "Points";
+        public const string ContinuitySource = "Linework continuity";
 
         public static readonly IList<ReviewKind> All = new List<ReviewKind>
         {
@@ -105,6 +128,38 @@ namespace FieldCodes.Review
             new ReviewKind(CommandError, "Commands", "Command", "Command did not finish",
                 "Read the reason, fix it and rerun the command.",
                 null, null, ReviewSeverity.Error, true),
+
+            new ReviewKind(PointMissingOutput, PointsSource, "Point", "Expected output missing",
+                "Draw what is missing (rerun FTFRUN, or place it by hand), or mark it not applicable with the reason it is not needed.",
+                "FTFRUN", "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointMissingLinework, PointsSource, "Point", "Linework shot on no line of its code",
+                "Draw the line through the shot, approve the proposed correction, or mark it not applicable with the reason.",
+                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointNoSymbol, PointsSource, "Point", "Bare code without its own symbol",
+                "Give the point a style whose marker is the code's symbol (description keys), add a rule that draws it, or mark it not applicable with the reason.",
+                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointDuplicate, PointsSource, "Point", "Another point at the same position",
+                "Check both shots: delete the duplicate in Civil 3D, or mark it not applicable (two features at one spot).",
+                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointExcludedNoReason, PointsSource, "Point", "Excluded without a documented reason",
+                "Give the ignore entry a reason (rules.json ignoreCodes, or Unknown Codes > Ignore), or mark the point not applicable with one.",
+                null, "Point Accountability", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointDeleted, PointsSource, "Point", "Point gone since it was first recorded",
+                "Restore the point if it was deleted by mistake, or mark it not applicable with the reason it was removed.",
+                null, "Point Accountability", ReviewSeverity.Error, true, true),
+            new ReviewKind(PointSourceChanged, PointsSource, "Point", "Point changed since it was last checked",
+                "Information: its raw description or position changed in Civil 3D. Decisions about it were reopened.",
+                null, "Point Accountability", ReviewSeverity.Info, false),
+
+            new ReviewKind(LineGap, ContinuitySource, "Line", "Possible missing connection",
+                "Look at the proposal (dashed, on the QC layer): approve the correction, or mark it not applicable with the reason (a gate, a driveway, the fence stops).",
+                null, "Linework Continuity", ReviewSeverity.Warning, true, true),
+            new ReviewKind(LineMissingVertex, ContinuitySource, "Line", "Line skips a coded shot",
+                "The line runs past a shot coded onto it: approve the proposed path, redraw the line, or mark it not applicable with the reason.",
+                null, "Linework Continuity", ReviewSeverity.Warning, true, true),
+            new ReviewKind(LineMissingSegment, ContinuitySource, "Line", "Coded linework not drawn",
+                "Shots coded as one string have no line between them: approve the proposed line, draw it, or mark it not applicable with the reason.",
+                null, "Linework Continuity", ReviewSeverity.Warning, true, true),
         }.AsReadOnly();
 
         public static ReviewKind Get(string id)

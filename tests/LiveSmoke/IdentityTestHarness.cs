@@ -22,7 +22,9 @@
 //               AGAIN     FTFLINES re-run: the CSV is identical, byte for byte
 //               REVIEW    FTFREVIEWCHECK: the review list (in the drawing) holds "code.modifier:FNC WOOD" for 601
 //             Every stage also checks that no point and no seeded curve changed, and that no FTF-owned
-//             entity was created (both commands are read-only for the drawing's geometry).
+//             entity was created (both commands are read-only for the drawing's geometry) -- except
+//             FTFREVIEWCHECK's non-plotted previews of proposed linework corrections (LineGapProposal),
+//             which it redraws on every run.
 // IDEND       writes the verdict and COMPLETE to the result file.
 //
 // Result protocol as ContourTestHarness: lines appended to the file named by FTF_IDENTITY_RESULT.
@@ -433,11 +435,26 @@ namespace FtfIdentityTest
                     var e = tr.GetObject(id, AcDb.OpenMode.ForRead) as AcDb.Entity;
                     if (e == null) continue;
                     var xd = e.GetXDataForApplication(AppName);
-                    if (xd != null) { n++; xd.Dispose(); }
+                    if (xd == null) continue;
+                    var preview = false;
+                    foreach (AcDb.TypedValue tv in xd)
+                        if (tv.TypeCode == (short)AcDb.DxfCode.ExtendedDataInteger16 && Convert.ToInt16(tv.Value) == ProposalKind()) preview = true;
+                    xd.Dispose();
+                    if (!preview) n++;
                 }
                 tr.Commit();
             }
             return n;
+        }
+
+        /// <summary>The kind of FTFREVIEWCHECK's proposal previews, from the plugin itself; -1 on a
+        /// build without them.</summary>
+        private static short ProposalKind()
+        {
+            var kinds = _plugin == null ? null : _plugin.GetType("FieldCodes.Cad.FtfEntityKind");
+            if (kinds == null) return -1;
+            try { return Convert.ToInt16(Enum.Parse(kinds, "LineGapProposal")); }
+            catch (ArgumentException) { return -1; }
         }
 
         /// <summary>One CSV line into fields, honouring quotes.</summary>

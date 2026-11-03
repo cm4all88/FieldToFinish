@@ -150,7 +150,7 @@ public sealed class InventoryShotIdentityTests : IClassFixture<RulesFixture>
         var linework = Read("src", "FieldCodes.Cad", "LineworkCommands.cs");
         Assert.DoesNotContain("Bucket(", linework);                              // the old string bucket is gone
         Assert.DoesNotContain("Dictionary<string, List<string>> noteIndex", linework);
-        Assert.Contains("return SourcePointReader.Read(db, tr);", linework);
+        Assert.Contains("return SourcePointReader.Read(db, tr, notes);", linework);   // with the crew's notes, for fence heights
         Assert.Contains("HeightReviewItems(noteIndex, heightIssues)", linework);
         Assert.DoesNotContain("Dictionary<string, List<string>> noteIndex", Read("src", "FieldCodes.Cad", "LineworkCommands.Gates.cs"));
         var inventory = Read("src", "FieldCodes.Cad", "FtfLineworkService.cs");
@@ -166,5 +166,40 @@ public sealed class InventoryShotIdentityTests : IClassFixture<RulesFixture>
         var dir = AppContext.BaseDirectory;
         while (dir != null && !File.Exists(Path.Combine(dir, "FieldToFinish.sln"))) dir = Path.GetDirectoryName(dir);
         return dir ?? throw new InvalidOperationException("repo root not found");
+    }
+}
+
+/// <summary>Fence heights the crew wrote in the field notes ("6.0 WOOD") are read like ones in the
+/// description; line identification still uses the raw description alone.</summary>
+public sealed class FieldNoteHeightTests
+{
+    [Fact]
+    public void ANoteIsReadAfterTheDescriptionForHeights()
+    {
+        var index = new SourcePointIndex(new[]
+        {
+            new SourcePoint { Number = "1", RawDescription = "FNC B", Note = "6.0 WOOD", X = 0, Y = 0 },
+            new SourcePoint { Number = "2", RawDescription = "FNC 4.5", Note = "4.5", X = 10, Y = 0 },
+            new SourcePoint { Number = "3", RawDescription = "FNC E", X = 20, Y = 0 },
+        });
+        Assert.Equal(new[] { "FNC B 6.0 WOOD" }, index.DescriptionsWithNotesAt(0, 0));
+        Assert.Equal(new[] { "FNC 4.5" }, index.DescriptionsWithNotesAt(10, 0));    // already in the description: not doubled
+        Assert.Equal(new[] { "FNC E" }, index.DescriptionsWithNotesAt(20, 0));
+        Assert.Equal(new[] { "FNC B" }, index.DescriptionsAt(0, 0));                  // identification unchanged
+
+        string written, problem;
+        var feet = LineHeights.Read(index.DescriptionsWithNotesAt(0, 0)[0], new HashSet<string> { "FNC" }, new[] { "FGP" }, 15, out written, out problem);
+        Assert.Equal(6.0, feet);
+        Assert.Null(problem);
+    }
+
+    [Fact]
+    public void TheHeightReaderUsesTheNotes()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir != null && !File.Exists(Path.Combine(dir, "FieldToFinish.sln"))) dir = Path.GetDirectoryName(dir);
+        var linework = File.ReadAllText(Path.Combine(dir!, "src", "FieldCodes.Cad", "LineworkCommands.cs"));
+        Assert.Contains("foreach (var description in index.DescriptionsWithNotesAt(vertex.X, vertex.Y))", linework);
+        Assert.Contains("CogoNotes.For(db, tr, FtfSession.SettingsFor(db, FtfSession.Rules(db)))", linework);
     }
 }
