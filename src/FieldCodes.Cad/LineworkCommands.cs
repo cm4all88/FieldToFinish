@@ -40,6 +40,14 @@ namespace FieldCodes.Cad
         [CommandMethod("FTFLINES", CommandFlags.Modal)]
         public void FtfLines()
         {
+            // Traced so the Civil 3D harnesses can prove it ran (it does not go through FtfSession.Run).
+            FtfCommandTrace.Start("FTFLINES");
+            Lines();
+            FtfCommandTrace.Finish("FTFLINES");
+        }
+
+        private static void Lines()
+        {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
 

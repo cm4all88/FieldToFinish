@@ -17,8 +17,12 @@
              boundary + labels), proving each run happened before checking what it drew
       4. watches the output while it runs: an "Unknown command" stops the run at once and fails it,
          so a missing command can never leave later checks passing on nothing
+      5. runs the identity check on a second fresh drawing (tests\LiveSmoke\IdentityTestHarness.cs):
+         source points read as Civil 3D stores them, FTFLINES naming lines from their shots and
+         FTFREVIEWCHECK reading linework coding, with nothing in the drawing changed. Required.
+      6. runs the annotation style check (tests\LiveSmoke\StyleTestHarness.cs). Reported, not required.
 
-    Exit code 0 only when every stage passed and the run reached its end.
+    Exit code 0 only when every required stage passed and each run reached its end.
 
 .PARAMETER PluginDll
     The FieldCodes.Cad.dll under test. When a bundle is installed, Civil 3D (and accoreconsole) loads
@@ -202,7 +206,103 @@ $passes = @($logLines | Where-Object { $_ -match '\[PASS\]' }).Count
 Say ("PASS: {0} checks; build {1}; {2}; stages {3}" -f $passes, $Commit.Substring(0, 7), $commands, ($required -join ', '))
 Say "log: $log"
 
-# --- 6. annotation styles: reported, not required -------------------------------------
+# --- 6. source-point identity and linework coding: REQUIRED --------------------------
+# A second run on a fresh drawing (tests\LiveSmoke\IdentityTestHarness.cs): synthetic COGO points and
+# the plain polylines drawn through them, as a TBC export arrives. The plugin's own reader must
+# return every point's number, handle, raw description and XYZ as CogoPoint reports them; FTFLINES
+# must name each line from its shots (a stacked shot, a vertex across a rounding boundary, a near
+# miss, a 3D polyline, a numbered figure) and write the same inventory twice; FTFREVIEWCHECK must
+# flag an unknown word after a linework code. Neither command may change a point or a line or
+# create anything. A failure here fails the smoke test, so UPDATEFTF puts the previous build back.
+function Invoke-IdentityCheck {
+    $folder = Join-Path $WorkFolder 'identity'
+    New-Item -ItemType Directory -Force -Path $folder | Out-Null
+    $source = Join-Path $repo 'tests\LiveSmoke\IdentityTestHarness.cs'
+    if (-not (Test-Path -LiteralPath $source)) { Fail "missing: $source" @() }
+    $harnessDll = Join-Path $folder 'FtfIdentityHarness.dll'
+    $out = & $csc /nologo /target:library "/out:$harnessDll" $source `
+        "/r:$C3D2024\accoremgd.dll" "/r:$C3D2024\acdbmgd.dll" "/r:$C3D2024\acmgd.dll" `
+        "/r:$C3D2024\C3D\AeccDbMgd.dll" "/r:$C3D2024\AecBaseMgd.dll" /r:System.Core.dll 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $harnessDll)) {
+        Fail 'the identity harness did not compile' @($out | Where-Object { "$_" -match 'error' } | Select-Object -First 15 | ForEach-Object { "$_" })
+    }
+    $drawingPath = Join-Path $folder 'identity.dwg'
+    Copy-Item -LiteralPath $Template -Destination $drawingPath -Force
+    [IO.File]::WriteAllText((Join-Path $folder 'ftf-settings.json'), '{ "version": "1" }', [Text.Encoding]::ASCII)
+    # The rules shipped with the build, beside the drawing: an office rules.json in %APPDATA% must not
+    # change what the check expects (which codes are line features, which words are linework commands).
+    $pluginFolder = Split-Path -Parent $PluginDll
+    $factoryRules = @((Join-Path $pluginFolder 'rules.json'), (Join-Path $pluginFolder 'config\rules.json')) |
+        Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $factoryRules) { Fail "identity check: no rules.json shipped beside $PluginDll" @() }
+    Copy-Item -LiteralPath $factoryRules -Destination (Join-Path $folder 'rules.json') -Force
+    $scriptPath = Join-Path $folder 'identity.scr'
+    $scriptLines = @(
+        "NETLOAD `"$PluginDll`"",
+        "NETLOAD `"$harnessDll`"",
+        'IDSEED',
+        'ZOOM', 'E',
+        'IDVERIFY', 'READER',
+        'FTFLINES',
+        'IDVERIFY', 'LINES',
+        'FTFLINES',
+        'IDVERIFY', 'AGAIN',
+        'FTFREVIEWCHECK',
+        'IDVERIFY', 'REVIEW',
+        'IDEND',
+        'SAVEAS', '2018', ('"' + (Join-Path $folder 'identity-out.dwg') + '"')
+    )
+    [IO.File]::WriteAllLines($scriptPath, [string[]]$scriptLines, [Text.Encoding]::ASCII)
+
+    $resultPath = Join-Path $folder 'result.txt'
+    $rawPath = Join-Path $folder 'accore.raw.txt'
+    Remove-Item $resultPath, $rawPath -Force -ErrorAction SilentlyContinue
+    $env:FTF_IDENTITY_RESULT = $resultPath
+    $arguments = '/i "' + $drawingPath + '" /s "' + $scriptPath + '" /product C3D /language en-US'
+    Say 'identity check: running accoreconsole (up to 240 s)...'
+    $p = Start-Process -FilePath $accore -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $rawPath
+    $until = (Get-Date).AddSeconds(240)
+    $why = $null
+    while (-not $p.HasExited) {
+        Start-Sleep -Milliseconds 500
+        $t = Read-Console $rawPath
+        $u = [regex]::Match($t, 'Unknown command\s*"?([A-Za-z0-9_\-]+)')
+        if ($u.Success) { $why = 'Unknown command ' + $u.Groups[1].Value + ' -- the command is not registered in the loaded build.'; break }
+        if ($t -match '\[FATAL\]') { Start-Sleep -Milliseconds 500; break }
+        if ((Get-Date) -gt $until) { $why = 'no result after 240 s: a prompt is waiting for input the script did not give.'; break }
+    }
+    if (-not $p.HasExited) {
+        if ($env:OS -eq 'Windows_NT') { & taskkill.exe /PID $p.Id /T /F 2>&1 | Out-Null } else { try { $p.Kill() } catch { } }
+        Start-Sleep -Milliseconds 500
+    }
+    Remove-Item Env:\FTF_IDENTITY_RESULT -ErrorAction SilentlyContinue
+
+    $text = Read-Console $rawPath
+    $identityLog = Join-Path $folder 'identity.log'
+    $text | Set-Content -Path $identityLog -Encoding utf8
+    $runLines = $text -split "`r?`n"
+    $r = if (Test-Path -LiteralPath $resultPath) { @(Get-Content -LiteralPath $resultPath) } else { @() }
+    $failed = @($r | Where-Object { $_ -like 'FAIL *' -or $_ -like 'FATAL *' } | ForEach-Object { $_ })
+    $last = @($runLines | Where-Object { $_.Trim() } | Select-Object -Last 25)
+    $prefix = 'identity check: '
+    if ($why) { Fail ($prefix + $why) (@($failed) + @('--- last lines of the run ---') + $last + @("log: $identityLog")) }
+    $fatal = @($r | Where-Object { $_ -like 'FATAL*' })
+    if ($fatal.Count -gt 0) { Fail ($prefix + $fatal[0].Substring(6)) (@('--- last lines of the run ---') + $last + @("log: $identityLog")) }
+    if ($r.Count -eq 0) { Fail ($prefix + 'the harness never ran (NETLOAD of the plugin or the harness failed?)') ($last + @("log: $identityLog")) }
+    if (-not ($r -contains 'COMPLETE')) { Fail ($prefix + 'the run stopped before its end') (@($failed) + $last + @("log: $identityLog")) }
+    $stages = @('READER', 'LINES', 'AGAIN', 'REVIEW')
+    $notPassed = @($stages | Where-Object { -not ($r -contains "STAGE $_ PASS") })
+    if ($notPassed.Count -gt 0 -or -not ($r | Where-Object { $_ -like 'RESULT PASS*' })) {
+        Fail ($prefix + 'stages not passed: ' + ($notPassed -join ', ')) (@($failed | Select-Object -First 20) + @("log: $identityLog"))
+    }
+    $count = @($r | Where-Object { $_ -like 'PASS *' }).Count
+    Say ("identity check: PASS ({0} checks: points read as Civil 3D stores them; FTFLINES names lines from their shots, twice the same; FTFREVIEWCHECK reads linework coding; nothing changed)" -f $count)
+    Say "identity log: $identityLog"
+}
+try { Invoke-IdentityCheck }
+catch { Fail ('the identity check could not run: ' + $_.Exception.Message) @() }
+
+# --- 7. annotation styles: reported, not required -------------------------------------
 # A second, separate run on a fresh drawing: Settings > Text Styles / Leader Styles / Style
 # Assignments must control what FTFLABELS draws (text style, height, colour, prefix, mask, layer,
 # spline leader, arrowhead, landing), a feature turned off must stay unlabelled, and FTFRESTYLE

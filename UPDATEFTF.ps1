@@ -669,7 +669,7 @@ if ($SkipSmoke) {
     Step 'Smoke test in Civil 3D'
     Warn 'SKIPPED (-SkipSmoke): this install has not been proven inside Civil 3D.'
 } else {
-    Step 'Smoke test in Civil 3D (headless): the loaded build, FTFVERSION, FTFCONTOUR'
+    Step 'Smoke test in Civil 3D (headless): the loaded build, FTFVERSION, FTFCONTOUR, source-point identity'
     $smokeDir = Join-Path $state ('smoke\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$short")
     $smoke = Invoke-Script (Join-Path $BuildRoot 'deploy\smoke-test.ps1') @('-PluginDll', $installedDll, '-Commit', $target,
         '-C3D2024', $C3D2024, '-WorkFolder', $smokeDir) -Echo

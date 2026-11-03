@@ -34,7 +34,9 @@ Bringing a branch in: merge it into `integration`, resolve conflicts, and run
 whole plugin against API stand-ins, so a bad merge fails before anyone builds on Windows) and
 `dotnet build tests/RealApiCompileCheck` (which compiles it against Autodesk's real AutoCAD 2024
 reference assemblies from NuGet, catching what stand-ins cannot, such as a type name that is
-ambiguous between AutoCAD and System.Drawing). Then `UPDATEFTF` picks it up.
+ambiguous between AutoCAD and System.Drawing), and `dotnet build tests/SmokeHarnessCompileCheck`
+(which compiles the Civil 3D harnesses the smoke test compiles, as C# 5 against the same assemblies,
+so a harness that would stop every UPDATEFTF fails first). Then `UPDATEFTF` picks it up.
 
 ## First time on a computer
 

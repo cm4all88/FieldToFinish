@@ -156,6 +156,69 @@ public sealed class DeploymentContractTests
     }
 
     [Fact]
+    public void TheIdentityCheckIsRequiredNotReported()
+    {
+        var runner = Code(Read("deploy", "smoke-test.ps1"));
+        var start = runner.IndexOf("function Invoke-IdentityCheck", StringComparison.Ordinal);
+        var end = runner.IndexOf("try { Invoke-IdentityCheck }", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "smoke-test.ps1 must define and run Invoke-IdentityCheck");
+        var body = runner.Substring(start, end - start);
+        Assert.Contains("FTF_IDENTITY_RESULT", body);
+        Assert.Contains("tests\\LiveSmoke\\IdentityTestHarness.cs", body);
+        Assert.Contains("'COMPLETE'", body);
+        Assert.Contains("FATAL", body);
+        Assert.Contains("Unknown command", body);
+        Assert.Contains("taskkill.exe /PID $p.Id /T /F", body);
+        foreach (var stage in new[] { "READER", "LINES", "AGAIN", "REVIEW" })
+            Assert.Contains("'" + stage + "'", body);
+        Assert.DoesNotContain("not blocking", body);
+        Assert.True(Regex.Matches(body, @"\bFail \(").Count >= 5, "every failed outcome of the identity check must call Fail");
+
+        // A failure that throws is a failure too, and the check runs before the reported-only style
+        // check, which must not be able to swallow it.
+        Assert.Matches(@"try \{ Invoke-IdentityCheck \}\s*catch \{ Fail \(", runner);
+        Assert.True(end < runner.IndexOf("try { Invoke-StyleCheck }", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheIdentityHarnessProvesEachCommandRanBeforeCheckingIt()
+    {
+        var harness = Read("tests", "LiveSmoke", "IdentityTestHarness.cs");
+        Assert.Contains("FTF_IDENTITY_RESULT", harness);
+        Assert.Contains("Environment.Exit(3)", harness);
+        Assert.Contains("FieldCodes.Cad is loaded \" + loaded.Count + \" times", harness);
+        Assert.Contains("else if (stage == \"LINES\") { RequireRanOnce(\"FTFLINES\");", harness);
+        Assert.Contains("else if (stage == \"AGAIN\") { RequireRanOnce(\"FTFLINES\");", harness);
+        Assert.Contains("else if (stage == \"REVIEW\") { RequireRanOnce(\"FTFREVIEWCHECK\");", harness);
+        Assert.Contains("never ran (Unknown command", harness);
+
+        // FTFLINES does not go through FtfSession.Run, so it is traced itself; FTFREVIEWCHECK is
+        // traced by FtfSession.Run.
+        var lines = Read("src", "FieldCodes.Cad", "LineworkCommands.cs");
+        Assert.Matches(@"FtfCommandTrace\.Start\(""FTFLINES""\);\s*Lines\(\);\s*FtfCommandTrace\.Finish\(""FTFLINES""\);", lines);
+        Assert.Contains("FtfSession.Run(\"FTFREVIEWCHECK\"", Read("src", "FieldCodes.Cad", "ReviewCommands.cs"));
+    }
+
+    [Fact]
+    public void EveryHarnessTheSmokeTestCompilesIsCompileCheckedAndAvoidsAeccMgd()
+    {
+        // smoke-test.ps1 and run-figures.ps1 compile with csc against accoremgd, acdbmgd, acmgd,
+        // AeccDbMgd and AecBaseMgd only. CivilApplication lives in AeccMgd: a harness using it fails every deploy.
+        var runners = new[] { Code(Read("deploy", "smoke-test.ps1")), Code(Read("tests", "LiveSmoke", "run-figures.ps1")) };
+        var compiled = runners.SelectMany(r => Regex.Matches(r, @"tests\\LiveSmoke\\(\w+)\.cs").Select(m => m.Groups[1].Value)).Distinct().ToList();
+        Assert.Contains("IdentityTestHarness", compiled);
+        Assert.Contains("FigureFixtureHarness", compiled);
+        Assert.All(runners, r => Assert.DoesNotContain("AeccMgd.dll", r));
+        var check = Read("tests", "SmokeHarnessCompileCheck", "SmokeHarnessCompileCheck.csproj");
+        Assert.Contains("<LangVersion>5</LangVersion>", check);
+        foreach (var name in compiled)
+        {
+            Assert.Contains(@"..\LiveSmoke\" + name + ".cs", check);
+            Assert.DoesNotContain("CivilApplication", Read("tests", "LiveSmoke", name + ".cs"));
+        }
+    }
+
+    [Fact]
     public void TheSmokeScriptIsGeneratedNotHardCoded()
     {
         Assert.False(File.Exists(Path.Combine(Repo(), "tests", "LiveSmoke", "runcontour.scr")),

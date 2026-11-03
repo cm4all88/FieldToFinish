@@ -41,4 +41,5 @@ file that imports both sides. This project remains the authority.
 dotnet test tests/FieldCodes.Tests
 dotnet build tests/CadCompileCheck
 dotnet build tests/RealApiCompileCheck
+dotnet build tests/SmokeHarnessCompileCheck
 ```
