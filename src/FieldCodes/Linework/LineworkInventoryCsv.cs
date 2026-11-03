@@ -17,7 +17,7 @@ namespace FieldCodes.Linework
     public static class LineworkInventoryCsv
     {
         public const string Suffix = ".ftf-linework.csv";
-        public const string Header = "EntityType,Figure,TrimbleName,Layer,Feature,Codes,Source,Length,LabelLayer";
+        public const string Header = "EntityType,Figure,TrimbleName,Layer,Feature,Codes,Source,Length,LabelLayer,Handle,Vertices,Shots";
 
         public static string PathFor(string drawingPath)
         {
@@ -51,7 +51,10 @@ namespace FieldCodes.Linework
                 sb.Append(Csv(row.Codes)).Append(',');
                 sb.Append(Csv(row.SourceText)).Append(',');
                 sb.Append(Csv(row.LengthText)).Append(',');
-                sb.Append(Csv(row.LabelLayerText));
+                sb.Append(Csv(row.LabelLayerText)).Append(',');
+                sb.Append(Csv(row.Handle)).Append(',');
+                sb.Append(row.VertexCount.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(',');
+                sb.Append(Csv(row.Shots == null ? string.Empty : string.Join(" ", row.Shots.ToArray())));
                 sb.AppendLine();
             }
 
@@ -79,12 +82,15 @@ namespace FieldCodes.Linework
 
             // 4: identification method.
             lines.Add(string.Format(
-                "  Identified by figure name: {0}, by Trimble name: {1}, by layer: {2}, " +
-                "unidentified: {3}",
+                "  Identified by figure name: {0}, by Trimble name: {1}, by point notes: {2}, by layer: {3}, " +
+                "unidentified: {4}",
                 rows.Count(r => r.Source == LineIdentitySource.FigureName),
                 rows.Count(r => r.Source == LineIdentitySource.TrimbleName),
+                rows.Count(r => r.Source == LineIdentitySource.PointNotes),
                 rows.Count(r => r.Source == LineIdentitySource.Layer),
                 rows.Count(r => r.Source == LineIdentitySource.None)));
+            lines.Add(string.Format("  Lines with no shot at any vertex: {0}",
+                rows.Count(r => r.Shots == null || r.Shots.Count == 0)));
 
             // 5: feature classifications with counts.
             var features = rows.Where(r => r.Source != LineIdentitySource.None)

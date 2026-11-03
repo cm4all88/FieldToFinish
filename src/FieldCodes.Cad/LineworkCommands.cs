@@ -315,7 +315,7 @@ namespace FieldCodes.Cad
                 // Fence heights that could not be read, lines identified but not labelled: on the
                 // drawing's review list (FTFREVIEW) until a drafter deals with them.
                 ReviewStore.Report(db, tr, FieldCodes.Review.ReviewChecks.FenceHeightsSource,
-                                   HeightReviewItems(db, tr, heightIssues), true, settings.Review);
+                                   HeightReviewItems(noteIndex, heightIssues), true, settings.Review);
                 ReviewStore.Report(db, tr, FieldCodes.Review.ReviewChecks.LineLabelsSource,
                                    lineItems.Values, true, settings.Review);
 
@@ -1330,7 +1330,7 @@ namespace FieldCodes.Cad
         /// identifies the line. Shared by the between-edges command.</summary>
         private static IList<LineFeatureRule> StagedCandidates(
             Database db, Transaction tr, Curve curve, LineworkCatalog catalog,
-            out string how, Dictionary<string, List<string>> noteIndex = null)
+            out string how, SourcePointIndex noteIndex = null)
         {
             string figureName = null;
             var figure = curve as Autodesk.Civil.DatabaseServices.SurveyFigure;
@@ -1462,52 +1462,32 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>
-        /// Raw descriptions of every CogoPoint that coincides EXACTLY with a vertex
-        /// of the line (0.01-unit buckets). TBC draws linework through the shot
-        /// points, so a coincident point created that vertex and its field note
-        /// names the line. Near-misses are deliberately not matched -- coincidence
-        /// is evidence, proximity would be guessing. Read-only throughout.
+        /// Raw descriptions of every CogoPoint that coincides with a vertex of the line (within the
+        /// source index's tolerance, 0.01 units, neighbouring cells included). TBC draws linework
+        /// through the shot points, so a coincident point created that vertex and its field note names
+        /// the line. Near-misses beyond the tolerance are deliberately not matched -- coincidence is
+        /// evidence, proximity would be guessing. Read-only throughout.
         /// </summary>
         private static IList<string> NotesAtVertices(Database db, Transaction tr,
                                                      Curve curve,
-                                                     Dictionary<string, List<string>> index = null)
+                                                     SourcePointIndex index = null)
         {
             var notes = new List<string>();
 
-            var byBucket = index ?? BuildNoteIndex(db, tr);
-            if (byBucket.Count == 0) return notes;
+            var sources = index ?? BuildNoteIndex(db, tr);
+            if (sources.Count == 0) return notes;
 
             foreach (var vertex in VerticesOf(curve))
-            {
-                List<string> here;
-                if (byBucket.TryGetValue(Bucket(vertex), out here))
-                    notes.AddRange(here);
-            }
+                notes.AddRange(sources.DescriptionsAt(vertex.X, vertex.Y));
 
             return notes;
         }
 
-        /// <summary>Every survey point's raw note, indexed by its 0.01-unit
-        /// position bucket, so vertices can look their creating shots up.</summary>
-        private static Dictionary<string, List<string>> BuildNoteIndex(Database db,
-                                                                       Transaction tr)
+        /// <summary>Every survey point -- number, handle, raw description, location -- indexed by
+        /// position, so vertices can look their creating shots up.</summary>
+        private static SourcePointIndex BuildNoteIndex(Database db, Transaction tr)
         {
-            var byBucket = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-            foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
-            {
-                var description = cogo.RawDescription;
-                if (string.IsNullOrWhiteSpace(description)) continue;
-
-                var key = Bucket(cogo.Location);
-                List<string> list;
-                if (!byBucket.TryGetValue(key, out list))
-                {
-                    list = new List<string>();
-                    byBucket[key] = list;
-                }
-                list.Add(description);
-            }
-            return byBucket;
+            return SourcePointReader.Read(db, tr);
         }
 
         /// <summary>
@@ -1522,7 +1502,7 @@ namespace FieldCodes.Cad
                                            double textHeight, ObjectId styleId,
                                            ObjectId layerId, string layerName,
                                            string sourceCode, string rulesVersion,
-                                           Dictionary<string, List<string>> noteIndex = null,
+                                           SourcePointIndex noteIndex = null,
                                            string mark = ManualLineLabelMark)
         {
             if (markers == null || markers.Count == 0) return 0;
@@ -1540,8 +1520,8 @@ namespace FieldCodes.Cad
                 var distances = new List<double>();
                 foreach (var vertex in VerticesOf(curve))
                 {
-                    List<string> notes;
-                    if (!index.TryGetValue(Bucket(vertex), out notes)) continue;
+                    var notes = index.DescriptionsAt(vertex.X, vertex.Y);
+                    if (notes.Count == 0) continue;
                     if (!notes.Any(n => SpanFinder.HasToken(n, marker.Token))) continue;
 
                     try { distances.Add(curve.GetDistAtPoint(vertex)); }
@@ -1593,28 +1573,19 @@ namespace FieldCodes.Cad
             public string Problem;
         }
 
-        /// <summary>Review items for unreadable fence heights, each tied to its shot.</summary>
-        private static IList<FieldCodes.Review.ReviewItem> HeightReviewItems(Database db, Transaction tr, IList<HeightIssue> issues)
+        /// <summary>Review items for unreadable fence heights, each tied to its shot (point number and
+        /// handle from the shared source index).</summary>
+        private static IList<FieldCodes.Review.ReviewItem> HeightReviewItems(SourcePointIndex sources, IList<HeightIssue> issues)
         {
             var items = new List<FieldCodes.Review.ReviewItem>();
             if (issues == null || issues.Count == 0) return items;
-            var shots = new Dictionary<string, List<Autodesk.Civil.DatabaseServices.CogoPoint>>(StringComparer.Ordinal);
-            foreach (var cogo in CadUtil.CogoPointsInOrder(db, tr))
-            {
-                var key = Bucket(cogo.Location);
-                List<Autodesk.Civil.DatabaseServices.CogoPoint> list;
-                if (!shots.TryGetValue(key, out list)) { list = new List<Autodesk.Civil.DatabaseServices.CogoPoint>(); shots[key] = list; }
-                list.Add(cogo);
-            }
             foreach (var issue in issues)
             {
-                List<Autodesk.Civil.DatabaseServices.CogoPoint> here;
-                var cogo = shots.TryGetValue(Bucket(issue.At), out here)
-                    ? here.FirstOrDefault(c => c.RawDescription == issue.Description) ?? here[0]
-                    : null;
+                var here = sources == null ? new List<SourcePoint>() : sources.At(issue.At.X, issue.At.Y);
+                var shot = here.FirstOrDefault(p => p.RawDescription == issue.Description) ?? here.FirstOrDefault();
                 items.Add(FieldCodes.Review.ReviewChecks.FenceHeight(
-                    cogo == null ? null : cogo.PointNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    cogo == null ? null : cogo.Handle.ToString(), issue.At.X, issue.At.Y, issue.Problem));
+                    shot == null ? null : shot.Number, shot == null ? null : shot.Handle,
+                    issue.At.X, issue.At.Y, issue.Problem));
             }
             return items;
         }
@@ -1655,7 +1626,7 @@ namespace FieldCodes.Cad
         /// height is added to <paramref name="problems"/> and not used.
         /// </summary>
         private static IList<RecordedHeight> RecordedHeights(Curve curve, IList<LineFeatureRule> features,
-                                                             Dictionary<string, List<string>> index, double maxFeet,
+                                                             SourcePointIndex index, double maxFeet,
                                                              IList<string> problems, ICollection<string> stopCodes = null,
                                                              IList<HeightIssue> issues = null)
         {
@@ -1665,9 +1636,8 @@ namespace FieldCodes.Cad
             var heights = new List<RecordedHeight>();
             foreach (var vertex in VerticesOf(curve))
             {
-                List<string> shots;
-                if (index == null || !index.TryGetValue(Bucket(vertex), out shots)) continue;
-                foreach (var description in shots)
+                if (index == null) break;
+                foreach (var description in index.DescriptionsAt(vertex.X, vertex.Y))
                 {
                     // The fence's code anywhere in the shot ("FGP FNC B 5" is a gate post on the
                     // fence); the height is the number after it, before a gate post's own code.
@@ -1689,17 +1659,10 @@ namespace FieldCodes.Cad
             return heights;
         }
 
-        private static string Bucket(Point3d p)
-        {
-            return Math.Round(p.X, 2).ToString("0.##",
-                       System.Globalization.CultureInfo.InvariantCulture) + ":" +
-                   Math.Round(p.Y, 2).ToString("0.##",
-                       System.Globalization.CultureInfo.InvariantCulture);
-        }
 
         /// <summary>The line's vertices. Polylines put a vertex at every integer
         /// parameter; anything else contributes its two ends.</summary>
-        private static IEnumerable<Point3d> VerticesOf(Curve curve)
+        internal static IEnumerable<Point3d> VerticesOf(Curve curve)
         {
             // A survey figure or feature line: every point it was built from, not only its ends,
             // so a shot part way along it (a new fence height, a gate post) is found.

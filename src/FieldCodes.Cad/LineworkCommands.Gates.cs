@@ -254,7 +254,7 @@ namespace FieldCodes.Cad
         /// </summary>
         internal static GateOutcome RunGatePass(Database db, Transaction tr, Editor ed,
                                                 FieldCodes.Settings.FtfSettings settings, RulesConfig cfg,
-                                                AnnotationStyler styler, Dictionary<string, List<string>> noteIndex,
+                                                AnnotationStyler styler, SourcePointIndex noteIndex,
                                                 ObjectId onlyFence)
         {
             var gs = settings.Gates;
@@ -360,7 +360,7 @@ namespace FieldCodes.Cad
 
         /// <summary>Every fence line in model space, flattened to plan.</summary>
         private static List<FenceInfo> GateFences(Database db, Transaction tr, RulesConfig cfg,
-                                                  Dictionary<string, List<string>> noteIndex,
+                                                  SourcePointIndex noteIndex,
                                                   FieldCodes.Settings.GateSettings gs)
         {
             var catalog = new LineworkCatalog(cfg.LineFeatures, cfg.IgnoreLineNames);

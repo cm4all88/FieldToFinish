@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using FieldCodes.Linework;
@@ -97,6 +98,9 @@ namespace FieldCodes.Cad
 
                 var layerCatalog = LayerNames(db, tr);
                 var ms = CadUtil.ModelSpace(db, tr, OpenMode.ForRead);
+                // The shots every line was drawn through: identity (point numbers) for the CSV, and
+                // point notes for identification, as the line label passes use them.
+                var sources = SourcePointReader.Read(db, tr);
 
                 foreach (ObjectId id in ms)
                 {
@@ -157,12 +161,27 @@ namespace FieldCodes.Cad
                     }
 
                     var trimbleName = TrimbleNameOf(entity);
+                    var vertices = LineworkCommands.VerticesOf((Curve)entity).ToList();
+                    var shots = new List<string>();
+                    var notesHere = new List<string>();
+                    foreach (var v in vertices)
+                        foreach (var p in sources.At(v.X, v.Y))
+                        {
+                            if (shots.Count == 0 || shots[shots.Count - 1] != p.Number) shots.Add(p.Number);
+                            if (p.HasDescription) notesHere.Add(p.RawDescription);
+                        }
+                    var notes = PointNotes.Consensus(notesHere, catalog);
                     var row = catalog.Identify(entityType, figureName, entity.Layer,
-                                               LengthOf(entity), trimbleName);
+                                               LengthOf(entity), trimbleName, notes);
+                    row.Handle = entity.Handle.ToString();
+                    row.VertexCount = vertices.Count;
+                    row.Shots = shots;
 
-                    var candidates = row.Source != LineIdentitySource.None
-                        ? catalog.Candidates(figureName, trimbleName, entity.Layer)
-                        : (IList<FieldCodes.LineFeatureRule>)new List<FieldCodes.LineFeatureRule>();
+                    var candidates = row.Source == LineIdentitySource.PointNotes
+                        ? notes.Features
+                        : row.Source != LineIdentitySource.None
+                            ? catalog.Candidates(figureName, trimbleName, entity.Layer)
+                            : (IList<FieldCodes.LineFeatureRule>)new List<FieldCodes.LineFeatureRule>();
 
                     // Preview exactly what FTFLINELABELS would do: label text from the
                     // configured standard, count, spacing and side from the same maths

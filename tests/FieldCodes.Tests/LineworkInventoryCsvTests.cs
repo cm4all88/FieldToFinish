@@ -46,7 +46,7 @@ public sealed class LineworkInventoryCsvTests : IClassFixture<RulesFixture>
         Assert.Contains("5 Civil 3D line object(s)", summary);                       // total
         Assert.Contains("Survey Figure 2", summary);                                 // by type
         Assert.Contains("Polyline 2", summary);
-        Assert.Contains("by figure name: 2, by Trimble name: 0, by layer: 2, unidentified: 1",
+        Assert.Contains("by figure name: 2, by Trimble name: 0, by point notes: 0, by layer: 2, unidentified: 1",
             summary); // method
         Assert.Contains("Concrete Wall (RWC)", summary);                             // features
         Assert.Contains("Chain Link Fence (FCK)", summary);

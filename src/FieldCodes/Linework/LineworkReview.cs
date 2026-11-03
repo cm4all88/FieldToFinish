@@ -17,7 +17,11 @@ namespace FieldCodes.Linework
         /// <summary>By TrimbleName XData the TBC export left on the entity -- either
         /// raw source coding ("ASPH L") or the TBC feature name ("Edge of Pavement"),
         /// matched exactly against a configured code, name or label. Exact.</summary>
-        TrimbleName = 3
+        TrimbleName = 3,
+        /// <summary>By the shots the line was drawn through: the raw descriptions of the points at
+        /// its vertices agree on the feature ("FNC B" ... "FNC E"). The same evidence the line label
+        /// passes use, so the inventory names a line the way they do.</summary>
+        PointNotes = 4
     }
 
     /// <summary>One existing Civil 3D line object, identified for the inventory.</summary>
@@ -50,6 +54,16 @@ namespace FieldCodes.Linework
         /// unidentified on purpose, so the review stops flagging it as unknown.</summary>
         public bool NameIgnored { get; set; }
 
+        /// <summary>The entity's handle, so a row can be found in the drawing.</summary>
+        public string Handle { get; set; }
+
+        /// <summary>How many vertices the line has (its plan vertices as FTF reads them).</summary>
+        public int VertexCount { get; set; }
+
+        /// <summary>The point numbers of the shots at its vertices, in vertex order (a vertex with no
+        /// shot contributes nothing; stacked shots all count). Empty when no shot coincides.</summary>
+        public IList<string> Shots { get; set; }
+
         /// <summary>Where this feature's label would go and why, display-ready --
         /// e.g. "V-CHAN-STRP-TEXT-E (matches source layer)". Set from the label
         /// layer resolver for identified rows; empty otherwise.</summary>
@@ -74,6 +88,7 @@ namespace FieldCodes.Linework
                     case LineIdentitySource.FigureName: return "figure name";
                     case LineIdentitySource.TrimbleName: return "Trimble name";
                     case LineIdentitySource.Layer: return "layer";
+                    case LineIdentitySource.PointNotes: return "point notes";
                     default: return "-";
                 }
             }
@@ -236,7 +251,8 @@ namespace FieldCodes.Linework
         /// every candidate rather than guessing.
         /// </summary>
         public LineworkRow Identify(string entityType, string figureName, string layer,
-                                    double? length, string trimbleName = null)
+                                    double? length, string trimbleName = null,
+                                    PointNoteConsensus notes = null)
         {
             string codePart;
             LineLabelSide? sourceSide;
@@ -274,6 +290,21 @@ namespace FieldCodes.Linework
                     byTrimble.Select(f => string.IsNullOrEmpty(f.Name) ? f.Code : f.Name)
                              .Distinct()
                              .ToArray());
+                row.ProposedAction = ProposedActionFor(row.FeatureName);
+                return row;
+            }
+
+            // The shots the line was drawn through, when they agree (StagedCandidates' order: after
+            // the figure and Trimble names, before the layer).
+            if (notes != null && notes.Features != null && notes.Features.Count > 0)
+            {
+                row.Source = LineIdentitySource.PointNotes;
+                row.Codes = string.Join("/", notes.Features.Select(f => f.Code).ToArray());
+                row.FeatureName = string.Join(" / ",
+                    notes.Features.Select(f => string.IsNullOrEmpty(f.Name) ? f.Code : f.Name)
+                                  .Distinct()
+                                  .ToArray());
+                if (row.SourceSide == null && !notes.SideConflict) row.SourceSide = notes.Side;
                 row.ProposedAction = ProposedActionFor(row.FeatureName);
                 return row;
             }
