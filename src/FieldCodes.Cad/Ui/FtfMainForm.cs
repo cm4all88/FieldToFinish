@@ -2195,8 +2195,9 @@ namespace FieldCodes.Cad.Ui
                 "and mask come from the standards.");
             CommandRow(stack, "FTFLABELBETWEEN   (or FTFB)",
                 "Label the space between two edges -- a driveway between its " +
-                "edge-of-asphalt lines. Pick both edges; the label rides the " +
-                "midline; click to place.");
+                "edge-of-asphalt lines, or two sides of one line such as a U-shaped " +
+                "hedge (3D polylines and figures too). Pick both edges; the label " +
+                "rides the midline; click to place. The edges are never changed.");
             CommandRow(stack, "FTFLABELDRIVEWAY   (or FTFDWY)",
                 "Label a driveway: pick its two edges as for FTFLABELBETWEEN. The " +
                 "label is the first edge's surface type, read from its layer, with " +
