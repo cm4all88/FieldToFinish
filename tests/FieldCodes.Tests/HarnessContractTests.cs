@@ -276,6 +276,54 @@ public sealed class HarnessContractTests
         }
     }
 
+    // ------------------------------------------------------------------ what the harnesses expect
+
+    [Theory]
+    [MemberData(nameof(LineEndings))]
+    public void TheIdentityHarnessExpectsTheLineworkCellsTheCsvWriterWrites(string eol)
+    {
+        // IdentityTestHarness's LINES stage reads FTFLINES's inventory CSV cell by cell. At 59d05ef it
+        // expected "-" for the line with no shots; LineworkInventoryCsv writes "'-" (a cell starting
+        // with - = + or @ gets a leading ', so a spreadsheet does not take it for a formula), and the
+        // stage failed in Civil 3D. Each expected cell is checked here against the writer itself.
+        var expects = Regex.Matches(Harness("IdentityTestHarness.cs", eol),
+            @"Expect\(ed, row\(""(\w)""\), header, ""[^""]*"", ""([^""]*)"", (null|""[^""]*""), ""(\d+)"", ""([^""]*)""\);");
+        Assert.Equal(7, expects.Count);
+
+        // Every Source cell the writer can write, one per way a line is identified.
+        var sources = Enum.GetValues<FieldCodes.Linework.LineIdentitySource>()
+            .Select(source => Cells(new FieldCodes.Linework.LineworkRow { Source = source })["Source"]).ToList();
+        Assert.Contains("'-", sources);
+
+        foreach (Match e in expects)
+        {
+            var line = e.Groups[1].Value;
+            var source = e.Groups[2].Value;
+            Assert.True(sources.Contains(source), "line " + line + ": the harness expects Source '" + source + "'; the writer writes one of: " + string.Join(", ", sources));
+            var codes = e.Groups[3].Value == "null" ? null : e.Groups[3].Value.Trim('"');
+            var shots = e.Groups[5].Value;
+            var cells = Cells(new FieldCodes.Linework.LineworkRow
+            {
+                Codes = codes,
+                VertexCount = int.Parse(e.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture),
+                Shots = shots.Length == 0 ? new List<string>() : shots.Split(' ').ToList(),
+            });
+            if (codes != null) Assert.True(cells["Codes"] == codes, "line " + line + ": Codes '" + codes + "' is written as '" + cells["Codes"] + "'");
+            Assert.True(cells["Vertices"] == e.Groups[4].Value, "line " + line + ": Vertices");
+            Assert.True(cells["Shots"] == shots, "line " + line + ": Shots '" + shots + "' is written as '" + cells["Shots"] + "'");
+        }
+    }
+
+    /// <summary>One row as LineworkInventoryCsv writes it, by column.</summary>
+    private static Dictionary<string, string> Cells(FieldCodes.Linework.LineworkRow row)
+    {
+        var lines = FieldCodes.Linework.LineworkInventoryCsv.Render(new[] { row }).Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var header = lines[0].Split(',');
+        var values = lines[1].Split(',');
+        Assert.Equal(header.Length, values.Length);
+        return header.Zip(values, (h, v) => (h, v)).ToDictionary(x => x.h, x => x.v);
+    }
+
     // ------------------------------------------------------------------ the plugin's trace
 
     [Fact]

@@ -332,7 +332,9 @@ namespace FtfIdentityTest
             Expect(ed, row("B"), header, "B rounding boundary", "point notes", "FHW", "2", "201 202");
             Expect(ed, row("C"), header, "C 3D polyline", "point notes", "EP", "3", "301 302 303");
             Expect(ed, row("D"), header, "D doubled shot", "point notes", "FNC", "2", "401 402 403");
-            Expect(ed, row("E"), header, "E no shots", "-", null, "2", "");
+            // A cell that starts with - = + or @ is written with a leading ' (LineworkInventoryCsv's guard
+            // against a spreadsheet taking it for a formula), so "no source" is the cell '-.
+            Expect(ed, row("E"), header, "E no shots", "'-", null, "2", "");
             Expect(ed, row("F"), header, "F near miss", "point notes", "FNC", "2", "502");
             Expect(ed, row("G"), header, "G figure number", "point notes", "FNC", "2", "601 602");
         }
