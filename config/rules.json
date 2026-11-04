@@ -119,6 +119,15 @@
     "labelFormat": "BENCH {length:0.#}'x{depth:0.#}'"
   },
 
+  "//wetlandBuffer": "FTFWETLANDBUFFER (FTFWLB). Offsets a wetland line by the buffer distance with round, tangent outside corners, so every point of the buffer is exactly that far from the wetland; smoothing > 0 rounds the inside corners too, without coming closer. A closed wetland is buffered outward; an open edge to the side picked. The buffer is cut back where a line on a hardSurfaceLayers layer lies between it and the wetland (it stops at the edge of the road instead of running across it). distance and smoothing are what the command offers first, in drawing units. Layers may use * (V-SURF-ASPH*). The wetland and hard-surface lines are never changed; running the command again on a wetland replaces its buffer.",
+  "wetlandBuffer": {
+    "layer": "V-WATR-WTLD-BUFR-E",
+    "distance": 50,
+    "smoothing": 0,
+    "trimAtHardSurfaces": true,
+    "hardSurfaceLayers": [ "V-SURF-ASPH-E", "V-SURF-ASPH-OVRL-E", "V-SURF-ASPH-PATC-E", "V-SURF-CONC-E", "V-SURF-CURB-E", "V-SURF-CURB-BACK-E", "V-SURF-CURB-FLOW-E", "V-SURF-GRVL-E", "V-SURF-SHLD-E", "V-SURF-BRCK-E", "V-SURF-BLDG-E" ]
+  },
+
   "//orientation": "FTFORIENT. Turns the symbols Civil 3D already drew (COGO point markers) to face the way the surveyed features do; nothing is inserted and no point or line moves. Decisions, strongest first: Measured (the crew's direction in the description or note: SN 135, AZ 135, FACES NE, NOZ E, ARM W, N-S for a valve), Relationship (stop bar, intersection approach, luminaire shot, panel line, valve tee), Alignment (the road or main beside it), Inferred (nearest-road reasoning), Review (two answers equally good: left alone, listed). A marker is turned only for a decision at or above applyMinimumConfidence and at least as strong as applyWeakestTier (Measured, Relationship, Alignment or Inferred). symbols / lines / stopSignCodes / stopSignWords / luminaireCodes are left out here, so the built-in PMX standard applies (README, 'Orienting symbols': each block's zero as read from the PMX template). Name one of them here to replace that whole list. Distances in feet; qcArrowPlotted in sheet inches.",
   "orientation": {
     "applyMinimumConfidence": 0.6,

@@ -268,6 +268,8 @@ namespace FieldCodes.Commands
                         RowWidthTip),
                     Tool("Bench", "FTFBENCH", "Bench",
                         "Draws a bench's outline and size label from its two end shots and the depth in their notes."),
+                    Tool("Wetland Buffer", "FTFWETLANDBUFFER", "WetlandBuffer",
+                        "Offsets wetland lines by the buffer distance with round, tangent corners, and stops the buffer at hard surfaces (road edges, curbs, buildings) between it and the wetland. FTFWLB for short."),
                     Tool("Clean Drafting", "FTFDRAFTCLEAN", "DraftClean",
                         DraftCleanTip)),
 

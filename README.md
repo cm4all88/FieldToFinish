@@ -424,6 +424,7 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `-FTFREVIEW` | The review list on the command line: List, Approve a proposed correction, NotApplicable / Accept with a reason, Reopen, Zoom (for scripts and the keyboard) | n/a |
 | `FTFQC` | Marks the drawing Drafting QC Complete, refused while required review items are open | yes |
 | `FTFBENCH` | A bench's outline and size label from its two end shots and the depth in their notes | yes (replaces) |
+| `FTFWETLANDBUFFER` (`FTFWLB`) | Wetland buffer lines: the wetland offset by the buffer distance with round, tangent corners, cut back where a hard surface (road edge, curb, gravel, building) lies between the buffer and the wetland | yes (replaces) |
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
 | `FTFORIENT` | Turns the symbols Civil 3D already drew (COGO markers) to face the way the features do; Preview, Apply or All. See "Orienting symbols" | yes (and kept: a marker turned by hand is not overwritten) |
 | `FTFORIENTRESET` | Puts every marker `FTFORIENT` turned back as it was and removes its QC graphics | yes |
@@ -534,6 +535,36 @@ feet, `[ ]` and `\P` as above).
   on the same two shots replaces that bench rather than drawing a second.
 - The outline goes on `V-SURF-LAND-E` and the label on `V-SURF-LAND-TEXT-E` (PMX keeps
   benches with landscape features); `bench.layer` / `bench.labelLayer` change them.
+
+## Wetland buffers: FTFWETLANDBUFFER
+
+`FTFWETLANDBUFFER` (`FTFWLB`) is the office's WLB routine, done exactly. Select the wetland
+lines, give the buffer distance and, if wanted, a smoothing radius for the inside corners:
+
+- **Round, tangent outside corners.** Every point of the buffer is exactly the distance from
+  the wetland. Where a jagged edge folds back, the loops an ordinary offset leaves are removed.
+  Arcs stay arcs.
+- **Smoothing** (> 0) rounds the inside corners too: out by distance + radius, then back in by
+  the radius. The buffer is never closer than the distance.
+- **Closed and open lines.** A closed wetland is buffered outward. For an open edge you pick
+  the side; it ends square to the edge's ends, as OFFSET does.
+- **Hard surfaces.** The buffer is cut where a line on a `wetlandBuffer.hardSurfaceLayers` layer
+  crosses it. A piece is not drawn when the straight way from it to the nearest point of the
+  wetland crosses a hard surface: the buffer stops at the edge of the road instead of running
+  across it. A driveway that crosses the buffer and stops short of the wetland cuts nothing off.
+  A piece only partly behind a hard surface (a building inside the buffer) is kept and listed
+  as CHECK. Answer No at the prompt to draw the whole buffer.
+- **Hard-surface layers** (PMX): `V-SURF-ASPH-E` (with overlays and patches), `V-SURF-CONC-E`,
+  the curb layers, `V-SURF-GRVL-E` and `V-SURF-SHLD-E` (gravel counts as a hard surface under
+  the Washington stormwater manual), `V-SURF-BRCK-E` and `V-SURF-BLDG-E`. Patterns with `*` work.
+- **What it reads.** Wetland and hard-surface lines can be lines, polylines, arcs, circles,
+  3D polylines, survey figures and feature lines. A spline or ellipse is read as short chords,
+  and the command says so.
+- **Safety.** The wetland and hard-surface lines are never changed. The buffer goes on
+  `V-WATR-WTLD-BUFR-E` (`wetlandBuffer.layer`). `FTFCLEAN` leaves it, `FTFWHAT` names it, and
+  running the command again on the same wetland replaces its buffer instead of adding a second.
+- **Defaults.** `wetlandBuffer.distance` (50) and `wetlandBuffer.smoothing` (0) are what it
+  offers first. It remembers what you typed for the rest of the session.
 
 ## Between two edges: FTFLABELBETWEEN
 

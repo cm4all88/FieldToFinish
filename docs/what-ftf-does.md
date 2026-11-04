@@ -93,6 +93,7 @@ These hold for every command below:
 | `FTFLABELDRIVEWAY` (`FTFDWY`) | A between-edges label built from the edge layer's surface type: `ASPH DWY`, `CONC DWY`. |
 | `FTFLABELSTAIRS` (`FTFS`) | Select the tread lines; the label counts the steps. |
 | `FTFBENCH` | A bench outline and its size label (`BENCH 3'x1.5'`), built from the two end shots and the depth in their notes. |
+| `FTFWETLANDBUFFER` (`FTFWLB`) | Wetland buffer lines at the buffer distance with round, tangent corners (optionally rounded inside corners too), stopped at hard surfaces such as road edges, curbs and buildings between the buffer and the wetland. The wetland and road lines are not changed. |
 
 **Fence heights.**
 - `FNC B 3.5` labels `3.5' FENCE`, and the height carries along the fence until a shot records a

@@ -927,6 +927,21 @@ namespace FieldCodes.Cad
             });
         }
 
+        /// <summary>A wetland buffer: the wetland, its round buffer line, stopped at a road edge.</summary>
+        public static ImageSource WetlandBuffer(int px)
+        {
+            return Render(px, dc =>
+            {
+                Path(dc, Gray, null, true, P(11, 12), P(14, 10), P(17, 12), P(20, 11), P(19, 15), P(20, 19), P(16, 21),
+                     P(13, 20), P(10, 21), P(11, 17), P(9, 14));
+                var arc = new System.Collections.Generic.List<Point>();
+                for (var a = 50; a <= 310; a += 10)
+                    arc.Add(P(15 + 12 * System.Math.Cos(a * System.Math.PI / 180), 16 - 12 * System.Math.Sin(a * System.Math.PI / 180)));
+                Path(dc, null, BluePen(Regular), false, arc.ToArray());
+                dc.DrawLine(GrayPen(Regular), P(23, 3), P(23, 29));
+            });
+        }
+
         /// <summary>Sheet planning: a 2x2 grid of sheet windows.</summary>
         public static ImageSource PlanSheets(int px)
         {

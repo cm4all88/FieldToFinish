@@ -46,6 +46,9 @@ namespace FieldCodes.Settings
         public const string BenchLayer = "V-SURF-LAND-E";
         public const string BenchLabelLayer = "V-SURF-LAND-TEXT-E";
 
+        /// <summary>Wetland buffer lines (FTFWETLANDBUFFER): PMX's wetland buffer layer.</summary>
+        public const string WetlandBufferLayer = "V-WATR-WTLD-BUFR-E";
+
         internal static readonly string[] RetiredProtected = { "V-SIGN", "V-UTIL-*", "V-STRC-*", "C-STRM-STRC" };
         internal static readonly string[] RetiredMaskable = { "V-TREE-DRIP", "C-TOPO-*", "V-ROAD-*" };
 

@@ -126,6 +126,11 @@ namespace FieldCodes
         [JsonProperty("bench")]
         public BenchRule Bench { get; set; }
 
+        /// <summary>FTFWETLANDBUFFER: the buffer layer, the hard-surface layers it stops at, and
+        /// the distances it offers first.</summary>
+        [JsonProperty("wetlandBuffer")]
+        public WetlandBufferRule WetlandBuffer { get; set; }
+
         /// <summary>FTFORIENT: how each symbol is drawn at rotation zero and which linework is
         /// road, stop bar or utility. Missing parts fall back to PMX's standard.</summary>
         [JsonProperty("orientation")]
@@ -164,6 +169,7 @@ namespace FieldCodes
             StairsLabelFormat = "{count} STEPS";
             ControlCodes = new List<string>();
             Bench = new BenchRule();
+            WetlandBuffer = new WetlandBufferRule();
             Orientation = FieldCodes.Orient.OrientationStandard.Pmx();
             FeatureStandard = FieldCodes.Standards.FeatureStandard.Pmx();
         }
@@ -245,6 +251,9 @@ namespace FieldCodes
 
             if (Codes.Count == 0)
                 problems.Add("No code rules defined.");
+
+            if (WetlandBuffer == null) WetlandBuffer = new WetlandBufferRule();
+            foreach (var p in WetlandBuffer.Problems()) problems.Add("wetlandBuffer: " + p);
 
             if (Bench == null) Bench = new BenchRule();
             if (string.IsNullOrWhiteSpace(Bench.Layer))
@@ -454,6 +463,78 @@ namespace FieldCodes
             Layer = FieldCodes.Settings.PmxLayers.BenchLayer;
             LabelLayer = FieldCodes.Settings.PmxLayers.BenchLabelLayer;
             LabelFormat = "BENCH {length:0.#}'x{depth:0.#}'";
+        }
+    }
+
+    /// <summary>
+    /// FTFWETLANDBUFFER. The buffer is offset from the wetland line with round, tangent outside
+    /// corners at the true distance; it is cut back where a hard surface (an edge of asphalt,
+    /// concrete, gravel, a curb, a building) lies between it and the wetland. Distances are in
+    /// drawing units (feet in a survey drawing).
+    /// </summary>
+    public sealed class WetlandBufferRule
+    {
+        /// <summary>The layer the buffer is drawn on.</summary>
+        [JsonProperty("layer")] public string Layer { get; set; }
+
+        /// <summary>The distance offered first; the drafter can type another.</summary>
+        [JsonProperty("distance")] public double Distance { get; set; }
+
+        /// <summary>The smoothing radius for inside corners offered first (0 = none).</summary>
+        [JsonProperty("smoothing")] public double Smoothing { get; set; }
+
+        /// <summary>Whether the buffer is cut back at hard surfaces unless the drafter says no.</summary>
+        [JsonProperty("trimAtHardSurfaces")] public bool TrimAtHardSurfaces { get; set; }
+
+        /// <summary>Layers whose lines are hard surfaces (* matches anything). Lines, polylines,
+        /// arcs, circles, splines, 3D polylines, survey figures and feature lines on them are
+        /// read; they are never changed.</summary>
+        [JsonProperty("hardSurfaceLayers", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> HardSurfaceLayers { get; set; }
+
+        public WetlandBufferRule()
+        {
+            Layer = FieldCodes.Settings.PmxLayers.WetlandBufferLayer;
+            Distance = 50.0;
+            Smoothing = 0.0;
+            TrimAtHardSurfaces = true;
+            HardSurfaceLayers = DefaultHardSurfaceLayers();
+        }
+
+        /// <summary>PMX's hard surfaces: asphalt (with overlays and patches), concrete, curbs,
+        /// gravel and shoulders (gravel is a hard surface under the Washington stormwater manual),
+        /// brick pavers and buildings.</summary>
+        public static List<string> DefaultHardSurfaceLayers()
+        {
+            return new List<string>
+            {
+                "V-SURF-ASPH-E", "V-SURF-ASPH-OVRL-E", "V-SURF-ASPH-PATC-E", "V-SURF-CONC-E",
+                "V-SURF-CURB-E", "V-SURF-CURB-BACK-E", "V-SURF-CURB-FLOW-E", "V-SURF-GRVL-E",
+                "V-SURF-SHLD-E", "V-SURF-BRCK-E", "V-SURF-BLDG-E"
+            };
+        }
+
+        /// <summary>True when a layer name matches one of the hard-surface patterns.</summary>
+        public bool IsHardSurface(string layer)
+        {
+            if (string.IsNullOrWhiteSpace(layer) || HardSurfaceLayers == null) return false;
+            foreach (var pattern in HardSurfaceLayers)
+            {
+                if (string.IsNullOrWhiteSpace(pattern)) continue;
+                var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern.Trim()).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+                if (System.Text.RegularExpressions.Regex.IsMatch(layer.Trim(), regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        public IList<string> Problems()
+        {
+            var problems = new List<string>();
+            if (string.IsNullOrWhiteSpace(Layer)) problems.Add("'layer' is required (the layer the buffer is drawn on).");
+            if (!(Distance > 0)) problems.Add("'distance' must be greater than zero.");
+            if (Smoothing < 0) problems.Add("'smoothing' cannot be negative.");
+            if (HardSurfaceLayers == null) HardSurfaceLayers = new List<string>();
+            return problems;
         }
     }
 

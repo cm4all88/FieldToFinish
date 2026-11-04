@@ -68,6 +68,7 @@ namespace FieldCodes.Stamps
             { "OrientQc", "FTFORIENT: review graphics (not plotted; FTFORIENT and FTFORIENTRESET remove them)" },
             { "LineGapProposal", "point accountability (linework continuity): a proposed join, for review" },
             { "LineCorrection", "point accountability (linework continuity): an accepted correction" },
+            { "WetlandBuffer", "FTFWETLANDBUFFER: a wetland buffer line (your drafting; FTFCLEAN leaves it; the command run again on the same wetland replaces it)" },
         };
 
         /// <summary>The command and what the object is, for a stamp kind's name.</summary>

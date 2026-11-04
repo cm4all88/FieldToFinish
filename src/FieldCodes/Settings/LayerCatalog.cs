@@ -138,6 +138,8 @@ namespace FieldCodes.Settings
                     if (lf != null && !string.IsNullOrWhiteSpace(lf.Label) && !string.IsNullOrWhiteSpace(lf.LabelLayer))
                         Add(uses, "Line " + (lf.Name ?? lf.Code) + " (" + lf.Code + ")", "Line label", lf.LabelLayer, LayerSource.Rules,
                             "rules.json: lineFeatures " + lf.Code + " labelLayer", "Line Labels", LineFamily(rules, lf));
+                if (rules.WetlandBuffer != null)
+                    Add(uses, "Wetland buffer", "Buffer line", rules.WetlandBuffer.Layer, LayerSource.Rules, "rules.json: wetlandBuffer layer", null, LayerFamily.Other);
                 if (rules.Bench != null)
                 {
                     Add(uses, "Bench", "Outline", rules.Bench.Layer, LayerSource.Rules, "rules.json: bench layer", null, LayerFamily.Other);

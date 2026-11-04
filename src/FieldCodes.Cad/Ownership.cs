@@ -161,7 +161,14 @@ namespace FieldCodes.Cad
         /// FTF drew when a person approved the proposal. TagText = "linefix:" + the review item id;
         /// the stamp's contents hash is its geometry, so an edit by hand is known and kept. The
         /// original survey linework is never changed. FTFCLEAN leaves it alone.</summary>
-        LineCorrection = 54
+        LineCorrection = 54,
+
+        // Wetland buffers (FTFWETLANDBUFFER). Deliberate drafting: FTFCLEAN leaves them alone.
+        // PointNumber = the wetland line's handle, so running the command again on that wetland
+        // replaces its buffer; TagText = the distance, smoothing and trim it was drawn with.
+
+        /// <summary>A wetland buffer line.</summary>
+        WetlandBuffer = 55
     }
 
     /// <summary>The XData this plugin stamps on every entity it creates.</summary>

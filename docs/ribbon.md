@@ -63,6 +63,7 @@ command it types, so any button can also be typed.
 | | Break Mark | `FTFTILDE` |
 | | ROW Width | `FTFROWDIM` |
 | | Bench | `FTFBENCH` |
+| | Wetland Buffer | `FTFWETLANDBUFFER` |
 | | Clean Drafting | `FTFDRAFTCLEAN` |
 | Sheets | Plan Sheets (large) | `FTFSHEETPLAN` |
 | | Make Layouts | `FTFSHEETMAKE` |

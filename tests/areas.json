@@ -691,7 +691,8 @@
         "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
         "FullyQualifiedName~FieldCodes.Tests.StripTrimRegressionTests.",
         "FullyQualifiedName~FieldCodes.Tests.StripTrimTests.",
-        "FullyQualifiedName~FieldCodes.Tests.TrimTests."
+        "FullyQualifiedName~FieldCodes.Tests.TrimTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferTests."
       ],
       "civil3d": [],
       "civil3dManual": [
@@ -725,7 +726,10 @@
         "tests/FieldCodes.Tests/SurveyDirectionTests.cs",
         "tests/FieldCodes.Tests/SpotPlacerTests.cs",
         "tests/FieldCodes.Tests/DraftingSettingsTests.cs",
-        "tests/FieldCodes.Tests/DraftingProfileTests.cs"
+        "tests/FieldCodes.Tests/DraftingProfileTests.cs",
+        "src/FieldCodes/Wetlands/**",
+        "src/FieldCodes.Cad/WetlandBufferCommands.cs",
+        "tests/FieldCodes.Tests/WetlandBufferTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
@@ -743,7 +747,8 @@
         "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
         "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
         "FullyQualifiedName~FieldCodes.Tests.SpotPlacerTests.",
-        "FullyQualifiedName~FieldCodes.Tests.SurveyDirectionTests."
+        "FullyQualifiedName~FieldCodes.Tests.SurveyDirectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferTests."
       ],
       "civil3d": [],
       "civil3dManual": [
@@ -1436,7 +1441,8 @@
         "FullyQualifiedName~FieldCodes.Tests.ShippedProfileTests.",
         "FullyQualifiedName~FieldCodes.Tests.StripTrimRegressionTests.",
         "FullyQualifiedName~FieldCodes.Tests.StripTrimTests.",
-        "FullyQualifiedName~FieldCodes.Tests.TrimTests."
+        "FullyQualifiedName~FieldCodes.Tests.TrimTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferTests."
       ],
       "civil3d": [],
       "civil3dManual": [
