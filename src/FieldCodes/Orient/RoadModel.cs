@@ -65,6 +65,41 @@ namespace FieldCodes.Orient
         public double MeetsDistance { get; set; }
     }
 
+    /// <summary>
+    /// A road line near a point, as a direction reference: where it passes the point (on the
+    /// line, or on its extension past an end), its local direction there as drawn, how far it is,
+    /// how far it had to be followed past its end, and how much it is trusted. Read only: no
+    /// linework is extended or changed.
+    /// </summary>
+    public sealed class RoadReference
+    {
+        public OrientLine Line { get; set; }
+        public LineRole Role { get { return Line.Role; } }
+        public P2 Foot { get; set; }
+        /// <summary>Unit direction of the line where it passes the point, as drawn (start to end).</summary>
+        public P2 Tangent { get; set; }
+        public double Distance { get; set; }
+        public double Station { get; set; }
+        /// <summary>How far past the line's end the point is, along the line's last stretch (0: beside it).</summary>
+        public double Extension { get; set; }
+        /// <summary>Set when the same kind of line resumes on the far side: the point is in a gap.</summary>
+        public OrientLine BridgedTo { get; set; }
+        public double Reliability { get; set; }
+        public double Score { get; set; }
+
+        public string Describe()
+        {
+            var what = RoadModel.RoleName(Role) + " " + Line.Id;
+            if (BridgedTo != null)
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} ({1:0.0} ft away, in a gap of {2:0} ft or more before {3} resumes)",
+                                     what, Distance, Extension, BridgedTo.Id);
+            if (Extension > 0)
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} ({1:0.0} ft away, followed {2:0.0} ft past its end)",
+                                     what, Distance, Extension);
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} ({1:0.0} ft away)", what, Distance);
+        }
+    }
+
     public sealed class TravelAt
     {
         public P2 Direction { get; set; }
@@ -75,6 +110,13 @@ namespace FieldCodes.Orient
         public double Distance { get; set; }
         /// <summary>Set when the traffic is on a side road drawn by its edges only.</summary>
         public SideRoad SideRoad { get; set; }
+        /// <summary>The road reference the direction came from (null for a side road).</summary>
+        public RoadReference Reference { get; set; }
+        /// <summary>Set when road lines near the point disagree about the road's direction: the
+        /// feature goes to review instead of one line being picked.</summary>
+        public string Conflict { get; set; }
+        /// <summary>The direction the disagreeing line would give, for the review.</summary>
+        public P2? ConflictDirection { get; set; }
     }
 
     /// <summary>
@@ -89,6 +131,8 @@ namespace FieldCodes.Orient
         public IList<OrientLine> Edges { get; private set; }
         public IList<StopBar> StopBars { get; private set; }
         public IList<OrientLine> Crosswalks { get; private set; }
+        /// <summary>Edges of concrete, sidewalks: road context, supporting only.</summary>
+        public IList<OrientLine> Context { get; private set; }
         public IList<Intersection> Intersections { get; private set; }
 
         public RoadModel(IEnumerable<OrientLine> lines, OrientationStandard std)
@@ -98,6 +142,7 @@ namespace FieldCodes.Orient
             Axes = all.Where(l => l.Role == LineRole.Centerline || l.Role == LineRole.OneWay).ToList();
             Edges = all.Where(l => l.Role == LineRole.Edge || l.Role == LineRole.LaneLine).ToList();
             Crosswalks = all.Where(l => l.Role == LineRole.Crosswalk).ToList();
+            Context = all.Where(l => l.Role == LineRole.RoadContext).ToList();
             Intersections = FindIntersections();
             StopBars = all.Where(l => l.Role == LineRole.StopBar).Select(BuildStopBar).ToList();
         }
@@ -279,12 +324,181 @@ namespace FieldCodes.Orient
 
             // Otherwise a two-way centre line: the bar spans the lane on the right of its traffic.
             var travel = TravelAtPoint(mid, true);
-            if (travel != null && travel.Tier <= OrientationTier.Alignment && Math.Abs(P2.Dot(travel.Direction, bar.Along)) < 0.71)
+            if (travel != null && travel.Conflict == null && travel.Tier <= OrientationTier.Alignment && Math.Abs(P2.Dot(travel.Direction, bar.Along)) < 0.71)
             {
                 bar.Travel = travel.Direction;
                 bar.TravelFrom = travel.Why;
             }
             return bar;
+        }
+
+        // ------------------------------------------------------------------ road references
+
+        internal static string RoleName(LineRole role)
+        {
+            switch (role)
+            {
+                case LineRole.Centerline: return "centre line";
+                case LineRole.OneWay: return "one-way line";
+                case LineRole.LaneLine: return "lane line";
+                case LineRole.Edge: return "road edge";
+                case LineRole.RoadContext: return "concrete edge";
+                default: return role.ToString();
+            }
+        }
+
+        private static bool IsAxis(LineRole role) { return role == LineRole.Centerline || role == LineRole.OneWay; }
+
+        /// <summary>
+        /// Every road line within <paramref name="reach"/> of the point as a direction reference,
+        /// best first. A line that stops short of the point is followed past its end along its
+        /// last stretch, at most maxExtensionFeet; further than that it is no reference at all.
+        /// The direction is the line's local tangent over localTangentFeet, so a curve gives the
+        /// direction where the point is. Scored by how far the kind of line is trusted, how near it
+        /// is, how far it had to be followed, and how long it is (a short piece, such as a
+        /// driveway's edge, says less about the road than a long one).
+        /// </summary>
+        public IList<RoadReference> References(P2 p, double reach, bool includeContext = true)
+        {
+            var found = new List<RoadReference>();
+            var lines = Axes.Concat(Edges);
+            if (includeContext) lines = lines.Concat(Context);
+            foreach (var line in lines)
+            {
+                var r = ReferenceOn(line, p, reach);
+                if (r != null) found.Add(r);
+            }
+            Bridge(found);
+            return found.OrderByDescending(r => r.Score).ToList();
+        }
+
+        internal RoadReference ReferenceOn(OrientLine line, P2 p, double reach)
+        {
+            P2 foot, segment; double d, s;
+            if (!line.Nearest(p, out foot, out segment, out d, out s)) return null;
+            var reliability = _std.ReliabilityOf(line.Role);
+            if (reliability <= 0) return null;
+            var length = line.Length;
+            var window = Math.Max(1.0, _std.LocalTangentFeet);
+            var extension = 0.0;
+            P2 tangent;
+            var atStart = s <= 1e-6;
+            var atEnd = s >= length - 1e-6;
+            if (atStart || atEnd)
+            {
+                // Past an end: the line's last stretch, followed outward.
+                var end = atEnd ? line.End : line.Start;
+                var drawn = atEnd ? line.DirectionOver(Math.Max(0, length - window), length) : line.DirectionOver(0, Math.Min(length, window));
+                var asDrawn = drawn ?? segment;
+                var outward = atEnd ? asDrawn : asDrawn * -1;
+                var rel = p - end;
+                var along = P2.Dot(rel, outward);
+                if (along > 1e-6)
+                {
+                    extension = along;
+                    if (extension > _std.MaxExtensionFeet) return null;
+                    foot = end + outward * along;
+                    d = Math.Abs(P2.Cross(outward, rel));
+                }
+                tangent = asDrawn;
+            }
+            else
+            {
+                var half = window / 2;
+                tangent = line.DirectionOver(Math.Max(0, s - half), Math.Min(length, s + half)) ?? segment;
+            }
+            if (d > reach) return null;
+            var reference = new RoadReference
+            {
+                Line = line, Foot = foot, Tangent = tangent, Distance = d, Station = s, Extension = extension, Reliability = reliability
+            };
+            reference.Score = BaseScore(reference) * ExtensionFactor(extension);
+            return reference;
+        }
+
+        private static double BaseScore(RoadReference r)
+        {
+            return r.Reliability * (1.0 / (1.0 + r.Distance / 40.0)) * Math.Max(0.4, Math.Min(1.0, r.Line.Length / 50.0));
+        }
+
+        /// <summary>1 beside a line, falling to 0.6 at the most a line may be followed past its end.</summary>
+        internal double ExtensionFactor(double extension)
+        {
+            if (extension <= 0) return 1.0;
+            if (_std.MaxExtensionFeet <= 0) return 0;
+            return 1.0 - 0.4 * Math.Min(1.0, extension / _std.MaxExtensionFeet);
+        }
+
+        /// <summary>A line followed past its end whose kind resumes on the far side of the point,
+        /// running the same way and about in line: the point is in a gap (a driveway, a missed
+        /// shot), and the line is trusted as if it ran through.</summary>
+        private void Bridge(IList<RoadReference> found)
+        {
+            var tolerance = Math.Cos(Math.Max(1, _std.AlignmentToleranceDegrees) * Math.PI / 180);
+            foreach (var a in found.Where(x => x.Extension > 0).ToList())
+                foreach (var b in found.Where(x => x != a && x.Extension > 0 && IsAxis(x.Role) == IsAxis(a.Role)))
+                {
+                    if (Math.Abs(P2.Dot(a.Tangent, b.Tangent)) < tolerance) continue;
+                    // Each was followed toward the point from its own end: from opposite sides.
+                    var fromA = a.Foot - a.Line.PointAt(a.Station);
+                    var fromB = b.Foot - b.Line.PointAt(b.Station);
+                    if (P2.Dot(fromA, fromB) >= 0) continue;
+                    if (Math.Abs(a.Distance - b.Distance) > 3.0) continue;
+                    a.BridgedTo = b.Line;
+                    a.Score = BaseScore(a);
+                }
+        }
+
+        /// <summary>Confidence a reference's direction deserves: less the further it was followed
+        /// past its end (unless the line resumes beyond), less beyond 30 ft away.</summary>
+        internal double ConfidenceFactor(RoadReference r)
+        {
+            var f = r.BridgedTo != null ? 1.0 : ExtensionFactor(r.Extension);
+            if (r.Distance > 30) f *= Math.Max(0.7, 1.0 - 0.3 * (r.Distance - 30) / 50.0);
+            return f;
+        }
+
+        /// <summary>
+        /// A road line near the point that runs a different way from <paramref name="chosen"/> by
+        /// more than the alignment tolerance and is trusted nearly as much: the road's direction is
+        /// then not established, and the feature should be reviewed. Null when they agree.
+        /// Concrete edges and sidewalks never raise a disagreement: they only support.
+        /// </summary>
+        public RoadReference Disagreeing(RoadReference chosen, IList<RoadReference> all)
+        {
+            if (chosen == null || all == null) return null;
+            var tolerance = Math.Cos(Math.Max(1, _std.AlignmentToleranceDegrees) * Math.PI / 180);
+            return all.Where(r => r != chosen && r.Line != chosen.Line && r.Role != LineRole.RoadContext && chosen.Role != LineRole.RoadContext)
+                      .Where(r => r.Score >= chosen.Score * 0.6 && r.Distance <= chosen.Distance * 1.5 + 10)
+                      .Where(r => Math.Abs(P2.Dot(r.Tangent, chosen.Tangent)) < tolerance)
+                      .OrderByDescending(r => r.Score).FirstOrDefault();
+        }
+
+        /// <summary>Other road lines that run the same way as the chosen one.</summary>
+        public IList<RoadReference> Agreeing(RoadReference chosen, IList<RoadReference> all)
+        {
+            if (chosen == null || all == null) return new List<RoadReference>();
+            var tolerance = Math.Cos(Math.Max(1, _std.AlignmentToleranceDegrees) * Math.PI / 180);
+            return all.Where(r => r != chosen && r.Line != chosen.Line && Math.Abs(P2.Dot(r.Tangent, chosen.Tangent)) >= tolerance).ToList();
+        }
+
+        /// <summary>The road's axis at a point, as drawn on the best road line there (centre lines
+        /// first): for valves and other features that need only the road's direction.</summary>
+        public P2? RoadAxisAt(P2 p, double reach)
+        {
+            var refs = References(p, reach, false);
+            var best = refs.FirstOrDefault(r => IsAxis(r.Role)) ?? refs.FirstOrDefault();
+            return best == null ? (P2?)null : best.Tangent;
+        }
+
+        /// <summary>Where a perpendicular from the point meets the nearest road edge (else centre
+        /// line), on a line's extension only within the limit.</summary>
+        public P2? RoadFootAt(P2 p, double reach)
+        {
+            var refs = References(p, reach, false);
+            var best = refs.Where(r => !IsAxis(r.Role)).OrderBy(r => r.Distance).FirstOrDefault() ??
+                       refs.Where(r => IsAxis(r.Role)).OrderBy(r => r.Distance).FirstOrDefault();
+            return best == null ? (P2?)null : best.Foot;
         }
 
         // ------------------------------------------------------------------ queries
@@ -356,14 +570,9 @@ namespace FieldCodes.Orient
         /// (as drawn), and the distance.</summary>
         public IList<Tuple<OrientLine, P2, double>> LinesNear(P2 p, double reach)
         {
-            var found = new List<Tuple<OrientLine, P2, double>>();
-            foreach (var line in Axes.Concat(Edges))
-            {
-                P2 foot, tangent; double d, s;
-                line.Nearest(p, out foot, out tangent, out d, out s);
-                if (d <= reach) found.Add(Tuple.Create(line, tangent, d));
-            }
-            return found;
+            // Through the references: the local direction where the point is, and a line that
+            // stops short only within the extension limit.
+            return References(p, reach, false).Select(r => Tuple.Create(r.Line, r.Tangent, r.Distance)).ToList();
         }
 
         public TravelAt TravelAtPoint(P2 p, bool insideRoad = false)
@@ -386,37 +595,81 @@ namespace FieldCodes.Orient
                 };
             }
 
-            var axis = NearestAxis(p, _std.RoadSearchFeet, out foot, out tangent, out d);
+            var refs = References(p, _std.RoadSearchFeet);
+            // Best by score, not simply nearest: a short driveway edge beside a sign says less
+            // about the road than the long road edge a little further off.
+            var axis = refs.Where(r => IsAxis(r.Role)).OrderByDescending(r => r.Score).FirstOrDefault();
             if (axis != null)
             {
+                foot = axis.Foot; tangent = axis.Tangent; d = axis.Distance;
+                TravelAt found;
                 if (axis.Role == LineRole.OneWay)
-                    return new TravelAt { Direction = tangent, Tier = OrientationTier.Alignment, Confidence = 0.85, Line = axis, Distance = d,
-                                          Why = "one-way road " + axis.Id + " drawn in the direction of travel" };
-                var side = P2.Cross(tangent, p - foot);
-                var t = side < 0 ? tangent : tangent * -1;          // keep right: the point is on the right
-                return new TravelAt { Direction = t, Tier = OrientationTier.Alignment, Confidence = d < 0.5 ? 0.3 : 0.7, Line = axis, Distance = d,
-                                      Why = "two-way road " + axis.Id + ", traffic keeps right" };
+                    found = new TravelAt { Direction = tangent, Tier = OrientationTier.Alignment, Confidence = 0.85, Line = axis.Line, Distance = d,
+                                           Why = "one-way road " + axis.Describe() + " drawn in the direction of travel" };
+                else
+                {
+                    var side = P2.Cross(tangent, p - foot);
+                    var t = side < 0 ? tangent : tangent * -1;          // keep right: the point is on the right
+                    found = new TravelAt { Direction = t, Tier = OrientationTier.Alignment, Confidence = d < 0.5 ? 0.3 : 0.7, Line = axis.Line, Distance = d,
+                                           Why = "two-way road " + axis.Describe() + ", traffic keeps right" };
+                }
+                return Checked(found, axis, refs, p);
             }
 
-            var edge = NearestEdge(p, _std.RoadSearchFeet, out foot, out tangent, out d);
-            if (edge == null) return null;
+            var edgeRef = refs.Where(r => r.Role != LineRole.RoadContext).OrderByDescending(r => r.Score).FirstOrDefault();
+            var context = false;
+            if (edgeRef == null)
+            {
+                // Only an edge of concrete or a sidewalk: context, never enough on its own.
+                edgeRef = refs.OrderByDescending(r => r.Score).FirstOrDefault();
+                context = true;
+            }
+            if (edgeRef == null) return null;
+            var edge = edgeRef.Line;
+            foot = edgeRef.Foot; tangent = edgeRef.Tangent; d = edgeRef.Distance;
             if (insideRoad)
             {
                 // Between two edges: keep right of the midline.
                 var nearFoot = foot;
-                var other = Edges.Where(e => e != edge).Select(e => { P2 f, tg; double dd, s; e.Nearest(p, out f, out tg, out dd, out s); return Tuple.Create(e, f, dd); })
-                                 .Where(e => e.Item3 < _std.RoadSearchFeet && P2.Dot(e.Item2 - p, nearFoot - p) < 0)
-                                 .OrderBy(e => e.Item3).FirstOrDefault();
+                var other = refs.Where(e => e.Line != edge && e.Role != LineRole.RoadContext && P2.Dot(e.Foot - p, nearFoot - p) < 0)
+                                .OrderBy(e => e.Distance).FirstOrDefault();
                 if (other == null) return null;
-                var mid = foot + (other.Item2 - foot) * 0.5;
+                var mid = foot + (other.Foot - foot) * 0.5;
                 var keepRight = P2.Cross(tangent, p - mid) < 0 ? tangent : tangent * -1;
-                return new TravelAt { Direction = keepRight, Tier = OrientationTier.Inferred, Confidence = 0.5, Line = edge, Distance = d,
-                                      Why = "between edges " + edge.Id + " and " + other.Item1.Id + ", traffic keeps right of the middle" };
+                return Checked(new TravelAt { Direction = keepRight, Tier = OrientationTier.Inferred, Confidence = 0.5, Line = edge, Distance = d,
+                                              Why = "between " + edgeRef.Describe() + " and " + other.Describe() + ", traffic keeps right of the middle" },
+                               edgeRef, refs, p);
             }
             var outSide = P2.Cross(tangent, p - foot);
             var dir = outSide < 0 ? tangent : tangent * -1;
-            return new TravelAt { Direction = dir, Tier = OrientationTier.Alignment, Confidence = 0.55, Line = edge, Distance = d,
-                                  Why = "road edge " + edge.Id + " (no centre line), traffic beside it keeps right" };
+            var basis = context ? 0.35 : (edgeRef.Role == LineRole.LaneLine ? 0.6 : 0.55);
+            return Checked(new TravelAt
+            {
+                Direction = dir, Tier = context ? OrientationTier.Inferred : OrientationTier.Alignment, Confidence = basis, Line = edge, Distance = d,
+                Why = edgeRef.Describe() + " (no centre line), traffic beside it keeps right" + (context ? "; road context only" : "")
+            }, edgeRef, refs, p);
+        }
+
+        /// <summary>Lowers the confidence for a line followed past its end or far away, notes the
+        /// lines that agree, and marks a disagreement for review.</summary>
+        private TravelAt Checked(TravelAt found, RoadReference chosen, IList<RoadReference> all, P2 p)
+        {
+            found.Reference = chosen;
+            found.Confidence = Math.Round(found.Confidence * ConfidenceFactor(chosen), 2);
+            var agree = Agreeing(chosen, all);
+            if (agree.Count > 0)
+                found.Why += "; " + string.Join(", ", agree.Take(3).Select(a => a.Describe()).ToArray()) + (agree.Count == 1 ? " runs" : " run") + " the same way";
+            var rival = Disagreeing(chosen, all);
+            if (rival != null)
+            {
+                var angle = Math.Acos(Math.Min(1, Math.Abs(P2.Dot(rival.Tangent, chosen.Tangent)))) * 180 / Math.PI;
+                found.Conflict = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "road lines here disagree: {0} and {1} run {2:0} degrees apart; record its direction or check the linework",
+                    chosen.Describe(), rival.Describe(), angle);
+                var side = P2.Cross(rival.Tangent, p - rival.Foot);
+                found.ConflictDirection = side < 0 ? rival.Tangent : rival.Tangent * -1;
+            }
+            return found;
         }
     }
 }

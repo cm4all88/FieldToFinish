@@ -112,7 +112,9 @@ namespace FieldCodes.Orient
         WaterMain,
         GasMain,
         /// <summary>A shot sign panel: the panel's own line.</summary>
-        SignPanel
+        SignPanel,
+        /// <summary>Edge of concrete, sidewalk: supports a road direction, never decides one alone.</summary>
+        RoadContext
     }
 
     /// <summary>Surveyed linework, read only.</summary>
@@ -162,6 +164,32 @@ namespace FieldCodes.Orient
                 run += len;
             }
             return distance < double.MaxValue;
+        }
+
+        /// <summary>The point this far along the line (clamped to its ends).</summary>
+        public P2 PointAt(double station)
+        {
+            if (Points.Count == 0) return default(P2);
+            if (station <= 0) return Points[0];
+            var run = 0.0;
+            for (var i = 1; i < Points.Count; i++)
+            {
+                var a = Points[i - 1];
+                var b = Points[i];
+                var len = a.DistanceTo(b);
+                if (run + len >= station && len > 1e-12) return a + (b - a) * ((station - run) / len);
+                run += len;
+            }
+            return Points[Points.Count - 1];
+        }
+
+        /// <summary>The line's direction (as drawn) over the stretch from <paramref name="from"/> to
+        /// <paramref name="to"/> along it; null when that stretch has no length.</summary>
+        public P2? DirectionOver(double from, double to)
+        {
+            var v = PointAt(to) - PointAt(from);
+            if (v.Length < 1e-9) return null;
+            return v.Normalized();
         }
 
         public P2 Start { get { return Points[0]; } }
@@ -242,6 +270,36 @@ namespace FieldCodes.Orient
         /// <summary>What the feature was associated with: an approach, a stop bar, a cluster.</summary>
         public string Association { get; set; }
         public P2? AssociatedPoint { get; set; }
+
+        /// <summary>The reference geometry the direction came from, described ("road edge EP12
+        /// (8.0 ft away, followed 6.0 ft past its end)"); null when none was used.</summary>
+        public string Reference { get; set; }
+
+        /// <summary>How far that reference is from the feature, in drawing units.</summary>
+        public double? ReferenceDistance { get; set; }
+
+        /// <summary>Decided only by the feature's fallback rule (a hydrant nozzle toward the street,
+        /// a sign facing the traffic beside it), not by anything recorded about it.</summary>
+        public bool ByFallback { get; set; }
+
+        /// <summary>Where the direction came from, in a drafter's words.</summary>
+        public string Source
+        {
+            get
+            {
+                if (ByFallback && Tier < OrientationTier.Review) return "fallback rule";
+                switch (Tier)
+                {
+                    case OrientationTier.Measured: return "recorded or measured";
+                    case OrientationTier.Relationship: return "related survey feature";
+                    case OrientationTier.Alignment: return "road or utility alignment";
+                    case OrientationTier.Inferred: return "inference";
+                    case OrientationTier.NotDirectional: return "symmetric symbol";
+                    case OrientationTier.NoSupport: return "needs a recorded direction";
+                    default: return "not established";
+                }
+            }
+        }
 
         public OrientationDecision() { Evidence = new List<Evidence>(); }
 

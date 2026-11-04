@@ -168,9 +168,13 @@ public sealed class OrientationConfigTests : IClassFixture<RulesFixture>
         Assert.Equal(4, lines.Count);
         Assert.StartsWith("101,SN,Sign,Relationship,0.85,90.0,,0.0,270.0,Rotated,\"stop bar \"\"A\"\"\",", lines[1]);
         Assert.StartsWith("102,WV,WaterValve,Review,0.30,0.0,90.0,0.0,0.0,Review,", lines[2]);
-        Assert.EndsWith("two mains equally likely", lines[2]);
+        // The review reason, then what a drafter needs to check the decision: no reference line,
+        // nothing established, the suggested rotation, not applied, needs review.
+        Assert.EndsWith(",two mains equally likely,,,not established,0.0,no,yes", lines[2]);
+        Assert.EndsWith(",related survey feature,270.0,yes,no", lines[1]);      // turned, nothing to review
         Assert.StartsWith("102 103,,InferredConnection,Inferred,0.70,", lines[3]);
         Assert.Contains("NotDrawnAsUtility", lines[3]);
+        Assert.EndsWith(",inferred, not verified: never a deliverable,,,inference,,no,yes", lines[3]);
     }
 
     [Fact]

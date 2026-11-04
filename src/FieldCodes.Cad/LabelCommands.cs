@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -77,6 +78,7 @@ namespace FieldCodes.Cad
                 var placed = 0;
                 var leaders = 0;
                 var failed = 0;
+                var unplaced = new List<FieldCodes.Review.ReviewItem>();
 
                 foreach (var number in scan.Order)
                 {
@@ -143,6 +145,9 @@ namespace FieldCodes.Cad
                         failed++;
                         ed.WriteMessage(
                             "\n  point {0}: no clear label position found.", number);
+                        string pointHandle;
+                        scan.Handles.TryGetValue(number, out pointHandle);
+                        unplaced.Add(FieldCodes.Review.ReviewChecks.LabelNotPlaced(number, pointHandle, anchor.X, anchor.Y, parsed.LabelText));
                         continue;
                     }
 
@@ -199,8 +204,14 @@ namespace FieldCodes.Cad
 
                 ed.WriteMessage(
                     "\nFTFLABELS: {0} placed, {1} leader(s), {2} kept as hand-placed, " +
-                    "{3} with no clear position.\n",
-                    placed, leaders, keptByHand.Count, failed);
+                    "{3} with no clear position{4}.\n",
+                    placed, leaders, keptByHand.Count, failed, failed > 0 ? " (on the review list)" : "");
+                // Labels with no clear position go on the review list; a run limited to some
+                // families keeps the earlier items of the others, and a placed label closes its own.
+                var register = DrawingStore.ReadReview(db, tr);
+                var carried = register.Items.Where(i => i.IsOpen && i.Source == FieldCodes.Review.ReviewChecks.PointLabelsSource &&
+                                                        !scan.InScope(i.Points, scope)).ToList();
+                ReviewStore.Report(db, tr, FieldCodes.Review.ReviewChecks.PointLabelsSource, carried.Concat(unplaced), true, settings.Review);
                 foreach (var pair in skipped)
                     ed.WriteMessage("  not labelled, {0}: {1}\n", pair.Key, pair.Value);
                 if (scan.DepthNotesKeptOut > 0)

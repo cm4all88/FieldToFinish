@@ -28,6 +28,26 @@ namespace FieldCodes.Review
         public const string CodesSource = "Codes";
         public const string OrientationSource = "Orientation";
         public const string LineLabelsSource = "Line labels";
+        public const string PointLabelsSource = "Point labels";
+
+        /// <summary>A point label FTFLABELS could not place clear of the symbols and labels around
+        /// it: it was left out rather than laid over them, and a drafter places it.</summary>
+        public static ReviewItem LabelNotPlaced(string pointNumber, string handle, double x, double y, string text)
+        {
+            var item = ReviewKinds.New(ReviewKinds.LabelFailed, pointNumber,
+                "no position within the leader length clears the symbols and labels around point " + pointNumber +
+                "; the label (" + text + ") was left out rather than laid over them");
+            item.Source = PointLabelsSource;
+            item.FeatureType = "Point label";
+            item.Points = pointNumber;
+            if (!string.IsNullOrEmpty(handle)) item.Handles.Add(handle);
+            item.X = x;
+            item.Y = y;
+            item.Issue = "Label has no clear position";
+            item.FixCommand = "FTFLABELS";
+            item.SettingsPage = "Leader Styles";
+            return item;
+        }
         public const string FenceHeightsSource = "Fence heights";
 
         /// <summary>
@@ -171,6 +191,35 @@ namespace FieldCodes.Review
                     item.FixCommand = "FTFORIENT";
                     item.SettingsPage = "Symbols and Rotations";
                 }
+                else
+                {
+                    // Fix opens this point's decision: why, the reference used, and Preview,
+                    // Apply, Override and Recheck.
+                    item.FixCommand = "FTFORIENTPOINT " + d.Feature.Id;
+                    if (!string.IsNullOrEmpty(d.Reference)) item.Reason = item.Reason + " (reference: " + d.Reference + ")";
+                }
+                items.Add(item);
+            }
+
+            // Probable underground connections: for review only, never utility linework.
+            foreach (var c in result.Connections ?? new List<InferredConnection>())
+            {
+                if (c == null || c.FeatureIds == null || c.FeatureIds.Count == 0) continue;
+                var subject = string.Join(" ", c.FeatureIds.ToArray());
+                var item = ReviewKinds.New(ReviewKinds.InferredConnection, subject + " " + (c.Kind ?? "connection"),
+                    string.Format(CultureInfo.InvariantCulture, "{0} inferred at confidence {1:0.00} from the positions of points {2}; not verified",
+                                  c.Kind ?? "connection", c.Confidence, subject));
+                item.Source = OrientationSource;
+                item.FeatureType = "Utility (inferred)";
+                item.Points = subject;
+                foreach (var id in c.FeatureIds)
+                {
+                    string handle;
+                    if (handles != null && handles.TryGetValue(id, out handle) && !string.IsNullOrEmpty(handle)) item.Handles.Add(handle);
+                }
+                item.X = (c.From.X + c.To.X) / 2;
+                item.Y = (c.From.Y + c.To.Y) / 2;
+                item.FixCommand = "FTFORIENTPOINT " + c.FeatureIds[0];
                 items.Add(item);
             }
             return items;

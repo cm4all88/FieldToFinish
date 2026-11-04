@@ -22,6 +22,8 @@ namespace FieldCodes.Cad
     {
         public readonly Dictionary<string, ParsedPoint> Points = new Dictionary<string, ParsedPoint>(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, Point3d> Anchors = new Dictionary<string, Point3d>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Each point's handle, for review items that zoom to it.</summary>
+        public readonly Dictionary<string, string> Handles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public readonly List<string> Order = new List<string>();
         public readonly HashSet<string> FtfLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public readonly HashSet<string> FtfTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -48,6 +50,7 @@ namespace FieldCodes.Cad
                 if (keptOut) scan.DepthNotesKeptOut++;
                 scan.Points[number] = parsed;
                 scan.Anchors[number] = CadUtil.Flatten(cogo.Location);
+                scan.Handles[number] = cogo.Handle.ToString();
                 scan.Order.Add(number);
                 string labelStyle;
                 if (Compare.CogoPointPlotting.LabelShown(cogo, db, tr, out labelStyle) == true) scan.PointLabelShown.Add(number);

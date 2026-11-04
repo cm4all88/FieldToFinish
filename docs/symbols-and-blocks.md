@@ -71,6 +71,23 @@ removes the file's list again.
 **When FTFORIENT applies a decision**: the two thresholds under the list
 (`applyMinimumConfidence`, `applyWeakestTier`).
 
+## Rotation evidence and review (tab 3)
+
+How FTFORIENT weighs the road lines around a feature and what a feature's fallback rule may do:
+
+- the search distance (`roadSearchFeet`);
+- how far a line that stops short is followed (`maxExtensionFeet`);
+- the length of line a direction is taken over (`localTangentFeet`);
+- when road lines disagree (`alignmentToleranceDegrees`);
+- the trust in each kind of road line (`roadReferences`);
+- intersections (`intersectionHandling`);
+- per kind, Apply, Review or Leave (`fallbacks`);
+- hand rotations (`handTurned`);
+- QC graphics (`qcGraphics`, `qcShowInferredConnections`, `qcTextPlotted`).
+
+All are in the rules file's `orientation` section and checked on save. Why they exist, with
+before and after: `docs/orientation-review-2026-11.md`.
+
 ## Blocks FTF inserts (tab 2)
 
 The code rules that name a block. Each setting is an optional property of the code

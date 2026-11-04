@@ -427,6 +427,8 @@ see which build is running. See [DEPLOY.md](DEPLOY.md).
 | `FTFVERSION` | Which FTF build is running, where it was loaded from, what is installed, and whether it is the latest approved build (see DEPLOY.md) | n/a |
 | `FTFORIENT` | Turns the symbols Civil 3D already drew (COGO markers) to face the way the features do; Preview, Apply or All. See "Orienting symbols" | yes (and kept: a marker turned by hand is not overwritten) |
 | `FTFORIENTRESET` | Puts every marker `FTFORIENT` turned back as it was and removes its QC graphics | yes |
+| `FTFORIENTPOINT` | One symbol's decision: the rotation now and before FTF, the direction FTFORIENT would set, the reference line and its distance, the evidence and confidence; then Zoom, Preview, Apply, Override, Recheck or Reset. The review list's Fix runs it | yes (Apply and Override are kept by later FTFORIENT runs; Recheck hands the point back) |
+| `FTFWHAT` | What a selected object is and what made it: a Civil 3D object (point, style, label style, figure), an FTF object and the command that made it, a copy of FTF output, or neither. With nothing selected, counts the whole drawing by owner. Changes nothing | n/a |
 | `FTFRESTYLE` | Brings FTF's existing labels, tags and line labels up to the current text and leader styles, in place; Preview first, Apply to change. See "CAD standards and styles" | yes |
 | `FTFLAYERUPDATE` | Lists every layer FTF uses whose properties differ from its layer standard, then asks before changing anything | yes |
 | `FTFCHECKSTANDARDS` | Checks every layer, linetype, text style, multileader style and block the settings name against the drawing, with fixes on request | n/a |
@@ -919,13 +921,19 @@ is kept on the point (XData `FTF_ORIENT`), so `FTFORIENTRESET` puts every symbol
 **Run it**
 
 1. `UPDATEFTF` (the approved build), open the drawing.
-2. `FTFORIENT` → `Preview`. Nothing is rotated; the QC arrows are drawn (non-plotting) and
-   the report is written. Look at the red rings first: those are the review list.
+2. `FTFORIENT` → `Preview`. Nothing is rotated; QC arrows for every decision are drawn
+   (non-plotting, starting beside each symbol so they are not mistaken for it) and the report is
+   written. Look at the red rings first: those are the review list.
 3. `FTFORIENT` → `Apply` (the default). Turns every decision at or above the office's
    confidence (0.6 and Inferred or stronger, `rules.json` → `orientation`).
    A marker someone already turned by hand is **kept** (listed as "kept as turned by
    hand"); a measured direction still replaces it. `All` replaces those too.
-4. `FTFORIENTRESET` puts everything back and removes the QC.
+   After Apply, QC graphics are drawn only for what needs review (Settings > Symbols and
+   Rotations > Rotation evidence and review), sized by the drawing's annotation scale.
+4. `FTFORIENTPOINT` (or Fix on the review list) explains one point and lets you Apply the
+   suggestion, Override it with your own direction, or Recheck it. A direction you set or
+   accept is never changed by a later FTFORIENT.
+5. `FTFORIENTRESET` puts everything back and removes the QC.
 
 The ribbon has both on the Finish panel (Orient Symbols, Reset Orient).
 
@@ -938,8 +946,8 @@ used to orient others, so one wrong guess cannot set off a chain of confident wr
 |---|---|---|
 | **Measured** | What the crew recorded | `SN 135` (the office sign rule's azimuth), `AZ 135`, `FACES NE`, `NOZ E`, `STEAMER 270`, `ARM W`, `ARMS N S`, a valve `N-S`; a shot sign panel line; in the description or the crew's note |
 | **Relationship** | Surveyed features around it | the stop bar a stop sign stands beside; the intersection approach a sign is on the right of; a side road (edges only) a stop sign stands on; a luminaire shot at the end of an arm; a hydrant and its valve tee; a measured arrow in the lane beside a sign |
-| **Alignment** | Surveyed road or utility linework | traffic keeps right of a two-way centre line (0.7) or an edge with no centre line (0.55); a one-way line drawn in its direction (0.85); a valve on a surveyed main (0.85) |
-| **Inferred** | A feature rule the surroundings support | a hydrant's pumper nozzle faces the nearest road (0.7 within 15 ft, 0.6 to 40 ft); a lone valve between a hydrant and the road |
+| **Alignment** | Surveyed road or utility linework | traffic keeps right of a two-way centre line (0.7), a lane or fog line (0.6) or a pavement edge with no centre line (0.55); a one-way line drawn in its direction (0.85); a valve on a surveyed main (0.85). Less when the line had to be followed past its end, or is over 30 ft away |
+| **Inferred** | A feature rule the surroundings support | a hydrant's pumper nozzle faces the nearest road (0.7 within 15 ft, 0.6 to 40 ft; the report's Source says "fallback rule"); a lone valve between a hydrant and the road; two valves near a hydrant (0.55: suggested, not turned) |
 | **Review** | Two answers equally good, or nothing to go on | left alone, ringed red, listed with a suggestion where there is one |
 
 Per feature:
@@ -956,21 +964,49 @@ Per feature:
   stripe is shot): a point much nearer an edge that runs *across* the main centre line than
   to the centre line itself belongs to that side road.
 - **Lights**: a round light is never rotated. An arm points to the luminaire shot if there is
-  one within 40 ft, else over the road (0.65).
-- **Signal poles**: the mast arm spans the intersection approach it stands beside; unsure →
-  review.
-- **Hydrants**: the pumper nozzle faces the street (fire engine access). Two streets at
-  similar distance in different directions → review.
+  one within 40 ft, or the direction the crew recorded (`ARM W`). With neither, the arm is **not**
+  invented from the pavement: it is suggested toward the road and listed for review (the
+  street-light fallback is Review; an office can set it to Apply).
+- **Signal poles**: the mast arm spans the intersection approach it stands beside; unsure, or
+  nothing but the road to go on → review.
+- **Hydrants**: a recorded nozzle direction (`NOZ E`, `STEAMER 270`) first; otherwise the pumper
+  nozzle faces the street (fire engine access) as a documented fallback (set Hydrant to Review to
+  have each confirmed). Never from the lateral: an underground lateral does not show which way the
+  visible nozzle was turned. Two streets at similar distance in different directions → review.
 - **Water valves** (axis symbols: 90° and 270° are the same): on a surveyed main, along it.
   Three valves at a hydrant are read as a tee — two on the main, one on the lateral
-  toward the hydrant — scored on how well they line up; a probable main and lateral are
-  drawn on the QC layer `FTF-QC-ORIENT-INFERRED` only, labelled inferred, never as
-  utility linework. Two in line along the road are both on the main. Anything else →
-  review.
+  toward the hydrant — scored on how well they line up. The probable main and lateral are
+  put on the review list and in the report, never drawn as utility linework or delivered; they
+  are drawn (dashed, with a short tag, on the non-plotting `FTF-QC-ORIENT-INFERRED`) only in
+  Preview or when the office turns that on. Two valves are not an assembly: their probable
+  arrangement is suggested, not applied. Anything else → review.
 - **Gas valves**: on a surveyed gas main, along it; several in a line along the road, along
   the road (0.6); otherwise review. (No hydrant tee: that is water only.)
 - **Arrows and painted words**: the direction of travel in their lane — stop bar, inbound
   intersection approach, one-way line, or keep-right of the road's middle.
+
+### Roads that are only partly surveyed
+
+A centre line is not required. A feature takes its road's direction from the road lines near
+it, ranked by how far each kind is trusted (centre lines, then lane and fog lines, then pavement
+edges, curbs and flowlines, then edges of concrete as support only), how near it is, and how long
+it is (a short driveway edge says less about the road than the long edge behind it). Fences,
+property lines and utilities are never road lines.
+
+- **Local tangent:** the direction is taken over a set length of line where the feature stands
+  (20 ft), so a curve gives its tangent there and a small jog in a shot edge does not swing it.
+- **Lines that stop short:** followed past their end along their last stretch, at most 25 ft,
+  with less confidence the further they go; further than that they are not used. A feature in a
+  gap, where the line resumes beyond it, is treated as if the line ran through. Nothing is ever
+  extended in the drawing.
+- **Disagreement:** road lines near a feature that run more than 15 degrees apart send it to
+  review with both suggestions, instead of one being picked.
+- All of these are settings (Symbols and Rotations > Rotation evidence and review), as are the
+  trust in each kind of line, intersection handling, each kind's fallback (Apply, Review or
+  Leave), how hand rotations are kept, and the QC graphics. The decision CSV lists, per point,
+  the reference used and its distance, the source of the direction, the proposed rotation,
+  whether it was applied and whether it needs review.
+- `docs/orientation-review-2026-11.md` has the reasoning, before and after.
 
 ### Pavement arrows with a written direction of travel
 

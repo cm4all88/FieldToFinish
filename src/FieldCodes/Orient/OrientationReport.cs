@@ -23,7 +23,9 @@ namespace FieldCodes.Orient
         NoSymbol,
         Failed,
         /// <summary>Not required to be turned, and nothing recorded its direction: left as surveyed.</summary>
-        LeftAsSurveyed
+        LeftAsSurveyed,
+        /// <summary>A drafter set this marker's rotation (FTFORIENTPOINT Override): never changed by FTFORIENT.</summary>
+        ManualOverride
     }
 
     /// <summary>The CSV written beside the drawing, and the command-line summary.</summary>
@@ -32,7 +34,8 @@ namespace FieldCodes.Orient
         public const string Suffix = ".ftf-orientation.csv";
 
         public const string Header =
-            "Point,Code,Kind,Tier,Confidence,Azimuth,Alternative,RotationBefore,RotationAfter,Outcome,Association,Evidence,Review";
+            "Point,Code,Kind,Tier,Confidence,Azimuth,Alternative,RotationBefore,RotationAfter,Outcome,Association,Evidence,Review," +
+            "Reference,ReferenceDistance,Source,ProposedRotation,Applied,NeedsReview";
 
         public static string Csv(OrientationResult result, IDictionary<OrientationDecision, OrientOutcome> outcomes)
         {
@@ -43,15 +46,22 @@ namespace FieldCodes.Orient
                 OrientOutcome o;
                 outcomes.TryGetValue(d, out o);
                 var before = Angles.ToDegrees(d.Feature.CurrentRotation);
-                var after = o == OrientOutcome.Rotated || o == OrientOutcome.AlreadyRight
+                var applied = o == OrientOutcome.Rotated || o == OrientOutcome.AlreadyRight;
+                var after = applied
                     ? (d.MarkerRotation.HasValue ? Angles.ToDegrees(d.MarkerRotation.Value) : before)
                     : before;
+                // What the marker would be turned to (also for a review item's suggestion).
+                var proposedRadians = d.MarkerRotation ??
+                    (d.Azimuth.HasValue && d.Symbol != null && d.Symbol.Directional ? SymbolRotation.MarkerRadians(d.Symbol, d.Azimuth.Value) : null);
+                var proposed = proposedRadians.HasValue ? Angles.ToDegrees(proposedRadians.Value) : (double?)null;
+                var needsReview = o == OrientOutcome.Review || o == OrientOutcome.BelowThreshold || o == OrientOutcome.Failed;
                 sb.AppendLine(string.Join(",", new[]
                 {
                     Q(d.Feature.Id), Q(d.Feature.Code), d.Feature.Kind.ToString(), d.Tier.ToString(),
                     d.Confidence.ToString("0.00", CultureInfo.InvariantCulture), N(d.Azimuth), N(d.AlternativeAzimuth),
                     before.ToString("0.0", CultureInfo.InvariantCulture), after.ToString("0.0", CultureInfo.InvariantCulture),
-                    o.ToString(), Q(d.Association), Q(string.Join(" | ", d.Evidence.Select(e => e.Text).ToArray())), Q(d.ReviewReason)
+                    o.ToString(), Q(d.Association), Q(string.Join(" | ", d.Evidence.Select(e => e.Text).ToArray())), Q(d.ReviewReason),
+                    Q(d.Reference), N(d.ReferenceDistance), Q(d.Source), N(proposed), applied ? "yes" : "no", needsReview ? "yes" : "no"
                 }));
             }
             foreach (var c in result.Connections)
@@ -59,7 +69,8 @@ namespace FieldCodes.Orient
                 {
                     Q(string.Join(" ", c.FeatureIds.ToArray())), "", "InferredConnection", "Inferred",
                     c.Confidence.ToString("0.00", CultureInfo.InvariantCulture), "", "", "", "", "NotDrawnAsUtility",
-                    Q(c.Kind), Q(string.Format(CultureInfo.InvariantCulture, "{0:0.00},{1:0.00} to {2:0.00},{3:0.00}", c.From.X, c.From.Y, c.To.X, c.To.Y)), ""
+                    Q(c.Kind), Q(string.Format(CultureInfo.InvariantCulture, "{0:0.00},{1:0.00} to {2:0.00},{3:0.00}", c.From.X, c.From.Y, c.To.X, c.To.Y)),
+                    "inferred, not verified: never a deliverable", "", "", "inference", "", "no", "yes"
                 }));
             return sb.ToString();
         }
@@ -78,7 +89,7 @@ namespace FieldCodes.Orient
                           result.Intersections.Sum(i => i.Approaches.Count) + " approaches.");
             if (result.Connections.Count > 0)
                 lines.Add(result.Connections.Count + " probable underground connection(s) inferred from valves and hydrants " +
-                          "(QC only, never drawn as utility lines).");
+                          "(on the review list and in the report; never drawn as utility lines).");
             var review = result.Decisions.Where(d => d.Tier == OrientationTier.Review).ToList();
             foreach (var d in review.Take(15))
                 lines.Add("  REVIEW " + d.Feature.Code + " " + d.Feature.Id + ": " + d.ReviewReason);
@@ -99,6 +110,7 @@ namespace FieldCodes.Orient
                 case OrientOutcome.NotDirectional: return "symmetric (not rotated)";
                 case OrientOutcome.NoSymbol: return "no symbol standard";
                 case OrientOutcome.LeftAsSurveyed: return "left as surveyed (no recorded direction; its standard turns it only by one)";
+                case OrientOutcome.ManualOverride: return "kept as set by a drafter (manual override)";
                 default: return "failed";
             }
         }

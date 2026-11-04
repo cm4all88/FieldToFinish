@@ -174,7 +174,8 @@ namespace FieldCodes.Orient
             {
                 var az = SymbolRotation.AzimuthOf(pair.Normalized());
                 foreach (var v in cluster)
-                    Assign(v, az, 0.6, "two valves in line, along the road, near hydrant " + hydrant.Id + ": both on the main", "water main near hydrant " + hydrant.Id, null);
+                    Assign(v, az, 0.6, "two valves in line, along the road, near hydrant " + hydrant.Id + ": both on the main", "water main near hydrant " + hydrant.Id, null,
+                           OrientationTier.Inferred);
                 return true;
             }
 
@@ -188,11 +189,13 @@ namespace FieldCodes.Orient
                 var toHydrant = hydrant.Location - t;
                 if (offset < 1.0 || toHydrant.Length <= offset) continue;
                 if (Angle((lat - t).Normalized(), toHydrant.Normalized()) > 30) continue;
-                Assign(pick.Item1, SymbolRotation.AzimuthOf(road.Value), 0.6, "valve on the main (along the road) beside hydrant " + hydrant.Id + "'s lateral", "water main near hydrant " + hydrant.Id, t);
-                Assign(pick.Item2, SymbolRotation.AzimuthOf((lat - t).Normalized()), 0.6,
-                       string.Format(CultureInfo.InvariantCulture, "valve {0:0.0} ft off the main toward hydrant {1}: probable lateral valve", offset, hydrant.Id),
-                       "hydrant lateral to " + hydrant.Id, hydrant.Location);
-                result.Connections.Add(new InferredConnection { Kind = "hydrant lateral (inferred)", From = t, To = hydrant.Location, Confidence = 0.6,
+                // Two valves are not an assembly: a probable arrangement, for review, not applied.
+                Assign(pick.Item1, SymbolRotation.AzimuthOf(road.Value), 0.55, "valve on the main (along the road) beside hydrant " + hydrant.Id + "'s lateral (two valves only: probable)",
+                       "water main near hydrant " + hydrant.Id, t, OrientationTier.Inferred);
+                Assign(pick.Item2, SymbolRotation.AzimuthOf((lat - t).Normalized()), 0.55,
+                       string.Format(CultureInfo.InvariantCulture, "valve {0:0.0} ft off the main toward hydrant {1}: probable lateral valve (two valves only)", offset, hydrant.Id),
+                       "hydrant lateral to " + hydrant.Id, hydrant.Location, OrientationTier.Inferred);
+                result.Connections.Add(new InferredConnection { Kind = "hydrant lateral (inferred)", From = t, To = hydrant.Location, Confidence = 0.55,
                                                                 FeatureIds = new List<string> { pick.Item2.Feature.Id, hydrant.Id } });
                 return true;
             }
@@ -268,20 +271,16 @@ namespace FieldCodes.Orient
             v.Evidence.Add(new Evidence(tier, conf, why));
         }
 
+        // The road's direction and the way out to it, from road lines only, followed past a
+        // line's end only within the extension limit, with the local tangent on curves.
         private P2? RoadDirection(P2 p)
         {
-            P2 foot, t; double d;
-            if (_roads.NearestAxis(p, 80, out foot, out t, out d) != null) return t;
-            if (_roads.NearestEdge(p, 80, out foot, out t, out d) != null) return t;
-            return null;
+            return _roads.RoadAxisAt(p, 80);
         }
 
         private P2? RoadFoot(P2 p)
         {
-            P2 foot, t; double d;
-            if (_roads.NearestEdge(p, 60, out foot, out t, out d) != null) return foot;
-            if (_roads.NearestAxis(p, 80, out foot, out t, out d) != null) return foot;
-            return null;
+            return _roads.RoadFootAt(p, 80);
         }
 
         private static double Angle(P2 a, P2 b)

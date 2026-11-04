@@ -167,6 +167,45 @@ namespace FieldCodes.Editing
 
         /// <summary>markingMaxTurnDegrees: the most the road may turn the written direction.</summary>
         public double MarkingMaxTurnDegrees { get; set; }
+
+        /// <summary>roadSearchFeet: how far from a feature road lines are looked for.</summary>
+        public double RoadSearchFeet { get; set; }
+
+        /// <summary>maxExtensionFeet: how far a road line that stops short may be followed past its end.</summary>
+        public double MaxExtensionFeet { get; set; }
+
+        /// <summary>localTangentFeet: the length of road line its direction is taken over.</summary>
+        public double LocalTangentFeet { get; set; }
+
+        /// <summary>alignmentToleranceDegrees: road lines further apart than this disagree.</summary>
+        public double AlignmentToleranceDegrees { get; set; }
+
+        /// <summary>intersectionHandling: Approach or Review.</summary>
+        public string IntersectionHandling { get; set; }
+
+        /// <summary>handTurned: Keep or MeasuredReplaces.</summary>
+        public string HandTurned { get; set; }
+
+        /// <summary>qcGraphics: Off, ReviewOnly or All.</summary>
+        public string QcGraphics { get; set; }
+
+        /// <summary>qcShowInferredConnections.</summary>
+        public bool QcShowInferredConnections { get; set; }
+
+        /// <summary>fallbacks: per kind (Sign, StreetLight, SignalPole, Hydrant, PavementArrow, PavementWord,
+        /// WaterValve, GasValve), Apply, Review or Leave.</summary>
+        public Dictionary<string, string> Fallbacks { get; set; }
+
+        /// <summary>roadReferences: how far each kind of road line is trusted (Centerline, LaneLine, Edge,
+        /// RoadContext), 0 to 1. One-way lines are trusted as centre lines.</summary>
+        public Dictionary<string, double> Reliability { get; set; }
+
+        /// <summary>The kinds whose fallback the Settings page edits.</summary>
+        public static readonly string[] FallbackKinds =
+            { "Sign", "StreetLight", "SignalPole", "Hydrant", "PavementArrow", "PavementWord", "WaterValve", "GasValve" };
+
+        /// <summary>The road line kinds whose trust the Settings page edits.</summary>
+        public static readonly string[] ReliabilityRoles = { "Centerline", "LaneLine", "Edge", "RoadContext" };
     }
 
     /// <summary>
@@ -552,6 +591,62 @@ namespace FieldCodes.Editing
             var maxTurn = o["markingMaxTurnDegrees"];
             if (maxTurn != null && (!TryNumber(maxTurn, out v) || v < 0 || v > 90))
                 problems.Add(page + "the most the road may turn a marking's written direction must be between 0 and 90 degrees.");
+
+            foreach (var range in new[]
+            {
+                Tuple.Create("roadSearchFeet", 1.0, 500.0, "the distance road lines are looked for must be between 1 and 500 ft."),
+                Tuple.Create("maxExtensionFeet", 0.0, 200.0, "how far a road line may be followed past its end must be between 0 and 200 ft."),
+                Tuple.Create("localTangentFeet", 1.0, 200.0, "the length of road line its direction is taken over must be between 1 and 200 ft."),
+                Tuple.Create("alignmentToleranceDegrees", 1.0, 90.0, "the angle at which road lines disagree must be between 1 and 90 degrees."),
+                Tuple.Create("qcTextPlotted", 0.01, 1.0, "the plotted height of QC text must be between 0.01 and 1 inch.")
+            })
+            {
+                var t = o[range.Item1];
+                if (t != null && (!TryNumber(t, out v) || v < range.Item2 || v > range.Item3)) problems.Add(page + range.Item4);
+            }
+            foreach (var word in new[]
+            {
+                Tuple.Create("intersectionHandling", typeof(FieldCodes.Orient.IntersectionHandling)),
+                Tuple.Create("handTurned", typeof(FieldCodes.Orient.HandTurnedRotation)),
+                Tuple.Create("qcGraphics", typeof(FieldCodes.Orient.QcGraphicsMode))
+            })
+            {
+                var t = o[word.Item1];
+                if (t != null && t.Type != JTokenType.Null && !Enum.GetNames(word.Item2).Any(n => string.Equals(n, t.ToString(), StringComparison.OrdinalIgnoreCase)))
+                    problems.Add(page + word.Item1 + " must be one of " + string.Join(", ", Enum.GetNames(word.Item2)) + " (not '" + t + "').");
+            }
+            var fallbacks = o["fallbacks"];
+            if (fallbacks != null && fallbacks.Type != JTokenType.Null)
+            {
+                var obj = fallbacks as JObject;
+                if (obj == null) problems.Add(page + "\"fallbacks\" must name kinds of feature, each Apply, Review or Leave.");
+                else
+                    foreach (var p in obj.Properties())
+                    {
+                        FieldCodes.Orient.OrientKind k;
+                        FieldCodes.Orient.OrientFallback f;
+                        if (!Enum.TryParse(p.Name, true, out k) || !Enum.IsDefined(typeof(FieldCodes.Orient.OrientKind), k))
+                            problems.Add(page + "fallback for '" + p.Name + "': not a kind of feature FTFORIENT knows.");
+                        else if (p.Value.Type != JTokenType.String || !Enum.TryParse(p.Value.ToString(), true, out f) || !Enum.IsDefined(typeof(FieldCodes.Orient.OrientFallback), f))
+                            problems.Add(page + "fallback for " + p.Name + " must be Apply, Review or Leave (not '" + p.Value + "').");
+                    }
+            }
+            var references = o["roadReferences"];
+            if (references != null && references.Type != JTokenType.Null)
+            {
+                var arr = references as JArray;
+                if (arr == null) problems.Add(page + "\"roadReferences\" must be a list of { role, reliability }.");
+                else
+                    foreach (var entry in arr)
+                    {
+                        var e = entry as JObject;
+                        FieldCodes.Orient.LineRole role;
+                        if (e == null || e["role"] == null || !Enum.TryParse(e["role"].ToString(), true, out role))
+                        { problems.Add(page + "a road reference needs a role (Centerline, OneWay, LaneLine, Edge, RoadContext)."); continue; }
+                        if (e["reliability"] == null || !TryNumber(e["reliability"], out v) || v < 0 || v > 1)
+                            problems.Add(page + "the trust in " + role + " lines must be between 0 and 1.");
+                    }
+            }
 
             var tier = o["applyWeakestTier"];
             if (tier != null && tier.Type != JTokenType.Null)
@@ -1012,8 +1107,71 @@ namespace FieldCodes.Editing
                 MarkingDirectionWords = Flag(o, "markingDirectionWords", defaults.MarkingDirectionWords),
                 MarkingFollowRoad = Flag(o, "markingFollowRoad", defaults.MarkingFollowRoad),
                 MarkingRoadFeet = o != null ? Number(o["markingRoadFeet"], defaults.MarkingRoadFeet) : defaults.MarkingRoadFeet,
-                MarkingMaxTurnDegrees = o != null ? Number(o["markingMaxTurnDegrees"], defaults.MarkingMaxTurnDegrees) : defaults.MarkingMaxTurnDegrees
+                MarkingMaxTurnDegrees = o != null ? Number(o["markingMaxTurnDegrees"], defaults.MarkingMaxTurnDegrees) : defaults.MarkingMaxTurnDegrees,
+                RoadSearchFeet = o != null ? Number(o["roadSearchFeet"], defaults.RoadSearchFeet) : defaults.RoadSearchFeet,
+                MaxExtensionFeet = o != null ? Number(o["maxExtensionFeet"], defaults.MaxExtensionFeet) : defaults.MaxExtensionFeet,
+                LocalTangentFeet = o != null ? Number(o["localTangentFeet"], defaults.LocalTangentFeet) : defaults.LocalTangentFeet,
+                AlignmentToleranceDegrees = o != null ? Number(o["alignmentToleranceDegrees"], defaults.AlignmentToleranceDegrees) : defaults.AlignmentToleranceDegrees,
+                IntersectionHandling = Word(o, "intersectionHandling", defaults.IntersectionHandling.ToString()),
+                HandTurned = Word(o, "handTurned", defaults.HandTurned.ToString()),
+                QcGraphics = Word(o, "qcGraphics", defaults.QcGraphics.ToString()),
+                QcShowInferredConnections = Flag(o, "qcShowInferredConnections", defaults.QcShowInferredConnections),
+                Fallbacks = ReadFallbacks(o, defaults),
+                Reliability = ReadReliability(o, defaults)
             };
+        }
+
+        private static string Word(JObject o, string name, string absentMeans)
+        {
+            var t = o != null ? o[name] : null;
+            return t != null && t.Type == JTokenType.String && !string.IsNullOrWhiteSpace((string)t) ? ((string)t).Trim() : absentMeans;
+        }
+
+        private static Dictionary<string, string> ReadFallbacks(JObject o, FieldCodes.Orient.OrientationStandard defaults)
+        {
+            var written = o != null ? o["fallbacks"] as JObject : null;
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kind in EditableOrientationApply.FallbackKinds)
+            {
+                string value = null;
+                if (written != null)
+                {
+                    var t = written.Properties().FirstOrDefault(p => string.Equals(p.Name, kind, StringComparison.OrdinalIgnoreCase));
+                    // A fallbacks list the office wrote replaces the built-in one: a kind it leaves out applies.
+                    value = t != null && t.Value.Type == JTokenType.String ? ((string)t.Value).Trim() : FieldCodes.Orient.OrientFallback.Apply.ToString();
+                }
+                else
+                {
+                    FieldCodes.Orient.OrientKind k;
+                    value = Enum.TryParse(kind, out k) ? defaults.FallbackFor(k).ToString() : FieldCodes.Orient.OrientFallback.Apply.ToString();
+                }
+                map[kind] = value;
+            }
+            return map;
+        }
+
+        private static Dictionary<string, double> ReadReliability(JObject o, FieldCodes.Orient.OrientationStandard defaults)
+        {
+            var written = o != null ? o["roadReferences"] as JArray : null;
+            var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var role in EditableOrientationApply.ReliabilityRoles)
+            {
+                FieldCodes.Orient.LineRole r;
+                var fallback = Enum.TryParse(role, out r) ? defaults.ReliabilityOf(r) : 0;
+                var value = fallback;
+                if (written != null)
+                {
+                    value = 0;     // a list the office wrote replaces the built-in one
+                    foreach (var entry in written.OfType<JObject>())
+                    {
+                        var name = entry["role"];
+                        if (name != null && string.Equals(name.ToString(), role, StringComparison.OrdinalIgnoreCase))
+                            value = Number(entry["reliability"], 0);
+                    }
+                }
+                map[role] = value;
+            }
+            return map;
         }
 
         private static bool Flag(JObject o, string name, bool absentMeans)
@@ -1041,6 +1199,50 @@ namespace FieldCodes.Editing
             if (current.MarkingFollowRoad != edit.MarkingFollowRoad) Orientation(true)["markingFollowRoad"] = edit.MarkingFollowRoad;
             if (Math.Abs(current.MarkingRoadFeet - edit.MarkingRoadFeet) > 1e-12) Orientation(true)["markingRoadFeet"] = edit.MarkingRoadFeet;
             if (Math.Abs(current.MarkingMaxTurnDegrees - edit.MarkingMaxTurnDegrees) > 1e-12) Orientation(true)["markingMaxTurnDegrees"] = edit.MarkingMaxTurnDegrees;
+            if (Math.Abs(current.RoadSearchFeet - edit.RoadSearchFeet) > 1e-12) Orientation(true)["roadSearchFeet"] = edit.RoadSearchFeet;
+            if (Math.Abs(current.MaxExtensionFeet - edit.MaxExtensionFeet) > 1e-12) Orientation(true)["maxExtensionFeet"] = edit.MaxExtensionFeet;
+            if (Math.Abs(current.LocalTangentFeet - edit.LocalTangentFeet) > 1e-12) Orientation(true)["localTangentFeet"] = edit.LocalTangentFeet;
+            if (Math.Abs(current.AlignmentToleranceDegrees - edit.AlignmentToleranceDegrees) > 1e-12) Orientation(true)["alignmentToleranceDegrees"] = edit.AlignmentToleranceDegrees;
+            foreach (var w in new[] { Tuple.Create("intersectionHandling", current.IntersectionHandling, edit.IntersectionHandling),
+                                      Tuple.Create("handTurned", current.HandTurned, edit.HandTurned),
+                                      Tuple.Create("qcGraphics", current.QcGraphics, edit.QcGraphics) })
+                if (!string.IsNullOrWhiteSpace(w.Item3) && !string.Equals(w.Item2, w.Item3, StringComparison.OrdinalIgnoreCase))
+                    Orientation(true)[w.Item1] = w.Item3.Trim();
+            if (current.QcShowInferredConnections != edit.QcShowInferredConnections) Orientation(true)["qcShowInferredConnections"] = edit.QcShowInferredConnections;
+
+            // The fallbacks and the trust in road lines are written whole when any changes: a
+            // list in the rules file replaces the built-in one, so a partial list would change the rest.
+            if (edit.Fallbacks != null && EditableOrientationApply.FallbackKinds.Any(k =>
+                    !string.Equals(Lookup(current.Fallbacks, k), Lookup(edit.Fallbacks, k), StringComparison.OrdinalIgnoreCase)))
+            {
+                var obj = new JObject();
+                foreach (var k in EditableOrientationApply.FallbackKinds) obj[k] = Lookup(edit.Fallbacks, k) ?? FieldCodes.Orient.OrientFallback.Apply.ToString();
+                Orientation(true)["fallbacks"] = obj;
+            }
+            if (edit.Reliability != null && EditableOrientationApply.ReliabilityRoles.Any(k =>
+                    Math.Abs(LookupNumber(current.Reliability, k) - LookupNumber(edit.Reliability, k)) > 1e-12))
+            {
+                var list = new JArray();
+                foreach (var role in EditableOrientationApply.ReliabilityRoles)
+                {
+                    var value = LookupNumber(edit.Reliability, role);
+                    list.Add(new JObject { ["role"] = role, ["reliability"] = value });
+                    if (role == "Centerline") list.Add(new JObject { ["role"] = "OneWay", ["reliability"] = value });
+                }
+                Orientation(true)["roadReferences"] = list;
+            }
+        }
+
+        private static string Lookup(IDictionary<string, string> map, string key)
+        {
+            string v;
+            return map != null && map.TryGetValue(key, out v) ? v : null;
+        }
+
+        private static double LookupNumber(IDictionary<string, double> map, string key)
+        {
+            double v;
+            return map != null && map.TryGetValue(key, out v) ? v : 0;
         }
 
         private JArray SymbolArray()

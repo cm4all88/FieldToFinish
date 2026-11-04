@@ -83,6 +83,30 @@ namespace FieldCodes.Orient
     /// SSV-AS*/AL*/AR*: arrow tip at the insertion point, travelling north; SSV-LT, SSV-WVT:
     /// round or lettered, never rotated).
     /// </summary>
+    /// <summary>What FTFORIENT does when only a feature's fallback rule decides it (a light's
+    /// arm toward the road, a hydrant nozzle toward the street, a sign facing the traffic beside
+    /// it): turn it, list it for review with the suggestion, or leave it as surveyed.</summary>
+    public enum OrientFallback { Apply, Review, Leave }
+
+    /// <summary>Which non-plotting QC graphics FTFORIENT draws.</summary>
+    public enum QcGraphicsMode { Off, ReviewOnly, All }
+
+    /// <summary>A marker turned by hand: kept always, or replaced when the crew measured the direction.</summary>
+    public enum HandTurnedRotation { Keep, MeasuredReplaces }
+
+    /// <summary>Near an intersection: decide from the approach a feature stands on, or list it for review.</summary>
+    public enum IntersectionHandling { Approach, Review }
+
+    /// <summary>How far a kind of road line is trusted as the road's direction (0 to 1).</summary>
+    public sealed class RoadReferenceRule
+    {
+        [JsonProperty("role")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public LineRole Role { get; set; }
+
+        [JsonProperty("reliability")] public double Reliability { get; set; }
+    }
+
     public sealed class OrientationStandard
     {
         [JsonProperty("symbols", ObjectCreationHandling = ObjectCreationHandling.Replace)]
@@ -162,6 +186,58 @@ namespace FieldCodes.Orient
         /// when asked). Nothing reads it while a command runs. Empty: none.</summary>
         [JsonProperty("symbolLibrary")] public string SymbolLibrary { get; set; }
 
+        // ------------------------------------------------------------ road references
+
+        /// <summary>How far each kind of road line is trusted as the road's direction: centre
+        /// lines first, then lane lines and fog lines, then pavement edges, curbs and flowlines,
+        /// then edges of concrete and sidewalks (context only). Fences, property lines and
+        /// utilities are never road references.</summary>
+        [JsonProperty("roadReferences", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<RoadReferenceRule> RoadReferences { get; set; }
+
+        /// <summary>The direction of a road line where a feature stands is taken over this length
+        /// of it (half each way), so a curve gives its local tangent, not its overall bearing, and
+        /// a short jog in a shot edge does not swing the result.</summary>
+        [JsonProperty("localTangentFeet")] public double LocalTangentFeet { get; set; }
+
+        /// <summary>A road line that stops short of a feature is followed past its end, along its
+        /// last stretch, at most this far (only for working out a direction: linework is never
+        /// changed). Confidence falls the further it is followed.</summary>
+        [JsonProperty("maxExtensionFeet")] public double MaxExtensionFeet { get; set; }
+
+        /// <summary>Road lines near a feature that run more than this many degrees apart disagree,
+        /// and the feature goes to review instead of one being picked.</summary>
+        [JsonProperty("alignmentToleranceDegrees")] public double AlignmentToleranceDegrees { get; set; }
+
+        [JsonProperty("intersectionHandling")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public IntersectionHandling IntersectionHandling { get; set; }
+
+        /// <summary>Per kind of feature, what its fallback rule may do. Kinds not listed: Apply.
+        /// Built in: street-light and signal arms are not turned by the road alone (Review), since
+        /// pavement does not show which way an arm points. A hydrant nozzle toward the street is
+        /// applied as a documented fallback (the report's Source says so); set Hydrant to Review
+        /// to have each one confirmed.</summary>
+        [JsonProperty("fallbacks", ObjectCreationHandling = ObjectCreationHandling.Replace, ItemConverterType = typeof(StringEnumConverter))]
+        public Dictionary<OrientKind, OrientFallback> Fallbacks { get; set; }
+
+        [JsonProperty("handTurned")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public HandTurnedRotation HandTurned { get; set; }
+
+        // ------------------------------------------------------------ QC graphics
+
+        [JsonProperty("qcGraphics")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public QcGraphicsMode QcGraphics { get; set; }
+
+        /// <summary>Draw inferred underground connections (water main, hydrant lateral) as QC
+        /// graphics. Off: they are only on the review list and in the report.</summary>
+        [JsonProperty("qcShowInferredConnections")] public bool QcShowInferredConnections { get; set; }
+
+        /// <summary>Plotted height (inches) of QC text; drawing height follows the annotation scale.</summary>
+        [JsonProperty("qcTextPlotted")] public double QcTextPlotted { get; set; }
+
         public OrientationStandard()
         {
             Symbols = new List<SymbolRule>();
@@ -187,6 +263,54 @@ namespace FieldCodes.Orient
             MarkingFollowRoad = true;
             MarkingRoadFeet = 40;
             MarkingMaxTurnDegrees = 60;
+            RoadReferences = DefaultRoadReferences();
+            LocalTangentFeet = 20;
+            MaxExtensionFeet = 25;
+            AlignmentToleranceDegrees = 15;
+            IntersectionHandling = IntersectionHandling.Approach;
+            Fallbacks = DefaultFallbacks();
+            HandTurned = HandTurnedRotation.MeasuredReplaces;
+            QcGraphics = QcGraphicsMode.ReviewOnly;
+            QcShowInferredConnections = false;
+            QcTextPlotted = 0.06;
+        }
+
+        public static List<RoadReferenceRule> DefaultRoadReferences()
+        {
+            return new List<RoadReferenceRule>
+            {
+                new RoadReferenceRule { Role = LineRole.Centerline, Reliability = 1.0 },
+                new RoadReferenceRule { Role = LineRole.OneWay, Reliability = 1.0 },
+                new RoadReferenceRule { Role = LineRole.LaneLine, Reliability = 0.9 },
+                new RoadReferenceRule { Role = LineRole.Edge, Reliability = 0.85 },
+                new RoadReferenceRule { Role = LineRole.RoadContext, Reliability = 0.5 }
+            };
+        }
+
+        public static Dictionary<OrientKind, OrientFallback> DefaultFallbacks()
+        {
+            return new Dictionary<OrientKind, OrientFallback>
+            {
+                { OrientKind.StreetLight, OrientFallback.Review },
+                { OrientKind.SignalPole, OrientFallback.Review }
+            };
+        }
+
+        /// <summary>How far a line of this role is trusted as a road direction; 0 for anything
+        /// that is not a road line.</summary>
+        public double ReliabilityOf(LineRole role)
+        {
+            var list = RoadReferences != null && RoadReferences.Count > 0 ? RoadReferences : DefaultRoadReferences();
+            var rule = list.FirstOrDefault(r => r != null && r.Role == role);
+            if (rule == null) return 0;
+            return Math.Max(0, Math.Min(1, rule.Reliability));
+        }
+
+        public OrientFallback FallbackFor(OrientKind kind)
+        {
+            OrientFallback f;
+            if (Fallbacks != null && Fallbacks.TryGetValue(kind, out f)) return f;
+            return OrientFallback.Apply;
         }
 
         /// <summary>PMX's standard, as the blocks in its template are drawn.</summary>
@@ -236,6 +360,9 @@ namespace FieldCodes.Orient
                                                     "V-SURF-CURB-FLOW-E", "V-SURF-ASPH-FLOW-E" },
                              new[] { "EP", "CU", "CG", "TBC", "AFL" }));
             s.Lines.Add(line(LineRole.LaneLine, new[] { "V-CHAN-STRP-E", "V-CHAN-SKST-E" }, new[] { "FOG", "LN", "LNSO" }));
+            // Edge of concrete: a concrete road edge or a sidewalk. Road context only: it supports
+            // a direction the road gives, and alone is not enough to turn anything.
+            s.Lines.Add(line(LineRole.RoadContext, new[] { "V-SURF-CONC-E" }, new[] { "EC" }));
             s.Lines.Add(line(LineRole.WaterMain, new[] { "V-UTIL-WATR-E", "V-UTIL-WATR-UNDR-E" }, new[] { "WU" }));
             s.Lines.Add(line(LineRole.GasMain, new[] { "V-UTIL-NGAS-E", "V-UTIL-NGAS-UNDR-E" }, new[] { "GU" }));
 

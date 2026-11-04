@@ -108,6 +108,27 @@ namespace FieldCodes.Cad.Setup
         private NumericUpDown _markingFeet;
         private NumericUpDown _markingTurn;
 
+        // Rotation evidence and review: how road lines are weighed, what fallbacks may do, QC.
+        private NumericUpDown _roadFeet;
+        private NumericUpDown _extendFeet;
+        private NumericUpDown _tangentFeet;
+        private NumericUpDown _toleranceDegrees;
+        private readonly Dictionary<string, NumericUpDown> _trust = new Dictionary<string, NumericUpDown>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ComboBox> _fallbacks = new Dictionary<string, ComboBox>(StringComparer.OrdinalIgnoreCase);
+        private ComboBox _intersections;
+        private ComboBox _handTurned;
+        private ComboBox _qcGraphics;
+        private CheckBox _qcConnections;
+
+        /// <summary>A choice shown in words, stored as the rules file's value.</summary>
+        private sealed class WordChoice
+        {
+            public readonly string Value;
+            public readonly string Text;
+            public WordChoice(string value, string text) { Value = value; Text = text; }
+            public override string ToString() { return Text; }
+        }
+
         // ---- inserted blocks
         private ListView _blockGrid;
         private Label _blockIdentity;
@@ -163,8 +184,11 @@ namespace FieldCodes.Cad.Setup
             symbolsTab.Controls.Add(BuildSymbolsTab());
             var blocksTab = new TabPage("Blocks FTF inserts (opt-in rules)");
             blocksTab.Controls.Add(BuildBlocksTab());
+            var evidenceTab = new TabPage("Rotation evidence and review");
+            evidenceTab.Controls.Add(BuildEvidenceTab());
             tabs.TabPages.Add(symbolsTab);
             tabs.TabPages.Add(blocksTab);
+            tabs.TabPages.Add(evidenceTab);
             root.Controls.Add(tabs, 0, 2);
 
             _problems = new Label { AutoSize = true, MaximumSize = new Size(900, 0), ForeColor = Bad, Margin = new Padding(0, 6, 0, 4) };
@@ -375,6 +399,130 @@ namespace FieldCodes.Cad.Setup
             return split;
         }
 
+        /// <summary>
+        /// How FTFORIENT weighs the road lines around a feature, how far it follows one that stops
+        /// short, when road lines disagree, what a feature's fallback rule may do, how hand
+        /// rotations are kept, and which QC graphics it draws. All of it is the orientation section
+        /// of the rules file (the office's drafting standard), like the rest of this page.
+        /// </summary>
+        private Control BuildEvidenceTab()
+        {
+            var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(10, 6, 4, 6) };
+            var grid = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Top };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            scroll.Controls.Add(grid);
+            var row = 0;
+            Action<string, string> heading = (text, note) =>
+            {
+                var h = new Label { Text = text, AutoSize = true, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(0, row == 0 ? 0 : 12, 0, 2) };
+                grid.Controls.Add(h, 0, row);
+                grid.SetColumnSpan(h, 2);
+                row++;
+                if (note == null) return;
+                var n = new Label { Text = note, AutoSize = true, MaximumSize = new Size(620, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 4) };
+                grid.Controls.Add(n, 0, row);
+                grid.SetColumnSpan(n, 2);
+                row++;
+            };
+            Action<string, Control, string> add = (text, control, tip) =>
+            {
+                grid.Controls.Add(new Label { Text = text, AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, 0, row);
+                grid.Controls.Add(control, 1, row);
+                if (tip != null) Tip(control, tip);
+                row++;
+            };
+            Func<decimal, decimal, int, decimal, NumericUpDown> number = (min, max, places, step) =>
+            {
+                var n = new NumericUpDown { Minimum = min, Maximum = max, DecimalPlaces = places, Increment = step, Width = 70 };
+                n.ValueChanged += (s, e) => { if (!_loading) StageApply(); };
+                return n;
+            };
+            Func<WordChoice[], ComboBox> choose = choices =>
+            {
+                var c = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
+                foreach (var ch in choices) c.Items.Add(ch);
+                c.SelectedIndexChanged += (s, e) => { if (!_loading) StageApply(); };
+                return c;
+            };
+
+            heading("Road lines a direction is taken from",
+                    "A sign, light, hydrant or arrow takes its road's direction from the road lines near it: centre lines, lane and fog lines, " +
+                    "pavement edges, curbs and flowlines, and (as support only) edges of concrete. Fences, property lines and utilities are never " +
+                    "road lines. Nothing here changes survey linework.");
+            _roadFeet = number(5, 500, 0, 5);
+            add("Look for road lines within (ft)", _roadFeet, "Road lines further than this from a feature are not considered.");
+            _extendFeet = number(0, 200, 0, 5);
+            add("Follow a line that stops short at most (ft)", _extendFeet,
+                "A pavement edge or stripe that ends before the feature is followed past its end, along its last stretch, this far at most, with less " +
+                "confidence the further it goes. Further than this it is not used. Where the line resumes beyond the feature, the gap is bridged.");
+            _tangentFeet = number(2, 200, 0, 5);
+            add("Take a line's direction over (ft)", _tangentFeet,
+                "The road's direction where the feature stands, over this length of line: a curve gives its local tangent, and a small jog in a " +
+                "shot edge does not swing the result.");
+            _toleranceDegrees = number(1, 90, 0, 1);
+            add("Road lines disagree beyond (degrees)", _toleranceDegrees,
+                "Road lines near a feature that run further apart than this send it to review instead of one being picked.");
+            foreach (var role in new[] { Tuple.Create("Centerline", "Trust centre lines (and one-way lines)"), Tuple.Create("LaneLine", "Trust lane and fog lines"),
+                                         Tuple.Create("Edge", "Trust pavement edges, curbs, flowlines"), Tuple.Create("RoadContext", "Trust edges of concrete, sidewalks") })
+            {
+                var n = number(0, 1, 2, 0.05m);
+                _trust[role.Item1] = n;
+                add(role.Item2 + " (0 to 1)", n, "How far this kind of line is trusted as the road's direction, against the others. 0: never used.");
+            }
+            _intersections = choose(new[] { new WordChoice("Approach", "Decide from the approach it stands on"), new WordChoice("Review", "List for review") });
+            add("Signs and markings at an intersection", _intersections, null);
+
+            heading("What a fallback rule may do",
+                    "A fallback rule decides only when nothing recorded or related does: a light's arm toward the road, a hydrant's nozzle toward the " +
+                    "street, a sign facing the traffic beside it. Apply turns the symbol (the report says it was the fallback); Review lists it with the " +
+                    "suggestion; Leave leaves it as surveyed.");
+            foreach (var kind in new[] { Tuple.Create("Sign", "Signs"), Tuple.Create("StreetLight", "Street lights and power poles with arms"),
+                                         Tuple.Create("SignalPole", "Signal poles"), Tuple.Create("Hydrant", "Hydrants"),
+                                         Tuple.Create("PavementArrow", "Pavement arrows"), Tuple.Create("PavementWord", "Pavement words"),
+                                         Tuple.Create("WaterValve", "Water valves"), Tuple.Create("GasValve", "Gas valves") })
+            {
+                var c = choose(new[] { new WordChoice("Apply", "Apply"), new WordChoice("Review", "Review"), new WordChoice("Leave", "Leave as surveyed") });
+                _fallbacks[kind.Item1] = c;
+                add(kind.Item2, c, null);
+            }
+
+            heading("Rotations set by hand, and QC graphics", null);
+            _handTurned = choose(new[] { new WordChoice("MeasuredReplaces", "Keep, unless the crew measured the direction"), new WordChoice("Keep", "Always keep") });
+            add("A marker turned by hand", _handTurned, "A direction set or accepted with FTFORIENTPOINT is always kept, whatever this says.");
+            _qcGraphics = choose(new[] { new WordChoice("ReviewOnly", "Only what needs review"), new WordChoice("All", "Every decision"), new WordChoice("Off", "None") });
+            add("QC graphics FTFORIENT draws (not plotted)", _qcGraphics, "Preview always draws every decision. QC graphics are sized by the annotation scale and removed by FTFORIENTRESET.");
+            _qcConnections = new CheckBox { Text = "Draw inferred underground connections (water main, hydrant lateral)", AutoSize = true };
+            _qcConnections.CheckedChanged += (s, e) => { if (!_loading) StageApply(); };
+            Tip(_qcConnections, "Off: they are on the review list and in the report only. Never drawn as utility linework, never plotted.");
+            grid.Controls.Add(_qcConnections, 0, row);
+            grid.SetColumnSpan(_qcConnections, 2);
+            return scroll;
+        }
+
+        private static void Select(ComboBox box, string value)
+        {
+            if (box == null) return;
+            foreach (var item in box.Items)
+            {
+                var c = item as WordChoice;
+                if (c != null && string.Equals(c.Value, value, StringComparison.OrdinalIgnoreCase)) { box.SelectedItem = item; return; }
+            }
+            if (box.Items.Count > 0) box.SelectedIndex = 0;
+        }
+
+        private static string Chosen(ComboBox box)
+        {
+            var c = box != null ? box.SelectedItem as WordChoice : null;
+            return c != null ? c.Value : null;
+        }
+
+        private static void SetNumber(NumericUpDown n, double value)
+        {
+            if (n == null) return;
+            n.Value = Math.Max(n.Minimum, Math.Min(n.Maximum, (decimal)value));
+        }
+
         private Control BuildBlocksTab()
         {
             var split = NewSplit();
@@ -530,6 +678,32 @@ namespace FieldCodes.Cad.Setup
                 _markingFollow.Checked = _document != null ? apply.MarkingFollowRoad : defaults.MarkingFollowRoad;
                 _markingFeet.Value = Math.Max(_markingFeet.Minimum, Math.Min(_markingFeet.Maximum, (decimal)(_document != null ? apply.MarkingRoadFeet : defaults.MarkingRoadFeet)));
                 _markingTurn.Value = Math.Max(_markingTurn.Minimum, Math.Min(_markingTurn.Maximum, (decimal)(_document != null ? apply.MarkingMaxTurnDegrees : defaults.MarkingMaxTurnDegrees)));
+                if (_document != null)
+                {
+                    SetNumber(_roadFeet, apply.RoadSearchFeet);
+                    SetNumber(_extendFeet, apply.MaxExtensionFeet);
+                    SetNumber(_tangentFeet, apply.LocalTangentFeet);
+                    SetNumber(_toleranceDegrees, apply.AlignmentToleranceDegrees);
+                    foreach (var t in _trust) SetNumber(t.Value, apply.Reliability != null && apply.Reliability.ContainsKey(t.Key) ? apply.Reliability[t.Key] : 0);
+                    foreach (var f in _fallbacks) Select(f.Value, apply.Fallbacks != null && apply.Fallbacks.ContainsKey(f.Key) ? apply.Fallbacks[f.Key] : "Apply");
+                    Select(_intersections, apply.IntersectionHandling);
+                    Select(_handTurned, apply.HandTurned);
+                    Select(_qcGraphics, apply.QcGraphics);
+                    _qcConnections.Checked = apply.QcShowInferredConnections;
+                }
+                else
+                {
+                    SetNumber(_roadFeet, defaults.RoadSearchFeet);
+                    SetNumber(_extendFeet, defaults.MaxExtensionFeet);
+                    SetNumber(_tangentFeet, defaults.LocalTangentFeet);
+                    SetNumber(_toleranceDegrees, defaults.AlignmentToleranceDegrees);
+                    foreach (var t in _trust) { LineRole role; SetNumber(t.Value, Enum.TryParse(t.Key, out role) ? defaults.ReliabilityOf(role) : 0); }
+                    foreach (var f in _fallbacks) { OrientKind kind; Select(f.Value, Enum.TryParse(f.Key, out kind) ? defaults.FallbackFor(kind).ToString() : "Apply"); }
+                    Select(_intersections, defaults.IntersectionHandling.ToString());
+                    Select(_handTurned, defaults.HandTurned.ToString());
+                    Select(_qcGraphics, defaults.QcGraphics.ToString());
+                    _qcConnections.Checked = defaults.QcShowInferredConnections;
+                }
             }
             finally { _loading = false; }
 
@@ -985,6 +1159,19 @@ namespace FieldCodes.Cad.Setup
             apply.MarkingFollowRoad = _markingFollow.Checked;
             apply.MarkingRoadFeet = (double)_markingFeet.Value;
             apply.MarkingMaxTurnDegrees = (double)_markingTurn.Value;
+            if (_roadFeet != null)
+            {
+                apply.RoadSearchFeet = (double)_roadFeet.Value;
+                apply.MaxExtensionFeet = (double)_extendFeet.Value;
+                apply.LocalTangentFeet = (double)_tangentFeet.Value;
+                apply.AlignmentToleranceDegrees = (double)_toleranceDegrees.Value;
+                foreach (var t in _trust) apply.Reliability[t.Key] = (double)t.Value.Value;
+                foreach (var f in _fallbacks) { var v = Chosen(f.Value); if (v != null) apply.Fallbacks[f.Key] = v; }
+                apply.IntersectionHandling = Chosen(_intersections) ?? apply.IntersectionHandling;
+                apply.HandTurned = Chosen(_handTurned) ?? apply.HandTurned;
+                apply.QcGraphics = Chosen(_qcGraphics) ?? apply.QcGraphics;
+                apply.QcShowInferredConnections = _qcConnections.Checked;
+            }
             _document.ApplyOrientationApply(apply);
             _applyTouched = true;
             SetDirty(true);

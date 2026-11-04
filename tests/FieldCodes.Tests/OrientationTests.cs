@@ -271,16 +271,26 @@ public sealed class OrientationTests
     // ----------------------------------------------------------------- lights and signals
 
     [Fact]
-    public void StreetLightArmsReachTheRoadOrFollowWhatWasMeasured()
+    public void StreetLightArmsFollowWhatWasMeasuredAndAreNotInventedFromThePavement()
     {
-        var r = new Scene().Line(LineRole.Centerline, -300, 0, 300, 0)
+        var scene = new Scene().Line(LineRole.Centerline, -300, 0, 300, 0)
             .Point("A", "LTARM", 0, -20)
             .Point("M", "LTARM", 100, -20, "ARM W")
             .Point("TWO", "LTARM", 200, -20, "ARMS N S")
-            .Point("P", "LTARM", -100, -20).Point("LUM", "LUM", -100, -10)
-            .Run();
-        Faces(r, "A", 0, OrientationTier.Alignment);
-        Rotation(r, "A", 0);                                   // SSV-LTARM: arm north at zero
+            .Point("P", "LTARM", -100, -20).Point("LUM", "LUM", -100, -10);
+        var r = scene.Run();
+        // Nothing recorded about A's arm: the road beside it does not show which way the arm
+        // reaches, so it is suggested toward the road and listed for review, not turned.
+        ForReview(r, "A", "no arm direction recorded");
+        Assert.Equal(0, r.For("A")!.Azimuth!.Value, 1);
+        Assert.True(r.For("A")!.ByFallback);
+        // An office that does want arms turned toward the road says so in its standard.
+        var apply = OrientationStandard.Pmx();
+        apply.Fallbacks[OrientKind.StreetLight] = OrientFallback.Apply;
+        var turned = scene.Run(apply);
+        Faces(turned, "A", 0, OrientationTier.Alignment);
+        Rotation(turned, "A", 0);                              // SSV-LTARM: arm north at zero
+        Assert.Equal("fallback rule", turned.For("A")!.Source);
         Faces(r, "M", 270, OrientationTier.Measured);
         Faces(r, "TWO", 0, OrientationTier.Measured);
         Assert.Equal("2 arms", r.For("TWO")!.Association);
@@ -354,11 +364,20 @@ public sealed class OrientationTests
     }
 
     [Fact]
-    public void TwoValvesOneOnTheLateral()
+    public void TwoValvesOneOnTheLateralAreProbableNotApplied()
     {
+        // Two valves are not a three-valve assembly: the arrangement is worked out and suggested,
+        // but neither is turned on it, and the lateral is a probable connection for review.
         var r = HydrantStreet().Point("M", "WVL", 0, -6).Point("L", "WVL", 0, -14).Point("H", "WFH", 0, -22).Run();
-        Faces(r, "M", 90, OrientationTier.Relationship);
-        Faces(r, "L", 180, OrientationTier.Relationship);
+        var std = OrientationStandard.Pmx();
+        Faces(r, "M", 90, OrientationTier.Inferred);
+        Faces(r, "L", 180, OrientationTier.Inferred);
+        Assert.False(r.For("M")!.Applies(std.ApplyMinimumConfidence, std.ApplyWeakestTier));
+        Assert.False(r.For("L")!.Applies(std.ApplyMinimumConfidence, std.ApplyWeakestTier));
+        Assert.Single(r.Connections);
+        Assert.Contains("lateral", r.Connections[0].Kind);
+        // The hydrant's own nozzle is decided by the street, never by the lateral below ground.
+        Assert.DoesNotContain(r.For("H")!.Evidence, e => e.Text.Contains("lateral"));
     }
 
     [Fact]

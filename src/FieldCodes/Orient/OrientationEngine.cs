@@ -200,11 +200,15 @@ namespace FieldCodes.Orient
                 if (close)
                     return Review(d, "at the corner of two approaches (" + best.Item1.Name + ", " + ranked[1].Item1.Name + "); record its facing",
                                   facing, SymbolRotation.Reverse(SymbolRotation.AzimuthOf(ranked[1].Item1.Inbound)));
+                if (_std.IntersectionHandling == IntersectionHandling.Review)
+                    return Review(d, "at an intersection (" + best.Item1.Name + "); the office reviews signs at intersections", facing, null);
                 d.Tier = OrientationTier.Relationship;
                 d.Confidence = stop ? 0.8 : 0.65;
                 d.Azimuth = facing;
                 d.Association = best.Item1.Name;
                 d.AssociatedPoint = best.Item1.Node.Center;
+                d.Reference = "intersection approach " + best.Item1.Name;
+                d.ReferenceDistance = -best.Item4;
                 d.Evidence.Add(new Evidence(OrientationTier.Relationship, d.Confidence, string.Format(CultureInfo.InvariantCulture,
                     "on the right of traffic arriving on the {0}, {1:0} ft before the intersection, {2:0} ft off its centre line",
                     best.Item1.Name, Math.Max(0, best.Item3), -best.Item4)));
@@ -264,6 +268,9 @@ namespace FieldCodes.Orient
             if (travel == null) return null;
             var near2 = SecondRoad(roads, f.Location, travel);
             var face2 = SymbolRotation.Reverse(SymbolRotation.AzimuthOf(travel.Direction));
+            if (travel.Conflict != null)
+                return Review(d, travel.Conflict, face2,
+                              travel.ConflictDirection.HasValue ? SymbolRotation.Reverse(SymbolRotation.AzimuthOf(travel.ConflictDirection.Value)) : (double?)null);
 
             // A stop sign with no stop bar, approach or side road found is not faced at the through
             // traffic beside it: through traffic is seldom stopped, and the road it controls was
@@ -281,8 +288,9 @@ namespace FieldCodes.Orient
             d.Confidence = travel.Confidence;
             d.Azimuth = face2;
             d.Association = travel.Line.Id;
+            Referenced(d, travel);
             d.Evidence.Add(new Evidence(travel.Tier, travel.Confidence, travel.Why + "; the sign faces the traffic beside it"));
-            return d;
+            return Fallback(d, OrientKind.Sign, "nothing recorded or related says which traffic it faces; facing the traffic beside it");
         }
 
         /// <summary>Several signs on one post: a measured one stands on its own; any not
@@ -326,7 +334,8 @@ namespace FieldCodes.Orient
                 MoreArms(d, f);
                 return d;
             }
-            return TowardRoad(d, f, roads, OrientationTier.Alignment, 0.65, "a street light's arm reaches over the road");
+            return Fallback(TowardRoad(d, f, roads, OrientationTier.Alignment, 0.65, "a street light's arm reaches over the road"), OrientKind.StreetLight,
+                            "no arm direction recorded (record ARM N or shoot the luminaire); the arm toward the road is an assumption");
         }
 
         private static void MoreArms(OrientationDecision d, OrientFeature f)
@@ -377,7 +386,8 @@ namespace FieldCodes.Orient
                     return Review(d, "signal pole serves one of several approaches (" + string.Join(", ", ranked.Select(r => r.Item1.Name).ToArray()) + "); record the arm direction",
                                   SymbolRotation.AzimuthOf(ranked[0].Item2 - f.Location), SymbolRotation.AzimuthOf(ranked[1].Item2 - f.Location));
             }
-            return TowardRoad(d, f, roads, OrientationTier.Alignment, 0.55, "a signal arm reaches over the road");
+            return Fallback(TowardRoad(d, f, roads, OrientationTier.Alignment, 0.55, "a signal arm reaches over the road"), OrientKind.SignalPole,
+                            "no mast arm direction recorded; the arm toward the road is an assumption");
         }
 
         // ================================================================== hydrants
@@ -387,7 +397,10 @@ namespace FieldCodes.Orient
             var d = Start(f, symbol);
             if (symbol != null && !symbol.Directional) return NotDirectional(d);
             if (f.MeasuredAzimuth.HasValue) return Measured(d, f.MeasuredAzimuth.Value, "pumper nozzle faces " + Deg(f.MeasuredAzimuth.Value) + ", " + f.MeasuredFrom);
-            return TowardRoad(d, f, roads, OrientationTier.Inferred, 0, "the pumper nozzle faces the street (fire engine access)", 40);
+            // The road only, never the lateral: an underground lateral does not show which way the
+            // visible nozzle was turned.
+            return Fallback(TowardRoad(d, f, roads, OrientationTier.Inferred, 0, "the pumper nozzle faces the street (fire engine access)", 40), OrientKind.Hydrant,
+                            "no nozzle direction recorded; the nozzle toward the street is an assumption");
         }
 
         /// <summary>Points the symbol at the nearest road (edge first, then centre line), and
@@ -395,29 +408,73 @@ namespace FieldCodes.Orient
         private OrientationDecision TowardRoad(OrientationDecision d, OrientFeature f, RoadModel roads, OrientationTier tier, double confidence, string why, double within = 0)
         {
             var reach = within > 0 ? within : _std.RoadSearchFeet;
-            var candidates = new List<Tuple<OrientLine, P2, double>>();
-            foreach (var l in roads.Edges.Concat(roads.Axes))
-            {
-                P2 foot, t; double dist, s;
-                if (l.Nearest(f.Location, out foot, out t, out dist, out s) && dist <= reach && dist > 0.3)
-                    candidates.Add(Tuple.Create(l, foot, dist));
-            }
-            if (candidates.Count == 0) return Review(d, "no road within " + reach + " ft", null, null);
-            var ranked = candidates.OrderBy(c => c.Item3).ToList();
+            // Road centre lines, lane lines and edges only (never fences or utilities, which are
+            // not road lines; never a concrete edge alone); a line that stops short is followed
+            // past its end only within the extension limit.
+            var ranked = roads.References(f.Location, reach, false).Where(r => r.Distance > 0.3).OrderBy(r => r.Distance).ToList();
+            if (ranked.Count == 0) return Review(d, "no road within " + reach + " ft", null, null);
             var best = ranked[0];
-            var az = SymbolRotation.AzimuthOf(best.Item2 - f.Location);
-            var rival = ranked.Skip(1).FirstOrDefault(c => c.Item3 < best.Item3 * 1.3 &&
-                                                         SymbolRotation.Difference(SymbolRotation.AzimuthOf(c.Item2 - f.Location), az) > 45);
+            var az = SymbolRotation.AzimuthOf(best.Foot - f.Location);
+            var rival = ranked.Skip(1).FirstOrDefault(c => c.Distance < best.Distance * 1.3 &&
+                                                         SymbolRotation.Difference(SymbolRotation.AzimuthOf(c.Foot - f.Location), az) > 45);
             if (rival != null)
-                return Review(d, "two roads at a similar distance (" + best.Item1.Id + ", " + rival.Item1.Id + ")", az,
-                              SymbolRotation.AzimuthOf(rival.Item2 - f.Location));
+                return Review(d, "two roads at a similar distance (" + best.Line.Id + ", " + rival.Line.Id + ")", az,
+                              SymbolRotation.AzimuthOf(rival.Foot - f.Location));
             d.Tier = tier;
-            d.Confidence = confidence > 0 ? confidence : (best.Item3 <= 15 ? 0.7 : 0.6);
+            d.Confidence = Math.Round((confidence > 0 ? confidence : (best.Distance <= 15 ? 0.7 : 0.6)) * roads.ConfidenceFactor(best), 2);
             d.Azimuth = az;
-            d.Association = best.Item1.Id;
-            d.AssociatedPoint = best.Item2;
-            d.Evidence.Add(new Evidence(tier, d.Confidence, string.Format(CultureInfo.InvariantCulture, "{0}: toward {1}, {2:0.0} ft away", why, best.Item1.Id, best.Item3)));
+            d.Association = best.Line.Id;
+            d.AssociatedPoint = best.Foot;
+            d.Reference = best.Describe();
+            d.ReferenceDistance = best.Distance;
+            d.Evidence.Add(new Evidence(tier, d.Confidence, string.Format(CultureInfo.InvariantCulture, "{0}: toward {1}", why, best.Describe())));
             return d;
+        }
+
+        /// <summary>
+        /// A decision made only by the feature's fallback rule, as the office set it: turned
+        /// (Apply), listed for review with the suggestion (Review), or left as surveyed (Leave). A
+        /// decision that is already a review, or that something stronger decided, is unchanged.
+        /// </summary>
+        private OrientationDecision Fallback(OrientationDecision d, OrientKind kind, string why)
+        {
+            if (d == null || d.Tier >= OrientationTier.Review) return d;
+            d.ByFallback = true;
+            switch (_std.FallbackFor(kind))
+            {
+                case OrientFallback.Review:
+                    var suggestion = d.Azimuth;
+                    d.Evidence.Add(new Evidence(OrientationTier.Review, 0, "fallback rule only: " + why));
+                    return Review(d, why + (suggestion.HasValue ? "; suggested " + Deg(suggestion.Value) : "") + " (this kind is set to review, not turn, by its fallback rule)",
+                                  suggestion, null);
+                case OrientFallback.Leave:
+                    d.Evidence.Add(new Evidence(OrientationTier.NoSupport, 0, "fallback rule only: " + why + "; this kind is set to be left as surveyed"));
+                    d.Tier = OrientationTier.NoSupport;
+                    d.Confidence = 0;
+                    return d;
+                default:
+                    // Turned by the fallback rule: said on the reason itself, and in the report's Source column.
+                    if (d.Evidence.Count > 0) d.Evidence[d.Evidence.Count - 1].Text += " (fallback rule: " + why + ")";
+                    else d.Evidence.Add(new Evidence(d.Tier, d.Confidence, "fallback rule: " + why));
+                    return d;
+            }
+        }
+
+        /// <summary>Records the road reference a road-direction decision came from.</summary>
+        private static void Referenced(OrientationDecision d, TravelAt travel)
+        {
+            if (travel == null) return;
+            if (travel.Reference != null)
+            {
+                d.Reference = travel.Reference.Describe();
+                d.ReferenceDistance = travel.Reference.Distance;
+                d.AssociatedPoint = d.AssociatedPoint ?? travel.Reference.Foot;
+            }
+            else if (travel.SideRoad != null)
+            {
+                d.Reference = "side road edge " + travel.SideRoad.Edge.Id;
+                d.ReferenceDistance = travel.SideRoad.Distance;
+            }
         }
 
         // ================================================================== pavement markings
@@ -470,6 +527,8 @@ namespace FieldCodes.Orient
                     d.Confidence = 0.9;
                     d.Azimuth = best.Azimuth;
                     d.Association = best.Line.Id;
+                    d.Reference = RoadModel.RoleName(best.Line.Role) + " " + best.Line.Id;
+                    d.ReferenceDistance = best.Distance;
                     d.Evidence.Add(new Evidence(OrientationTier.Measured, 0.9, string.Format(CultureInfo.InvariantCulture,
                         "the crew wrote {0}; along {1} ({2:0.0} ft away) that is {3}", written, best.Line.Id, best.Distance, Deg(best.Azimuth))));
                     NoteDisagreement(d, f, symbol, roads, arrows);
@@ -527,9 +586,14 @@ namespace FieldCodes.Orient
                               .Where(a => a.Item2 > 10 && a.Item2 < 200 && a.Item3 < 0.5 && a.Item3 > -30)
                               .OrderBy(a => Math.Abs(a.Item3)).FirstOrDefault();
                 if (leg == null) continue;
+                if (_std.IntersectionHandling == IntersectionHandling.Review)
+                    return Review(d, "in an inbound lane of the " + leg.Item1.Name + "; the office reviews markings at intersections",
+                                  SymbolRotation.AzimuthOf(leg.Item1.Inbound), null);
                 d.Tier = OrientationTier.Relationship;
                 d.Confidence = 0.7;
                 d.Azimuth = SymbolRotation.AzimuthOf(leg.Item1.Inbound);
+                d.Reference = "intersection approach " + leg.Item1.Name;
+                d.ReferenceDistance = Math.Abs(leg.Item3);
                 d.Association = leg.Item1.Name;
                 d.AssociatedPoint = node.Center;
                 d.Evidence.Add(new Evidence(OrientationTier.Relationship, 0.7, string.Format(CultureInfo.InvariantCulture,
@@ -539,12 +603,16 @@ namespace FieldCodes.Orient
 
             var travel = roads.TravelAtPoint(f.Location, true);
             if (travel == null) return Review(d, "no road linework around it", null, null);
+            if (travel.Conflict != null)
+                return Review(d, travel.Conflict, SymbolRotation.AzimuthOf(travel.Direction),
+                              travel.ConflictDirection.HasValue ? SymbolRotation.AzimuthOf(travel.ConflictDirection.Value) : (double?)null);
             d.Tier = travel.Tier;
             d.Confidence = travel.Confidence;
             d.Azimuth = SymbolRotation.AzimuthOf(travel.Direction);
             d.Association = travel.Line.Id;
+            Referenced(d, travel);
             d.Evidence.Add(new Evidence(travel.Tier, travel.Confidence, travel.Why));
-            return d;
+            return Fallback(d, f.Kind, "no direction written, no stop bar or approach: the lane it is in, traffic keeping right");
         }
 
         // ================================================================== valves (alone)
@@ -563,6 +631,8 @@ namespace FieldCodes.Orient
                 d.Confidence = 0.85;
                 d.Azimuth = SymbolRotation.AzimuthOf(main.Item2);
                 d.Association = main.Item1.Id;
+                d.Reference = (f.Kind == OrientKind.WaterValve ? "water line " : "gas line ") + main.Item1.Id;
+                d.ReferenceDistance = main.Item3;
                 d.Evidence.Add(new Evidence(OrientationTier.Alignment, 0.85, string.Format(CultureInfo.InvariantCulture,
                     "on surveyed/marked {0} {1}, {2:0.0} ft away", f.Kind == OrientKind.WaterValve ? "water line" : "gas line", main.Item1.Id, main.Item3)));
                 return d;

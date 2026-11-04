@@ -55,6 +55,7 @@ namespace FieldCodes.Review
         public const string GateWidthDisagrees = "gate.widthdisagrees";
         public const string OrientReview = "orient.review";
         public const string MarkingDirection = "orient.marking";
+        public const string InferredConnection = "orient.inferred";
         public const string SettingMissing = "settings.missing";
         public const string CommandError = "error.command";
 
@@ -140,11 +141,15 @@ namespace FieldCodes.Review
                 "Check which is right; FTFGATE places the label with the width you choose.",
                 "FTFGATE", "Gates", ReviewSeverity.Warning, true),
             new ReviewKind(OrientReview, "Orientation", "Symbol", "Symbol rotation needs review",
-                "Rotate it by hand (FTFORIENT keeps a hand rotation), or fix the direction words and rerun.",
-                "FTFORIENT", "Symbols and Rotations", ReviewSeverity.Warning, true),
+                "Fix shows why FTF suggests what it does, with Preview, Apply, Override and Recheck (FTFORIENTPOINT). A hand rotation is kept.",
+                "FTFORIENTPOINT", "Symbols and Rotations", ReviewSeverity.Warning, true),
             new ReviewKind(MarkingDirection, "Orientation", "Pavement marking", "Marking direction not decided",
-                "Write the direction of travel on the shot (ASTO N), or rotate the arrow by hand.",
-                "FTFORIENT", "Symbols and Rotations", ReviewSeverity.Warning, true),
+                "Write the direction of travel on the shot (ASTO N), or use Fix (FTFORIENTPOINT) to apply the suggestion or set it.",
+                "FTFORIENTPOINT", "Symbols and Rotations", ReviewSeverity.Warning, true),
+            new ReviewKind(InferredConnection, "Orientation", "Utility (inferred)", "Probable underground connection (not verified)",
+                "Inferred from where the valves and hydrant are; confirm it against utility records. It is never drawn as utility linework " +
+                "or delivered; FTFORIENT Preview shows it on a non-plotting layer.",
+                "FTFORIENTPOINT", "Symbols and Rotations", ReviewSeverity.Info, false),
             new ReviewKind(SettingMissing, "Settings", "Setting", "Setting or style missing",
                 "Load the named style into the drawing, or choose another in Settings.",
                 "FTFCHECKSTANDARDS", null, ReviewSeverity.Warning, false),

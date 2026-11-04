@@ -20,15 +20,23 @@ namespace FieldCodes.Cad
     internal static class CadUtil
     {
         /// <summary>
-        /// Drawing units per plotted unit, from the current annotation scale.
-        /// A 1"=20' sheet returns 240. Falls back to 1.0 when no scale is set.
+        /// Drawing units per plotted inch, from the current annotation scale and the drawing's
+        /// units: a 1"=20' sheet in a drawing in feet returns 20, whether its scale is defined as
+        /// 1:20 or, the AutoCAD way in inches, as 1:240 (FieldCodes.Geometry.PlotScale). Falls
+        /// back to 1.0 when no scale is set.
         /// </summary>
         public static double DrawingUnitsPerPlottedUnit(Database db)
         {
-            var scale = db.Cannoscale;
-            if (scale == null) return 1.0;
-            if (scale.PaperUnits <= 0.0) return 1.0;
-            return scale.DrawingUnits / scale.PaperUnits;
+            return PlotScaleOf(db).DrawingUnitsPerPlottedInch;
+        }
+
+        /// <summary>The annotation scale as FTF reads it, with how it was worked out.</summary>
+        public static FieldCodes.Geometry.PlotScale.Reading PlotScaleOf(Database db)
+        {
+            AnnotationScale scale = null;
+            try { scale = db.Cannoscale; } catch (Autodesk.AutoCAD.Runtime.Exception) { }
+            if (scale == null) return FieldCodes.Geometry.PlotScale.Resolve(null, 0, 0, (int)db.Insunits);
+            return FieldCodes.Geometry.PlotScale.Resolve(scale.Name, scale.PaperUnits, scale.DrawingUnits, (int)db.Insunits);
         }
 
         public static BlockTableRecord ModelSpace(Database db, Transaction tr, OpenMode mode)
