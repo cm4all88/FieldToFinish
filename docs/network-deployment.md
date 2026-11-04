@@ -5,78 +5,113 @@ or update FTF by double-clicking one file there. Civil 3D then loads FTF by itse
 starts. Nobody uses NETLOAD, and no DLL ever runs from the network.
 
 ```
-  your workstation                      the server                         a surveyor's workstation
-  ----------------                      ----------                         ------------------------
-  UPDATEFTF -PublishTo <folder>  --->   <folder>\                   --->   double-click
-    build, unit tests,                    Install or Update                  "Install or Update FieldToFinish.bat"
-    installer tests,                      FieldToFinish.bat                    copy locally, verify, back up,
-    install, smoke test                   Bundle\ (verified)                   install, verify, register
-    in Civil 3D, then publish             release.json, notes                Civil 3D loads it at every start
+  your workstation                       the approved release folder             a surveyor's workstation
+  ----------------                       ---------------------------             ------------------------
+  UPDATEFTF -Publish              --->   Install or Update FieldToFinish.bat --->  double-click it
+    folder check, build, unit tests,      Bundle\ (verified)                         copy locally, verify, back up,
+    installer tests, install,             release.json, notes                        install, verify, register
+    smoke test in Civil 3D, publish       Previous releases\                         Civil 3D loads it at every start
 ```
 
-## The approved release folder
+## The official folder
 
-Pick any folder on the server. Nothing in FTF hard-codes a location: you name it when you publish,
-and every copy installed from it remembers it. Example (use your own):
+The office's approved release folder is configured with the scripts, in
+`deploy\release-folder.txt` (by its drive path, as the office knows it). Check it, on the
+publishing workstation, before the first publish:
 
 ```
-\\<server>\<share>\CAD\FieldToFinish\             <- the approved release: staff read, the publisher writes
+C:\dev\UPDATEFTF -CheckReleaseFolder
+```
+
+That runs `deploy\check-release-folder.ps1`. `UPDATEFTF -Publish` runs it again before anything is
+built or written there.
+
+| Check | |
+|---|---|
+| Where it really is | The drive path (`U:\...`) is turned into the `\\server\share\...` path behind it, on the publishing workstation. Every installed copy records that path, so it finds updates whether or not the drive letter is mapped there, or mapped differently. The server's name is never written into the repository. A drive letter that is not mapped in that PowerShell stops the publish. |
+| Reachable | The folder, or its parent if it does not exist yet (publishing creates it). |
+| What it holds | The approved release there (or an older setup folder, or nothing), how many previous releases are kept, and any other files (publishing leaves them alone). |
+| You can publish there | A write test: create a folder, write a file, rename both, delete both, exactly as publishing does. Nothing is left behind. |
+| Who can read and change it | The folder's permissions: who can change it (a warning if a general group such as Domain Users or Everyone can), and who can read it (a warning if no general group can, so every surveyor must be in a listed group). |
+
+It changes nothing on the share. Run it as the person who publishes, **without** "Run as
+administrator" (an elevated PowerShell does not see mapped drives). Each check is logged in
+`%LOCALAPPDATA%\FieldToFinish\logs`. `-PublishTo <folder>` checks or publishes another folder
+instead; `UPDATEFTF -Status` names the configured one.
+
+What it cannot see from a workstation: the share permissions on the server (as opposed to the
+folder's), and what another person can actually do. Confirm those with IT, and have one surveyor
+run **Check FTF.bat** after the first install (it reports whether the release folder is reachable).
+
+Permissions to ask IT for, on the release folder itself:
+
+- Survey staff: Read & execute.
+- Whoever publishes: Modify.
+
+Publishing never replaces or renames the folder itself, so these stay as IT sets them.
+
+## What the folder holds
+
+```
+<the approved release folder>\
     Install or Update FieldToFinish.bat           what staff double-click
     Install FTF.bat                               the older name; does the same
-    Restore previous FieldToFinish.bat            puts back the FTF before the last update
+    Restore previous FieldToFinish.bat            puts back the FTF this computer had before its last update
     Check FTF.bat / Repair FTF.bat                diagnostics / clear Civil 3D's stale record
     Uninstall FTF.bat
     install.ps1, check.ps1, ftf-common.ps1        the work behind the batch files
     README.txt                                    instructions for staff
     RELEASE-NOTES.txt                             what changed, who approved it, when
     release.json                                  commit, channel, approved by / when / on which computer,
-                                                  the checks it passed, SHA-256 of every setup file
+                                                  the folder's \\server\share path, the checks it passed,
+                                                  SHA-256 of every setup file
     version.txt                                   one line: date, branch, commit
-    updates-from.txt                              the folder itself, so installed copies update from here
+    updates-from.txt                              the folder's \\server\share path, so installed copies update from here
     Bundle\                                       the Autodesk ApplicationPlugins bundle
         PackageContents.xml
         build-info.json                           commit, channel, built, and SHA-256 of every bundle file
         version.txt
         Contents\2024\                            FieldCodes.Cad.dll, FieldCodes.dll, dependencies,
                                                   factory rules.json, compare-profiles, ribbon resources
-\\<server>\<share>\CAD\FieldToFinish.previous-<time>\   the three releases before it, kept by publishing
+    Previous releases\<time>-<commit>\            the three releases it replaced, each whole
+    _publishing\                                  only while a release is being published (hidden)
 ```
 
-Permissions:
-
-- Survey staff: read (and read and execute) on the folder.
-- Whoever publishes: modify on the folder's parent, because publishing writes `<folder>.incoming`
-  and renames.
-
-Staff never need to write there: installing writes only to their own profile.
+The batch file copies only the release: not `Previous releases`, not `_publishing`.
 
 ## Publishing an approved release (the approval step)
 
 On your workstation, with Civil 3D closed:
 
 ```
-C:\dev\UPDATEFTF -PublishTo "\\<server>\<share>\CAD\FieldToFinish" -ReleaseNotes "Point accountability fixes; style check required"
+C:\dev\UPDATEFTF -Publish -ReleaseNotes "Point accountability fixes; style check required"
 ```
 
-UPDATEFTF then:
+(`-PublishTo <folder>` publishes to another folder instead of the office's.) UPDATEFTF then:
 
-1. Builds the approved branch (`origin/integration`) in its own checkout, stamped **approved**.
-2. Runs the unit tests (the regression suite).
-3. Runs the installer tests:
+1. Checks the release folder again (reachable, write test). Nothing is built if it fails.
+2. Builds the approved branch (`origin/integration`) in its own checkout, stamped **approved**.
+3. Runs the unit tests (the regression suite).
+4. Runs the installer tests:
    - `deploy\test-release.ps1` on the real package;
-   - `deploy\test-installer.ps1` on every kind of release the installer must handle or refuse.
-4. Installs the build on your workstation.
-5. Runs the smoke test in Civil 3D: the main checks plus the required identity, point
+   - `deploy\test-installer.ps1` on every kind of release the installer must handle or refuse,
+     and on publishing.
+5. Installs the build on your workstation.
+6. Runs the smoke test in Civil 3D: the main checks plus the required identity, point
    accountability and style checks. Any failure puts your previous FTF back, and nothing is published.
-6. Publishes (`deploy\publish-release.ps1`):
+7. Publishes (`deploy\publish-release.ps1`):
    - checks the package again: complete, every file's SHA-256, every FTF DLL the same build, approved;
-   - copies it to `<folder>.incoming` beside the release folder and verifies the copy on the server;
-   - only then swaps it in, keeping the release it replaces as `<folder>.previous-<time>`;
-   - writes `RELEASE-NOTES.txt`: your notes, then the commits since the release it replaces;
-   - writes `release.json`: who approved it, when, on which computer, and which checks it passed.
+   - copies it into the folder's `_publishing` and verifies the copy there, on the server;
+   - moves the current release's files into `Previous releases\<time>-<commit>` and the new ones
+     up (renames on the share: a moment). If any of that fails, everything is moved back;
+   - verifies the release again in place; if it does not verify, the previous one is put back;
+   - keeps the three most recent previous releases;
+   - writes `RELEASE-NOTES.txt` (your notes, then the commits since the release it replaces) and
+     `release.json` (who approved it, when, on which computer, which checks it passed).
 
 Publishing always comes right after a passing smoke test in the same run. UPDATEFTF installs and
-smoke-tests again even when the build is already installed.
+smoke-tests again even when the build is already installed. When it was asked to publish and did
+not, it exits with code 3 and says why; the release folder is then unchanged.
 
 Never published:
 
@@ -85,11 +120,17 @@ Never published:
 - a build with uncommitted changes;
 - a package that does not verify.
 
-`publish-release.ps1` refuses each of these on its own too.
+UPDATEFTF refuses the first two before building anything, and `publish-release.ps1` refuses each
+of these on its own too.
 
 "Approved" means: built from `origin/integration` and passed every check above. Putting it on the
-server is a separate, deliberate act: only `-PublishTo` does it. A development build you are trying
-out (`UPDATEFTF -Dev -Ref ...`) stays on your workstation.
+server is a separate, deliberate act: only `-Publish` (or `-PublishTo`) does it. A development
+build you are trying out (`UPDATEFTF -Dev -Ref ...`) stays on your workstation.
+
+A surveyor who double-clicks during the moment the files are switched gets "not a complete
+release" and nothing changes on their computer. Publishing stops, and puts everything back, if a
+file in the release is open; for example when someone has FTF loaded into Civil 3D from that
+folder with NETLOAD.
 
 ## Installing and updating (survey staff)
 
@@ -98,14 +139,15 @@ out (`UPDATEFTF -Dev -Ref ...`) stays on your workstation.
 3. Start Civil 3D. Type `FTFVERSION` to see the build.
 
 The same file does the first install, every update, repairs, and "up to date". `README.txt` in the
-folder is the staff instructions.
+folder is the staff instructions. It works from the mapped drive or from the `\\server\share` path
+(opened that way, Windows first prints "UNC paths are not supported"; that is harmless).
 
 ### What the double-click does
 
 | Step | |
 |---|---|
 | 1 | Stops at once if Civil 3D is running, with "close it and run this again". |
-| 2 | Copies the whole release to `%TEMP%\FTF-Setup` (a network drop mid-copy changes nothing). |
+| 2 | Copies the release to `%TEMP%\FTF-Setup` (a network drop mid-copy changes nothing). |
 | 3 | Verifies the copy: every file against `Bundle\build-info.json` (SHA-256), nothing extra, `FieldCodes.Cad.dll` and `FieldCodes.dll` both stamped with the release's commit, and an approved release (a development build is refused). |
 | 4 | Reads the installed build (`build-info.json` in the installed bundle) and compares. |
 | 5 | Decides and says so: **install** (none yet), **update** `old -> new` (noting a release older than the installed build, or one replacing a development build), **repair** (same release, damaged files), or **up to date** (nothing is copied, nothing is backed up). |
@@ -113,7 +155,7 @@ folder is the staff instructions.
 | 7 | Copies the release beside the installed bundle (`FieldToFinish.bundle.new`), verifies it again, and carries over what the office or the person saved inside the old bundle. Then it swaps the two folders by rename. |
 | 8 | Verifies the installed files where Civil 3D loads them, and writes Civil 3D's per-user startup record. If either fails, the previous FTF and its startup record are put back at once, and the failed copy is kept in `%LOCALAPPDATA%\FieldToFinish\failed`. Never a partly installed bundle. |
 | 9 | Finds other copies of FTF: another bundle, an old startup entry (for example one pointing at a network DLL), the Startup Suite, an `acad*.lsp` NETLOAD. It switches off the per-user ones (backed up first) and names the rest. |
-| 10 | Says what is installed, what it was, where updates come from, and the log file. |
+| 10 | Records where updates come from (the folder's `\\server\share` path) and says what is installed, what it was, and the log file. |
 
 Every run writes `%LOCALAPPDATA%\FieldToFinish\logs\install-<time>.log`.
 
@@ -121,6 +163,10 @@ Updates also arrive without anyone doing anything: FTF installed from the folder
 with it when Civil 3D starts and, if a newer release is there, installs it when Civil 3D closes
 (`FTFUPDATE` shows what it found). That path runs the same `install.ps1`, so it verifies,
 backs up and rolls back the same way. It only ever moves forward.
+
+A copy installed earlier that recorded the folder by its drive letter keeps working where the
+drive is mapped; its next install or update records the `\\server\share` path (**Check FTF.bat**
+notes which it has).
 
 ### Automatic loading
 
@@ -148,8 +194,9 @@ No admin rights are needed.
 | Situation | What to do |
 |---|---|
 | An update fails while installing | Nothing: the installer puts the previous FTF back by itself and says so. |
+| A publish fails part way | Nothing: the release folder is put back as it was, and UPDATEFTF says why (exit code 3). |
 | The new release misbehaves on one computer | Close Civil 3D, double-click **Restore previous FieldToFinish.bat** (in the release folder, or `%LOCALAPPDATA%\FieldToFinish` when the network is down). It puts back the newest intact backup of the build before. Settings stay as they are now. |
-| The new release misbehaves everywhere | On the server, rename the release folder aside, rename `<folder>.previous-<time>` back to the folder name, and tell staff to double-click the batch file. It installs whatever the folder holds and says "OLDER". The automatic update never goes backwards on its own. Or publish the earlier approved build again with UPDATEFTF. |
+| The new release misbehaves everywhere | `UPDATEFTF -RestoreRelease` puts the release the folder had before back (the newest one in `Previous releases` that verifies; the current one goes into `Previous releases`). Staff then double-click the batch file, and it says "OLDER". The automatic update never goes backwards on its own. Or publish the earlier approved build again with UPDATEFTF. |
 | Your own workstation | `UPDATEFTF -Rollback` puts back UPDATEFTF's last backup. |
 | Civil 3D does not show FTF | **Repair FTF.bat** clears a stale Civil 3D record. **Check FTF.bat** writes `ftf-check.txt` (desktop, and a copy in the logs). |
 | Remove FTF | **Uninstall FTF.bat**: backs up, removes the bundle and the startup record, keeps settings. |
@@ -170,7 +217,8 @@ No admin rights are needed.
   - Civil 3D's record for FTF;
   - the last install log;
   - how many backups there are.
-- `%LOCALAPPDATA%\FieldToFinish\logs`: every install, update, restore and check.
+- `UPDATEFTF -CheckReleaseFolder` on the publishing workstation: the release folder check above.
+- `%LOCALAPPDATA%\FieldToFinish\logs`: every install, update, restore, check and release folder check.
 
 ## Moving a workstation off NETLOAD
 
@@ -184,6 +232,10 @@ of the batch file:
   `acad*.lsp` NETLOAD line, and machine-wide entries (IT).
 
 A NETLOAD typed by hand loads only for that session; just stop doing it.
+
+If the folder already holds an older setup folder (from before release.json), the first publish
+moves it whole into `Previous releases`. Copies installed from it update the same way: they
+double-click, or their FTF installs the new release when Civil 3D closes.
 
 ## Tests
 
@@ -200,17 +252,26 @@ What it covers:
 - duplicate bundles;
 - releases that are damaged, missing a file, carrying an extra file, without `build-info.json`,
   or with DLLs from another build;
-- development builds;
+- development builds, and developer installs;
 - Civil 3D open;
 - rollback after the swap;
 - restore previous, and uninstall;
 - the logs, the local tools and the diagnostic report;
-- publishing an approved release, and refusing development or inconsistent ones.
+- the `\\server\share` path behind a mapped drive letter;
+- the release folder check: a new folder, an existing release, an unreachable folder, nothing left behind;
+- publishing an approved release, and refusing development or inconsistent ones;
+- publishing inside the folder: the releases it replaced kept in `Previous releases` (three),
+  other files left alone, a publish that fails part way or does not verify in place undone, two
+  publishes never at once;
+- putting a previous release back on the server, skipping one that does not verify.
 
 `deploy\test-release.ps1` (Windows) checks the real package and the registry writes.
 
 | What | Status |
 |---|---|
-| `test-installer.ps1` | 83 PASS, 0 FAIL on PowerShell 7.4 (Linux), 2026-11-04. Civil 3D's startup record (registry) is Windows-only and was not run there. |
-| `test-release.ps1`, and the whole flow in UPDATEFTF | Updated for the new installer. Runs on Windows in UPDATEFTF; **not yet run**. |
+| `test-installer.ps1` | 111 PASS, 0 FAIL on PowerShell 7.4 (Linux), 2026-11-04. Civil 3D's startup record (registry) is Windows-only and was not run there. |
+| Release folder check refusing a folder the publisher cannot write | Run by hand as an unprivileged user on Linux: refused, nothing left behind. Not part of the suite (it needs a non-administrator account). |
+| Resolving a real mapped drive, reading real folder permissions | Windows only; **not yet run**. The joining of drive and path is tested with a stand-in drive map. |
+| `test-release.ps1`, and the whole flow in UPDATEFTF | Runs on Windows in UPDATEFTF; **not yet run** with this installer. |
+| The office's release folder | **Not checked.** Run `UPDATEFTF -CheckReleaseFolder` on the publishing workstation. |
 | A real Civil 3D workstation (the publisher's, and the first surveyor's) | **Not tested.** Nothing here claims a surveyor's computer works until the batch file has been run there. |

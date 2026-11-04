@@ -334,22 +334,49 @@ public sealed class DeploymentContractTests
         Assert.Contains("if (-not $Force -and -not $PublishTo -and $installed", code);
         // Publishing comes after the smoke test passed, and refuses again on its own.
         var smoke = code.IndexOf("Ok 'smoke test passed'", StringComparison.Ordinal);
-        var publish = code.IndexOf("deploy\\publish-release.ps1')", StringComparison.Ordinal);
+        var publish = code.IndexOf("(Join-Path $BuildRoot 'deploy\\publish-release.ps1') $pubArgs", StringComparison.Ordinal);
+        // The only other call puts a previous release back; it publishes nothing new.
+        Assert.Contains("(Join-Path $here 'deploy\\publish-release.ps1') @('-Restore', '-ReleaseFolder', $folderToRestore)", code);
         Assert.True(smoke > 0 && publish > smoke, "publishing must come after a passing smoke test");
         var block = code.Substring(code.IndexOf("if ($PublishTo) {", smoke, StringComparison.Ordinal));
         Assert.Matches(@"if \(\$channel -ne 'approved'\) \{\s*\$notPublished", block);
         Assert.Matches(@"elseif \(\$SkipSmoke\) \{\s*\$notPublished", block);
         // A run that was asked to publish and did not says so in its exit code.
         Assert.Contains("exit 3", code);
+        // -Publish takes the office's folder from deploy\release-folder.txt; it is checked before
+        // the build, and publishing goes to the \\server\share path the check found.
+        Assert.Contains("$PublishTo = Get-OfficeReleaseFolder", code);
+        var check = code.IndexOf("$checked = Test-ReleaseFolder $PublishTo", StringComparison.Ordinal);
+        var build = code.IndexOf("Step \"Build $short ($channel, Release)\"", StringComparison.Ordinal);
+        Assert.True(check > 0 && build > check, "the release folder is checked before the build");
+        Assert.Contains("$PublishTo = \"$($checked.Result.folder)\"", code);
+        // The office's folder is configured with the scripts by its drive path only: the server
+        // behind it is resolved on the publishing workstation and never written into the repository.
+        var configured = File.ReadAllLines(Path.Combine(Repo(), "deploy", "release-folder.txt"))
+            .Where(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith("#", StringComparison.Ordinal)).ToList();
+        Assert.Single(configured);
+        Assert.Matches(@"^[A-Za-z]:\\[^\r\n]+\\FieldToFinish-Setup$", configured[0]);
+        // -CheckReleaseFolder builds and publishes nothing.
+        var only = Regex.Match(code, @"if \(\$CheckReleaseFolder\) \{[\s\S]*?\r?\n\}\r?\n").Value;
+        Assert.Contains("exit 0", only);
+        Assert.DoesNotContain("publish-release.ps1", only);
 
         var pub = Code(Read("deploy", "publish-release.ps1"));
         Assert.Contains("Test-FtfBundle $bundle $info -Strict", pub);          // every file, nothing extra
         Assert.Contains("if (-not (Test-FtfApproved $info)) {", pub);            // never a development build
-        // Assembled beside the folder, verified on the server, and only then swapped in.
-        var verified = pub.IndexOf("$onServer = @(Test-FtfBundle (Join-Path $incoming 'Bundle')", StringComparison.Ordinal);
-        var swapped = pub.IndexOf("Rename-Item -LiteralPath $incoming -NewName $leaf", StringComparison.Ordinal);
-        Assert.True(verified > 0 && swapped > verified, "the server copy must be verified before the swap");
-        Assert.Contains("$kept = \"$leaf.previous-\"", pub);
+        // Copied into the folder's _publishing, verified there, on the server, and only then
+        // switched in; verified again in place, and taken back out if it does not verify.
+        var verified = pub.IndexOf("$onServer = @(Test-Release $staging $top)", StringComparison.Ordinal);
+        var switched = pub.IndexOf("$failed = Switch-Release $staging $keepAs", StringComparison.Ordinal);
+        var inPlace = pub.IndexOf("$live = @(Test-Release $folder $top)", switched > 0 ? switched : 0, StringComparison.Ordinal);
+        Assert.True(verified > 0 && switched > verified && inPlace > switched, "verify on the server, switch, verify in place");
+        Assert.Matches(@"if \(\$live\.Count -gt 0\) \{\s*\$left = Undo-Switch \$staging \$keepAs", pub);
+        // The folder itself never moves (its permissions stay); what it replaced is kept inside it.
+        Assert.DoesNotContain("Rename-Item -LiteralPath $folder", pub);
+        Assert.Contains("$keepAs = Join-Path $previousRoot (Previous-Name $before)", pub);
+        // Installed copies record the folder's \\server\share path.
+        Assert.Contains("$folder = Resolve-FtfUncPath $given $DriveMap", pub);
+        Assert.Contains("Set-Content -Path (Join-Path $staging 'updates-from.txt') -Value $folder", pub);
 
         var common = Code(Read("deploy", "setup", "ftf-common.ps1"));
         Assert.Contains("(\"$($info.channel)\" -eq 'approved') -and (-not $info.dirty)", common);
@@ -368,6 +395,10 @@ public sealed class DeploymentContractTests
         }
 
         // The release is checked whole before anything is touched...
+        // A developer install (-NoOfficeCopy) is the only other way a development build goes in.
+        Assert.Contains("if ($NoOfficeCopy) { $AllowDevelopmentBuild = $true; $LeaveOtherLoaders = $true }", code);
+        // The release folder is recorded by its \\server\share path.
+        Assert.Contains("$network = Resolve-FtfUncPath $office", code);
         Then("$releaseProblems = @(Test-FtfBundle $from $release -Strict)");
         Then("if (-not (Test-FtfApproved $release) -and -not $AllowDevelopmentBuild) {");
         // ...the installed FTF is backed up...
@@ -400,12 +431,36 @@ public sealed class DeploymentContractTests
         var bat = Read("deploy", "setup", "Install or Update FieldToFinish.bat");
         Assert.Contains("\r\n", bat);                                                       // cmd.exe needs CRLF
         var civil = bat.IndexOf("find /I \"acad.exe\"", StringComparison.Ordinal);
-        var copy = bat.IndexOf("robocopy \"%~dp0.\" \"%STAGE%\"", StringComparison.Ordinal);
+        // The release only: not the releases it replaced, nor one being published.
+        var copy = bat.IndexOf("robocopy \"%~dp0.\" \"%STAGE%\" /E /XD \"Previous releases\" \"_publishing\"", StringComparison.Ordinal);
         var run = bat.IndexOf("-File \"%STAGE%\\install.ps1\" -Source \"%~dp0.\"", StringComparison.Ordinal);
         Assert.True(civil > 0 && copy > civil && run > copy, "check Civil 3D, copy locally, then run the local copy");
         Assert.Contains("if errorlevel 8 goto copyfailed", bat);
         Assert.DoesNotContain("NETLOAD", bat.ToUpperInvariant().Replace("NO NETLOAD", string.Empty));
+        // Staff never install a development build: neither the batch file nor the automatic
+        // update passes what allows one.
+        foreach (var dev in new[] { "-NoOfficeCopy", "-AllowDevelopmentBuild" })
+        {
+            Assert.DoesNotContain(dev, bat);
+            Assert.DoesNotContain(dev, Read("src", "FieldCodes.Cad", "OfficeUpdate.cs"));
+        }
         Assert.Contains("call \"%~dp0Install or Update FieldToFinish.bat\"", Read("deploy", "setup", "Install FTF.bat"));
+    }
+
+    [Fact]
+    public void TheReleaseFolderCheckChangesNothingButItsOwnWriteTest()
+    {
+        var code = Code(Read("deploy", "check-release-folder.ps1"));
+        foreach (var verb in new[] { "Set-Acl", "Move-Item", "Copy-Item", "Rename-Item -LiteralPath $folder" })
+            Assert.DoesNotContain(verb, code);
+        // Only the write test's own folder is ever removed, and it is removed whatever happens.
+        var removes = Regex.Matches(code, @"Remove-Item[^\r\n]*").Cast<Match>().ToList();
+        Assert.NotEmpty(removes);
+        Assert.All(removes, m => Assert.Matches(@"-LiteralPath \$(moved|left) ", m.Value));
+        Assert.Matches(@"\} finally \{\s*foreach \(\$left in @\(\$probe, \$moved\)\)", code);
+        // What it writes besides: the result, for UPDATEFTF.
+        Assert.Single(Regex.Matches(code, @"Set-Content "));
+        Assert.Contains("Set-Content -Path $ResultFile", code);
     }
 
     // ----------------------------------------------------------------- saving local work

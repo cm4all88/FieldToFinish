@@ -33,7 +33,8 @@ if not exist "%~dp0Bundle\PackageContents.xml" goto notrelease
 if not exist "%~dp0install.ps1" goto notrelease
 
 if exist "%STAGE%" rmdir /s /q "%STAGE%"
-robocopy "%~dp0." "%STAGE%" /E /R:2 /W:2 /NFL /NDL /NJH /NJS /NP >nul
+rem The release only: not the releases it replaced, nor one being published right now.
+robocopy "%~dp0." "%STAGE%" /E /XD "Previous releases" "_publishing" /R:2 /W:2 /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 goto copyfailed
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%STAGE%\install.ps1" -Source "%~dp0."
@@ -62,6 +63,9 @@ exit /b 1
 :notrelease
 echo  This folder is not a complete Field to Finish release (the Bundle folder
 echo  or install.ps1 is missing). Nothing was changed.
+echo.
+echo  If a new release is being published right now, wait a minute and
+echo  double-click this again.
 echo.
 echo  Run "Install or Update FieldToFinish.bat" from the approved release
 echo  folder itself, or tell the drafting lead.

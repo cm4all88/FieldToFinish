@@ -1,0 +1,6 @@
+# The office's approved release folder: where UPDATEFTF -Publish puts approved releases, and where
+# survey staff double-click "Install or Update FieldToFinish.bat". UPDATEFTF -CheckReleaseFolder
+# checks it; -Publish checks it again before anything is built or written there. On the publishing
+# workstation the drive letter is turned into the \\server\share path behind it, and that is what
+# every installed copy records, so staff computers do not need the drive mapped.
+U:\PSO\Shared\Divisions\00Survey\OFC_RSC\FieldToFinish-Setup

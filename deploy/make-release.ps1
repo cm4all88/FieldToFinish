@@ -13,7 +13,7 @@
         version.txt          build date, branch and commit -- printed when installing
         Bundle\              PackageContents.xml + Contents\2024\ (the program itself)
 
-    The approved release folder on the server is published from it by UPDATEFTF -PublishTo
+    The approved release folder on the server is published from it by UPDATEFTF -Publish
     (publish-release.ps1); see docs\network-deployment.md. People double-click
     "Install or Update FieldToFinish.bat" there. Nothing in it needs admin rights or the repository.
 
@@ -183,7 +183,7 @@ Write-Host "  $files file(s); program files in Bundle\Contents\$series"
 if ($OfficeFolder) { Write-Host "  updates come from: $OfficeFolder" }
 else { Write-Host '  updates come from wherever it is installed from (pass -OfficeFolder to pin that)' }
 Write-Host ''
-Write-Host 'Publish it with UPDATEFTF -PublishTo <release folder> (approved builds only); people then'
+Write-Host 'Publish it with UPDATEFTF -Publish (approved builds only, to the office release folder); people then'
 Write-Host 'close Civil 3D and double-click "Install or Update FieldToFinish.bat" there.'
 
 if ($Zip) {

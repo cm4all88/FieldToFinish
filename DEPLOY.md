@@ -109,7 +109,9 @@ Only a clean build of `origin/integration` that passed all of that is stamped **
 | `-WaitForCivil3D` | Wait for Civil 3D to close instead of stopping. |
 | `-Force` | Rebuild and reinstall even if already current. |
 | `-Dev -Ref origin/claude/xyz` | Install a development branch for testing; stamped **DEV**, never approved. |
-| `-PublishTo \\server\share\CAD\FieldToFinish` | After every check above passed (smoke test included, never with `-SkipSmoke` or `-Dev`), publish the build as the approved release survey staff install from. `-ReleaseNotes "..."` adds a note. See [docs/network-deployment.md](docs/network-deployment.md). |
+| `-CheckReleaseFolder` | Check the office's approved release folder (`deploy\release-folder.txt`): the `\\server\share` path behind its drive letter, reachable, a write test that leaves nothing behind, who can read and change it. Builds and publishes nothing. |
+| `-Publish` | After every check above passed (smoke test included, never with `-SkipSmoke` or `-Dev`), publish the build to the office's approved release folder, the one survey staff install from. The folder is checked again before building. `-ReleaseNotes "..."` adds a note; `-PublishTo <folder>` publishes elsewhere instead. See [docs/network-deployment.md](docs/network-deployment.md). |
+| `-RestoreRelease` | Put the release the approved release folder had before back (from its `Previous releases`, verified first). Builds nothing. |
 | `-FixStartup` | Disable other registry startup entries that load an FTF DLL (backed up first). |
 | `-SkipSmoke` | Skip the in-Civil 3D test (the install is then unproven). |
 
@@ -195,7 +197,7 @@ computer, verifies every file, backs up the installed FTF, installs the bundle i
 `%APPDATA%\Autodesk\ApplicationPlugins`, verifies it again, and puts the previous FTF back if
 anything fails. Civil 3D then loads FTF by itself at every start; nobody uses NETLOAD.
 
-Only `UPDATEFTF -PublishTo <folder>` puts a release there, and only after the whole check above,
+Only `UPDATEFTF -Publish` (or `-PublishTo <folder>`) puts a release there, and only after the whole check above,
 including the style check, passed in the same run. The folder layout, the approval step, what is
 kept on update, rollback and diagnostics are in [docs/network-deployment.md](docs/network-deployment.md);
 the staff instructions are `deploy\setup\README.txt` (copied into the folder).

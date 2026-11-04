@@ -58,8 +58,10 @@
     (FTFUPDATE) applies itself; it also writes to %TEMP%\FTF-update.log.
 
 .PARAMETER NoOfficeCopy
-    Records no approved release location, so this install never replaces itself from one.
-    UPDATEFTF.ps1 passes it: a developer's machine takes builds from the integration branch.
+    A developer install: records no approved release location, so this install never replaces
+    itself from one, accepts a development build, and switches no other copy of FTF off (as
+    -AllowDevelopmentBuild -LeaveOtherLoaders). UPDATEFTF.ps1 passes it: a developer's machine
+    takes builds from the integration branch. The batch file and the automatic update never do.
 
 .PARAMETER NoBackup
     No backup of its own (UPDATEFTF makes its own, with its own restore).
@@ -108,6 +110,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $bundleName = 'FieldToFinish.bundle'
+# -NoOfficeCopy is a developer install (UPDATEFTF, from a package on this computer); the batch file
+# and the automatic update never pass it. Earlier UPDATEFTFs pass only -NoOfficeCopy, so it also
+# accepts a development build and leaves other copies of FTF to UPDATEFTF -FixStartup.
+if ($NoOfficeCopy) { $AllowDevelopmentBuild = $true; $LeaveOtherLoaders = $true }
 $here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $from = Join-Path $here 'Bundle'
 $tempRoot = if ($env:TEMP) { $env:TEMP } else { [IO.Path]::GetTempPath() }
@@ -596,7 +602,7 @@ Say ("  release:   " + (Get-FtfDescription $release))
 $releaseProblems = @(Test-FtfBundle $from $release -Strict)
 if ($releaseProblems.Count -gt 0) {
     Fail ("This release folder is not complete or not what was built, so nothing was installed:`n  " + ($releaseProblems -join "`n  ") +
-          "`nTell the drafting lead: the release folder needs publishing again.")
+          "`nIf a new release is being published right now, wait a minute and run this again. Otherwise tell the drafting lead: the release folder needs publishing again.")
 }
 Say '  verified:  every file of the release matches what was built (SHA-256), and every FTF program file is this build'
 if (-not (Test-FtfApproved $release) -and -not $AllowDevelopmentBuild) {
@@ -627,6 +633,12 @@ if (-not $NoOfficeCopy) {
             $office = $candidate
         }
     }
+}
+# Recorded as its \\server\share path where the drive letter is a mapped network drive, so this
+# copy finds its updates on a computer with the drive mapped differently, or not at all.
+if ($office) {
+    $network = Resolve-FtfUncPath $office
+    if ($network -and $network -ne $office) { Log "release folder $office is $network"; $office = $network }
 }
 
 # --- installed, and what to do ------------------------------------------------------------

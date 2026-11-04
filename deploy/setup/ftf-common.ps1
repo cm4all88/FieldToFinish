@@ -13,6 +13,16 @@
 # version ("1.0.0+5c3c021.approved"), written by build\FtfBuildInfo.targets.
 $script:FtfAssemblies = @('FieldCodes.Cad.dll', 'FieldCodes.dll')
 
+# What an approved release folder holds at its top level, including what earlier setup folders
+# held. Publishing moves exactly these aside, so anything else somebody keeps in the folder stays.
+$script:FtfReleaseItems = @('Bundle', 'Install or Update FieldToFinish.bat', 'Install FTF.bat', 'Restore previous FieldToFinish.bat',
+    'Check FTF.bat', 'Repair FTF.bat', 'Uninstall FTF.bat', 'install.ps1', 'check.ps1', 'ftf-common.ps1', 'README.txt',
+    'RELEASE-NOTES.txt', 'release.json', 'version.txt', 'updates-from.txt')
+# Inside the release folder: the releases it replaced, and the release being published (copied
+# and verified there before it replaces the current one). The batch file does not copy either.
+$script:FtfPreviousReleases = 'Previous releases'
+$script:FtfPublishing = '_publishing'
+
 function Read-FtfBuildInfo([string]$bundleDir)
 {
     if ([string]::IsNullOrWhiteSpace($bundleDir)) { return $null }
@@ -113,6 +123,56 @@ function Test-FtfSamePath([string]$a, [string]$b)
 {
     if ([string]::IsNullOrWhiteSpace($a) -or [string]::IsNullOrWhiteSpace($b)) { return $false }
     try { return [IO.Path]::GetFullPath($a).TrimEnd('\', '/') -ieq [IO.Path]::GetFullPath($b).TrimEnd('\', '/') } catch { return $false }
+}
+
+# The network path behind a mapped drive letter ("U:" -> "\\server\share"), or $null when the drive
+# is not a network drive or is not mapped in this session (an elevated PowerShell does not see the
+# drives mapped for the signed-in user).
+function Get-FtfNetworkRoot([string]$drive)
+{
+    $letter = $drive.TrimEnd(':').ToUpperInvariant()
+    $root = $null
+    try {
+        $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='" + $letter + ":'") -ErrorAction Stop
+        if ($disk -and $disk.DriveType -eq 4 -and "$($disk.ProviderName)" -like '\\*') { $root = "$($disk.ProviderName)" }
+    } catch { }
+    if (-not $root) {
+        try {
+            $ps = Get-PSDrive -Name $letter -PSProvider FileSystem -ErrorAction Stop
+            if ("$($ps.DisplayRoot)" -like '\\*') { $root = "$($ps.DisplayRoot)" }
+        } catch { }
+    }
+    if (-not $root) {
+        try {
+            $remote = (Get-ItemProperty -Path ('HKCU:\Network\' + $letter) -ErrorAction Stop).RemotePath
+            if ("$remote" -like '\\*') { $root = "$remote" }
+        } catch { }
+    }
+    return $root
+}
+
+# The UNC form of a folder, so what is recorded works on every computer whether or not it has the
+# same drive letter mapped: "U:\Dept\FieldToFinish-Setup" -> "\\server\share\Dept\FieldToFinish-Setup".
+# A UNC path, or a path that is not on a drive letter, comes back as it is (without a trailing
+# separator). $null when the drive letter is not a mapped network drive. $DriveMap ("U:" ->
+# "\\server\share") replaces the lookup, for tests.
+function Resolve-FtfUncPath([string]$path, $DriveMap)
+{
+    if ([string]::IsNullOrWhiteSpace($path)) { return $null }
+    $p = $path.Trim()
+    if ($p.StartsWith('\\')) {
+        $trimmed = $p.TrimEnd('\')
+        if ($trimmed.Length -lt 3) { return $null }
+        return $trimmed
+    }
+    if ($p -notmatch '^([A-Za-z]):(\\.*)?$') { return $p.TrimEnd('\', '/') }
+    $drive = $Matches[1].ToUpperInvariant() + ':'
+    $rest = "$($Matches[2])"
+    $root = $null
+    if ($null -ne $DriveMap) { if ($DriveMap.Contains($drive)) { $root = "$($DriveMap[$drive])" } }
+    else { $root = Get-FtfNetworkRoot $drive }
+    if ([string]::IsNullOrWhiteSpace($root) -or -not $root.StartsWith('\\')) { return $null }
+    return ($root.TrimEnd('\') + $rest).TrimEnd('\')
 }
 
 # Civil 3D's startup records that load FTF, per product: our own (Applications\FieldToFinish) and

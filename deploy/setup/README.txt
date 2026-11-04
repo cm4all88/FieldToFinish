@@ -15,6 +15,13 @@ Please do not NETLOAD FTF from this folder, or from anywhere else.
 
 To see which FTF you have, type FTFVERSION in Civil 3D.
 
+If you opened this folder by its \\server path rather than a drive letter, the
+window may first say "UNC paths are not supported". That is Windows talking;
+it does no harm, and the install carries on.
+
+The "Previous releases" folder holds the releases this folder had before. Do
+not install from there; always use the batch file in this folder.
+
 
 WHAT HAPPENS WHEN YOU DOUBLE-CLICK
 ----------------------------------
@@ -59,8 +66,9 @@ IF SOMETHING GOES WRONG
     and keeps working. Try again when you are connected.
 
 "not complete" / "not what was built" / "development build"
-    This folder is not a good approved release. Nothing was changed. Tell the
-    drafting lead.
+    This folder is not a good approved release. Nothing was changed. If a new
+    release is being published right now, wait a minute and try again;
+    otherwise tell the drafting lead.
 
 The new FTF does not behave
     Close Civil 3D and double-click  Restore previous FieldToFinish.bat

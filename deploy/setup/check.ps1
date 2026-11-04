@@ -110,6 +110,11 @@ if ($haveCommon -and (Test-Path $bundle)) {
     Section 'Approved release folder'
     $sourceFile = Join-Path $bundle 'source.txt'
     $office = if (Test-Path $sourceFile) { (Get-Content $sourceFile -First 1) } else { $null }
+    if ($office -and $office -match '^[A-Za-z]:') {
+        $network = Resolve-FtfUncPath $office
+        $how = if ($network) { "it is $network here" } else { 'that drive is not mapped here' }
+        Say ("  NOTE: recorded with a drive letter ($how); the next install or update records the \\server\share path.")
+    }
     if (-not $office) {
         Say '  none recorded -- this FTF was not installed from an approved release folder, so it never updates itself.'
     } elseif (-not (Test-Path -LiteralPath $office)) {

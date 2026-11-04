@@ -14,7 +14,11 @@
       duplicate copies of FTF found and switched off; integrity (a damaged, missing or extra file;
       no build-info.json; DLLs of another build); development builds refused; Civil 3D open;
       rollback when anything fails after the swap; restore of the previous FTF; check only;
-      uninstall; logs and local tools; publishing an approved release, refusing anything else.
+      uninstall; logs and local tools; the network path behind a mapped drive; checking the
+      release folder (reachable, write test, leaves nothing behind); publishing an approved
+      release into the folder, refusing anything else, keeping the releases it replaced inside
+      it, leaving other files alone, undoing a publish that fails part way, never two at once;
+      and putting a previous release back on the server.
 
     Windows-only parts (Civil 3D's startup record in the registry) are checked on Windows only and
     reported as not run elsewhere. Needs the .NET SDK (dotnet) to build the stand-in assemblies.
@@ -126,6 +130,9 @@ function Contents2024([string]$bundle) { return (Join-Path (Join-Path $bundle 'C
 $commitA = 'aaaaaaa1111111111111111111111111111111aa'
 $commitB = 'bbbbbbb2222222222222222222222222222222bb'
 $commitC = 'ccccccc3333333333333333333333333333333cc'
+$commitD = 'ddddddd4444444444444444444444444444444dd'
+$commitE = 'eeeeeee5555555555555555555555555555555ee'
+$commitF = 'fffffff6666666666666666666666666666666ff'
 $releases = Join-Path $scratch 'releases'
 $relA = Join-Path $releases 'A'
 $relB = Join-Path $releases 'B'
@@ -287,6 +294,10 @@ try
     Check ($r.Code -eq 0 -and (Installed).commit -eq $commitC) 'UPDATEFTF -Dev can still install one, deliberately'
     $r = Install $relB @()
     Check ($r.Code -eq 0 -and $r.Text -match 'replacing a development build' -and (Installed).commit -eq $commitB) 'the approved release replaces a development build'
+    $r = Install $relDev @('-NoOfficeCopy')
+    Check ($r.Code -eq 0 -and (Installed).commit -eq $commitC -and -not (Test-Path (Join-Path $installed 'source.txt'))) 'a developer install (-NoOfficeCopy, as earlier UPDATEFTFs pass it) takes a development build and records no release folder'
+    $r = Install $relB @()
+    Check ($r.Code -eq 0 -and (Installed).commit -eq $commitB) 'and the approved release replaces it again'
 
     # --- Civil 3D open --------------------------------------------------------------------------
     Write-Host '-- Civil 3D open'
@@ -333,34 +344,149 @@ try
     Check ($r.Text -match 'Restore previous') 'after backing it up'
     Check (@($officeRules, $officeSettings, $profileFile | Where-Object { (Get-Content $_ -Raw) -match 'do not touch' }).Count -eq 3) 'office and personal settings survive uninstalling'
 
-    # --- publishing ---------------------------------------------------------------------------------
+    # --- the network path behind a drive letter ----------------------------------------------------
+    Write-Host '-- the network path behind a mapped drive'
+    $map = @{ 'U:' = '\\fs01\data' }
+    Check ((Resolve-FtfUncPath 'U:\Survey\Office\FieldToFinish-Setup' $map) -eq '\\fs01\data\Survey\Office\FieldToFinish-Setup') 'a mapped drive path becomes its \\server\share path'
+    Check ((Resolve-FtfUncPath 'u:\Survey\FieldToFinish-Setup\' @{ 'U:' = '\\fs01\data\' }) -eq '\\fs01\data\Survey\FieldToFinish-Setup') 'whatever the case of the letter and the trailing separators'
+    Check ((Resolve-FtfUncPath 'U:\Survey' @{ 'U:' = '\\fs01\data\Divisions' }) -eq '\\fs01\data\Divisions\Survey') 'a drive mapped to a folder inside a share'
+    Check ((Resolve-FtfUncPath '\\fs01\data\Survey\' $map) -eq '\\fs01\data\Survey') 'a UNC path stays as it is'
+    Check ($null -eq (Resolve-FtfUncPath 'Q:\Survey' $map)) 'a drive letter that is not mapped gives no network path'
+    Check ($null -eq (Resolve-FtfUncPath 'C:\Releases' @{ 'C:' = 'C:\' })) 'nor does a local drive'
+
+    # --- checking the release folder before publishing ---------------------------------------------
+    Write-Host '-- checking the release folder'
+    $checker = Join-Path $PSScriptRoot 'check-release-folder.ps1'
+    $serverRoot = Join-Path $scratch 'server'
+    New-Item -ItemType Directory -Force -Path $serverRoot | Out-Null
+    $server = Join-Path $serverRoot 'FieldToFinish-Setup'
+    $resultFile = Join-Path $scratch 'release-folder-check.json'
+    function Check-Folder([string]$folder) {
+        Remove-Item $resultFile -Force -ErrorAction SilentlyContinue
+        $said = & $shell -NoProfile -ExecutionPolicy Bypass -File $checker -ReleaseFolder $folder -ResultFile $resultFile 2>&1 | ForEach-Object { "$_" }
+        $code = $LASTEXITCODE
+        $res = $null
+        if (Test-Path $resultFile) { $res = Get-Content $resultFile -Raw | ConvertFrom-Json }
+        return [pscustomobject]@{ Code = $code; Text = ($said -join "`n"); Result = $res }
+    }
+    $c = Check-Folder $server
+    Check ($c.Code -eq 0 -and $c.Result.canPublish -and $c.Result.writeTested -and $c.Text -match 'does not exist yet') 'a new release folder: publishing can create it, and the write test passes'
+    Check (@(Get-ChildItem $serverRoot -Force).Count -eq 0) 'the check leaves nothing behind'
+    $c = Check-Folder (Join-Path (Join-Path $scratch 'no-such-server') 'FieldToFinish-Setup')
+    Check ($c.Code -eq 1 -and -not $c.Result.canPublish -and $c.Text -match 'cannot reach' -and $c.Text -match 'CANNOT PUBLISH') 'an unreachable folder is reported, and publishing is refused'
+    $free = @('Q', 'R', 'S', 'T', 'V', 'W', 'X', 'Y', 'Z' | Where-Object { -not (Test-Path ($_ + ':\')) }) | Select-Object -First 1
+    if ($free) {
+        $c = Check-Folder ($free + ':\Survey\FieldToFinish-Setup')
+        Check ($c.Code -eq 1 -and $c.Text -match "${free}: is not mapped") 'a drive letter that is not mapped stops it: installed copies would record a path that works nowhere else'
+    } else { $skipped.Add('unmapped drive letter: every letter from Q to Z is in use here') }
+    $isRoot = $false
+    if (-not $onWindows) { $isRoot = ("$(& id -u 2>$null)".Trim() -eq '0') }
+    if (-not $onWindows -and -not $isRoot) {
+        $locked = Join-Path $scratch 'read-only-share'
+        New-Item -ItemType Directory -Force -Path $locked | Out-Null
+        & chmod 555 $locked
+        $c = Check-Folder $locked
+        & chmod 755 $locked
+        Check ($c.Code -eq 1 -and $c.Text -match 'you cannot publish here') 'a folder the publisher cannot write to is refused before anything is built'
+    } else { $skipped.Add('release folder without write rights: needs a non-administrator account on Linux (Windows: by hand, see docs)') }
+
+    # --- publishing ----------------------------------------------------------------------------------
     Write-Host '-- publishing an approved release'
-    $server = Join-Path (Join-Path $scratch 'server') 'FieldToFinish'
     $publish = Join-Path $PSScriptRoot 'publish-release.ps1'
-    $p = & $shell -NoProfile -ExecutionPolicy Bypass -File $publish -Package $relB -ReleaseFolder $server -ApprovedBy 'test' -Notes 'First approved release.' 2>&1 | ForEach-Object { "$_" }
-    Check ($LASTEXITCODE -eq 0) ("publishes an approved release (" + ($p | Select-Object -Last 1) + ")")
-    foreach ($name in @('Install or Update FieldToFinish.bat', 'install.ps1', 'ftf-common.ps1', 'check.ps1', 'README.txt', 'RELEASE-NOTES.txt', 'release.json', 'version.txt')) {
+    function Publish([string]$package, [string[]]$extra) {
+        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $publish, '-ReleaseFolder', $server, '-ApprovedBy', 'test')
+        if ($package) { $arguments += @('-Package', $package) }
+        $said = & $shell @arguments @extra 2>&1 | ForEach-Object { "$_" }
+        return [pscustomobject]@{ Code = $LASTEXITCODE; Text = ($said -join "`n") }
+    }
+    function ServerCommit() { return "$((Read-FtfBuildInfo (Join-Path $server 'Bundle')).commit)" }
+    function ServerIntact() {
+        $info = Read-FtfBuildInfo (Join-Path $server 'Bundle')
+        if ($null -eq $info -or @(Test-FtfBundle (Join-Path $server 'Bundle') $info -Strict).Count -gt 0) { return $false }
+        $rel = Get-Content (Join-Path $server 'release.json') -Raw | ConvertFrom-Json
+        foreach ($p in @($rel.setupFiles.PSObject.Properties)) {
+            $f = Join-Path $server $p.Name
+            if (-not (Test-Path $f) -or (Get-FileHash $f -Algorithm SHA256).Hash -ne "$($p.Value)") { return $false }
+        }
+        return ("$($rel.commit)" -eq "$($info.commit)")
+    }
+    function PreviousReleases() { return @(Get-ChildItem (Join-Path $server 'Previous releases') -Directory -ErrorAction SilentlyContinue | Sort-Object Name) }
+    function NoStaging() { return -not (Test-Path (Join-Path $server '_publishing')) }
+
+    $p = Publish $relB @('-Notes', 'First approved release.')
+    Check ($p.Code -eq 0) ("publishes an approved release, creating the folder (" + (($p.Text -split "`n") | Select-Object -Last 1) + ")")
+    foreach ($name in @('Install or Update FieldToFinish.bat', 'Restore previous FieldToFinish.bat', 'install.ps1', 'ftf-common.ps1', 'check.ps1', 'README.txt', 'RELEASE-NOTES.txt', 'release.json', 'version.txt')) {
         Check (Test-Path (Join-Path $server $name)) "the release folder has $name"
     }
     $rel = Get-Content (Join-Path $server 'release.json') -Raw | ConvertFrom-Json
-    Check ($rel.commit -eq $commitB -and $rel.approvedBy -eq 'test' -and $rel.channel -eq 'approved') 'release.json says what was approved, by whom'
+    Check ($rel.commit -eq $commitB -and $rel.approvedBy -eq 'test' -and $rel.channel -eq 'approved' -and $rel.folder -eq $server) 'release.json says what was approved, by whom, and where'
     Check ((Get-Content (Join-Path $server 'updates-from.txt') -First 1) -eq $server) 'the release names its own location for updates'
-    Check (@(Test-FtfBundle (Join-Path $server 'Bundle') (Read-FtfBuildInfo (Join-Path $server 'Bundle')) -Strict).Count -eq 0) 'the published copy verifies on the server'
+    Check ((ServerIntact) -and (NoStaging) -and -not (Test-Path (Join-Path $server 'Previous releases'))) 'the published copy verifies on the server, with nothing left over'
     $r = Install $server @()
     Check ($r.Code -eq 0 -and (Installed).commit -eq $commitB -and (Get-Content (Join-Path $installed 'source.txt') -First 1) -eq $server) 'installing from the published folder records it for updates'
 
-    $p = & $shell -NoProfile -ExecutionPolicy Bypass -File $publish -Package $relDev -ReleaseFolder $server -ApprovedBy 'test' 2>&1 | ForEach-Object { "$_" }
-    Check ($LASTEXITCODE -ne 0 -and ($p -join ' ') -match 'development build') 'a development build is never published'
-    Check ((Read-FtfBuildInfo (Join-Path $server 'Bundle')).commit -eq $commitB) 'and the approved release stays'
-    $p = & $shell -NoProfile -ExecutionPolicy Bypass -File $publish -Package $mixed -ReleaseFolder $server -ApprovedBy 'test' 2>&1 | ForEach-Object { "$_" }
-    Check ($LASTEXITCODE -ne 0 -and (Read-FtfBuildInfo (Join-Path $server 'Bundle')).commit -eq $commitB) 'an inconsistent package is never published'
+    $notesFile = Join-Path $server 'Office notes.txt'
+    Set-Content -Path $notesFile -Value 'kept by the office' -Encoding utf8
+    $c = Check-Folder $server
+    Check ($c.Code -eq 0 -and $c.Text -match 'approved release bbbbbbb' -and $c.Text -match 'Office notes.txt') 'the check says which release is there, and what else'
+    Check (@(Get-ChildItem $server -Force -Filter '_publishing-check-*').Count -eq 0) 'and leaves nothing behind in the release folder'
+
+    $p = Publish $relDev @()
+    Check ($p.Code -ne 0 -and $p.Text -match 'development build') 'a development build is never published'
+    Check ((ServerCommit) -eq $commitB -and (ServerIntact)) 'and the approved release stays'
+    $p = Publish $mixed @()
+    Check ($p.Code -ne 0 -and (ServerCommit) -eq $commitB -and (ServerIntact)) 'an inconsistent package is never published'
+
     $relC = Join-Path $releases 'C'
     New-Release $relC $commitC 'approved' '2026-11-05T10:00:00Z'
-    $p = & $shell -NoProfile -ExecutionPolicy Bypass -File $publish -Package $relC -ReleaseFolder $server -ApprovedBy 'test' 2>&1 | ForEach-Object { "$_" }
-    Check ($LASTEXITCODE -eq 0 -and (Read-FtfBuildInfo (Join-Path $server 'Bundle')).commit -eq $commitC) 'a newer approved release replaces it'
-    Check (@(Get-ChildItem (Split-Path $server -Parent) -Directory -Filter 'FieldToFinish.previous-*').Count -eq 1) 'and the previous release is kept beside it'
+    $p = Publish $relC @()
+    Check ($p.Code -eq 0 -and (ServerCommit) -eq $commitC -and (ServerIntact) -and (NoStaging)) 'a newer approved release replaces it, inside the same folder'
+    $prev = PreviousReleases
+    Check ($prev.Count -eq 1 -and $prev[0].Name -match '-bbbbbbb$' -and (Test-Path (Join-Path $prev[0].FullName 'Bundle')) -and
+           (Test-Path (Join-Path $prev[0].FullName 'Install or Update FieldToFinish.bat'))) 'the release it replaced is kept whole in Previous releases'
+    Check ((Get-Content $notesFile -Raw) -match 'kept by the office') 'a file that is not part of a release stays where it is'
     $r = Install $server @()
     Check ($r.Code -eq 0 -and $r.Text -match 'update bbbbbbb -> ccccccc') 'surveyors update from the same folder, same double-click'
+
+    Write-Host '-- a publish that fails part way'
+    $relD = Join-Path $releases 'D'
+    New-Release $relD $commitD 'approved' '2026-11-06T10:00:00Z'
+    $p = Publish $relD @('-TestFault', 'MidSwap')
+    Check ($p.Code -ne 0 -and $p.Text -match 'could not be switched') 'a failure while switching releases stops the publish'
+    Check ((ServerCommit) -eq $commitC -and (ServerIntact) -and (NoStaging) -and (PreviousReleases).Count -eq 1) 'and the release folder is exactly as it was'
+    $p = Publish $relD @('-TestFault', 'AfterSwap')
+    Check ($p.Code -ne 0 -and $p.Text -match 'did not verify in place' -and $p.Text -match 'previous release was put back') 'a release that does not verify in place is taken back out'
+    Check ((ServerCommit) -eq $commitC -and (ServerIntact) -and (NoStaging) -and (PreviousReleases).Count -eq 1) 'and the previous release is there again, every file intact'
+    New-Item -ItemType Directory -Force -Path (Join-Path $server '_publishing') | Out-Null
+    $p = Publish $relD @()
+    Check ($p.Code -ne 0 -and $p.Text -match 'another publish may be running' -and (ServerCommit) -eq $commitC) 'two publishes never run over each other'
+    Remove-Item (Join-Path $server '_publishing') -Recurse -Force
+
+    Write-Host '-- the releases it replaced'
+    $relE = Join-Path $releases 'E'
+    $relF = Join-Path $releases 'F'
+    New-Release $relE $commitE 'approved' '2026-11-07T10:00:00Z'
+    New-Release $relF $commitF 'approved' '2026-11-08T10:00:00Z'
+    foreach ($next in @($relD, $relE, $relF)) {
+        Start-Sleep -Milliseconds 1100
+        $p = Publish $next @()
+        if ($p.Code -ne 0) { Write-Host $p.Text }
+    }
+    $prev = PreviousReleases
+    Check ((ServerCommit) -eq $commitF -and (ServerIntact) -and $prev.Count -eq 3) 'the three most recent releases it replaced are kept'
+    Check (@($prev | Where-Object { $_.Name -match '-bbbbbbb$' }).Count -eq 0 -and $prev[2].Name -match '-eeeeeee$') 'the oldest is let go'
+    Check (Test-Path (Join-Path (Join-Path $server 'Previous releases') 'README.txt')) 'Previous releases explains itself'
+    $r = Install $server @()
+    Check ($r.Code -eq 0 -and (Installed).commit -eq $commitF) 'surveyors take the newest release'
+
+    Write-Host '-- putting the previous release back on the server'
+    Add-Content -Path (Join-Path (Contents2024 (Join-Path $prev[2].FullName 'Bundle')) 'rules.json') -Value ' '
+    Start-Sleep -Milliseconds 1100
+    $p = Publish $null @('-Restore')
+    Check ($p.Code -eq 0 -and $p.Text -match 'skipped' -and (ServerCommit) -eq $commitD -and (ServerIntact)) 'a previous release that does not verify is skipped; the newest one that does is put back'
+    Check ((PreviousReleases).Count -eq 3 -and @(PreviousReleases | Where-Object { $_.Name -match '-fffffff$' }).Count -eq 1 -and (NoStaging)) 'and the release it replaced is kept'
+    $r = Install $server @()
+    Check ($r.Code -eq 0 -and $r.Text -match 'OLDER' -and (Installed).commit -eq $commitD) 'the batch file then installs it, saying it is older'
 }
 catch
 {

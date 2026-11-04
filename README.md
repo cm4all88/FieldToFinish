@@ -193,7 +193,7 @@ version.txt          build date, branch and commit -- printed while installing
 Bundle\              PackageContents.xml + Contents\2024\ (the plugin itself)
 ```
 
-`UPDATEFTF -PublishTo <folder>` publishes it, after every check passed, as the approved release
+`UPDATEFTF -Publish` publishes it, after every check passed, as the approved release
 on the server, and people double-click `Install or Update FieldToFinish.bat` there. It stages the
 files to `%TEMP%` first, so a network folder and a network hiccup are both fine, verifies every
 file, and refuses to install while Civil 3D is open. The whole process, the folder layout and

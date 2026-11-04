@@ -52,14 +52,30 @@
     Build and install a development ref (a branch such as origin/claude/xyz, or a commit) for
     testing. Stamped "dev"; FTFVERSION says so.
 
+.PARAMETER CheckReleaseFolder
+    Checks the office's approved release folder (deploy\release-folder.txt, or -PublishTo) without
+    building or publishing anything: the \\server\share path behind its drive letter, that it can
+    be reached, what it holds, that you can publish there (a write test that leaves nothing behind),
+    and who can read and change it (deploy\check-release-folder.ps1). Changes nothing.
+
+.PARAMETER Publish
+    The approval step, to the office's approved release folder (deploy\release-folder.txt): after
+    the approved build is built,
+    unit-tested, installer-tested, installed and smoke-tested in Civil 3D in this same run, publish
+    it there (deploy\publish-release.ps1). The folder is checked again before anything is built.
+    Surveyors install and update from it by double-clicking "Install or Update FieldToFinish.bat"
+    there; FTF installed from there also offers each newer release when Civil 3D starts. Refused
+    for -Dev and -SkipSmoke builds. Runs the install and smoke test even when the build is already
+    installed, so what is published was proven in Civil 3D by this run. See
+    docs\network-deployment.md.
+
 .PARAMETER PublishTo
-    The approval step: after the approved build is built, unit-tested, installer-tested, installed
-    and smoke-tested in Civil 3D in this same run, publish it to this approved release folder on the
-    network (deploy\publish-release.ps1). Any folder: nothing is hard-coded. Surveyors install and
-    update from it by double-clicking "Install or Update FieldToFinish.bat" there; FTF installed
-    from there also offers each newer release when Civil 3D starts. Refused for -Dev and -SkipSmoke
-    builds. Runs the install and smoke test even when the build is already installed, so what is
-    published was proven in Civil 3D by this run. See docs\network-deployment.md.
+    The same as -Publish, to the folder given here instead of the office's (also for
+    -CheckReleaseFolder and -RestoreRelease).
+
+.PARAMETER RestoreRelease
+    Puts the release the approved release folder had before back (from its "Previous releases"),
+    after verifying it. Builds and installs nothing.
 
 .PARAMETER ReleaseNotes
     What changed, for the release's RELEASE-NOTES.txt (with -PublishTo). The commits since the
@@ -84,6 +100,9 @@ param(
     [switch]$Dev,
     [string]$Ref,
     [string]$PublishTo,
+    [switch]$Publish,
+    [switch]$CheckReleaseFolder,
+    [switch]$RestoreRelease,
     [string]$ReleaseNotes,
     [switch]$FixStartup,
     [string]$Branch = 'integration',
@@ -361,13 +380,69 @@ $marker = Join-Path $BuildRoot '.ftf-build-checkout'
 Info "repository:     $repoRoot (your working copy; never changed by this script)"
 Info "build checkout: $BuildRoot"
 
+# ===================================================================== the approved release folder
+
+# The office's approved release folder, kept with the scripts (deploy\release-folder.txt). Its
+# \\server\share path is worked out on this workstation by the check, never written down here.
+function Get-OfficeReleaseFolder {
+    $file = Join-Path $here 'deploy\release-folder.txt'
+    if (-not (Test-Path -LiteralPath $file)) { return $null }
+    return (Get-Content -LiteralPath $file | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | Select-Object -First 1)
+}
+
+# deploy\check-release-folder.ps1 (this UPDATEFTF's own copy): where the folder really is, that it
+# can be reached, and that this person can publish there.
+function Test-ReleaseFolder([string]$path) {
+    $checker = Join-Path $here 'deploy\check-release-folder.ps1'
+    if (-not (Test-Path -LiteralPath $checker)) { Fail "deploy\check-release-folder.ps1 is not beside this UPDATEFTF ($here)." @() }
+    $resultFile = Join-Path $state ('logs\release-folder-check-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
+    $check = Invoke-Script $checker @('-ReleaseFolder', $path, '-ResultFile', $resultFile) -Echo
+    $result = $null
+    try { $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json } catch { }
+    return [pscustomobject]@{ Code = $check.Code; Result = $result }
+}
+
+if ($Publish) {
+    if ($PublishTo) { Fail 'give -Publish (the office release folder) or -PublishTo <folder>, not both.' @() }
+    $PublishTo = Get-OfficeReleaseFolder
+    if (-not $PublishTo) { Fail "no office release folder is configured (deploy\release-folder.txt beside $here)." @('Give the folder with -PublishTo instead.') }
+}
+
+if ($CheckReleaseFolder) {
+    $path = if ($PublishTo) { $PublishTo } else { Get-OfficeReleaseFolder }
+    if (-not $path) { Fail "no office release folder is configured (deploy\release-folder.txt beside $here)." @('Give the folder with -PublishTo.') }
+    Step "Approved release folder: $path"
+    $checked = Test-ReleaseFolder $path
+    if ($checked.Code -ne 0 -or -not $checked.Result -or -not $checked.Result.canPublish) {
+        $why = @()
+        if ($checked.Result) { $why = @($checked.Result.problems) }
+        Fail 'the approved release folder did not pass its check; nothing can be published there yet.' $why
+    }
+    Ok ('approved releases can be published to ' + $checked.Result.folder)
+    Info ('check log: ' + (Join-Path $state 'logs'))
+    Info 'Nothing was built or published. When a build has passed in Civil 3D, publish it with UPDATEFTF -Publish.'
+    exit 0
+}
+
+if ($RestoreRelease) {
+    $folderToRestore = if ($PublishTo) { $PublishTo } else { Get-OfficeReleaseFolder }
+    if (-not $folderToRestore) { Fail "no office release folder is configured (deploy\release-folder.txt beside $here)." @() }
+    Step "Put back the previous approved release in $folderToRestore"
+    $restored = Invoke-Script (Join-Path $here 'deploy\publish-release.ps1') @('-Restore', '-ReleaseFolder', $folderToRestore) -Echo
+    if ($restored.Code -ne 0) { Fail 'nothing was restored (see above); the approved release folder is unchanged.' @() }
+    Ok 'the previous approved release is back in the release folder'
+    exit 0
+}
+
 # ===================================================================== -Rollback
 
 if ($Rollback) {
     Step 'Rollback to the previous FTF'
     if ((Civil3D-Processes).Count -gt 0) { Fail 'Civil 3D is open. Close it, then run UPDATEFTF -Rollback again.' @() }
+    # UPDATEFTF's own backups (<time>-<commit>), newest first; install.ps1's (install-*) have their
+    # own restore ("Restore previous FieldToFinish.bat") and would sort ahead of them by name.
     $backups = @(Get-ChildItem (Join-Path $state 'backups') -Directory -ErrorAction SilentlyContinue |
-                 Where-Object { Test-Path (Join-Path $_.FullName 'FieldToFinish.bundle') } | Sort-Object Name -Descending)
+                 Where-Object { $_.Name -notlike 'install-*' -and (Test-Path (Join-Path $_.FullName 'FieldToFinish.bundle')) } | Sort-Object Name -Descending)
     if ($backups.Count -eq 0) { Fail 'there is no backup to roll back to.' @("Backups are kept in $state\backups.") }
     $from = $backups[0].FullName
     $current = Read-BuildInfo $installedDir
@@ -429,8 +504,20 @@ if ($Dev) {
 }
 $short = $target.Substring(0, 7)
 # Publishing is for approved builds proven in Civil 3D in this same run; say so before building anything.
-if ($PublishTo -and $channel -ne 'approved') { Fail '-PublishTo publishes approved releases only. A -Dev build is never published; it stays on this workstation.' @() }
-if ($PublishTo -and $SkipSmoke) { Fail '-PublishTo needs the smoke test in Civil 3D: a -SkipSmoke run is never published.' @() }
+if ($PublishTo -and $channel -ne 'approved') { Fail 'only approved releases are published. A -Dev build is never published; it stays on this workstation.' @() }
+if ($PublishTo -and $SkipSmoke) { Fail 'publishing needs the smoke test in Civil 3D: a -SkipSmoke run is never published.' @() }
+# The release folder is checked before a long build, not after it.
+if ($PublishTo -and -not $Status) {
+    Step "Approved release folder: $PublishTo"
+    $checked = Test-ReleaseFolder $PublishTo
+    if ($checked.Code -ne 0 -or -not $checked.Result -or -not $checked.Result.canPublish) {
+        $why = @()
+        if ($checked.Result) { $why = @($checked.Result.problems) }
+        Fail 'the approved release folder did not pass its check, so nothing was built or published.' $why
+    }
+    $PublishTo = "$($checked.Result.folder)"
+    Ok "it can take this release once every check below has passed: $PublishTo"
+}
 
 # ===================================================================== -Status
 
@@ -445,6 +532,8 @@ if ($Status) {
         Warn ("a newer approved build is available: {0}. Run UPDATEFTF." -f $approvedHead.Substring(0, 7))
     }
     if (Test-Path $installedDir) { Show-Startup }
+    $office = Get-OfficeReleaseFolder
+    if ($office) { Info ("office release folder: $office (UPDATEFTF -CheckReleaseFolder checks it)") }
     Report-OtherLoaders -Fix:$FixStartup
     if (Test-Path $installedDll) { Restart-Advice $(if ($installed) { "$($installed.commit)".Substring(0, 7) } else { 'its commit' }) }
     exit 0
@@ -720,7 +809,7 @@ if ($PublishTo) {
         Warn 'not published: only an approved build of the integration branch is published, never a -Dev build.'
     } elseif ($SkipSmoke) {
         $notPublished = 'the smoke test was skipped'
-        Warn 'not published: -SkipSmoke left this build unproven in Civil 3D. Run UPDATEFTF -PublishTo without it.'
+        Warn 'not published: -SkipSmoke left this build unproven in Civil 3D. Run UPDATEFTF -Publish without it.'
     } else {
         $published = Invoke-Script (Join-Path $BuildRoot 'deploy\make-release.ps1') @('-Configuration', 'Release', '-NoBuild',
             '-OutputRoot', (Join-Path $package 'publish'), '-Commit', $target, '-Branch', $branchName, '-Channel', 'approved',
