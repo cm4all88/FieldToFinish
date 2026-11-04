@@ -122,6 +122,8 @@ namespace FieldCodes.Cad
         /// contents' wording (FTFRESTYLE).</summary>
         public void Restyle(MText text, string labelText, ResolvedTextStyle t, double? symbolDegrees, bool keepRotation)
         {
+            // Where the text is now -- where FTF put it, or where someone moved it -- is kept.
+            var at = text.Location;
             var styleId = TextStyleId(t.DrawingTextStyle);
             if (!styleId.IsNull) text.TextStyleId = styleId;
             if (labelText != null) text.Contents = StyleText.Compose(labelText, t);
@@ -131,6 +133,7 @@ namespace FieldCodes.Cad
             Colour(text, t.Color);
             CadUtil.Mask(text, t.Mask == MaskMode.Background);
             Finish(text, t);
+            if (text.Location.DistanceTo(at) > 1e-9) text.Location = at;
         }
 
         /// <summary>Makes placed text annotative when its style says so.</summary>
@@ -281,6 +284,13 @@ namespace FieldCodes.Cad
         /// position or its leader's vertices (FTFRESTYLE).</summary>
         public void Restyle(MLeader leader, string labelText, ResolvedAnnotationStyle s, double? symbolDegrees)
         {
+            // What is on the sheet: the text where it is (FTF's place, or where someone moved it)
+            // and each leader's arrow. A multileader re-seats its text against its landing when the
+            // text height, attachment or landing changes, which moved a label a drafter had put
+            // somewhere (the style smoke test at e979c7f: "the pole label moved by hand stayed where
+            // it was put"). Both are put back after the look is applied; the landing follows the text.
+            var textAt = leader.TextLocation;
+            var arrows = ArrowPoints(leader);
             var t = s.Text;
             var annotative = t.Annotative || s.Leader.Annotative;
             Try(() =>
@@ -297,6 +307,29 @@ namespace FieldCodes.Cad
                 }
             });
             StyleLeader(leader, s, leader.TextLocation, leader.TextLocation, symbolDegrees);
+            Try(() => { if (leader.TextLocation.DistanceTo(textAt) > 1e-9) leader.TextLocation = textAt; });
+            foreach (var a in arrows)
+            {
+                var line = a.Key;
+                var point = a.Value;
+                Try(() => { if (leader.GetFirstVertex(line).DistanceTo(point) > 1e-9) leader.SetFirstVertex(line, point); });
+            }
+        }
+
+        /// <summary>Each leader line's arrow end (its first vertex), by leader line index.</summary>
+        private static List<KeyValuePair<int, Point3d>> ArrowPoints(MLeader leader)
+        {
+            var points = new List<KeyValuePair<int, Point3d>>();
+            try
+            {
+                foreach (var index in leader.GetLeaderLineIndexes(0))
+                {
+                    var line = Convert.ToInt32(index, System.Globalization.CultureInfo.InvariantCulture);
+                    points.Add(new KeyValuePair<int, Point3d>(line, leader.GetFirstVertex(line)));
+                }
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { }
+            return points;
         }
 
         private static TextAttachmentType Attachment(LeaderAttachment a)

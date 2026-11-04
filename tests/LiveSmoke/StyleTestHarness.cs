@@ -1,16 +1,27 @@
 // Headless checks that Settings > Text Styles, Leader Styles and Style Assignments control the
 // objects FTFLABELS draws, and that FTFRESTYLE updates them in place.
 //
-// The drawing folder holds an ftf-settings.json (written by deploy\smoke-test.ps1) with:
+// A REQUIRED stage of the deploy smoke test (deploy\smoke-test.ps1, Invoke-RequiredCheck): a failure
+// makes UPDATEFTF put the previous build back.
+//
+// The drawing folder holds the build's own rules.json and an ftf-settings.json (both written by
+// deploy\smoke-test.ps1). The settings:
 //   text style  "Smoke text":   drawing text style FTFSMOKE, 0.12" high, colour 3, prefix "S-", background mask
 //   leader      "Smoke leader": spline, _Dot arrow 0.05", colour 1, no landing
 //   assignments: family Utilities -> Smoke text, layer FTF-SMOKE-UTIL
 //                code FH          -> Smoke leader, leader Always
+//                code WFH         -> Smoke leader, leader Always
 //                code MB          -> not labelled
+// The drafting standard (built in): a fire hydrant (WFH, FH) gets no text label. STYLESEED adds
+// an office standard to the rules beside the drawing that labels FH -- on purpose, so the hydrant's
+// label styling is tested -- and leaves WFH to the built-in standard: its leader Always assignment
+// must then draw nothing, since a leader belongs to a label and the standard wants none.
 //
-// STYLESEED     a text style FTFSMOKE and four COGO points: FH 12, PP 1234, MB 5, SN 135 STOP
-// STYLEVERIFY   checks the stage named: STYLED (after FTFLABELS), PREVIEW (after FTFRESTYLE Preview),
-//               RESTYLED (after STYLEEDIT and FTFRESTYLE Apply)
+// STYLESEED     the office standard for FH, a text style FTFSMOKE and five COGO points:
+//               FH 12, WFH 13, PP 1234, MB 5, SN 135 STOP
+// STYLEVERIFY   first requires that the named command ran exactly once since the previous stage, then
+//               checks the stage named: STYLED (after FTFLABELS), PREVIEW (after FTFRESTYLE Preview: nothing
+//               changed), RESTYLED (after STYLEEDIT and FTFRESTYLE Apply: the new look, nothing moved)
 // STYLEMOVE     moves the pole's label by hand
 // STYLEEDIT     rewrites the settings: Smoke text 0.15" and colour 5, then has FTF re-read them
 // STYLEEND      writes the verdict
@@ -45,7 +56,17 @@ namespace FtfStyleTest
         private static readonly List<string> Stages = new List<string>();
         private static readonly Dictionary<string, string> Numbers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static Point3d _movedTo;
+        private static Point3d _poleBefore;
         private static bool _moved;
+        private static Point3d? _hydrantText;
+        private static Point3d? _hydrantArrow;
+        private static Assembly _plugin;
+        private static readonly Dictionary<string, int> SeenStarted = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, int> SeenFinished = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private const string StartedCount = "FieldCodes.Cad.FtfCommandTrace.StartedCount(System.String)";
+        private const string FinishedCount = "FieldCodes.Cad.FtfCommandTrace.FinishedCount(System.String)";
+        // The office standard STYLESEED puts in the rules beside the drawing: FH is labelled.
+        private const string HydrantLabelled = @"{ ""requirements"": [ { ""name"": ""Fire hydrant, labelled (style smoke test)"", ""codes"": [""FH""], ""label"": ""AsPlanned"", ""symbol"": ""PointStyle"" } ] }";
 
         private static Editor Ed { get { return Application.DocumentManager.MdiActiveDocument.Editor; } }
 
@@ -221,6 +242,15 @@ namespace FtfStyleTest
             var db = doc.Database;
             Record("BEGIN " + DateTime.UtcNow.ToString("o", C));
             var plugin = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "FieldCodes.Cad");
+            if (plugin == null) Fatal("FieldCodes.Cad is not loaded.");
+            _plugin = plugin;
+            foreach (var signature in new[] { StartedCount, FinishedCount }) Contract(plugin, signature);
+            foreach (var name in new[] { "FTFLABELS", "FTFRESTYLE" })
+            {
+                SeenStarted[name] = Trace(StartedCount, name);
+                SeenFinished[name] = Trace(FinishedCount, name);
+            }
+            OfficeStandard(db);
             var kinds = plugin != null ? plugin.GetType("FieldCodes.Cad.FtfEntityKind") : null;
             if (kinds != null) LabelKind = Convert.ToInt16(Enum.Parse(kinds, "Label"));
             using (var tr = db.TransactionManager.StartTransaction())
@@ -239,6 +269,7 @@ namespace FtfStyleTest
                 var seeds = new[]
                 {
                     new KeyValuePair<string, Point3d>("FH 12", new Point3d(1000, 1000, 100)),
+                    new KeyValuePair<string, Point3d>("WFH 13", new Point3d(1000, 1200, 100)),
                     new KeyValuePair<string, Point3d>("PP 1234", new Point3d(1200, 1000, 100)),
                     new KeyValuePair<string, Point3d>("MB 5", new Point3d(1400, 1000, 100)),
                     new KeyValuePair<string, Point3d>("SN 135 STOP", new Point3d(1600, 1000, 100))
@@ -251,8 +282,94 @@ namespace FtfStyleTest
                 }
                 tr.Commit();
             }
-            Check(Numbers.Count == 4, "four COGO points and text style FTFSMOKE seeded (scale " + Scale(db).ToString("0.##", C) + ")");
+            Check(Numbers.Count == 5, "five COGO points and text style FTFSMOKE seeded (scale " + Scale(db).ToString("0.##", C) + ")");
         }
+
+        /// <summary>The office standard that labels FH, added to the build's rules.json beside the
+        /// drawing (deploy\smoke-test.ps1 copies it there). The plugin re-reads rules whose file changed.</summary>
+        private static void OfficeStandard(AcDb.Database db)
+        {
+            var path = Path.Combine(Path.GetDirectoryName(db.Filename), "rules.json");
+            if (!File.Exists(path)) Fatal("no rules.json beside the drawing (" + path + "): the smoke test copies the build's own there.");
+            var text = File.ReadAllText(path);
+            if (text.Contains("\"featureStandard\"")) Fatal("the rules beside the drawing already have a featureStandard; the style check needs the factory rules.");
+            text = text.TrimEnd();
+            if (!text.EndsWith("}", StringComparison.Ordinal)) Fatal("rules.json does not end with }");
+            var before = File.GetLastWriteTimeUtc(path);
+            File.WriteAllText(path, text.Substring(0, text.Length - 1).TrimEnd() + ",\r\n  \"featureStandard\": " + HydrantLabelled + "\r\n}\r\n", new UTF8Encoding(false));
+            var now = DateTime.UtcNow;
+            File.SetLastWriteTimeUtc(path, now < before.AddSeconds(2) ? before.AddSeconds(2) : now);
+            Record("NOTE office standard in the rules beside the drawing: " + HydrantLabelled);
+        }
+
+        private static int Trace(string signature, string command)
+        {
+            return (int)Call(_plugin, signature, null, command);
+        }
+
+        /// <summary>The named command ran exactly once, and finished, since the previous stage.</summary>
+        private static void RequireRanOnce(string name)
+        {
+            var started = Trace(StartedCount, name);
+            var finished = Trace(FinishedCount, name);
+            int seenStarted, seenFinished;
+            SeenStarted.TryGetValue(name, out seenStarted);
+            SeenFinished.TryGetValue(name, out seenFinished);
+            if (started == seenStarted) Fatal(name + " never ran (Unknown command, or the script fell out of step).");
+            if (started != seenStarted + 1) Fatal(name + " ran " + (started - seenStarted) + " times where once was expected.");
+            if (finished != seenFinished + 1) Fatal(name + " started but did not finish (see the command line above).");
+            SeenStarted[name] = started;
+            SeenFinished[name] = finished;
+        }
+
+        /// <summary>Every FTF label (text or multileader) drawn for the point.</summary>
+        private static int LabelsOf(AcDb.Transaction tr, AcDb.Database db, string code)
+        {
+            string number;
+            if (!Numbers.TryGetValue(code, out number)) return -1;
+            var n = 0;
+            var ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForRead);
+            foreach (AcDb.ObjectId id in ms)
+            {
+                var e = tr.GetObject(id, AcDb.OpenMode.ForRead) as AcDb.Entity;
+                if (e == null || !(e is AcDb.MText || e is AcDb.MLeader)) continue;
+                using (var rb = e.GetXDataForApplication(AppName))
+                {
+                    if (rb == null) continue;
+                    var s = new List<string>();
+                    short kind = -1;
+                    foreach (AcDb.TypedValue tv in rb)
+                    {
+                        if (tv.TypeCode == (short)AcDb.DxfCode.ExtendedDataAsciiString) s.Add(tv.Value as string);
+                        if (tv.TypeCode == (short)AcDb.DxfCode.ExtendedDataInteger16) kind = Convert.ToInt16(tv.Value);
+                    }
+                    if (kind == LabelKind && s.Count >= 3 && s[2] == number) n++;
+                }
+            }
+            return n;
+        }
+
+        private static int Multileaders(AcDb.Transaction tr, AcDb.Database db)
+        {
+            var n = 0;
+            var ms = (AcDb.BlockTableRecord)tr.GetObject(AcDb.SymbolUtilityServices.GetBlockModelSpaceId(db), AcDb.OpenMode.ForRead);
+            foreach (AcDb.ObjectId id in ms) if (tr.GetObject(id, AcDb.OpenMode.ForRead) is AcDb.MLeader) n++;
+            return n;
+        }
+
+        /// <summary>The arrow end of a multileader's first leader line.</summary>
+        private static Point3d? ArrowOf(AcDb.MLeader ml)
+        {
+            try
+            {
+                foreach (var index in ml.GetLeaderLineIndexes(0))
+                    return ml.GetFirstVertex(Convert.ToInt32(index, C));
+            }
+            catch (System.Exception) { }
+            return null;
+        }
+
+        private static string Xy(Point3d p) { return p.X.ToString("0.###", C) + "," + p.Y.ToString("0.###", C); }
 
         /// <summary>FTF's label for a point: its text entity (MText or MLeader) and its XData strings.</summary>
         private static AcDb.Entity LabelOf(AcDb.Transaction tr, AcDb.Database db, string code, out List<string> strings)
@@ -326,6 +443,9 @@ namespace FtfStyleTest
         private static void VerifyBody()
         {
             var stage = Ed.GetString("\nStage: ").StringResult.Trim().ToUpperInvariant();
+            if (stage == "STYLED") RequireRanOnce("FTFLABELS");
+            else if (stage == "PREVIEW" || stage == "RESTYLED") RequireRanOnce("FTFRESTYLE");
+            else Fatal("unknown stage " + stage);
             var db = Application.DocumentManager.MdiActiveDocument.Database;
             var scale = Scale(db);
             var failuresBefore = _failures;
@@ -337,10 +457,26 @@ namespace FtfStyleTest
             {
                 List<string> xd;
                 var fh = LabelOf(tr, db, "FH", out xd);
-                Check(fh is AcDb.MLeader, stage + ": the hydrant (leader Always) is one multileader");
+                Check(fh is AcDb.MLeader && LabelsOf(tr, db, "FH") == 1,
+                      stage + ": the hydrant (leader Always; labelled by the office standard) is one multileader (" +
+                      (fh == null ? "no label" : fh.GetType().Name) + ", " + LabelsOf(tr, db, "FH") + " label(s))");
+                // WFH: leader Always is assigned, but its standard (built in) draws no label -- and so no leader.
+                Check(LabelsOf(tr, db, "WFH") == 0, stage + ": the hydrant WFH 13 (its standard: no label) has no label, its leader Always assignment notwithstanding (" +
+                      LabelsOf(tr, db, "WFH") + ")");
+                Check(Multileaders(tr, db) == (fh is AcDb.MLeader ? 1 : 0) + (LabelOf(tr, db, "PP", out xd) is AcDb.MLeader ? 1 : 0) + (LabelOf(tr, db, "SN", out xd) is AcDb.MLeader ? 1 : 0),
+                      stage + ": no multileader but the labels' own (" + Multileaders(tr, db) + ")");
+                fh = LabelOf(tr, db, "FH", out xd);
                 if (fh is AcDb.MLeader)
                 {
                     var ml = (AcDb.MLeader)fh;
+                    var arrowAt = ArrowOf(ml);
+                    if (stage == "STYLED") { _hydrantText = ml.TextLocation; _hydrantArrow = arrowAt; }
+                    else if (_hydrantText.HasValue)
+                    {
+                        Check(ml.TextLocation.DistanceTo(_hydrantText.Value) < 1e-6 && arrowAt.HasValue && _hydrantArrow.HasValue && arrowAt.Value.DistanceTo(_hydrantArrow.Value) < 1e-6,
+                              stage + ": FTFRESTYLE moved nothing: the hydrant's text and arrow are where FTFLABELS put them (text " + Xy(_hydrantText.Value) + " -> " + Xy(ml.TextLocation) +
+                              (arrowAt.HasValue && _hydrantArrow.HasValue ? ", arrow " + Xy(_hydrantArrow.Value) + " -> " + Xy(arrowAt.Value) : ", arrow not read") + ")");
+                    }
                     Check(Contents(fh).StartsWith("S-HYDRANT 12", StringComparison.Ordinal), stage + ": hydrant text has the style's prefix (" + Contents(fh) + ")");
                     Check(StyleName(tr, fh).Equals("FTFSMOKE", StringComparison.OrdinalIgnoreCase), stage + ": hydrant text style is FTFSMOKE (" + StyleName(tr, fh) + ")");
                     Check(Near(Height(fh), smokeHeight), stage + ": hydrant text height " + Height(fh).ToString("0.###", C) + " = " + smokeHeight.ToString("0.###", C));
@@ -356,7 +492,7 @@ namespace FtfStyleTest
                 }
 
                 var pp = LabelOf(tr, db, "PP", out xd);
-                Check(pp != null, stage + ": the pole is labelled");
+                Check(pp != null && LabelsOf(tr, db, "PP") == 1, stage + ": the pole is labelled, once (" + LabelsOf(tr, db, "PP") + ")");
                 if (pp != null)
                 {
                     Check(Contents(pp).StartsWith("S-POLE 1234", StringComparison.Ordinal), stage + ": pole text has the family's prefix (" + Contents(pp) + ")");
@@ -364,14 +500,16 @@ namespace FtfStyleTest
                     var colour = pp is AcDb.MText ? pp.Color.ColorIndex : ((AcDb.MLeader)pp).TextColor.ColorIndex;
                     Check(colour == smokeColour, stage + ": pole text colour " + colour + " = " + smokeColour);
                     Check(pp.Layer.Equals("FTF-SMOKE-UTIL", StringComparison.OrdinalIgnoreCase), stage + ": pole label on FTF-SMOKE-UTIL");
-                    if (_moved) Check(Where(pp).DistanceTo(_movedTo) < 1e-6, stage + ": the pole label moved by hand stayed where it was put");
+                    if (_moved)
+                        Check(Where(pp).DistanceTo(_movedTo) < 1e-6, stage + ": the pole label moved by hand stayed where it was put (" + pp.GetType().Name +
+                              ": placed " + Xy(_poleBefore) + ", moved to " + Xy(_movedTo) + ", now " + Xy(Where(pp)) + ")");
                 }
 
                 var mb = LabelOf(tr, db, "MB", out xd);
                 Check(mb == null, stage + ": the mailbox (labelling turned off for MB) has no label");
 
                 var sn = LabelOf(tr, db, "SN", out xd);
-                Check(sn != null, stage + ": the sign is labelled");
+                Check(sn != null && LabelsOf(tr, db, "SN") == 1, stage + ": the sign is labelled, once");
                 if (sn != null)
                 {
                     Check(!Contents(sn).StartsWith("S-", StringComparison.Ordinal), stage + ": the sign (no assignment) has no prefix");
@@ -399,6 +537,7 @@ namespace FtfStyleTest
                 var pp = LabelOf(tr, db, "PP", out xd);
                 if (pp != null)
                 {
+                    _poleBefore = Where(pp);
                     pp.UpgradeOpen();
                     pp.TransformBy(Matrix3d.Displacement(new Vector3d(3, 2, 0)));
                     _movedTo = Where(pp);
@@ -406,7 +545,7 @@ namespace FtfStyleTest
                 }
                 tr.Commit();
             }
-            Check(_moved, "the pole's label was moved by hand");
+            Check(_moved, "the pole's label was moved by hand (" + (_moved ? Xy(_poleBefore) + " -> " + Xy(_movedTo) : "no pole label") + ")");
         }
 
         [CommandMethod("STYLEEDIT")]

@@ -126,13 +126,31 @@ written.
 
 ## Checked in Civil 3D on every deploy
 
-`deploy\smoke-test.ps1` (run by UPDATEFTF) does a second, separate headless run: it seeds four
-COGO points, runs FTFLABELS under test styles, and checks the real MTEXT and MLEADER
-properties -- text style, height, colour, prefix, background mask, layer, spline leader, `_Dot`
-arrow, no landing, a feature turned off -- then FTFRESTYLE Preview (nothing changes) and Apply
-(the change lands; a hand-moved label stays where it was put). It is reported in the UPDATEFTF
-output as `style check: PASS` or `STYLE CHECK FAILED`; while the style system is new it does
-not undo the install on its own.
+`deploy\smoke-test.ps1` (run by UPDATEFTF) does a separate headless run on a fresh drawing with the
+build's own rules: it seeds five COGO points and runs FTFLABELS under test styles. It then checks
+the real MTEXT and MLEADER properties:
+
+- text style, height, colour, prefix, background mask and layer;
+- spline leader, `_Dot` arrow, no landing;
+- a feature turned off.
+
+The hydrant FH is labelled by an office drafting standard the check writes beside the drawing (the
+built-in standard gives a fire hydrant no text label). WFH 13 keeps the built-in standard, so its
+"leader Always" assignment must draw nothing: a leader belongs to a label.
+
+FTFRESTYLE Preview must change nothing. Apply must land the new look and move nothing: the
+hydrant's text and arrow stay where FTFLABELS put them, and a hand-moved label stays where it was
+put.
+
+It is a **required** check, like identity and accountability: a failure makes UPDATEFTF put the
+previous build back. The log is `StyleTestHarness\StyleTestHarness.log` in the smoke folder.
+
+At e979c7f two things failed:
+
+- The hydrant had no label at all (the drafting standard, not the styles).
+- A hand-moved pole label, a multileader, came back moved after Apply: re-styling a multileader's
+  text height and attachment makes AutoCAD re-seat the text against its landing. FTFRESTYLE now
+  puts the text and every leader's arrow back where they were after applying the look.
 
 ## Code
 

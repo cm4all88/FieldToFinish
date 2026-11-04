@@ -212,12 +212,25 @@ public sealed class DeploymentContractTests
         Assert.Contains("'-FTFREVIEW', 'Approve', 'line.gap:FNC:103-105'", accountability);
         Assert.Contains("'FTFQC', 'Complete'", accountability);
 
-        // A failure that throws is a failure too, and both run before the reported-only style
-        // check, which must not be able to swallow them.
+        // A failure that throws is a failure too.
         Assert.Matches(@"try \{ Invoke-IdentityCheck \}\s*catch \{ Fail \(", runner);
         Assert.Matches(@"try \{ Invoke-AccountabilityCheck \}\s*catch \{ Fail \(", runner);
+        Assert.Matches(@"try \{ Invoke-StyleCheck \}\s*catch \{ Fail \(", runner);
         var style = runner.IndexOf("try { Invoke-StyleCheck }", StringComparison.Ordinal);
         Assert.True(runner.IndexOf("try { Invoke-AccountabilityCheck }", StringComparison.Ordinal) < style);
+
+        // The style check is required too: the same runner, its stages proven, no "not blocking".
+        var styles = Between(runner, "function Invoke-StyleCheck", "try { Invoke-StyleCheck }");
+        Assert.Contains("Invoke-RequiredCheck 'style' 'StyleTestHarness' 'FTF_STYLE_RESULT'", styles);
+        Assert.Contains("@('STYLED', 'PREVIEW', 'RESTYLED')", styles);
+        Assert.Contains("'FTFRESTYLE', 'Preview',", styles);
+        Assert.Contains("'FTFRESTYLE', 'Apply',", styles);
+        Assert.DoesNotContain("not blocking", styles);
+        Assert.DoesNotContain("STYLE CHECK FAILED", runner);
+        // The harness proves each command ran before it judges the stage.
+        var harness = Read("tests", "LiveSmoke", "StyleTestHarness.cs");
+        Assert.Contains("if (stage == \"STYLED\") RequireRanOnce(\"FTFLABELS\");", harness);
+        Assert.Contains("else if (stage == \"PREVIEW\" || stage == \"RESTYLED\") RequireRanOnce(\"FTFRESTYLE\");", harness);
     }
 
     private static string Between(string text, string from, string to)

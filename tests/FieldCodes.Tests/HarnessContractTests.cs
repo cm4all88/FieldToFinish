@@ -389,9 +389,11 @@ public sealed class HarnessContractTests
     public void TheSmokeTestSaysHowARunEndedAndWhereItGotTo(string eol)
     {
         var smoke = Source(eol, "deploy", "smoke-test.ps1");
-        // Exit codes are only readable from Start-Process when the handle was taken while it ran.
-        Assert.Equal(3, Regex.Matches(smoke, @"\$null = \$(p|process)\.Handle").Count);
-        Assert.Equal(3, Regex.Matches(smoke, @"Get-ExitReport \$(p|process) \$(killed|styleKilled)").Count);
+        // Exit codes are only readable from Start-Process when the handle was taken while it ran:
+        // the main run, and the one runner every required check (identity, accountability, style) uses.
+        Assert.Equal(2, Regex.Matches(smoke, @"\$null = \$(p|process)\.Handle").Count);
+        Assert.Equal(2, Regex.Matches(smoke, @"Get-ExitReport \$(p|process) \$killed").Count);
+        Assert.Equal(1, Regex.Matches(smoke, @"Start-Process -FilePath \$accore").Count - 1);   // one runner beside the main run
 
         // How the run ended: the exit code and what it means, or a kill on a timeout, and how long.
         var exit = FunctionBody(smoke, "Get-ExitReport");
