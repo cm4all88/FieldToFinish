@@ -48,9 +48,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": ""
@@ -70,9 +70,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "PlotScale.cs (ab476b7) is unit-tested only (PlotScaleTests); it has not run on a real drawing."
@@ -104,9 +104,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -146,9 +146,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -207,9 +207,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "Unit-verified at 63c5c0b, after the rotation work in ab476b7: road references when there is no centre line (local tangent, limited extension past a line's end, agreement between lines), fallbacks per kind, two-valve arrangements suggested and not applied, inferred connections for review only, QC graphics only for what needs review, FTFORIENTPOINT and FTFWHAT. None of it has run in Civil 3D: no smoke-test section checks a rotation (FTFRUN in the accountability check runs FTFORIENT, but nothing there checks one), and FTFORIENTPOINT, FTFWHAT and the new QC drawing have not been tried in a drawing. 874ebd1: a number with a unit after it (\"RD FACE 16\\\"\") is no longer read as an azimuth, and a sign's \"SW FACE\" is read; checked against every note of a real survey drawing, not in Civil 3D."
@@ -310,9 +310,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -355,9 +355,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "Civil 3D style check at e979c7f: 31 PASS 4 FAIL. The fix in 28034d0 is not yet verified in Civil 3D."
@@ -425,9 +425,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -474,9 +474,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -570,9 +570,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -611,9 +611,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -701,9 +701,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
@@ -756,12 +756,12 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
-        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded. FTFWETLANDBUFFER (6246d5a) is unit-tested and was checked on a 400-vertex jagged wetland and real road edges outside Civil 3D; it has not run in Civil 3D."
       }
     },
     {
@@ -799,9 +799,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": ""
@@ -838,9 +838,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "The Rotation evidence and review tab (SymbolsPage.cs, ab476b7) has not been opened in Civil 3D."
@@ -882,9 +882,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "The orientation settings in the rules file (ab476b7) are unit-tested only (OrientationSettingsEditingTests)."
@@ -931,9 +931,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
@@ -984,9 +984,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
@@ -1069,9 +1069,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
@@ -1141,9 +1141,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -1205,9 +1205,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -1278,9 +1278,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": ""
@@ -1312,9 +1312,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "The Rotation evidence and review tab of Symbols and Rotations (SymbolsPage.cs, ab476b7) has not been opened in Civil 3D."
@@ -1345,9 +1345,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": ""
@@ -1377,9 +1377,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": ""
@@ -1450,9 +1450,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
@@ -1484,9 +1484,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -1523,9 +1523,9 @@
       "installerTests": true,
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -1575,9 +1575,9 @@
       "harnessCompile": true,
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -1610,9 +1610,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": ""
@@ -1633,9 +1633,9 @@
       ],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
@@ -1659,9 +1659,9 @@
       "civil3d": [],
       "verified": {
         "unit": {
-          "commit": "874ebd1848c4b39ae0229da7d4be761011080925",
+          "commit": "6246d5aea5cda682ec8c1d73f4b35b4ec53b4f5e",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite, 2865 tests, LF checkout only (tools/check-before-push.sh --quick, which ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
+          "where": "Linux, .NET 8: the full unit suite, 2884 tests, LF checkout only (the pre-push quick check ran it in full because shared code changed; the four ReportSitsBesideTheDrawing tests compare Windows paths and do not run on Linux)"
         },
         "civil3d": null,
         "notes": "tools/test-plan.ps1 has run under PowerShell 7.4.6 on Linux only; under Windows PowerShell 5.1 only its syntax is checked (deploy/lint-powershell.ps1)."
