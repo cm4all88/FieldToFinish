@@ -116,6 +116,43 @@ namespace FieldCodes.Geometry
         }
 
         /// <summary>
+        /// One line for FTFWHAT: the scale FTF draws annotation at, and what a typical 0.08 in
+        /// label comes to in drawing units.
+        /// </summary>
+        public static string Summary(Reading scale)
+        {
+            if (scale == null) return "no annotation scale";
+            return string.Format(CultureInfo.InvariantCulture,
+                "{0}: 1 plotted inch = {1:0.###} drawing units, so FTF text of 0.08 in plotted is {2:0.###} drawing units tall",
+                scale.Basis, scale.DrawingUnitsPerPlottedInch, 0.08 * scale.DrawingUnitsPerPlottedInch);
+        }
+
+        /// <summary>
+        /// What a text height in drawing units comes to on paper at this scale, for FTFWHAT:
+        /// "1.6 drawing units = 0.080 in plotted at ...". A label 12 times too big reads as
+        /// 0.96 in here, which is the point.
+        /// </summary>
+        public static string HeightText(double drawingUnits, Reading scale)
+        {
+            if (scale == null || scale.DrawingUnitsPerPlottedInch <= 0)
+                return string.Format(CultureInfo.InvariantCulture, "{0:0.###} drawing units", drawingUnits);
+            return string.Format(CultureInfo.InvariantCulture, "{0:0.###} drawing units = {1:0.###} in plotted at {2:0.###} drawing units per plotted inch",
+                                 drawingUnits, drawingUnits / scale.DrawingUnitsPerPlottedInch, scale.DrawingUnitsPerPlottedInch);
+        }
+
+        /// <summary>
+        /// A block's insertion scale against the annotation scale, for FTFWHAT: "20 (1.0 x the
+        /// annotation scale)". A symbol inserted 12 times too big shows as 12.0 x.
+        /// </summary>
+        public static string BlockScaleText(double blockScale, Reading scale)
+        {
+            if (scale == null || scale.DrawingUnitsPerPlottedInch <= 0)
+                return string.Format(CultureInfo.InvariantCulture, "{0:0.###}", blockScale);
+            return string.Format(CultureInfo.InvariantCulture, "{0:0.###} ({1:0.###} x the annotation scale's {2:0.###})",
+                                 blockScale, blockScale / scale.DrawingUnitsPerPlottedInch, scale.DrawingUnitsPerPlottedInch);
+        }
+
+        /// <summary>
         /// Drawing units per plotted inch for an annotation scale (its name, paper units and
         /// drawing units, as the drawing holds it) in a drawing with the given INSUNITS.
         /// </summary>

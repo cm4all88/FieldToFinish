@@ -23,6 +23,16 @@ drawing; `FTFWHAT` (below) does that in one step.
 FTFORIENT, markers set by a drafter, and FTF objects by the command that made them. Every kind of
 object FTF stamps is named there; a test fails the build if a new kind is added without a name.
 
+It also answers "is this too big?":
+
+- With nothing selected, it names the annotation scale FTF draws at, how it read it, and what
+  0.08 in text comes to ("1" = 20'" in a drawing in US survey feet: 1 plotted inch = 20 drawing
+  units, so FTF text of 0.08 in plotted is 1.6 drawing units tall").
+- For a selected text or multileader, it gives the height in drawing units and in plotted
+  inches at that scale. A label twelve times too big reads 0.96 in.
+- For a block, it gives the insertion scale against the annotation scale. A symbol inserted
+  twelve times too big reads "12 x the annotation scale".
+
 ## Root causes
 
 ### 1. "HYDRANT LATERAL (INFERRED)" and the inferred utility graphics
@@ -103,6 +113,20 @@ FTF label, leader, mask and QC mark twelve times too big. The old code comment e
 All 25 annotation routines use it through `CadUtil.DrawingUnitsPerPlottedUnit`. Your example
 (0.08 in at 1" = 20' in a feet drawing) is 1.6 ft, and a test holds it.
 
+**Which drawings it affects.** A real Civil 3D survey drawing in US survey feet was checked by
+reading its scale list. Its engineering scales are made for feet: "1" = 20'" is 1:20, and it is
+the current scale. Its architectural scales are made the AutoCAD way: "1/4" = 1'-0"" is 0.25:12,
+which is 48 drawing units per plotted inch instead of 4.
+
+- **At 1" = 20' in a drawing like that one,** the old conversion was already right. Oversized
+  text there has another cause: the inferred-connection text in item 1, or a text or block FTF
+  did not make.
+- **The twelve-times error** hit drawings whose 1" = 20' scale is defined as 1:240, and any
+  architectural scale in a feet drawing.
+
+`FTFWHAT` on the oversized object, and with nothing selected, shows which case a drawing is.
+A test holds the whole scale list of that drawing.
+
 ### 4. Overlapping labels
 
 FTFLABELS already measures each label's real text extents, collects the symbols and labels
@@ -119,6 +143,45 @@ keeps labels moved by hand where they are, and never lays a label over a protect
 - **Duplicate labels with Civil 3D's own:** unchanged and already handled. A point whose label
   style shows its description is not labelled again (the drafting standard's "point label says
   it").
+
+### 5. Directions in the crew's notes
+
+A recorded direction is the strongest evidence FTFORIENT has, so misreading one turns a symbol
+with full confidence. Every note and raw description of a real survey drawing (150 notes, 1,013
+descriptions) was run through the parser.
+
+- **"RD FACE 16"" and "ROAD FACE 16"" (six notes) were read as an azimuth of 16 degrees.** On a
+  sign, hydrant or valve that would have overridden the road and turned it to 16 degrees as
+  "measured". The 16" is a measurement at the road face.
+  - **Corrected:** a number followed by a unit (", ', IN, FT, MM, X, TALL, HIGH, DIA ...) is
+    never an azimuth. "FACES 135" still is.
+- **"SW FACE" (the direction written first) was not read at all.**
+  - **Corrected:** on a sign it now reads as facing SW.
+  - On a pole the same words name the side its tag is on ("W FACE" followed by the pole
+    number), so they are not read as a light's arm.
+
+After the change, the parser reads only those direction-first notes, and only for signs. In that
+drawing they are all on poles, which its standard never turns.
+
+## Checked on a real survey drawing
+
+The engine before (7771085) and now was run on the points and linework of a real Civil 3D survey
+drawing. It is a rural road with edge of asphalt, fog lines, a double yellow and gravel edges, no
+curb and no separate alignment, plus fences, property lines, banks, ditches and utilities. The
+geometry was read from a copy of the drawing, which was not changed. This is the engine, not a
+Civil 3D run. The drawing is not in the repository.
+
+| | Result |
+|---|---|
+| Symbols decided | 24: signs, a hydrant, water and irrigation valves |
+| Same before and now (within 2 degrees) | 23 |
+| Changed | 1: a sign at the corner where the asphalt edge turns into a side road. Before, it was turned to match its neighbour; now it goes to review ("road lines here disagree": the edge 14 ft away and the centre line 29 ft away run 46 degrees apart) |
+| A non-road line nearer than any road line | 22 of 24. Banks and ditches within 2 ft, a fence 1.5 ft from one sign, utilities, gravel. None was used as a reference: every reference is a centre line or a road edge |
+| Signs whose only evidence is a road edge | 7, at 0.55: suggested and listed for review, not turned (keep-right is not assumed enough to turn on its own) |
+| Inferred hydrant laterals | none, before or now: the two valves near the hydrant are not arranged as an assembly |
+
+Before-and-after pictures of four places in that drawing were made for the office. They are not
+in the repository, because the drawing is project data.
 
 ## Settings (Symbols and Rotations > Rotation evidence and review)
 
@@ -170,7 +233,10 @@ it needs review.
     limit), a gap, a curve, a jog, a fence nearer than the road, a driveway edge, disagreeing
     edges, the tolerance and search settings, written arrow directions on partial and curved
     roads, re-running gives the same rotation, and the settings reading from the rules file;
-  - `PlotScaleTests`: 19 checks, including 0.08 in at 1" = 20';
+  - `PlotScaleTests`: 30 checks, including 0.08 in at 1" = 20', the whole scale list of a real
+    survey drawing, and the FTFWHAT size lines;
+  - the recorded-direction tests, with the notes of a real survey drawing ("RD FACE 16"",
+    "SW FACE", a pole's tag face);
   - `OrientationSettingsEditingTests`;
   - `OrientationReviewTests`;
   - the existing orientation, valve and review tests.
@@ -179,12 +245,14 @@ it needs review.
     Apply fallback;
   - two valves near a hydrant are suggested, not turned;
   - the CSV has six more columns.
-- **Before and after** in the table above are the same reconstructed scenes run through the engine
-  at 7771085 and now. They are synthetic geometry, not the survey drawing.
+- **Before and after:**
+  - The table in item 2 uses the same reconstructed scenes, run through the engine at 7771085
+    and now. They are synthetic geometry.
+  - "Checked on a real survey drawing" above is real geometry, run through both engines.
 - **Not verified in Civil 3D yet:**
   - FTFORIENTPOINT, FTFWHAT, the new QC drawing, the new settings tab;
   - the label review items;
-  - the scale fix on a real drawing.
+  - the scale fix and the FTFWHAT size lines on a real drawing.
 
   The plugin compiles against the stand-ins and against the real AutoCAD 2024 API. The next step
   is to run them on the drawing in the screenshots.
@@ -193,6 +261,10 @@ it needs review.
 
 - **The five screenshots were not seen.** Which of the causes above each one shows has to be
   confirmed in the drawing (`FTFWHAT`, the orientation CSV).
+- **The real drawing that was checked is not the one in the screenshots.** It has no inferred
+  lateral, and its 1" = 20' scale was already read correctly.
+- **Notes are read as written.** A bearing in a note ("12" N72E" on a pipe) is not read as a
+  direction yet, and a note on the wrong point turns the wrong symbol.
 - **Road side and sense:** keep-right is assumed on two-way roads. A road drawn by its edges only
   may be one-way, so edge-only decisions stay below the apply threshold (0.55) unless something
   else (a stop bar, an approach, a written direction) decides them.

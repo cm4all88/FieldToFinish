@@ -60,6 +60,8 @@ namespace FieldCodes.Cad
             var plots = LayerPlots(tr, entity.LayerId);
             lines.Add(string.Format(CultureInfo.InvariantCulture, "{0} on layer {1}{2} (handle {3})",
                                     TypeName(entity), layer, plots ? "" : " (does not plot)", entity.Handle));
+            var size = SizeOf(db, entity);
+            if (size != null) lines.Add("  size:   " + size);
 
             var cogo = entity as CogoPoint;
             if (cogo != null)
@@ -145,6 +147,7 @@ namespace FieldCodes.Cad
                 other++;
             }
             ed.WriteMessage("\nFTFWHAT: {0} object(s) in model space.", total);
+            ed.WriteMessage("\n  Annotation scale: {0}.", PlotScale.Summary(CadUtil.PlotScaleOf(db)));
             ed.WriteMessage("\n  Civil 3D: {0} COGO point(s) ({1} marker(s) turned by FTFORIENT, {2} set by a drafter), {3} other Civil 3D object(s).",
                             cogo, turned, manual, civil);
             var ftf = byKind.Values.Sum();
@@ -154,6 +157,29 @@ namespace FieldCodes.Cad
             if (copies > 0) ed.WriteMessage("\n  Copies someone made of FTF output (no longer FTF's): {0}.", copies);
             ed.WriteMessage("\n  Not made by FieldToFinish or Civil 3D (original or hand-drawn): {0}.", other);
             ed.WriteMessage("\nSelect objects with FTFWHAT to see each one's owner.\n");
+        }
+
+        /// <summary>
+        /// A text's height or a block's scale, and what it comes to at the drawing's annotation
+        /// scale: oversized annotation (a scale read 12 times too big, a block inserted at the
+        /// wrong scale) shows here as a plotted size that is plainly wrong. Null for other objects.
+        /// </summary>
+        private static string SizeOf(Database db, AcEntity entity)
+        {
+            try
+            {
+                var mtext = entity as MText;
+                if (mtext != null) return "text height " + PlotScale.HeightText(mtext.TextHeight, CadUtil.PlotScaleOf(db));
+                var text = entity as DBText;
+                if (text != null) return "text height " + PlotScale.HeightText(text.Height, CadUtil.PlotScaleOf(db));
+                var leader = entity as MLeader;
+                if (leader != null && leader.ContentType == ContentType.MTextContent)
+                    return "text height " + PlotScale.HeightText(leader.TextHeight, CadUtil.PlotScaleOf(db));
+                var block = entity as BlockReference;
+                if (block != null) return "block scale " + PlotScale.BlockScaleText(block.ScaleFactors.X, CadUtil.PlotScaleOf(db));
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { }
+            return null;
         }
 
         private static string TypeName(AcEntity e)

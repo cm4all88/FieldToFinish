@@ -476,9 +476,38 @@ public sealed class OrientationTests
     [InlineData("WVL EW", null, OrientKind.WaterValve, new[] { 90.0 })]
     [InlineData("SN", "STOP", OrientKind.Sign, new double[0])]
     [InlineData("WVL", "NEW VALVE", OrientKind.WaterValve, new double[0])]
+    // Notes as a crew wrote them in a real survey (pole tag numbers replaced). A number with a
+    // unit after it is a measurement, not an azimuth: "RD FACE 16\"" was read as 16 degrees.
+    [InlineData("SN", "RD FACE 16\"", OrientKind.Sign, new double[0])]
+    [InlineData("WFH", "ROAD FACE 16\"", OrientKind.Hydrant, new double[0])]
+    [InlineData("WVL", "RD FACE 16\"", OrientKind.WaterValve, new double[0])]
+    [InlineData("SN", "FACE 2 FT", OrientKind.Sign, new double[0])]
+    [InlineData("SN", "FACES 135", OrientKind.Sign, new[] { 135.0 })]
+    // A sign's face written direction first.
+    [InlineData("SN", "SW FACE", OrientKind.Sign, new[] { 225.0 })]
+    [InlineData("SN", "N FACING", OrientKind.Sign, new[] { 0.0 })]
+    // On a pole the same words say which side its tag is on: not an arm.
+    [InlineData("LTARM", "W FACE 123456-654321", OrientKind.StreetLight, new double[0])]
+    [InlineData("SN", "1.0 W", OrientKind.Sign, new double[0])]
+    [InlineData("WVL", "TIES E", OrientKind.WaterValve, new double[0])]
+    [InlineData("SN", "CON TIN SOUTH AT THIS SLOPE", OrientKind.Sign, new double[0])]
     public void DirectionsTheCrewRecordedAreRead(string description, string? note, OrientKind kind, double[] expected)
     {
         Assert.Equal(expected, MeasuredDirection.Read(description, note, kind));
+    }
+
+    [Fact]
+    public void AMeasurementInANoteDoesNotTurnASign_AFaceWrittenDirectionFirstDoes()
+    {
+        // East-west road, the sign south of it: it serves the eastbound traffic beside it (keep
+        // right), which comes from the west, so it faces 270.
+        var road = new Scene().Line(LineRole.Centerline, -300, 0, 300, 0);
+        var measured = road.Point("SIGN", "SN", 0, -20, "RD FACE 16\"").Run();
+        Assert.NotEqual(OrientationTier.Measured, measured.For("SIGN")!.Tier);
+        Faces(measured, "SIGN", 270);
+
+        var written = new Scene().Line(LineRole.Centerline, -300, 0, 300, 0).Point("SIGN", "SN", 0, -20, "SW FACE").Run();
+        Faces(written, "SIGN", 225, OrientationTier.Measured);
     }
 
     // ----------------------------------------------------------------- side roads drawn by their edges only

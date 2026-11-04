@@ -99,13 +99,23 @@ namespace FieldCodes.Orient
             { "NORTH", 0 }, { "EAST", 90 }, { "SOUTH", 180 }, { "WEST", 270 }
         };
 
-        private const string Dir = @"(?<d>NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NORTH|EAST|SOUTH|WEST|NE|SE|SW|NW|N|E|S|W|[0-9]{1,3}(?:\.[0-9]+)?)";
+        // A number is an azimuth only when no unit follows it: "FACES 135" is, but "RD FACE 16\""
+        // (a 16-inch measurement at the road face) and "FACE 2 FT" are not.
+        private const string Unit = @"(?!\.?[0-9])(?!\s*(?:[""'”″’′]|IN(?:CH(?:ES)?)?\b|FT\b|FEET\b|FOOT\b|MM\b|CM\b|M\b|X\b|TALL\b|HIGH\b|WIDE\b|DIA(?:M)?\b|DBH\b))";
+        private const string Dir = @"(?<d>NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NORTH|EAST|SOUTH|WEST|NE|SE|SW|NW|N|E|S|W|[0-9]{1,3}(?:\.[0-9]+)?" + Unit + ")";
+        private const string Compass = @"(?<d>NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NORTH|EAST|SOUTH|WEST|NE|SE|SW|NW|N|E|S|W)";
 
         private static readonly Regex Azimuth = new Regex(@"\bAZ\s*[=:]?\s*(?<a>[0-9]{1,3}(?:\.[0-9]+)?)\b|\b(?<a>[0-9]{1,3}(?:\.[0-9]+)?)\s*AZ\b",
                                                           RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly Regex Facing = new Regex(@"\b(?:FACES|FACING|FACE|FCG|NOZ|NOZZLE|STEAMER|PUMPER|STMR|ARMS?|POINTS?|TO)\s+(?<list>" + Dir + @"(?:\s*[,&/ ]\s*" + Dir + @")*)\b",
                                                          RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        // A sign's face written direction first, as crews write it: "SW FACE", "N FACING". On a
+        // pole the same words name the side its tag is on ("W FACE 123456-654321"), not an arm,
+        // so this is read for signs only.
+        private static readonly Regex FaceAfter = new Regex(@"(?<![A-Z0-9/.])" + Compass + @"\s+(?:FACE|FACES|FACING|FCG)\b",
+                                                            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         private static readonly Regex Axis = new Regex(@"\b(?<a>NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NE|SE|SW|NW|N|E|S|W)\s*-\s*(?<b>NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW|NE|SE|SW|NW|N|E|S|W)\b|\b(?<ns>NS|EW)\b",
                                                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -122,6 +132,9 @@ namespace FieldCodes.Orient
                 foreach (Match m in Facing.Matches(text))
                     foreach (Match d in Regex.Matches(m.Groups["list"].Value, Dir, RegexOptions.IgnoreCase))
                         Add(found, Parse(d.Value));
+                if (kind == OrientKind.Sign)
+                    foreach (Match m in FaceAfter.Matches(text))
+                        Add(found, Parse(m.Groups["d"].Value));
                 if (kind == OrientKind.WaterValve || kind == OrientKind.GasValve)
                     foreach (Match m in Axis.Matches(text))
                     {
