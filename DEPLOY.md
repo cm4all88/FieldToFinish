@@ -109,12 +109,13 @@ Only a clean build of `origin/integration` that passed all of that is stamped **
 | `-WaitForCivil3D` | Wait for Civil 3D to close instead of stopping. |
 | `-Force` | Rebuild and reinstall even if already current. |
 | `-Dev -Ref origin/claude/xyz` | Install a development branch for testing; stamped **DEV**, never approved. |
-| `-PublishTo U:\...\FieldToFinish-Setup` | Also publish the validated setup folder to the office copy; surveyors installed from it update when they next close Civil 3D. |
+| `-PublishTo \\server\share\CAD\FieldToFinish` | After every check above passed (smoke test included, never with `-SkipSmoke` or `-Dev`), publish the build as the approved release survey staff install from. `-ReleaseNotes "..."` adds a note. See [docs/network-deployment.md](docs/network-deployment.md). |
 | `-FixStartup` | Disable other registry startup entries that load an FTF DLL (backed up first). |
 | `-SkipSmoke` | Skip the in-Civil 3D test (the install is then unproven). |
 
 Exit codes: `0` installed or already current, `1` failed (installed FTF unchanged or restored),
-`2` validated but Civil 3D is open.
+`2` validated but Civil 3D is open, `3` installed and proven on this workstation but not published
+(the release folder is unchanged).
 
 Every run writes a log to `%LOCALAPPDATA%\FieldToFinish\logs`.
 
@@ -161,8 +162,9 @@ the DLL's *Product version*: `1.0.0+5c3c021.approved`); the installed bundle car
   of it, a re-run that replaces instead of duplicating, and a boundary run with labels. Every
   stage also checks that the surface's statistics and every triangle are untouched.
 
-- **Point identity and accountability are required checks** (`IdentityTestHarness`,
-  `AccountabilityTestHarness`): each on its own fresh drawing; a failure puts the previous build back.
+- **Point identity, accountability and annotation styles are required checks**
+  (`IdentityTestHarness`, `AccountabilityTestHarness`, `StyleTestHarness`): each on its own fresh
+  drawing; a failure in any of them puts the previous build back, and nothing is published.
 
 `tests\LiveSmoke\run-contour.ps1 -Installed` runs the same test against whatever is installed.
 
@@ -187,6 +189,13 @@ seeding, and record any exception in full before ending the run as FATAL.
 
 ## For surveyors
 
-The surveyor installer is unchanged: `deploy\make-release.ps1` builds the setup folder
-(`Install FTF.bat`), and FTF installed from an office folder updates itself when Civil 3D closes
-(`FTFUPDATE`). `UPDATEFTF -PublishTo <office folder>` publishes a validated approved build there.
+Survey staff install and update from the approved release folder on the server by double-clicking
+**Install or Update FieldToFinish.bat** there (Civil 3D closed). It copies the release to the
+computer, verifies every file, backs up the installed FTF, installs the bundle in
+`%APPDATA%\Autodesk\ApplicationPlugins`, verifies it again, and puts the previous FTF back if
+anything fails. Civil 3D then loads FTF by itself at every start; nobody uses NETLOAD.
+
+Only `UPDATEFTF -PublishTo <folder>` puts a release there, and only after the whole check above,
+including the style check, passed in the same run. The folder layout, the approval step, what is
+kept on update, rollback and diagnostics are in [docs/network-deployment.md](docs/network-deployment.md);
+the staff instructions are `deploy\setup\README.txt` (copied into the folder).

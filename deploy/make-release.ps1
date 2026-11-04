@@ -5,15 +5,17 @@
 .DESCRIPTION
     Produces  deploy\release\FieldToFinish-Setup\  containing
 
-        Install FTF.bat      what a surveyor double-clicks
-        Uninstall FTF.bat
-        install.ps1          the work, staged locally by the batch file
+        Install or Update FieldToFinish.bat   what a surveyor double-clicks
+        Install FTF.bat      the older name; does the same
+        Restore previous FieldToFinish.bat, Check FTF.bat, Repair FTF.bat, Uninstall FTF.bat
+        install.ps1, check.ps1, ftf-common.ps1   the work, staged locally by the batch file
         README.txt
         version.txt          build date, branch and commit -- printed when installing
         Bundle\              PackageContents.xml + Contents\2024\ (the program itself)
 
-    Copy that folder anywhere the office can reach it (the U: drive) and point people
-    at Install FTF.bat. Nothing in it needs admin rights or the repository.
+    The approved release folder on the server is published from it by UPDATEFTF -PublishTo
+    (publish-release.ps1); see docs\network-deployment.md. People double-click
+    "Install or Update FieldToFinish.bat" there. Nothing in it needs admin rights or the repository.
 
     The Autodesk assemblies are deliberately left out: the host already has them
     loaded and a second copy is the classic "works on my machine" load failure.
@@ -181,8 +183,8 @@ Write-Host "  $files file(s); program files in Bundle\Contents\$series"
 if ($OfficeFolder) { Write-Host "  updates come from: $OfficeFolder" }
 else { Write-Host '  updates come from wherever it is installed from (pass -OfficeFolder to pin that)' }
 Write-Host ''
-Write-Host 'Copy that folder where the office can reach it and tell people to close'
-Write-Host 'Civil 3D and double-click "Install FTF.bat".'
+Write-Host 'Publish it with UPDATEFTF -PublishTo <release folder> (approved builds only); people then'
+Write-Host 'close Civil 3D and double-click "Install or Update FieldToFinish.bat" there.'
 
 if ($Zip) {
     $archive = Join-Path $OutputRoot 'FieldToFinish-Setup.zip'

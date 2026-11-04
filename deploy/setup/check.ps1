@@ -8,10 +8,15 @@
 
       which Autodesk releases are on the machine, and whether 2024 is one of them
       whether the plugin is installed, where, which build, and from which office copy
+      whether every installed file is the one its build shipped (SHA-256)
+      the approved release folder it updates from: reachable or not, which build is there
+      anything else that loads a copy of FTF (a second bundle, an old startup entry, NETLOAD)
       whether Windows has marked the files as "from another computer"
       whether Civil 3D is set to load plugins at startup at all
+      the last install or update, from its log
 
-    Reads only. Changes nothing, installs nothing.
+    Reads only. Changes nothing, installs nothing. A copy of the report is also kept in
+    %LOCALAPPDATA%\FieldToFinish\logs.
 
 .EXAMPLE
     .\check.ps1
@@ -20,7 +25,10 @@
 param(
     [switch]$Repair,
     [string]$OutFile,
-    [string]$RegistryRoot = 'HKCU:\SOFTWARE\Autodesk\AutoCAD'
+    [string]$RegistryRoot = 'HKCU:\SOFTWARE\Autodesk\AutoCAD',
+    # For the installer's own test: a scratch plugin folder and state folder instead of the real ones.
+    [string]$PluginsRoot,
+    [string]$StateRoot
 )
 
 $ErrorActionPreference = 'Continue'
@@ -28,8 +36,14 @@ $lines = New-Object System.Collections.Generic.List[string]
 function Say([string]$text) { $lines.Add($text); Write-Host $text }
 function Section([string]$title) { Say ''; Say ('== ' + $title) }
 
-$bundle = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'
-$module = Join-Path $bundle 'Contents\2024\FieldCodes.Cad.dll'
+if (-not $PluginsRoot) { $PluginsRoot = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins' }
+$bundle = Join-Path $PluginsRoot 'FieldToFinish.bundle'
+$module = Join-Path (Join-Path (Join-Path $bundle 'Contents') '2024') 'FieldCodes.Cad.dll'
+$here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$common = Join-Path $here 'ftf-common.ps1'
+$haveCommon = Test-Path -LiteralPath $common
+if ($haveCommon) { . $common }
+$state = if ($StateRoot) { $StateRoot } elseif ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'FieldToFinish' } else { $null }
 
 Say 'FIELD TO FINISH -- INSTALLATION CHECK'
 Say ((Get-Date).ToString('yyyy-MM-dd HH:mm'))
@@ -60,7 +74,7 @@ if ($has2024) {
 Section 'The plugin itself'
 if (-not (Test-Path $bundle)) {
     Say ("  PROBLEM: nothing installed at " + $bundle)
-    Say '  -> run Install FTF.bat again and read what it says.'
+    Say '  -> run "Install or Update FieldToFinish.bat" in the approved release folder and read what it says.'
 } else {
     Say ("  folder:  " + $bundle)
     foreach ($name in @('version.txt', 'source.txt')) {
@@ -76,6 +90,52 @@ if (-not (Test-Path $bundle)) {
     }
     $count = (Get-ChildItem $bundle -Recurse -File -ErrorAction SilentlyContinue).Count
     Say ("  files:   " + $count)
+}
+
+# --- which build, whole or not, and the approved release -----------------------------
+if ($haveCommon -and (Test-Path $bundle)) {
+    Section 'Installed build'
+    $info = Read-FtfBuildInfo $bundle
+    Say ("  " + (Get-FtfDescription $info))
+    if ($info) {
+        Say ("  commit:  " + $info.commit)
+        $damage = @(Test-FtfBundle $bundle $info)
+        if ($damage.Count -eq 0) { Say '  every installed file is the one this build shipped (SHA-256), and the FTF DLLs are all this build' }
+        else {
+            Say '  PROBLEM: the installed files are not what was installed:'
+            foreach ($d in $damage) { Say ("    " + $d) }
+            Say '  -> run "Install or Update FieldToFinish.bat" from the approved release folder; it repairs this.'
+        }
+    }
+    Section 'Approved release folder'
+    $sourceFile = Join-Path $bundle 'source.txt'
+    $office = if (Test-Path $sourceFile) { (Get-Content $sourceFile -First 1) } else { $null }
+    if (-not $office) {
+        Say '  none recorded -- this FTF was not installed from an approved release folder, so it never updates itself.'
+    } elseif (-not (Test-Path -LiteralPath $office)) {
+        Say ("  " + $office)
+        Say '  PROBLEM: it cannot be reached from this computer right now (network, VPN, drive letter).'
+        Say '  -> FTF keeps working; updates wait until the folder can be reached.'
+    } else {
+        $approved = Read-FtfBuildInfo (Join-Path $office 'Bundle')
+        Say ("  " + $office)
+        Say ("  release there: " + (Get-FtfDescription $approved))
+        if ($approved -and $info -and "$($approved.commit)" -eq "$($info.commit)") { Say '  -> this computer has the approved release.' }
+        elseif ($approved) { Say '  -> a different approved release is there: close Civil 3D and run "Install or Update FieldToFinish.bat" in that folder.' }
+    }
+    Section 'Other copies of FTF'
+    $roots = @($PluginsRoot)
+    if (-not $StateRoot) {
+        if ($env:ProgramData) { $roots += (Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins') }
+        if ($env:ProgramFiles) { $roots += (Join-Path $env:ProgramFiles 'Autodesk\ApplicationPlugins') }
+    }
+    $others = @(Find-FtfOtherLoaders $module $bundle $roots $RegistryRoot $(if ($StateRoot) { $null } else { $env:APPDATA }))
+    if ($others.Count -eq 0) { Say '  none -- Civil 3D loads one FTF, from the installed bundle.' }
+    else {
+        foreach ($o in $others) { Say ("  PROBLEM: " + $o.Text) }
+        Say '  -> each loads a second FTF beside the installed one. "Install or Update FieldToFinish.bat" switches off'
+        Say '     the per-user ones; the Startup Suite (APPLOAD) and acad*.lsp NETLOAD lines are removed by hand.'
+    }
 }
 
 # --- has Windows marked the files -------------------------------------------------
@@ -215,22 +275,42 @@ if (Test-Path $updateLog) {
 foreach ($leftover in @(($bundle + '.new'), ($bundle + '.old'))) {
     if (Test-Path $leftover) {
         Say ("  PROBLEM: a half-finished update left " + $leftover)
-        Say '  -> an update was interrupted. Run Install FTF.bat again; it clears these.'
+        Say '  -> an update was interrupted. Run "Install or Update FieldToFinish.bat" again; it clears these.'
     }
+}
+
+# --- the last install or update ----------------------------------------------------
+if ($state) {
+    Section 'Last install or update'
+    $last = Get-ChildItem (Join-Path $state 'logs') -Filter 'install-*.log' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+    if ($last) {
+        Say ("  log: " + $last.FullName)
+        foreach ($line in (Get-Content $last.FullName -Tail 15)) { Say ("    " + $line) }
+    } else { Say '  no install log on this computer (installed before install logs, or never installed here).' }
+    $backups = @(Get-ChildItem (Join-Path $state 'backups') -Directory -ErrorAction SilentlyContinue)
+    Say ("  backups: " + $backups.Count + $(if ($backups.Count -gt 0) { ' ("Restore previous FieldToFinish.bat" puts the newest one back)' } else { '' }))
 }
 
 # --- what to do next ---------------------------------------------------------------
 Section 'If the tabs are still missing'
-Say '  In Civil 3D, type NETLOAD, choose this file, and then type FTF:'
-Say ("    " + $module)
-Say '  If the FTF window opens, the plugin is fine and only the automatic loading is not'
-Say '  happening. If an error appears instead, send that exact wording on -- it names the cause.'
+Say '  1. Close Civil 3D, run "Repair FTF.bat", then start Civil 3D again.'
+Say '  2. Still missing: send this report to the drafting lead.'
+Say '  Never NETLOAD FTF from the network folder: a copy loaded from there breaks whenever the'
+Say '  folder changes. For the drafting lead only, to tell a loading problem from a program one:'
+Say ("    NETLOAD the installed file " + $module + ", then type FTF.")
 
 # --- save ---------------------------------------------------------------------------
 # On the desktop, where the person running it can find it -- and not inside the setup
 # folder, which is usually a shared drive everyone else installs from.
 if (-not $OutFile) {
     $OutFile = Join-Path ([Environment]::GetFolderPath('Desktop')) 'ftf-check.txt'
+}
+if ($state) {
+    try {
+        $kept = Join-Path (Join-Path $state 'logs') ('ftf-check-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt')
+        New-Item -ItemType Directory -Force -Path (Split-Path $kept -Parent) | Out-Null
+        Set-Content -Path $kept -Value $lines -Encoding utf8
+    } catch { }
 }
 try {
     Set-Content -Path $OutFile -Value $lines -Encoding utf8

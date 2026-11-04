@@ -27,7 +27,9 @@
     -Dev builds another ref for testing and is stamped "dev" -- never an approved release.
 
     Exit codes: 0 installed (or already current), 1 failed (the installed FTF is unchanged or was
-    restored), 2 validated but Civil 3D is open -- close it and run UPDATEFTF again.
+    restored), 2 validated but Civil 3D is open -- close it and run UPDATEFTF again, 3 installed and
+    proven here but not published (-PublishTo was refused or could not finish; the release folder is
+    unchanged).
 
 .PARAMETER Status
     Only report: installed build, latest approved build, startup registration, anything else that
@@ -51,9 +53,17 @@
     testing. Stamped "dev"; FTFVERSION says so.
 
 .PARAMETER PublishTo
-    After a successful approved install, also publish the validated setup folder to this office
-    folder (e.g. U:\Survey\FTF\FieldToFinish-Setup). Surveyors installed from there update
-    themselves the next time they close Civil 3D.
+    The approval step: after the approved build is built, unit-tested, installer-tested, installed
+    and smoke-tested in Civil 3D in this same run, publish it to this approved release folder on the
+    network (deploy\publish-release.ps1). Any folder: nothing is hard-coded. Surveyors install and
+    update from it by double-clicking "Install or Update FieldToFinish.bat" there; FTF installed
+    from there also offers each newer release when Civil 3D starts. Refused for -Dev and -SkipSmoke
+    builds. Runs the install and smoke test even when the build is already installed, so what is
+    published was proven in Civil 3D by this run. See docs\network-deployment.md.
+
+.PARAMETER ReleaseNotes
+    What changed, for the release's RELEASE-NOTES.txt (with -PublishTo). The commits since the
+    release being replaced are added below it.
 
 .PARAMETER FixStartup
     Also disable (LOADCTRLS=0, after a .reg backup) other registry entries that make Civil 3D load
@@ -74,6 +84,7 @@ param(
     [switch]$Dev,
     [string]$Ref,
     [string]$PublishTo,
+    [string]$ReleaseNotes,
     [switch]$FixStartup,
     [string]$Branch = 'integration',
     [string]$Remote = 'origin',
@@ -417,6 +428,9 @@ if ($Dev) {
     $branchName = $Branch
 }
 $short = $target.Substring(0, 7)
+# Publishing is for approved builds proven in Civil 3D in this same run; say so before building anything.
+if ($PublishTo -and $channel -ne 'approved') { Fail '-PublishTo publishes approved releases only. A -Dev build is never published; it stays on this workstation.' @() }
+if ($PublishTo -and $SkipSmoke) { Fail '-PublishTo needs the smoke test in Civil 3D: a -SkipSmoke run is never published.' @() }
 
 # ===================================================================== -Status
 
@@ -438,7 +452,8 @@ if ($Status) {
 
 # ===================================================================== already current?
 
-if (-not $Force -and $installed -and "$($installed.commit)" -eq $target -and $installed.channel -eq $channel -and -not $installed.dirty) {
+# Publishing always follows an install and smoke test in this run, so it never stops here.
+if (-not $Force -and -not $PublishTo -and $installed -and "$($installed.commit)" -eq $target -and $installed.channel -eq $channel -and -not $installed.dirty) {
     $problem = Verify-Installed $target
     if (-not $problem) {
         Step 'Already up to date'
@@ -572,6 +587,12 @@ if ($reuse) {
     $installerSummary = ($installerTest.Lines | Where-Object { $_ -match 'release setup: PASS' } | Select-Object -Last 1)
     if ($installerTest.Code -ne 0) { Fail 'the installer test failed.' (@($installerTest.Lines | Where-Object { $_ -match '\[FAIL\]' }) + @("$installerSummary")) }
     Ok "$installerSummary".Trim()
+    # The staff installer and publishing, on releases of every kind it must refuse (scratch only).
+    $stafftest = Invoke-Script (Join-Path $BuildRoot 'deploy\test-installer.ps1') @()
+    $staffSummary = ($stafftest.Lines | Where-Object { $_ -match 'installer and publishing: PASS' } | Select-Object -Last 1)
+    if ($stafftest.Code -ne 0) { Fail 'the staff installer test failed.' (@($stafftest.Lines | Where-Object { $_ -match '\[FAIL\]' }) + @("$staffSummary")) }
+    Ok "$staffSummary".Trim()
+    $installerSummary = "$installerSummary".Trim() + '; ' + "$staffSummary".Trim()
 
     [ordered]@{ commit = $target; channel = $channel; builtUtc = $buildDate; unitTests = "$summary".Trim()
                 installerTest = "$installerSummary".Trim(); validatedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } |
@@ -655,7 +676,11 @@ function Restore-Backup([string]$why) {
 
 Step "Install $short"
 $script:touched = $true
-$install = Invoke-Script (Join-Path $setup 'install.ps1') @('-Source', $setup, '-NoOfficeCopy') -Echo
+# The same installer the surveyors run. UPDATEFTF keeps its own backup and restore (above), and its
+# own report of other loaders (-FixStartup), and it decided to install, so -Force.
+$installArgs = @('-Source', $setup, '-NoOfficeCopy', '-Force', '-NoBackup', '-LeaveOtherLoaders')
+if ($channel -ne 'approved') { $installArgs += '-AllowDevelopmentBuild' }
+$install = Invoke-Script (Join-Path $setup 'install.ps1') $installArgs -Echo
 if ($install.Code -ne 0) {
     # install.ps1 swaps folders only once the new copy is whole, so a failed install has normally
     # left the previous one in place; make sure of it.
@@ -687,26 +712,43 @@ if ($SkipSmoke) {
 
 # ===================================================================== publish (optional)
 
+$notPublished = $null
 if ($PublishTo) {
-    Step "Publish to the office copy: $PublishTo"
+    Step "Publish the approved release: $PublishTo"
     if ($channel -ne 'approved') {
-        Warn 'not published: only approved builds go to the office copy.'
+        $notPublished = 'a development build'
+        Warn 'not published: only an approved build of the integration branch is published, never a -Dev build.'
+    } elseif ($SkipSmoke) {
+        $notPublished = 'the smoke test was skipped'
+        Warn 'not published: -SkipSmoke left this build unproven in Civil 3D. Run UPDATEFTF -PublishTo without it.'
     } else {
         $published = Invoke-Script (Join-Path $BuildRoot 'deploy\make-release.ps1') @('-Configuration', 'Release', '-NoBuild',
             '-OutputRoot', (Join-Path $package 'publish'), '-Commit', $target, '-Branch', $branchName, '-Channel', 'approved',
             '-BuildDate', (Utc-Text $packaged.builtUtc), '-OfficeFolder', $PublishTo)
         $source = Join-Path $package 'publish\FieldToFinish-Setup'
         if ($published.Code -ne 0 -or -not (Test-Path $source)) {
-            Warn 'publishing failed; the local install is unaffected.'
+            $notPublished = 'packaging for the release folder failed'
+            Warn 'publishing failed (packaging); the local install is unaffected.'
         } else {
-            $parent = Split-Path $PublishTo -Parent
-            $leaf = Split-Path $PublishTo -Leaf
-            $incoming = Join-Path $parent ("$leaf.incoming")
-            if (Test-Path $incoming) { Remove-Item -LiteralPath $incoming -Recurse -Force }
-            Copy-Item -LiteralPath $source -Destination $incoming -Recurse -Force
-            if (Test-Path $PublishTo) { Rename-Item -LiteralPath $PublishTo -NewName ("$leaf.previous-" + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
-            Rename-Item -LiteralPath $incoming -NewName $leaf
-            Ok "published $short; surveyors installed from there update when they next close Civil 3D"
+            # What changed since the release being replaced.
+            $previousInfo = Read-BuildInfo (Join-Path $PublishTo 'Bundle')
+            $range = if ($previousInfo -and "$($previousInfo.commit)" -match '^[0-9a-f]{40}$') { "$($previousInfo.commit)..$target" } else { $target }
+            $logArgs = @('-C', $repoRoot, 'log', '--no-merges', '--format=- %h %s')
+            if ($range -eq $target) { $logArgs += @('-20') }
+            $changes = (Run-Git ($logArgs + @($range))).Lines | Where-Object { $_ }
+            $notesFile = Join-Path $package 'release-notes.txt'
+            $notesBody = @()
+            if ($ReleaseNotes) { $notesBody += $ReleaseNotes; $notesBody += '' }
+            $notesBody += $(if ($range -eq $target) { 'Recent changes:' } else { 'Changes since the release it replaces:' })
+            $notesBody += @($changes)
+            Set-Content -Path $notesFile -Value $notesBody -Encoding utf8
+            $checks = if ($reuse) { @("unit tests: $($v.unitTests)", "installer tests: $($v.installerTest)") }
+                      else { @("unit tests: $("$summary".Trim())", "installer tests: $installerSummary") }
+            $checks += 'smoke test in Civil 3D: passed in this run'
+            $pubArgs = @('-Package', $source, '-ReleaseFolder', $PublishTo, '-NotesFile', $notesFile, '-Checks', ($checks -join ' | '))
+            $pub = Invoke-Script (Join-Path $BuildRoot 'deploy\publish-release.ps1') $pubArgs -Echo
+            if ($pub.Code -ne 0) { $notPublished = 'publish-release.ps1 refused it or could not finish'; Warn 'not published (see above); the local install is unaffected.' }
+            else { Ok "published approved release $short to $PublishTo" }
         }
     }
 }
@@ -723,4 +765,10 @@ Write-Host ''
 Write-Host ('   Civil 3D will load this build automatically when it starts. NEXT: start Civil 3D and type ' +
             "FTFVERSION -- it should say $short.") -ForegroundColor Green
 Write-Host "   log: $logFile"
+if ($notPublished) {
+    Write-Host ''
+    Write-Host "   NOT PUBLISHED to $PublishTo ($notPublished). The release folder is unchanged." -ForegroundColor Red
+    Log "NOT PUBLISHED to $PublishTo ($notPublished)"
+    exit 3
+}
 exit 0

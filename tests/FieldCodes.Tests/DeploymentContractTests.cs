@@ -67,13 +67,17 @@ public sealed class DeploymentContractTests
         Then("'test', (Join-Path $BuildRoot 'tests\\FieldCodes.Tests\\FieldCodes.Tests.csproj')");
         Then("deploy\\make-release.ps1') @('-Configuration', 'Release', '-NoBuild'");
         Then("deploy\\test-release.ps1') @('-Configuration', 'Release', '-NoBuild')");
+        Then("deploy\\test-installer.ps1') @()");
         Then("VALIDATED, NOT YET INSTALLED");
         Then("Copy-Item -LiteralPath $installedDir -Destination $script:backup -Recurse -Force");
-        Then("(Join-Path $setup 'install.ps1') @('-Source', $setup, '-NoOfficeCopy')");
+        Then("$installArgs = @('-Source', $setup, '-NoOfficeCopy'");
+        Then("(Join-Path $setup 'install.ps1') $installArgs");
         Then("$problem = Verify-Installed $target");
         Then("deploy\\smoke-test.ps1') @('-PluginDll', $installedDll, '-Commit', $target");
 
         Assert.Matches(@"if \(\$smoke\.Code -ne 0\) \{\s*Restore-Backup", code);
+        // A development build installs on this workstation only because UPDATEFTF says so.
+        Assert.Contains("if ($channel -ne 'approved') { $installArgs += '-AllowDevelopmentBuild' }", code);
         Assert.Contains("channel = 'approved'", code);
         Assert.Matches(@"if \(\$Ref\) \{ Fail '-Ref builds a development ref and needs -Dev", code);
     }
@@ -315,6 +319,93 @@ public sealed class DeploymentContractTests
         Assert.False(File.Exists(Path.Combine(Repo(), "tests", "LiveSmoke", "runcontour.scr")),
                      "a hard-coded script would NETLOAD a fixed bin\\Debug path, not the build under test");
         Assert.Contains("deploy\\smoke-test.ps1", Read("tests", "LiveSmoke", "run-contour.ps1"));
+    }
+
+    // ----------------------------------------------------------------- the approved release folder
+
+    [Fact]
+    public void OnlyAnApprovedBuildProvenInCivil3DInTheSameRunIsPublished()
+    {
+        var code = Code(Read("UPDATEFTF.ps1"));
+        // Refused before anything is built.
+        Assert.Contains("if ($PublishTo -and $channel -ne 'approved') { Fail", code);
+        Assert.Contains("if ($PublishTo -and $SkipSmoke) { Fail", code);
+        // An install that is already current is installed and smoke-tested again before publishing.
+        Assert.Contains("if (-not $Force -and -not $PublishTo -and $installed", code);
+        // Publishing comes after the smoke test passed, and refuses again on its own.
+        var smoke = code.IndexOf("Ok 'smoke test passed'", StringComparison.Ordinal);
+        var publish = code.IndexOf("deploy\\publish-release.ps1')", StringComparison.Ordinal);
+        Assert.True(smoke > 0 && publish > smoke, "publishing must come after a passing smoke test");
+        var block = code.Substring(code.IndexOf("if ($PublishTo) {", smoke, StringComparison.Ordinal));
+        Assert.Matches(@"if \(\$channel -ne 'approved'\) \{\s*\$notPublished", block);
+        Assert.Matches(@"elseif \(\$SkipSmoke\) \{\s*\$notPublished", block);
+        // A run that was asked to publish and did not says so in its exit code.
+        Assert.Contains("exit 3", code);
+
+        var pub = Code(Read("deploy", "publish-release.ps1"));
+        Assert.Contains("Test-FtfBundle $bundle $info -Strict", pub);          // every file, nothing extra
+        Assert.Contains("if (-not (Test-FtfApproved $info)) {", pub);            // never a development build
+        // Assembled beside the folder, verified on the server, and only then swapped in.
+        var verified = pub.IndexOf("$onServer = @(Test-FtfBundle (Join-Path $incoming 'Bundle')", StringComparison.Ordinal);
+        var swapped = pub.IndexOf("Rename-Item -LiteralPath $incoming -NewName $leaf", StringComparison.Ordinal);
+        Assert.True(verified > 0 && swapped > verified, "the server copy must be verified before the swap");
+        Assert.Contains("$kept = \"$leaf.previous-\"", pub);
+
+        var common = Code(Read("deploy", "setup", "ftf-common.ps1"));
+        Assert.Contains("(\"$($info.channel)\" -eq 'approved') -and (-not $info.dirty)", common);
+    }
+
+    [Fact]
+    public void TheStaffInstallerVerifiesBacksUpAndPutsThePreviousFtfBack()
+    {
+        var code = Code(Read("deploy", "setup", "install.ps1"));
+        var at = 0;
+        void Then(string marker)
+        {
+            var i = code.IndexOf(marker, at, StringComparison.Ordinal);
+            Assert.True(i >= 0, "missing, or out of order: " + marker);
+            at = i + marker.Length;
+        }
+
+        // The release is checked whole before anything is touched...
+        Then("$releaseProblems = @(Test-FtfBundle $from $release -Strict)");
+        Then("if (-not (Test-FtfApproved $release) -and -not $AllowDevelopmentBuild) {");
+        // ...the installed FTF is backed up...
+        Then("$backup = Save-Backup (");
+        // ...and the copy beside the installed bundle is verified before the swap and again after it.
+        var install = Regex.Match(code, @"function Install-Bundle[\s\S]*?\r?\n\}\r?\n").Value;
+        Assert.NotEmpty(install);
+        var staged = install.IndexOf("$copied = @(Test-FtfBundle $staging $info -Strict:(-not $FromBackup))", StringComparison.Ordinal);
+        var placed = install.IndexOf("$placed = @(Test-FtfBundle $target $info)", StringComparison.Ordinal);
+        var putBack = install.IndexOf("The previous FTF was put back", StringComparison.Ordinal);
+        Assert.True(staged > 0 && placed > staged && putBack > placed, "verify the copy, swap, verify in place, put back on failure");
+
+        // It writes only the bundle, Civil 3D's per-user record and its own state; office and
+        // personal settings in %APPDATA%\FieldToFinish are only ever named, never removed.
+        foreach (Match m in Regex.Matches(code, @"Remove-Item[^\r\n]*"))
+            Assert.DoesNotContain("APPDATA", m.Value);
+        // Civil 3D's startup record is written per user; the machine-wide key is only read, for the
+        // product name.
+        Assert.Contains("[string]$RegistryRoot = 'HKCU:\\SOFTWARE\\Autodesk\\AutoCAD'", code);
+        var machine = Regex.Matches(code, @"[^\r\n]*\$ProductRoot[^\r\n]*").Cast<Match>().Select(m => m.Value.Trim()).ToList();
+        Assert.Equal(2, machine.Count);
+        Assert.Contains(machine, line => line.StartsWith("$where = Join-Path $ProductRoot", StringComparison.Ordinal));
+        Assert.Contains("$name = (Get-ItemProperty -Path $where -ErrorAction SilentlyContinue).ProductName", code);
+        Assert.Equal(2, Regex.Matches(code, @"\$where\b").Count);      // made, read once, never written
+    }
+
+    [Fact]
+    public void TheBatchFileStagesTheReleaseLocallyAndStopsWhileCivil3DIsOpen()
+    {
+        var bat = Read("deploy", "setup", "Install or Update FieldToFinish.bat");
+        Assert.Contains("\r\n", bat);                                                       // cmd.exe needs CRLF
+        var civil = bat.IndexOf("find /I \"acad.exe\"", StringComparison.Ordinal);
+        var copy = bat.IndexOf("robocopy \"%~dp0.\" \"%STAGE%\"", StringComparison.Ordinal);
+        var run = bat.IndexOf("-File \"%STAGE%\\install.ps1\" -Source \"%~dp0.\"", StringComparison.Ordinal);
+        Assert.True(civil > 0 && copy > civil && run > copy, "check Civil 3D, copy locally, then run the local copy");
+        Assert.Contains("if errorlevel 8 goto copyfailed", bat);
+        Assert.DoesNotContain("NETLOAD", bat.ToUpperInvariant().Replace("NO NETLOAD", string.Empty));
+        Assert.Contains("call \"%~dp0Install or Update FieldToFinish.bat\"", Read("deploy", "setup", "Install FTF.bat"));
     }
 
     // ----------------------------------------------------------------- saving local work

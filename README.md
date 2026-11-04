@@ -183,17 +183,21 @@ deploy\test-release.ps1                tests that folder without touching a real
 `make-release.ps1` writes `deploy\release\FieldToFinish-Setup\`:
 
 ```
-Install FTF.bat      what a surveyor double-clicks
-Uninstall FTF.bat
+Install or Update FieldToFinish.bat   what a surveyor double-clicks
+Install FTF.bat      the older name; does the same
+Restore previous FieldToFinish.bat, Check FTF.bat, Repair FTF.bat, Uninstall FTF.bat
 install.ps1          the work; the batch file stages it locally and calls it
+check.ps1, ftf-common.ps1   the diagnostic report, and the checks both share
 README.txt           three steps, and what to do when something is wrong
 version.txt          build date, branch and commit -- printed while installing
 Bundle\              PackageContents.xml + Contents\2024\ (the plugin itself)
 ```
 
-Copy that folder anywhere the office can reach (the U: drive) and point people at
-`Install FTF.bat`. It stages the files to `%TEMP%` first, so a network folder and a
-network hiccup are both fine, and it refuses to install while Civil 3D is open.
+`UPDATEFTF -PublishTo <folder>` publishes it, after every check passed, as the approved release
+on the server, and people double-click `Install or Update FieldToFinish.bat` there. It stages the
+files to `%TEMP%` first, so a network folder and a network hiccup are both fine, verifies every
+file, and refuses to install while Civil 3D is open. The whole process, the folder layout and
+rollback are in [docs/network-deployment.md](docs/network-deployment.md).
 
 Installing writes one folder -- `%APPDATA%\Autodesk\ApplicationPlugins\FieldToFinish.bundle`
 -- and replaces it whole, so a file from an older FTF cannot linger and load. Office

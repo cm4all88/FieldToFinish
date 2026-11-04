@@ -44,6 +44,21 @@ foreach ($pair in @(@('R24.3\ACAD-7100:409', 'Autodesk Civil 3D 2024 - English')
     if ($pair[1]) { New-ItemProperty -Path (Join-Path $regProducts $pair[0]) -Name ProductName -Value $pair[1] -PropertyType String -Force | Out-Null }
 }
 $civilKey = Join-Path $regRoot 'R24.3\ACAD-7100:409\Applications\FieldToFinish'
+
+# A release edited on purpose by this test (a newer version line) gets its build-info.json hashes
+# again, as make-release.ps1 would write them: the installer refuses a release whose files are not
+# what its build-info.json lists.
+function Update-Hashes([string]$bundle)
+{
+    $file = Join-Path $bundle 'build-info.json'
+    $info = Get-Content $file -Raw | ConvertFrom-Json
+    $hashes = [ordered]@{}
+    foreach ($f in Get-ChildItem $bundle -Recurse -File | Where-Object { $_.Name -ne 'build-info.json' } | Sort-Object FullName) {
+        $hashes[$f.FullName.Substring($bundle.Length + 1).Replace('\', '/')] = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash
+    }
+    $info.files = [pscustomobject]$hashes
+    $info | ConvertTo-Json -Depth 4 | Set-Content -Path $file -Encoding utf8
+}
 $otherKey = Join-Path $regRoot 'R24.3\ACAD-7101:409\Applications\FieldToFinish'
 
 try
@@ -55,8 +70,8 @@ try
     Check (Test-Path $setup) 'make-release.ps1 writes a setup folder'
     if (-not (Test-Path $setup)) { throw 'nothing to test' }
 
-    foreach ($name in @('Install FTF.bat', 'Uninstall FTF.bat', 'Check FTF.bat', 'Repair FTF.bat',
-                        'install.ps1', 'check.ps1', 'README.txt', 'version.txt'))
+    foreach ($name in @('Install or Update FieldToFinish.bat', 'Install FTF.bat', 'Restore previous FieldToFinish.bat', 'Uninstall FTF.bat',
+                        'Check FTF.bat', 'Repair FTF.bat', 'install.ps1', 'ftf-common.ps1', 'check.ps1', 'README.txt', 'version.txt'))
     {
         Check (Test-Path (Join-Path $setup $name)) "the surveyor gets $name"
     }
@@ -88,12 +103,15 @@ try
     $version = Get-Content (Join-Path $setup 'version.txt') -First 1
     Check ($version -match '^FTF \d{4}-\d{2}-\d{2}') "version.txt says which build this is ($version)"
 
-    $batch = Get-Content (Join-Path $setup 'Install FTF.bat') -Raw
+    $batch = Get-Content (Join-Path $setup 'Install or Update FieldToFinish.bat') -Raw
     Check ($batch -match 'ExecutionPolicy Bypass') 'the batch file runs even where PowerShell scripts are restricted'
     Check ($batch -match 'install\.ps1') 'and it calls the installer'
     Check ($batch -match 'pause') 'the window stays open long enough to read'
-    $batchRaw = [IO.File]::ReadAllText((Join-Path $setup 'Install FTF.bat'))
-    Check ($batchRaw -match "`r`n") 'the batch file keeps Windows line endings -- with LF a goto can miss its label'
+    Check ($batch -match 'acad\.exe' -and $batch -match 'robocopy') 'it stops while Civil 3D is open, and stages the release locally first'
+    Check ((Get-Content (Join-Path $setup 'Install FTF.bat') -Raw) -match 'Install or Update FieldToFinish\.bat') 'the older Install FTF.bat does the same'
+    foreach ($bat in @(Get-ChildItem $setup -Filter '*.bat')) {
+        Check ([IO.File]::ReadAllText($bat.FullName) -match "`r`n") ("$($bat.Name) keeps Windows line endings -- with LF a goto can miss its label")
+    }
 
     # --- install ------------------------------------------------------------------
     # A scratch APPDATA with office settings already in it: installing must not touch them.
@@ -106,7 +124,7 @@ try
 
     try
     {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild | Out-Null
         $code = $LASTEXITCODE
         $installed = Join-Path $plugins 'FieldToFinish.bundle'
         Check ($code -eq 0) "installing reports success ($code)"
@@ -118,7 +136,7 @@ try
         # A file left from an older FTF must not survive the next install.
         $stale = Join-Path $installed 'Contents\2024\OldThing.dll'
         Set-Content -Path $stale -Value 'x' -Encoding utf8
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild | Out-Null
         Check ($LASTEXITCODE -eq 0) 'installing over an existing install works'
         Check (-not (Test-Path $stale)) 'and clears out files from the older build'
 
@@ -138,7 +156,7 @@ try
         Set-Content -Path ($marked + ':Zone.Identifier') -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction SilentlyContinue
         $wasMarked = [bool](Get-Item $marked -Stream Zone.Identifier -ErrorAction SilentlyContinue)
         Check $wasMarked 'the test could mark the file the way a download does'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup -Force | Out-Null
         $stillMarked = [bool](Get-Item (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll') -Stream Zone.Identifier -ErrorAction SilentlyContinue)
         Check (-not $stillMarked) 'installing clears the mark, so Civil 3D will load it'
 
@@ -159,7 +177,7 @@ try
         $staged = Join-Path $env:TEMP 'FTF-Setup'
         if (Test-Path $staged) { Remove-Item $staged -Recurse -Force }
         Copy-Item $setup -Destination $staged -Recurse -Force
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $staged 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild | Out-Null
         Check (-not (Test-Path $recorded)) 'a copy run from TEMP records no office copy, so nothing points at a staging folder'
         Remove-Item $staged -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -167,11 +185,11 @@ try
         # UPDATEFTF installs with -NoOfficeCopy: the machine takes builds from the integration
         # branch, so nothing may point it at a setup folder to "update" from.
         Write-Host '-- a developer install records no office copy'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup -NoOfficeCopy | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup -NoOfficeCopy | Out-Null
         Check ($LASTEXITCODE -eq 0) 'installing with -NoOfficeCopy works'
         Check (-not (Test-Path (Join-Path $installed 'source.txt'))) 'and records no office copy to update from'
         Check (Test-Path (Join-Path $installed 'build-info.json')) 'and the installed bundle says which build it is'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup | Out-Null
 
         # --- telling Civil 3D to load it ------------------------------------------
         # Civil 3D writes this record itself after reading a bundle, but only on a machine
@@ -196,26 +214,27 @@ try
         Copy-Item $setup -Destination $localCopy -Recurse -Force
         $officeHome = 'U:\Somewhere\That\Is\Not\Mounted\FieldToFinish-Setup'
         Set-Content -Path (Join-Path $localCopy 'updates-from.txt') -Value $officeHome -Encoding utf8
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $localCopy | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $localCopy | Out-Null
         Check ($LASTEXITCODE -eq 0) 'installing from a local copy works'
         Check ((Get-Content $recorded -First 1) -eq $officeHome) `
               ("and it takes its updates from the office drive, not the local folder (" + (Get-Content $recorded -First 1) + ")")
 
         # Back to the real setup folder for the update tests below.
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup | Out-Null
 
         # --- an update applying itself -------------------------------------------
         # What FTF launches as Civil 3D closes: the same script, with -WaitForCivil3D.
         Write-Host '-- an update applying itself'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup | Out-Null
         $before = Get-Content (Join-Path $installed 'version.txt') -First 1
 
         $newer = 'FTF 2099-01-01 09:00  office deadbee  (Release, Civil 3D 2024)'
         Set-Content -Path (Join-Path $setup 'Bundle\version.txt') -Value $newer -Encoding utf8
+        Update-Hashes (Join-Path $setup 'Bundle')
         # -ProcessName is the test seam: nothing named this is running, so the wait ends at
         # once and the real Civil 3D -- which someone may well have open -- is left out of it.
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') `
-            -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup -WaitForCivil3D -ProcessName 'ftf-nothing-runs-by-this-name' | Out-Null
+            -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup -WaitForCivil3D -ProcessName 'ftf-nothing-runs-by-this-name' | Out-Null
         $after = Get-Content (Join-Path $installed 'version.txt') -First 1
         Check ($LASTEXITCODE -eq 0) 'the update installer finishes cleanly'
         Check ($before -ne $after -and $after -eq $newer) "the newer office build replaced the installed one ($after)"
@@ -224,8 +243,9 @@ try
         # And the other half of that behaviour: while Civil 3D is open, nothing is replaced.
         # 'powershell' is certainly running -- this test is it -- so the wait gives up.
         Set-Content -Path (Join-Path $setup 'Bundle\version.txt') -Value 'FTF 2099-06-06 06:06  office cafe123  (Release, Civil 3D 2024)' -Encoding utf8
+        Update-Hashes (Join-Path $setup 'Bundle')
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') `
-            -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $setup -WaitForCivil3D -WaitMinutes 0 -ProcessName 'powershell' | Out-Null
+            -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup -WaitForCivil3D -WaitMinutes 0 -ProcessName 'powershell' | Out-Null
         Check ($LASTEXITCODE -eq 0) 'an update that cannot apply yet is not an error'
         Check ((Get-Content (Join-Path $installed 'version.txt') -First 1) -eq $newer) `
               'a session still open is never replaced underneath -- the update waits for the next close'
@@ -234,7 +254,7 @@ try
         Check (Test-Path $log) 'the unattended update writes a log, since nobody is watching'
         if (Test-Path $log)
         {
-            Check ((Get-Content $log -Raw) -match 'installed for') 'and the log says what it did'
+            Check ((Get-Content $log -Raw) -match '(installed|updated) for') 'and the log says what it did'
         }
 
         # --- a source that goes wrong halfway ------------------------------------
@@ -247,7 +267,7 @@ try
         Remove-Item $broken -Recurse -Force -ErrorAction SilentlyContinue
         Copy-Item $setup -Destination $broken -Recurse -Force
         Remove-Item (Join-Path $broken 'Bundle\Contents\2024\FieldCodes.Cad.dll') -Force
-        $said = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -Source $broken 2>&1
+        $said = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $broken 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $broken 2>&1
         Check ($LASTEXITCODE -eq 1) 'an install from a broken source fails rather than half-installing'
         Check (Test-Path (Join-Path $installed 'Contents\2024\FieldCodes.Cad.dll')) `
               'and the FTF already on the machine is still there'
@@ -259,7 +279,7 @@ try
         # --- uninstall -----------------------------------------------------------
         Write-Host '-- uninstalling'
         Check (Test-Path $civilKey) 'the startup record is there before uninstalling'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -Uninstall -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts | Out-Null
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -Uninstall -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild | Out-Null
         Check ($LASTEXITCODE -eq 0) 'uninstalling reports success'
         Check (-not (Test-Path (Join-Path $plugins 'FieldToFinish.bundle'))) 'the bundle is gone'
         Check ((Get-Content $officeRules -Raw) -match 'do not touch') 'office settings survive uninstalling'

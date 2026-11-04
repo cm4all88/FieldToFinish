@@ -1,57 +1,77 @@
-FIELD TO FINISH -- HOW TO INSTALL
-=================================
+FIELD TO FINISH -- HOW TO INSTALL OR UPDATE
+===========================================
 
-1.  Close Civil 3D.
-2.  Double-click  Install FTF.bat
-3.  Start Civil 3D.
+1.  Save your drawings and close Civil 3D.
+2.  Double-click  Install or Update FieldToFinish.bat  in this folder.
+3.  Read the window, then start Civil 3D.
 
-Two tabs are on the ribbon when it opens:
+That is all, the first time and every time after. The same file installs FTF,
+updates it when the office approves a new release, repairs a damaged install,
+and tells you "up to date" when there is nothing to do.
 
-    FTF            the drawing being finished -- labels, points, drip lines,
-                   tags, schedules, Dip Builder, sheets, clean up
-    FTF Boundary   the record work -- recorded surveys, easements, exhibits
-                   and legal drafts
+The FTF ribbon tabs are there when Civil 3D opens. There is nothing to load
+and nothing to type: Civil 3D loads FTF by itself every time it starts.
+Please do not NETLOAD FTF from this folder, or from anywhere else.
 
-There is nothing to load and nothing to type. If you would rather type,
-every button is also a command: FTF opens the window, FTFDIP the Dip
-Builder, FTFRECORD a recorded survey.
+To see which FTF you have, type FTFVERSION in Civil 3D.
 
 
-UPDATES -- NOTHING TO DO
-------------------------
+WHAT HAPPENS WHEN YOU DOUBLE-CLICK
+----------------------------------
 
-You install once. After that FTF keeps itself the same as the office copy:
+  * It stops straight away if Civil 3D is open (close it and run it again).
+  * It copies this release to your computer and checks every file against the
+    list made when the release was built. A damaged or half-copied release is
+    refused, and nothing changes.
+  * It compares the release with the FTF you already have, and says which
+    build you have, which build this folder has, and what it is going to do.
+  * It keeps a copy of the FTF you had, installs the new one, and checks every
+    installed file again. If anything goes wrong, the FTF you had is put back.
+  * It writes a log to  %LOCALAPPDATA%\FieldToFinish\logs.
 
-  * When Civil 3D starts, FTF looks at the office copy this was installed from.
-  * If there is a newer one, the FTF window says so. Keep working -- nothing
-    changes underneath you, and nothing asks you anything.
-  * When you close Civil 3D, the newer FTF installs itself. The next time you
+It never touches your office settings, your own settings, profiles, layer
+mappings, styles, feature rules, commands, workflows or drawings.
+
+
+UPDATES
+-------
+
+When the office approves a new release, it is put in this folder. Then:
+
+  * double-click  Install or Update FieldToFinish.bat  again (Civil 3D closed), or
+  * just keep working: when Civil 3D starts, FTF notices the newer release in
+    this folder, and installs it when you close Civil 3D. The next time you
     open Civil 3D you are current.
 
-So a new FTF reaches you the next time you open Civil 3D after closing it once.
-Civil 3D holds FTF open while it runs, which is why the swap waits for the close.
-
-To see which FTF you have, type FTFUPDATE, or click FTF Version on the FTF tab.
-The FTF window shows it too.
+There is also an  Update FieldToFinish.bat  in  %LOCALAPPDATA%\FieldToFinish
+that runs the one in this folder for you.
 
 
 IF SOMETHING GOES WRONG
 -----------------------
 
 "Civil 3D is open"
-    Close every Civil 3D window and run Install FTF.bat again. Civil 3D holds
-    the plugin open while it is running, so it cannot be replaced underneath it.
+    Close every Civil 3D window and run it again. Civil 3D holds FTF open while
+    it runs, so it cannot be replaced underneath it.
 
-"It says a newer FTF is waiting" and it stays that way
-    The update installs when Civil 3D closes. If you have closed and reopened it
-    and the message is still there, type FTFUPDATE -- it says what it found and
-    where it looked -- and send that to the drafting lead.
+"Could not copy the release" / "cannot be reached"
+    The network folder is not reachable (network, VPN). Your FTF is unchanged
+    and keeps working. Try again when you are connected.
+
+"not complete" / "not what was built" / "development build"
+    This folder is not a good approved release. Nothing was changed. Tell the
+    drafting lead.
+
+The new FTF does not behave
+    Close Civil 3D and double-click  Restore previous FieldToFinish.bat
+    (here, or in %LOCALAPPDATA%\FieldToFinish). It puts back the FTF you had
+    before the last update. Your settings stay as they are.
 
 The tabs are not there after installing
-    Close Civil 3D and start it again -- the tabs are built when Civil 3D
-    starts. If they are still missing, tell the drafting lead which build you
-    installed (it is printed in the install window, and in version.txt beside
-    this file).
+    Close Civil 3D, double-click  Repair FTF.bat, then start Civil 3D again.
+    Still missing: double-click  Check FTF.bat. It writes ftf-check.txt on your
+    desktop (and a copy in %LOCALAPPDATA%\FieldToFinish\logs). Send that file
+    to the drafting lead.
 
 You have a different Civil 3D year
     This build is for Civil 3D 2024. Tell the drafting lead.
@@ -60,12 +80,15 @@ You have a different Civil 3D year
 WHAT IT CHANGES ON YOUR COMPUTER
 --------------------------------
 
-One folder, in your own profile, no admin rights:
+No admin rights. Only these, in your own profile:
 
-    %APPDATA%\Autodesk\ApplicationPlugins\FieldToFinish.bundle
+    %APPDATA%\Autodesk\ApplicationPlugins\FieldToFinish.bundle    FTF itself
+    Civil 3D's own record that it loads FTF at startup
+    %LOCALAPPDATA%\FieldToFinish                                  logs, backups, the local tools
 
 Your office settings are somewhere else and are never touched by installing:
 
     %APPDATA%\FieldToFinish
 
-To remove FTF, double-click  Uninstall FTF.bat  (settings are kept).
+To remove FTF, double-click  Uninstall FTF.bat  (settings are kept, and a copy
+of FTF is kept so Restore previous FieldToFinish.bat can put it back).

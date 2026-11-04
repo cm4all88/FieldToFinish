@@ -58,6 +58,8 @@ esac
 if command -v pwsh >/dev/null 2>&1; then
   step "PowerShell scripts (Windows PowerShell 5.1 syntax)"
   pwsh -NoProfile -Command "& ./deploy/lint-powershell.ps1 -Paths @(git ls-files '*.ps1'); exit \$LASTEXITCODE"
+  step "Staff installer and publishing (scratch folders only)"
+  pwsh -NoProfile -File ./deploy/test-installer.ps1
 fi
 
 if [ -f tests/CadCompileCheck/Stubs/CivilApiNames.g.cs ]; then
