@@ -18,11 +18,11 @@
   (vl-load-com)
   (setq olderr *error*
         oldgap (getvar "OFFSETGAPTYPE")
-        olderase (getvar "OFFSETERASE")
+        olderase (getvar "OFFSETERASE") ; nil on some versions - guarded below
         oldcmd (getvar "CMDECHO"))
   (defun *error* (msg)
     (setvar "OFFSETGAPTYPE" oldgap)
-    (setvar "OFFSETERASE" olderase)
+    (if olderase (setvar "OFFSETERASE" olderase))
     (setvar "CMDECHO" oldcmd)
     (command-s "_.undo" "_end")
     (setq *error* olderr)
@@ -44,7 +44,7 @@
 
       (setvar "CMDECHO" 0)
       (setvar "OFFSETGAPTYPE" 1)   ; 1 = round (filleted, tangent arcs)
-      (setvar "OFFSETERASE" 0)     ; keep the originals
+      (if olderase (setvar "OFFSETERASE" 0)) ; keep the originals
       (command "_.undo" "_begin")
 
       (setq i 0)
@@ -75,7 +75,7 @@
 
       (command "_.undo" "_end")
       (setvar "OFFSETGAPTYPE" oldgap)
-      (setvar "OFFSETERASE" olderase)
+      (if olderase (setvar "OFFSETERASE" olderase))
       (setvar "CMDECHO" oldcmd)
     )
   )
