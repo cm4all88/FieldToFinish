@@ -1,0 +1,1644 @@
+{
+  "about": [
+    "The map from FTF's functional areas to the tests that cover them, and the record of what has been verified where.",
+    "tools/test-plan.ps1 reads it to choose the tests for a change; docs/testing.md says how to use it and how to update the record.",
+    "paths: repo-relative globs (* within a folder, ** across folders). A file may belong to several areas.",
+    "shared: changing a file of a shared area runs the full unit suite (its unitTests is empty for that reason). A changed file in no area counts as shared too.",
+    "unitTests: dotnet test --filter clauses; joined with |, they select the test classes that cover the area. AreaMapTests checks they name real test classes and include every test that reaches the area's code.",
+    "civil3d: the deploy/smoke-test.ps1 sections that check the area in Civil 3D (the smoke test always runs them all). civil3dManual: Civil 3D runners run by hand at a milestone.",
+    "verified: unit / civil3d / installer record the commit, date and place each kind of check last passed; null means never verified. Never record a check that did not pass in full."
+  ],
+  "noTests": {
+    "paths": [
+      "**/*.md",
+      "docs/**",
+      "checkpoints/**"
+    ],
+    "why": "Documentation and old checkpoints: no test reads them. A file that is also in an area's paths (docs/ribbon.md, tests/LiveSmoke/fixtures/README.md) counts for that area instead."
+  },
+  "alwaysRun": [
+    "FullyQualifiedName~FieldCodes.Tests.AmbiguousTypeNameTests.",
+    "FullyQualifiedName~FieldCodes.Tests.AreaMapTests.",
+    "FullyQualifiedName~FieldCodes.Tests.CompileCheckCoverageTests.",
+    "FullyQualifiedName~FieldCodes.Tests.GroundworkContractTests."
+  ],
+  "alwaysRunWhy": "Cheap repository-wide checks (namespace lint, compile-check coverage, no personal paths or real cases in tests, and AreaMapTests, which holds this map to the code): they run with every change that is not documentation only.",
+  "civil3dSections": {
+    "main": "the loaded DLL is this build, FTFVERSION, FTFCONTOUR on a seeded surface (ContourTestHarness)",
+    "identity": "source points read as Civil 3D stores them, FTFLINES naming lines from their shots, FTFREVIEWCHECK reading linework coding (IdentityTestHarness)",
+    "accountability": "FTFRUN Standard, the point ledger and linework continuity, -FTFREVIEW approvals, decisions that reopen, FTFQC Complete (AccountabilityTestHarness)",
+    "style": "FTFLABELS and FTFRESTYLE Preview / Apply against the office's annotation styles (StyleTestHarness)"
+  },
+  "installerTests": {
+    "deploy/test-release.ps1": "packages the real build and installs it into a scratch profile (Windows only; UPDATEFTF runs it)",
+    "deploy/test-installer.ps1": "the staff installer and publishing against synthetic releases, in scratch folders (any PowerShell)"
+  },
+  "areas": [
+    {
+      "id": "build",
+      "title": "Build and project files: csproj and solution files, build stamping (build/FtfBuildInfo.targets), line-ending rules",
+      "shared": true,
+      "paths": [
+        "**/*.csproj",
+        "**/*.sln",
+        "build/**",
+        ".gitattributes"
+      ],
+      "unitTests": [],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "shared-geometry",
+      "title": "Shared geometry: points and courses (P2, Course), angles, bearing and azimuth text",
+      "shared": true,
+      "paths": [
+        "src/FieldCodes/Geometry/Angles.cs",
+        "src/FieldCodes/Easements/CourseGeometry.cs",
+        "src/FieldCodes/Drafting/SurveyDirection.cs"
+      ],
+      "unitTests": [],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "rules-and-settings-model",
+      "title": "Field-code rules and the settings model: config/rules.json, the parser, RulesConfig, FtfSettings and its layers",
+      "shared": true,
+      "paths": [
+        "src/FieldCodes/Config.cs",
+        "src/FieldCodes/Models.cs",
+        "src/FieldCodes/FieldCodeParser.cs",
+        "src/FieldCodes/Settings/FtfSettings.cs",
+        "src/FieldCodes/Settings/Sections.cs",
+        "src/FieldCodes/Settings/SettingsLayers.cs",
+        "src/FieldCodes/Settings/SettingsRegistry.cs",
+        "src/FieldCodes/Settings/OfficeAuthorization.cs",
+        "config/rules.json",
+        "tests/FieldCodes.Tests/RulesFixture.cs",
+        "tests/FieldCodes.Tests/ProfileDirectoryCollection.cs"
+      ],
+      "unitTests": [],
+      "civil3d": [
+        "main",
+        "identity",
+        "accountability",
+        "style"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "main",
+            "identity",
+            "accountability"
+          ],
+          "results": "main 51 PASS, identity 35 PASS, accountability 104 PASS"
+        },
+        "notes": "Civil 3D style check at e979c7f: 31 PASS 4 FAIL. The fix in 28034d0 is not yet verified in Civil 3D."
+      }
+    },
+    {
+      "id": "cad-core",
+      "title": "Plugin core inside Civil 3D: CadUtil, ownership stamps, FtfSession, the drawing store, build info and the command trace, COGO notes, drawing resources",
+      "shared": true,
+      "paths": [
+        "src/FieldCodes.Cad/CadUtil.cs",
+        "src/FieldCodes.Cad/Ownership.cs",
+        "src/FieldCodes.Cad/FtfSession.cs",
+        "src/FieldCodes.Cad/DrawingStore.cs",
+        "src/FieldCodes.Cad/FtfBuildInfo.cs",
+        "src/FieldCodes.Cad/CogoNotes.cs",
+        "src/FieldCodes.Cad/Setup/DrawingResources.cs",
+        "src/FieldCodes/Stamps/**",
+        "tests/FieldCodes.Tests/LegacyStampTests.cs"
+      ],
+      "unitTests": [],
+      "civil3d": [
+        "main",
+        "identity",
+        "accountability",
+        "style"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "main",
+            "identity",
+            "accountability"
+          ],
+          "results": "main 51 PASS, identity 35 PASS, accountability 104 PASS"
+        },
+        "notes": "Civil 3D style check at e979c7f: 31 PASS 4 FAIL. The fix in 28034d0 is not yet verified in Civil 3D."
+      }
+    },
+    {
+      "id": "orientation",
+      "title": "Orientation: symbol rotation from linework, roads and field azimuths (FTFORIENT, FTFORIENTRESET)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Orient/**",
+        "src/FieldCodes.Cad/OrientationCommands.cs",
+        "tests/FieldCodes.Tests/OrientationTests.cs",
+        "tests/FieldCodes.Tests/OrientationConfigTests.cs",
+        "tests/FieldCodes.Tests/PavementArrowDirectionTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockPreviewMathTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IdentityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationConfigTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PavementArrowDirectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewChecksTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "Unit-verified at 7771085, but the orientation code is being changed now: revalidate it when that work lands. No smoke-test section checks orientation: FTFRUN in the accountability check runs FTFORIENT, but nothing there checks a rotation."
+      }
+    },
+    {
+      "id": "point-labels",
+      "title": "Point labels and label placement (FTFLABELS, FTFLABELALL, notes, masks, FTFORDER)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Annotation/AnnotationPolicy.cs",
+        "src/FieldCodes/Annotation/LabelPlan.cs",
+        "src/FieldCodes/Annotation/ManualAnnotations.cs",
+        "src/FieldCodes/Annotation/ScheduleSelection.cs",
+        "src/FieldCodes/Geometry/LabelPlacer.cs",
+        "src/FieldCodes/FieldNotes.cs",
+        "src/FieldCodes/CodeNotes.cs",
+        "src/FieldCodes/Settings/AnnotationSettings.cs",
+        "src/FieldCodes.Cad/LabelCommands.cs",
+        "src/FieldCodes.Cad/LabelAllCommand.cs",
+        "src/FieldCodes.Cad/AnnotationScan.cs",
+        "src/FieldCodes.Cad/TextMask.cs",
+        "src/FieldCodes.Cad/MaskSync.cs",
+        "src/FieldCodes.Cad/DrawOrderCommands.cs",
+        "tests/FieldCodes.Tests/LabelPlacerTests.cs",
+        "tests/FieldCodes.Tests/AnnotationPolicyTests.cs",
+        "tests/FieldCodes.Tests/LabelEverythingFixTests.cs",
+        "tests/FieldCodes.Tests/NoteLabelTests.cs",
+        "tests/FieldCodes.Tests/SeparateNoteTests.cs",
+        "tests/FieldCodes.Tests/SymbolLabelTests.cs",
+        "tests/FieldCodes.Tests/GenericFeatureTests.cs",
+        "tests/FieldCodes.Tests/SurveyInventoryTests.cs",
+        "tests/FieldCodes.Tests/StemAverageTests.cs",
+        "tests/FieldCodes.Tests/ParserTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DiagnosticsSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GenericFeatureTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IdentityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelPlacerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ParserTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyExtractionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RestyleReportTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewChecksTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleCategoryEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleDocumentFeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RulesStoreTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ScheduleSelectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SeparateNoteTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StampIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsViewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StarterRuleTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StemAverageTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleResolverTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleTextTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SurveyInventoryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SymbolLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WorkflowFollowUpTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WorkflowTests."
+      ],
+      "civil3d": [
+        "accountability",
+        "style"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "accountability"
+          ],
+          "results": "accountability 104 PASS"
+        },
+        "notes": "Civil 3D style check at e979c7f: 31 PASS 4 FAIL. The fix in 28034d0 is not yet verified in Civil 3D."
+      }
+    },
+    {
+      "id": "annotation-styles",
+      "title": "Annotation styles: style resolution, FTFRESTYLE, the style pages",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Styles/**",
+        "src/FieldCodes.Cad/AnnotationStyler.cs",
+        "src/FieldCodes.Cad/RestyleCommand.cs",
+        "src/FieldCodes.Cad/Setup/StylePages.cs",
+        "src/FieldCodes.Cad/Setup/StylePreview.cs",
+        "tests/FieldCodes.Tests/StyleResolverTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RestyleReportTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleResolverTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleTextTests."
+      ],
+      "civil3d": [
+        "style"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "Civil 3D style check at e979c7f: 31 PASS 4 FAIL. The fix in 28034d0 is not yet verified in Civil 3D."
+      }
+    },
+    {
+      "id": "accountability",
+      "title": "Point accountability and the drafting standard: the point ledger, feature standards, FTFCHECKSTANDARDS data",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Review/PointLedger.cs",
+        "src/FieldCodes/Reporting/AccountabilityReport.cs",
+        "src/FieldCodes/Standards/**",
+        "src/FieldCodes/PropertyReader.cs",
+        "src/FieldCodes/Settings/AccountabilitySettings.cs",
+        "src/FieldCodes.Cad/Accountability.cs",
+        "src/FieldCodes.Cad/Setup/AccountabilityPage.cs",
+        "src/FieldCodes.Cad/Setup/FeatureStandardForm.cs",
+        "tests/FieldCodes.Tests/PointAccountingTests.cs",
+        "tests/FieldCodes.Tests/AccountabilityHarnessExpectationTests.cs",
+        "tests/FieldCodes.Tests/AccountabilitySettingsTests.cs",
+        "tests/FieldCodes.Tests/UnverifiedEvidenceTests.cs",
+        "tests/FieldCodes.Tests/FeatureStandardTests.cs",
+        "tests/FieldCodes.Tests/StandardsCheckTests.cs",
+        "tests/FieldCodes.Tests/StandardsViewTests.cs",
+        "tests/FieldCodes.Tests/PropertyReaderTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilitySettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleDocumentFeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RulesStoreTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsViewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+      ],
+      "civil3d": [
+        "accountability"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "accountability"
+          ],
+          "results": "accountability 104 PASS"
+        },
+        "notes": ""
+      }
+    },
+    {
+      "id": "source-identity",
+      "title": "Source point identity: one identity for every survey shot, and the Civil 3D point reader",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Linework/SourcePoints.cs",
+        "src/FieldCodes.Cad/SourcePointReader.cs",
+        "tests/FieldCodes.Tests/SourcePointIndexTests.cs",
+        "tests/FieldCodes.Tests/IdentityHarnessExpectationTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FieldNoteHeightTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IdentityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.InventoryShotIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SourcePointIndexTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+      ],
+      "civil3d": [
+        "identity"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "identity"
+          ],
+          "results": "identity 35 PASS"
+        },
+        "notes": ""
+      }
+    },
+    {
+      "id": "linework",
+      "title": "Linework: line naming and coding, continuity, line labels, gates, fences, label-between (FTFLINES, FTFLINELABELS, FTFLABELBETWEEN, FTFGATES)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Linework/**",
+        "src/FieldCodes.Cad/LineworkCommands.cs",
+        "src/FieldCodes.Cad/LineworkCommands.Gates.cs",
+        "src/FieldCodes.Cad/FtfLineworkService.cs",
+        "src/FieldCodes.Cad/Setup/DraftingLinesPage.cs",
+        "src/FieldCodes.Cad/Setup/LineLabelNavigation.cs",
+        "src/FieldCodes.Cad/Setup/GateReviewPages.cs",
+        "tests/FieldCodes.Tests/Line*Tests.cs",
+        "tests/FieldCodes.Tests/Gate*Tests.cs",
+        "tests/FieldCodes.Tests/Fence*Tests.cs",
+        "tests/FieldCodes.Tests/LabelBetween*Tests.cs",
+        "tests/FieldCodes.Tests/DrivewayLabelTests.cs",
+        "tests/FieldCodes.Tests/InteractiveLineLabelTests.cs",
+        "tests/FieldCodes.Tests/LabelLayerResolverTests.cs",
+        "tests/FieldCodes.Tests/PointNotesTests.cs",
+        "tests/FieldCodes.Tests/SpanMarkerTests.cs",
+        "tests/FieldCodes.Tests/TrimbleNameTests.cs",
+        "tests/FieldCodes.Tests/SurveyFigureFixtureTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BenchTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DrivewayLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FenceHeightTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FenceLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FieldNoteHeightTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IdentityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.InteractiveLineLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.InventoryShotIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelBetweenSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelBetweenTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelLayerResolverTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineLabelPlannerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineNameAliasTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineSideTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineworkCodingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineworkInventoryCsvTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineworkReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointNotesTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewChecksTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SourcePointIndexTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SpanMarkerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SpotPlacerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SurveyFigureFixtureTests.",
+        "FullyQualifiedName~FieldCodes.Tests.TrimbleNameTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+      ],
+      "civil3d": [
+        "identity",
+        "accountability"
+      ],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-figures.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "identity",
+            "accountability"
+          ],
+          "results": "identity 35 PASS, accountability 104 PASS"
+        },
+        "notes": "The ReportSitsBesideTheDrawing tests (LineworkInventoryCsvTests) compare Windows paths and do not run on Linux, so 7771085 did not run them. No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "contours",
+      "title": "Contours (FTFCONTOUR)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Contours/**",
+        "src/FieldCodes.Cad/ContourCommands.cs",
+        "tests/FieldCodes.Tests/ContourTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.ContourTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests."
+      ],
+      "civil3d": [
+        "main"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "main"
+          ],
+          "results": "main 51 PASS"
+        },
+        "notes": ""
+      }
+    },
+    {
+      "id": "easements-exhibits",
+      "title": "Easements, legal descriptions and exhibits (STRIPEASEMENT, FTFEASEMENT, FTFPORTION, FTFEXHIBIT, production cleanup)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Easements/**",
+        "src/FieldCodes/Exhibits/**",
+        "src/FieldCodes.Cad/Easement*.cs",
+        "src/FieldCodes.Cad/Exhibit*.cs",
+        "src/FieldCodes.Cad/Setup/ExhibitsPage.cs",
+        "src/FieldCodes.Cad/Setup/ProductionPages.cs",
+        "src/FieldCodes.Cad/Ui/EasementPreviewForm.cs",
+        "src/FieldCodes.Cad/Ui/LegalDescriptionForm.cs",
+        "src/FieldCodes.Cad/Ui/ExhibitInfoForm.cs",
+        "src/FieldCodes.Cad/Ui/InspectorForm.cs",
+        "src/FieldCodes/Settings/EasementSettings.cs",
+        "src/FieldCodes/Settings/ExhibitSettings.cs",
+        "config/profiles/**",
+        "tests/FieldCodes.Tests/Easement*Tests.cs",
+        "tests/FieldCodes.Tests/ClosureAndCompositionTests.cs",
+        "tests/FieldCodes.Tests/ComponentOverlapTests.cs",
+        "tests/FieldCodes.Tests/Legal*Tests.cs",
+        "tests/FieldCodes.Tests/PortionAndAreaTests.cs",
+        "tests/FieldCodes.Tests/StripTrimTests.cs",
+        "tests/FieldCodes.Tests/Exhibit*Tests.cs",
+        "tests/FieldCodes.Tests/OfficeStandardTests.cs",
+        "tests/FieldCodes.Tests/ProductionCleanupTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ClosureAndCompositionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ComponentOverlapTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EasementBuilderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EasementDraftingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitEasementTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitPlannerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitTitleBlockRulesTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerAppearanceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LegalCompositionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LegalDescriptionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LotTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OfficeStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PortionAndAreaTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProductionCleanupTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyExtractionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyOcrNoiseTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyParsingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RightOfWayTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StripTrimRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StripTrimTests.",
+        "FullyQualifiedName~FieldCodes.Tests.TrimTests."
+      ],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-production.ps1",
+        "tests/LiveSmoke/run-cleanup.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "drafting-tools",
+      "title": "Drafting tools: FTFDRAWLINE survey line construction, FTFBENCH, FTFPROFILE, FTFSPOT, FTFCONTROL, FTFLEGEND",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Drafting/**",
+        "src/FieldCodes/Geometry/SpotPlacer.cs",
+        "src/FieldCodes/Settings/DraftingSettings.cs",
+        "src/FieldCodes.Cad/BenchCommands.cs",
+        "src/FieldCodes.Cad/DraftingCommands.cs",
+        "src/FieldCodes.Cad/DraftPrimitives.cs",
+        "src/FieldCodes.Cad/ProfileCommands.cs",
+        "src/FieldCodes.Cad/SpotCommands.cs",
+        "tests/FieldCodes.Tests/BenchTests.cs",
+        "tests/FieldCodes.Tests/SurveyDirectionTests.cs",
+        "tests/FieldCodes.Tests/SpotPlacerTests.cs",
+        "tests/FieldCodes.Tests/DraftingSettingsTests.cs",
+        "tests/FieldCodes.Tests/DraftingProfileTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BenchTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DraftingSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LotTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RightOfWayTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SpotPlacerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SurveyDirectionTests."
+      ],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-livesmoke.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "trees-tags",
+      "title": "Point placement, trees, drip lines and tags (FTFPOINTS, FTFTREES, FTFDRIP, FTFTAGS, FTFTABLE)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Tagging/**",
+        "src/FieldCodes/Geometry/DripLineTrimmer.cs",
+        "src/FieldCodes.Cad/TreeCommands.cs",
+        "src/FieldCodes.Cad/DripCommands.cs",
+        "src/FieldCodes.Cad/TagCommands.cs",
+        "tests/FieldCodes.Tests/TreeBehaviourTests.cs",
+        "tests/FieldCodes.Tests/TaggingTests.cs",
+        "tests/FieldCodes.Tests/DripLineTrimmerTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DripLineTrimmerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleCategoryEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ScheduleSelectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StampIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StarterRuleTests.",
+        "FullyQualifiedName~FieldCodes.Tests.TaggingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.TreeBehaviourTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "symbol-blocks",
+      "title": "Symbol blocks: insertion, the block library and previews (FTFBLOCKS)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Symbols/**",
+        "src/FieldCodes.Cad/BlockCommands.cs",
+        "src/FieldCodes.Cad/InsertedBlocks.cs",
+        "src/FieldCodes.Cad/SymbolLibraryReader.cs",
+        "src/FieldCodes.Cad/BlockSketchReader.cs",
+        "src/FieldCodes.Cad/Setup/SymbolsPage.cs",
+        "src/FieldCodes.Cad/Ui/BlockChooser.cs",
+        "src/FieldCodes.Cad/Ui/BlockPreview.cs",
+        "tests/FieldCodes.Tests/BlockInsertSettingsTests.cs",
+        "tests/FieldCodes.Tests/BlockInsertionSafeguardTests.cs",
+        "tests/FieldCodes.Tests/BlockPreviewMathTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertionSafeguardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockPreviewMathTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "rules-editing",
+      "title": "Rule editing: the rules document behind the point- and line-feature settings pages",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Editing/**",
+        "src/FieldCodes.Cad/Setup/PointFeaturesPage.cs",
+        "src/FieldCodes.Cad/Setup/PointFeatureNavigation.cs",
+        "tests/FieldCodes.Tests/RuleEditingTests.cs",
+        "tests/FieldCodes.Tests/RulesStoreTests.cs",
+        "tests/FieldCodes.Tests/RuleDocumentFeatureStandardTests.cs",
+        "tests/FieldCodes.Tests/PointFeatureEditingTests.cs",
+        "tests/FieldCodes.Tests/SymbolStandardEditingTests.cs",
+        "tests/FieldCodes.Tests/AuditRegressionTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleDocumentFeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RulesStoreTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "record-survey",
+      "title": "Record survey and boundary (FTFRECORD: call extraction, traverses, curves, record QC)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/RecordSurvey/**",
+        "src/FieldCodes.Cad/Record*.cs",
+        "src/FieldCodes.Cad/Setup/RecordSurveyPage.cs",
+        "src/FieldCodes.Cad/Ui/RecordReviewForm.cs",
+        "src/FieldCodes/Settings/RecordSurveySettings.cs",
+        "tests/FieldCodes.Tests/Samples/**",
+        "tests/FieldCodes.Tests/RecordSurvey*Tests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyCurveTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyExtractionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyOcrNoiseTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyParsingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyTraverseTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsCheckTests."
+      ],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-record.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "lots-row",
+      "title": "Lots and right of way (FTFLOTS, FTFROW, FTFROWDIM)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Lots/**",
+        "src/FieldCodes/RightOfWay/**",
+        "src/FieldCodes.Cad/LotCommands.cs",
+        "src/FieldCodes.Cad/RowCommands.cs",
+        "src/FieldCodes.Cad/RowWidthCommand.cs",
+        "src/FieldCodes.Cad/Setup/LotsPage.cs",
+        "src/FieldCodes.Cad/Setup/RightOfWayPage.cs",
+        "src/FieldCodes.Cad/Ui/LotForm.cs",
+        "src/FieldCodes.Cad/Ui/RowForm.cs",
+        "src/FieldCodes/Settings/LotSettings.cs",
+        "src/FieldCodes/Settings/RightOfWaySettings.cs",
+        "tests/FieldCodes.Tests/LotTests.cs",
+        "tests/FieldCodes.Tests/RightOfWayTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LotTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyExtractionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyOcrNoiseTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyParsingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RightOfWayTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests."
+      ],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-rowlots.ps1",
+        "tests/LiveSmoke/rowlots-ui/run-rowlots-ui.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "utilities-dips",
+      "title": "Utilities and dips (FTFDIP and the Dip Builder, pipe entry, connections, utility QC, dip field notes)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Utilities/**",
+        "src/FieldCodes.Cad/UtilityCadService.cs",
+        "src/FieldCodes.Cad/UtilityCommands.cs",
+        "src/FieldCodes.Cad/DipFieldNotesStore.cs",
+        "src/FieldCodes.Cad/Ui/DipBuilderForm.cs",
+        "src/FieldCodes.Cad/Ui/DipFieldNotesDialog.cs",
+        "src/FieldCodes.Cad/Ui/PipeCards.cs",
+        "src/FieldCodes.Cad/Ui/PipeQuickEntry.cs",
+        "src/FieldCodes/Settings/UtilitySettings.cs",
+        "tests/FieldCodes.Tests/Dip*Tests.cs",
+        "tests/FieldCodes.Tests/ConnectAsEnteredTests.cs",
+        "tests/FieldCodes.Tests/ConnectionBatchTests.cs",
+        "tests/FieldCodes.Tests/PipeMaterialTests.cs",
+        "tests/FieldCodes.Tests/StructureSizeTests.cs",
+        "tests/FieldCodes.Tests/OutsideLimitsTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ConnectAsEnteredTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ConnectionBatchTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipBuilderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipFieldNotesPdfTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipFieldNotesTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipFieldRealityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipNetworkWalkTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipPickListTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipReferenceDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DipWindowQueueTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerUpdatePlanTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OutsideLimitsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PipeMaterialTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RestyleReportTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleCategoryEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ScheduleSelectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StampIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StarterRuleTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StructureSizeTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleResolverTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleTextTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+      ],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-production.ps1",
+        "tests/LiveSmoke/ui/run-ui.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "review",
+      "title": "Review system: the review register, FTFREVIEW, FTFREVIEWCHECK, -FTFREVIEW, FTFQC, diagnostics and processing reports",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Review/**",
+        "src/FieldCodes/Reporting/**",
+        "src/FieldCodes/Settings/DiagnosticsSettings.cs",
+        "src/FieldCodes.Cad/ReviewCommands.cs",
+        "src/FieldCodes.Cad/FtfReviewService.cs",
+        "src/FieldCodes.Cad/FtfStatusService.cs",
+        "src/FieldCodes.Cad/Ui/ReviewForm.cs",
+        "src/FieldCodes.Cad/Setup/ProvenancePage.cs",
+        "tests/FieldCodes.Tests/ReviewChecksTests.cs",
+        "tests/FieldCodes.Tests/ReviewRegisterTests.cs",
+        "tests/FieldCodes.Tests/FeatureReviewTests.cs",
+        "tests/FieldCodes.Tests/CodeDiagnosticsTests.cs",
+        "tests/FieldCodes.Tests/NaturalOrderTests.cs",
+        "tests/FieldCodes.Tests/ExceptionReportTests.cs",
+        "tests/FieldCodes.Tests/ProcessingRecordTests.cs",
+        "tests/FieldCodes.Tests/UnhandledSummaryTests.cs",
+        "tests/FieldCodes.Tests/DiagnosticsSettingsTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DiagnosticsSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExceptionReportTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IdentityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.NaturalOrderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyExtractionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewChecksTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewRegisterTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsViewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnhandledSummaryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+      ],
+      "civil3d": [
+        "identity",
+        "accountability"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "identity",
+            "accountability"
+          ],
+          "results": "identity 35 PASS, accountability 104 PASS"
+        },
+        "notes": "The ReportSitsBesideTheDrawing tests (ExceptionReportTests, UnhandledSummaryTests) compare Windows paths and do not run on Linux, so 7771085 did not run them."
+      }
+    },
+    {
+      "id": "workflows",
+      "title": "Workflows and the finishing pass (FTF, FTFRUN, process presets)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Annotation/ProcessPresets.cs",
+        "src/FieldCodes/Settings/WorkflowSettings.cs",
+        "src/FieldCodes.Cad/FtfCommand.cs",
+        "src/FieldCodes.Cad/FtfPipeline.cs",
+        "src/FieldCodes.Cad/FtfWorkflows.cs",
+        "src/FieldCodes.Cad/Setup/WorkflowPages.cs",
+        "src/FieldCodes.Cad/Setup/WorkflowsPage.cs",
+        "tests/FieldCodes.Tests/WorkflowTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleCategoryEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ScheduleSelectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StampIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StarterRuleTests.",
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WorkflowFollowUpTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WorkflowTests."
+      ],
+      "civil3d": [
+        "accountability"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "accountability"
+          ],
+          "results": "accountability 104 PASS"
+        },
+        "notes": ""
+      }
+    },
+    {
+      "id": "layers",
+      "title": "Layers and layer standards (FTFLAYERUPDATE, FTFCHECKSTANDARDS)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/LayerClassifier.cs",
+        "src/FieldCodes/Settings/LayerAppearance.cs",
+        "src/FieldCodes/Settings/LayerCatalog.cs",
+        "src/FieldCodes/Settings/LayerStandards.cs",
+        "src/FieldCodes/Settings/PmxLayers.cs",
+        "src/FieldCodes/Settings/ProductionLayerResolver.cs",
+        "src/FieldCodes.Cad/LayerStandardCommands.cs",
+        "src/FieldCodes.Cad/LayerStandardsCad.cs",
+        "src/FieldCodes.Cad/ProductionLayers.cs",
+        "src/FieldCodes.Cad/ProjectLayers.cs",
+        "src/FieldCodes.Cad/Setup/LayersPage.cs",
+        "src/FieldCodes.Cad/Setup/LayerStandardDialogs.cs",
+        "tests/FieldCodes.Tests/Layer*Tests.cs",
+        "tests/FieldCodes.Tests/PmxLayerTests.cs",
+        "tests/FieldCodes.Tests/ProductionLayerResolverTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelPlacerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerAppearanceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerClassifierTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LayerUpdatePlanTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PmxLayerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProductionLayerResolverTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyStandardsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RestyleReportTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RuleCategoryEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ScheduleSelectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StampIdentityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StandardsCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StarterRuleTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleCheckTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleResolverTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StyleTextTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "settings-ui",
+      "title": "The settings window and other dialogs (Setup pages and Ui forms; FTFSETUP)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes.Cad/Setup/**",
+        "src/FieldCodes.Cad/Ui/**",
+        "src/FieldCodes.Cad/SettingsCommands.cs",
+        "tests/FieldCodes.Tests/FtfSettingsTests.cs",
+        "tests/FieldCodes.Tests/SettingsLayersTests.cs",
+        "tests/FieldCodes.Tests/SettingsRegistryTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.DipWindowQueueTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "commands-ribbon",
+      "title": "The command catalog and the ribbon",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Commands/**",
+        "src/FieldCodes.Cad/FtfRibbon.cs",
+        "src/FieldCodes.Cad/FtfCommandCatalog.cs",
+        "src/FieldCodes.Cad/Setup/CommandsPage.cs",
+        "docs/ribbon.md",
+        "tests/FieldCodes.Tests/CommandCatalogTests.cs",
+        "tests/FieldCodes.Tests/RibbonLayoutTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "sheets",
+      "title": "Sheets, keymaps, break lines and match lines (FTFSHEETS, FTFKEYMAP, FTFTILDE, FTFMATCHLINE)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Sheets/**",
+        "src/FieldCodes.Cad/SheetCommands.cs",
+        "src/FieldCodes.Cad/BreakMarkCommands.cs",
+        "tests/FieldCodes.Tests/SheetPlanTests.cs",
+        "tests/FieldCodes.Tests/BreakLineTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.BreakLineTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SheetPlanTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "compare",
+      "title": "Compare and trim (FTFCOMPARE, FTFTRIM)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Compare/**",
+        "src/FieldCodes.Cad/Compare/**",
+        "src/FieldCodes.Cad/Ui/CompareReviewForm.cs",
+        "src/FieldCodes.Cad/Setup/ComparePage.cs",
+        "src/FieldCodes/Settings/CompareSettings.cs",
+        "config/compare-profiles/**",
+        "tests/FieldCodes.Tests/Compare/**"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AnnotationMatchingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ClassifierAndProfileTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ClosureAndCompositionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ComparePerformanceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ComponentOverlapTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DiscrepancyMarkTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EasementBuilderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EasementDraftingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExactnessAndVisibilityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitEasementTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ExhibitPlannerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LegalCompositionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LegalDescriptionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LinearMatchingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LotTests.",
+        "FullyQualifiedName~FieldCodes.Tests.NonplotLayeringTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OfficeStandardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PlanDecisionsReportQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PointMatchingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PortionAndAreaTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ProductionCleanupTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyExtractionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyOcrNoiseTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyParsingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RecordSurveyReviewAndQcTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RepeatabilityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RightOfWayTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsLayersTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
+        "FullyQualifiedName~FieldCodes.Tests.ShippedProfileTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StripTrimRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.StripTrimTests.",
+        "FullyQualifiedName~FieldCodes.Tests.TrimTests."
+      ],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/LiveSmoke/run-compare.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "version-office-update",
+      "title": "The version stamp and office auto-update inside the plugin (FTFVERSION, FTFUPDATE)",
+      "shared": false,
+      "paths": [
+        "src/FieldCodes/Deploy/**",
+        "src/FieldCodes.Cad/OfficeUpdate.cs",
+        "tests/FieldCodes.Tests/BuildStampTests.cs",
+        "tests/FieldCodes.Tests/OfficeBuildTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.BuildStampTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OfficeBuildTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests."
+      ],
+      "civil3d": [
+        "main"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "main"
+          ],
+          "results": "main 51 PASS"
+        },
+        "notes": ""
+      }
+    },
+    {
+      "id": "deployment",
+      "title": "Deployment: UPDATEFTF, packaging, the staff installer, publishing to the release folder, the smoke-test runner",
+      "shared": false,
+      "paths": [
+        "deploy/**",
+        "UPDATEFTF.ps1",
+        "UPDATEFTF.cmd",
+        "build/**",
+        "src/FieldCodes/FieldCodes.csproj",
+        "src/FieldCodes.Cad/FieldCodes.Cad.csproj",
+        "tests/FieldCodes.Tests/DeploymentContractTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests."
+      ],
+      "civil3d": [
+        "main"
+      ],
+      "installerTests": true,
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "main"
+          ],
+          "results": "main 51 PASS"
+        },
+        "installer": [
+          {
+            "script": "deploy/test-installer.ps1",
+            "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+            "date": "2026-11-04",
+            "where": "Linux, PowerShell 7.4 (its Windows-only checks, Civil 3D's startup record in the registry, did not run)",
+            "result": "114 PASS"
+          }
+        ],
+        "notes": "deploy/test-release.ps1 is not verified: on Windows at 8ab54ac it gave 77 PASS 1 FAIL (a fixture assumed U: was unmapped); the fix in 7771085 has not been run on Windows yet. deploy/test-installer.ps1 has never run on Windows."
+      }
+    },
+    {
+      "id": "civil3d-harnesses",
+      "title": "Civil 3D harnesses (tests/LiveSmoke) and their compile check",
+      "shared": false,
+      "paths": [
+        "tests/LiveSmoke/**",
+        "tests/SmokeHarnessCompileCheck/**",
+        "deploy/smoke-test.ps1",
+        "tests/FieldCodes.Tests/HarnessContractTests.cs",
+        "tests/FieldCodes.Tests/GroundworkContractTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.IdentityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.SurveyFigureFixtureTests."
+      ],
+      "civil3d": [
+        "main",
+        "identity",
+        "accountability",
+        "style"
+      ],
+      "harnessCompile": true,
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": {
+          "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
+          "date": "2026-11-04",
+          "where": "office workstation, Civil 3D 2024, deploy/smoke-test.ps1",
+          "passed": [
+            "main",
+            "identity",
+            "accountability"
+          ],
+          "results": "main 51 PASS, identity 35 PASS, accountability 104 PASS"
+        },
+        "notes": "Civil 3D style check at e979c7f: 31 PASS 4 FAIL. The fix in 28034d0 is not yet verified in Civil 3D."
+      }
+    },
+    {
+      "id": "compile-checks",
+      "title": "Compile checks: the plugin against API stand-ins and against the real AutoCAD 2024 API",
+      "shared": false,
+      "paths": [
+        "tests/CadCompileCheck/**",
+        "tests/RealApiCompileCheck/**",
+        "tools/CivilApiNames/**",
+        "tests/FieldCodes.Tests/AmbiguousTypeNameTests.cs",
+        "tests/FieldCodes.Tests/CompileCheckCoverageTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "real-world-cases",
+      "title": "The real-drawing case runner (tests/RealWorld); the cases themselves stay outside the repository",
+      "shared": false,
+      "paths": [
+        "tests/RealWorld/**",
+        ".gitignore"
+      ],
+      "unitTests": [],
+      "civil3d": [],
+      "civil3dManual": [
+        "tests/RealWorld/run-all-cases.ps1"
+      ],
+      "verified": {
+        "unit": {
+          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: the full unit suite"
+        },
+        "civil3d": null,
+        "notes": "No result of the hand-run Civil 3D runners (civil3dManual) is recorded."
+      }
+    },
+    {
+      "id": "test-tooling",
+      "title": "Test tooling: this map, tools/test-plan.ps1, check-before-push, the git hook, the PowerShell lint",
+      "shared": false,
+      "paths": [
+        "tests/areas.json",
+        "tools/test-plan.ps1",
+        "tools/check-before-push.sh",
+        "tools/githooks/**",
+        "deploy/lint-powershell.ps1",
+        "tests/FieldCodes.Tests/AreaMapTests.cs"
+      ],
+      "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests."
+      ],
+      "civil3d": [],
+      "verified": {
+        "unit": null,
+        "civil3d": null,
+        "notes": "New with tools/test-plan.ps1: AreaMapTests and the new DeploymentContractTests passed on Linux in the commit that added them. Record that commit here once it is merged."
+      }
+    }
+  ]
+}

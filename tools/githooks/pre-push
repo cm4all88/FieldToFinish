@@ -2,4 +2,29 @@
 # Runs tools/check-before-push.sh before git pushes anything. Enable it in a working copy with
 #   git config core.hooksPath tools/githooks
 # Skip it once, knowingly, with git push --no-verify.
-exec "$(git rev-parse --show-toplevel)/tools/check-before-push.sh"
+#
+# A push runs the quick check (docs/testing.md): compile checks, lint, and the unit tests for what
+# the push brings, compared with what the remote branch already has (a new branch: with what it
+# adds to <remote>/integration). FTF_FULL_CHECK=1 git push ... runs the full check, as a milestone
+# or an approved release needs.
+top="$(git rev-parse --show-toplevel)"
+if [ "${FTF_FULL_CHECK:-}" = "1" ]; then
+  exec "$top/tools/check-before-push.sh"
+fi
+
+remote="${1:-origin}"
+since=""
+# git writes one line per ref being pushed: <local ref> <local sha> <remote ref> <remote sha>.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac            # deleting a remote branch
+  case "$remote_sha" in
+    *[!0]*) if git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then since="$remote_sha"; fi ;;
+    *) since="$(git merge-base "$local_sha" "$remote/integration" 2>/dev/null || true)" ;;
+  esac
+  break
+done
+
+if [ -n "$since" ]; then
+  exec "$top/tools/check-before-push.sh" --quick --since "$since"
+fi
+exec "$top/tools/check-before-push.sh" --quick
