@@ -25,6 +25,10 @@
 
     Only a clean build of origin/integration that passed every check is stamped "approved".
     -Dev builds another ref for testing and is stamped "dev" -- never an approved release.
+    -Dev -Quick is the faster development install (docs\testing.md): the same build, packaging,
+    backup, install, verification and rollback, with only the unit tests for what changed since the
+    installed build, the installer tests only when the installer changed, and no smoke test unless
+    -Smoke is given. It says what it skipped. Approved releases always get every check.
 
     Exit codes: 0 installed (or already current), 1 failed (the installed FTF is unchanged or was
     restored), 2 validated but Civil 3D is open -- close it and run UPDATEFTF again, 3 installed and
@@ -51,6 +55,21 @@
 .PARAMETER Ref
     Build and install a development ref (a branch such as origin/claude/xyz, or a commit) for
     testing. Stamped "dev"; FTFVERSION says so.
+
+.PARAMETER Quick
+    With -Dev only, never with -Publish or -PublishTo: a development iteration. The unit tests are
+    the ones tools\test-plan.ps1 (in the build checkout) chooses for the files changed since the
+    installed build's commit (build-info.json); the whole suite when nothing is installed, the
+    installed build's commit is unknown, or the change touches shared code. The installer tests run
+    only when the installer changed since then. The smoke test in Civil 3D is skipped unless -Smoke
+    is given. Backup, install.ps1's verification and rollback, and the SHA-256 check are as always.
+    The validation is recorded as quick and is never reused by a run without -Quick.
+    The UPDATEFTF in the build checkout must already know -Quick: after updating to a commit that
+    has it, run UPDATEFTF once without -Quick (PowerShell refuses a parameter an older UPDATEFTF does
+    not have before that UPDATEFTF can hand over to a newer one).
+
+.PARAMETER Smoke
+    With -Quick: run the smoke test in Civil 3D after all.
 
 .PARAMETER CheckReleaseFolder
     Checks the office's approved release folder (deploy\release-folder.txt, or -PublishTo) without
@@ -89,6 +108,8 @@
     powershell -ExecutionPolicy Bypass -File C:\dev\FieldToFinish-build\UPDATEFTF.ps1
 .EXAMPLE
     C:\dev\UPDATEFTF.cmd -Status
+.EXAMPLE
+    C:\dev\UPDATEFTF.cmd -Dev -Ref origin/claude/my-fix -Quick
 #>
 [CmdletBinding()]
 param(
@@ -99,6 +120,8 @@ param(
     [switch]$SkipSmoke,
     [switch]$Dev,
     [string]$Ref,
+    [switch]$Quick,
+    [switch]$Smoke,
     [string]$PublishTo,
     [switch]$Publish,
     [switch]$CheckReleaseFolder,
@@ -367,6 +390,16 @@ Write-Host "   log: $logFile"
 
 if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { Fail 'git is not on PATH.' @('Install Git for Windows, then run this again.') }
 
+# -Quick is a development iteration only (docs\testing.md). An approved build, and anything that is
+# published to survey staff, always gets every check, the smoke test in Civil 3D included.
+if ($Quick) {
+    if (-not $Dev) { Fail '-Quick is for development builds only: use it with -Dev -Ref <branch or commit>. An approved build always gets every check.' @() }
+    if ($Publish -or $PublishTo) { Fail '-Quick is never published: a release for survey staff needs the full validation and the smoke test in Civil 3D. Run UPDATEFTF -Publish without -Quick.' @() }
+    if ($Smoke -and $SkipSmoke) { Fail 'give -Smoke or -SkipSmoke, not both.' @() }
+} elseif ($Smoke) {
+    Fail '-Smoke goes with -Quick: every other run already runs the smoke test (unless -SkipSmoke).' @()
+}
+
 $here = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $commonDir = (Run-Git @('-C', $here, 'rev-parse', '--git-common-dir')).Lines | Select-Object -First 1
 if (-not $commonDir) { Fail "UPDATEFTF.ps1 must run from inside the FieldToFinish repository (or its build checkout): $here" @() }
@@ -496,6 +529,11 @@ if ($Dev) {
     $channel = 'dev'
     $branchName = ($Ref -replace '^(refs/remotes/|refs/heads/)', '') -replace ("^" + [regex]::Escape($Remote) + "/"), ''
     Warn ("DEV build of {0} ({1}): it will be stamped and reported as a development build, NOT an approved release." -f $Ref, $target.Substring(0, 7))
+    if ($Quick) {
+        $smokeText = 'no smoke test in Civil 3D (add -Smoke to run it)'
+        if ($Smoke) { $smokeText = 'the smoke test in Civil 3D (-Smoke)' }
+        Warn ('QUICK development run: the unit tests for what changed since the installed build, the installer tests only if the installer changed, ' + $smokeText + '. Backup, install verification and rollback are as always.')
+    }
 } else {
     if ($Ref) { Fail '-Ref builds a development ref and needs -Dev. Approved builds come only from the approved branch.' @() }
     $target = $approvedHead
@@ -612,17 +650,36 @@ if (-not $Relaunched -and -not $Dev -and (Test-Path $next) -and
 $package = Join-Path $state ("updates\$short-$channel")
 $validated = Join-Path $package 'validated.json'
 $setup = Join-Path $package 'FieldToFinish-Setup'
+
+# What -Quick compares with: the installed build's commit, when it is a clean build of a commit this
+# repository has. Without one there is nothing to compare with, and the tests run in full.
+$sinceCommit = $null
+$sinceWhy = $null
+if ($Quick) {
+    if ($null -eq $installed) { $sinceWhy = 'nothing is installed, or the installed FTF has no build-info.json' }
+    elseif ($installed.dirty) { $sinceWhy = 'the installed build was made from uncommitted changes' }
+    elseif ("$($installed.commit)" -notmatch '^[0-9a-f]{40}$') { $sinceWhy = 'the installed build does not say which commit it is' }
+    elseif ((Run-Git @('-C', $BuildRoot, 'cat-file', '-e', "$($installed.commit)^{commit}")).Code -ne 0) { $sinceWhy = ("the installed build's commit " + "$($installed.commit)".Substring(0, 7) + ' is not in this repository') }
+    else { $sinceCommit = "$($installed.commit)" }
+}
+$skippedChecks = @()     # what this run did not run, said at the end and kept in validated.json
+
 $reuse = $false
 if ((Test-Path $validated) -and -not $Force) {
     try {
         $v = Get-Content $validated -Raw | ConvertFrom-Json
         $reuse = ($v.commit -eq $target) -and (Test-Path (Join-Path $setup 'Bundle\build-info.json'))
+        # A quick validation ran only the tests for what had changed since the build installed then.
+        # Only another -Quick run against that same installed build may reuse it: any other run
+        # validates again, in full.
+        if ($reuse -and "$($v.mode)" -eq 'quick') { $reuse = $Quick -and ("$($v.since)" -eq "$sinceCommit") }
     } catch { $reuse = $false }
 }
 
 if ($reuse) {
     Step 'Build and tests'
     Ok ("already built and validated for $short on " + (Utc-Text $v.validatedUtc) + " (" + $v.unitTests + "); reusing it")
+    $skippedChecks = @($v.skipped | Where-Object { $_ -and "$_" -notlike 'smoke test*' })
 } else {
     Step 'Prerequisites'
     foreach ($need in @("$C3D2024\AcDbMgd.dll", "$C3D2024\AcMgd.dll", "$C3D2024\AcCoreMgd.dll", "$C3D2024\C3D\AeccDbMgd.dll")) {
@@ -653,14 +710,55 @@ if ($reuse) {
     if ("$product" -notmatch ('\+' + $short + '\.' + $channel + '$')) { Fail "the built DLL is not a clean $channel build of ${short}: its version says '$product'." @() }
     Ok "built FieldCodes.Cad.dll $product"
 
-    Step 'Unit tests (regression suite for every FTF feature)'
-    $testLog = Join-Path $package 'tests.log'
-    $tests = Invoke-Native 'dotnet' @('test', (Join-Path $BuildRoot 'tests\FieldCodes.Tests\FieldCodes.Tests.csproj'), '-c', 'Release', '--no-build', '--nologo') -Capture $testLog
-    $summary = ($tests.Lines | Where-Object { $_ -match '(Passed|Failed)!\s+-' } | Select-Object -Last 1)
-    if ($tests.Code -ne 0) {
-        Fail 'unit tests failed.' (@($tests.Lines | Where-Object { $_ -match '^\s+Failed ' } | Select-Object -First 20) + @("$summary", "test log: $testLog"))
+    # -Quick: the tests tools\test-plan.ps1 (this commit's own) chooses for what changed since the
+    # installed build. Anything it cannot work out falls back to the whole suite.
+    $plan = $null
+    if ($Quick) {
+        Step 'Test plan (-Quick): what changed since the installed build'
+        $planner = Join-Path $BuildRoot 'tools\test-plan.ps1'
+        if (-not $sinceCommit) {
+            Warn "the whole unit suite and the installer tests: $sinceWhy"
+        } elseif (-not (Test-Path -LiteralPath $planner)) {
+            Warn "the whole unit suite and the installer tests: $short has no tools\test-plan.ps1 to choose them"
+        } else {
+            $planFile = Join-Path $package 'test-plan.json'
+            if (Test-Path -LiteralPath $planFile) { Remove-Item -LiteralPath $planFile -Force }
+            $planned = Invoke-Script $planner @('-Repo', $BuildRoot, '-Since', $sinceCommit, '-Until', $target, '-OutFile', $planFile) -Echo
+            try { $plan = Get-Content -LiteralPath $planFile -Raw | ConvertFrom-Json } catch { $plan = $null }
+            if ($planned.Code -ne 0 -or $null -eq $plan) { Warn 'the whole unit suite and the installer tests: tools\test-plan.ps1 could not make a plan (see above)'; $plan = $null }
+        }
     }
-    Ok "$summary".Trim()
+
+    $testArgs = @('test', (Join-Path $BuildRoot 'tests\FieldCodes.Tests\FieldCodes.Tests.csproj'), '-c', 'Release', '--no-build', '--nologo')
+    $testTitle = 'Unit tests (regression suite for every FTF feature)'
+    $runUnit = $true
+    if ($plan -and "$($plan.unitTests)" -eq 'targeted') {
+        $testArgs += @('--filter', "$($plan.filter)")
+        $testTitle = ('Unit tests (-Quick: {0} test classes for {1})' -f @($plan.testClasses).Count, (@($plan.areas) -join ', '))
+    } elseif ($plan -and "$($plan.unitTests)" -eq 'none') {
+        $runUnit = $false
+    }
+    if ($runUnit) {
+        Step $testTitle
+        $testLog = Join-Path $package 'tests.log'
+        $tests = Invoke-Native 'dotnet' $testArgs -Capture $testLog
+        $summary = ($tests.Lines | Where-Object { $_ -match '(Passed|Failed)!\s+-' } | Select-Object -Last 1)
+        if ($tests.Code -ne 0) {
+            Fail 'unit tests failed.' (@($tests.Lines | Where-Object { $_ -match '^\s+Failed ' } | Select-Object -First 20) + @("$summary", "test log: $testLog"))
+        }
+        Ok "$summary".Trim()
+        if ($plan -and "$($plan.unitTests)" -eq 'targeted') {
+            $summary = "$summary".Trim() + ' (-Quick: only the tests for what changed since ' + $sinceCommit.Substring(0, 7) + ')'
+            $skippedChecks += ('the rest of the unit suite (only the tests for ' + (@($plan.areas) -join ', ') + ' ran)')
+        }
+    } else {
+        $why = 'nothing but documentation changed'
+        if (@($plan.changed).Count -eq 0) { $why = 'nothing changed' }
+        Step 'Unit tests'
+        Warn ("SKIPPED (-Quick): $why since " + $sinceCommit.Substring(0, 7))
+        $summary = "SKIPPED (-Quick: $why)"
+        $skippedChecks += "the unit tests ($why)"
+    }
 
     Step 'Package'
     if (Test-Path $setup) { Remove-Item -LiteralPath $setup -Recurse -Force }
@@ -671,20 +769,33 @@ if ($reuse) {
     if ("$($packaged.commit)" -ne $target) { Fail "the package says $($packaged.commit), not $target." @() }
     Ok ("packaged: " + (Describe-Build $packaged) + ", " + @($packaged.files.PSObject.Properties).Count + " files")
 
-    Step 'Installer test (scratch profile; your install is not touched)'
-    $installerTest = Invoke-Script (Join-Path $BuildRoot 'deploy\test-release.ps1') @('-Configuration', 'Release', '-NoBuild')
-    $installerSummary = ($installerTest.Lines | Where-Object { $_ -match 'release setup: PASS' } | Select-Object -Last 1)
-    if ($installerTest.Code -ne 0) { Fail 'the installer test failed.' (@($installerTest.Lines | Where-Object { $_ -match '\[FAIL\]' }) + @("$installerSummary")) }
-    Ok "$installerSummary".Trim()
-    # The staff installer and publishing, on releases of every kind it must refuse (scratch only).
-    $stafftest = Invoke-Script (Join-Path $BuildRoot 'deploy\test-installer.ps1') @()
-    $staffSummary = ($stafftest.Lines | Where-Object { $_ -match 'installer and publishing: PASS' } | Select-Object -Last 1)
-    if ($stafftest.Code -ne 0) { Fail 'the staff installer test failed.' (@($stafftest.Lines | Where-Object { $_ -match '\[FAIL\]' }) + @("$staffSummary")) }
-    Ok "$staffSummary".Trim()
-    $installerSummary = "$installerSummary".Trim() + '; ' + "$staffSummary".Trim()
+    # -Quick runs the installer tests only when the plan says the installer changed (deploy\,
+    # UPDATEFTF, packaging); without a plan they run as always.
+    if ($plan -and -not $plan.installerTests) {
+        Step 'Installer tests'
+        Warn ('SKIPPED (-Quick): the installer did not change since ' + $sinceCommit.Substring(0, 7) + ' (deploy\, UPDATEFTF, packaging)')
+        $installerSummary = 'SKIPPED (-Quick: the installer did not change)'
+        $skippedChecks += 'the installer tests (deploy\test-release.ps1, deploy\test-installer.ps1): the installer did not change'
+    } else {
+        Step 'Installer test (scratch profile; your install is not touched)'
+        $installerTest = Invoke-Script (Join-Path $BuildRoot 'deploy\test-release.ps1') @('-Configuration', 'Release', '-NoBuild')
+        $installerSummary = ($installerTest.Lines | Where-Object { $_ -match 'release setup: PASS' } | Select-Object -Last 1)
+        if ($installerTest.Code -ne 0) { Fail 'the installer test failed.' (@($installerTest.Lines | Where-Object { $_ -match '\[FAIL\]' }) + @("$installerSummary")) }
+        Ok "$installerSummary".Trim()
+        # The staff installer and publishing, on releases of every kind it must refuse (scratch only).
+        $stafftest = Invoke-Script (Join-Path $BuildRoot 'deploy\test-installer.ps1') @()
+        $staffSummary = ($stafftest.Lines | Where-Object { $_ -match 'installer and publishing: PASS' } | Select-Object -Last 1)
+        if ($stafftest.Code -ne 0) { Fail 'the staff installer test failed.' (@($stafftest.Lines | Where-Object { $_ -match '\[FAIL\]' }) + @("$staffSummary")) }
+        Ok "$staffSummary".Trim()
+        $installerSummary = "$installerSummary".Trim() + '; ' + "$staffSummary".Trim()
+    }
 
-    [ordered]@{ commit = $target; channel = $channel; builtUtc = $buildDate; unitTests = "$summary".Trim()
-                installerTest = "$installerSummary".Trim(); validatedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } |
+    $mode = 'full'
+    if ($Quick) { $mode = 'quick' }
+    $recorded = @($skippedChecks)
+    if ($Quick -and -not $Smoke) { $recorded += 'smoke test in Civil 3D (-Quick without -Smoke)' }
+    [ordered]@{ commit = $target; channel = $channel; mode = $mode; since = $sinceCommit; builtUtc = $buildDate; unitTests = "$summary".Trim()
+                installerTest = "$installerSummary".Trim(); skipped = $recorded; validatedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } |
         ConvertTo-Json | Set-Content -Path $validated -Encoding utf8
 }
 
@@ -705,9 +816,15 @@ if ($open.Count -gt 0) {
     if (-not $WaitForCivil3D) {
         Write-Host ''
         Write-Host ("VALIDATED, NOT YET INSTALLED: Civil 3D is open (PID {0})." -f (($open | ForEach-Object { $_.Id }) -join ', ')) -ForegroundColor Yellow
-        Write-Host "   Build $short passed its build, unit and installer tests. Civil 3D holds FTF open while it runs,"
-        Write-Host '   so it cannot be replaced now. Close Civil 3D, then run UPDATEFTF again: it installs this'
-        Write-Host '   validated build and smoke-tests it in about a minute, without rebuilding.'
+        if ($Quick) {
+            Write-Host "   Build $short passed its build and the -Quick checks above. Civil 3D holds FTF open while it runs,"
+            Write-Host '   so it cannot be replaced now. Close Civil 3D, then run the same UPDATEFTF -Quick again: it'
+            Write-Host '   installs this build in about a minute, without rebuilding.'
+        } else {
+            Write-Host "   Build $short passed its build, unit and installer tests. Civil 3D holds FTF open while it runs,"
+            Write-Host '   so it cannot be replaced now. Close Civil 3D, then run UPDATEFTF again: it installs this'
+            Write-Host '   validated build and smoke-tests it in about a minute, without rebuilding.'
+        }
         Write-Host '   (Or run UPDATEFTF -WaitForCivil3D to wait for Civil 3D to close.)'
         Write-Host '   Your installed FTF was NOT changed.'
         exit 2
@@ -784,9 +901,13 @@ Show-Startup
 
 # ===================================================================== prove it in Civil 3D
 
-if ($SkipSmoke) {
+# Skipped only when asked: -SkipSmoke, or a -Quick development run without -Smoke.
+$smokeSkipped = $SkipSmoke -or ($Quick -and -not $Smoke)
+if ($smokeSkipped) {
     Step 'Smoke test in Civil 3D'
-    Warn 'SKIPPED (-SkipSmoke): this install has not been proven inside Civil 3D.'
+    if ($SkipSmoke) { Warn 'SKIPPED (-SkipSmoke): this install has not been proven inside Civil 3D.' }
+    else { Warn 'SKIPPED (-Quick): this install has not been proven inside Civil 3D. Add -Smoke to run the smoke test.' }
+    $skippedChecks += 'the smoke test in Civil 3D'
 } else {
     Step 'Smoke test in Civil 3D (headless): the loaded build, FTFVERSION, FTFCONTOUR, source-point identity'
     $smokeDir = Join-Path $state ('smoke\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$short")
@@ -810,6 +931,9 @@ if ($PublishTo) {
     } elseif ($SkipSmoke) {
         $notPublished = 'the smoke test was skipped'
         Warn 'not published: -SkipSmoke left this build unproven in Civil 3D. Run UPDATEFTF -Publish without it.'
+    } elseif ($Quick) {
+        $notPublished = 'a -Quick run'
+        Warn 'not published: a -Quick run is never published. Run UPDATEFTF -Publish without it.'
     } else {
         $published = Invoke-Script (Join-Path $BuildRoot 'deploy\make-release.ps1') @('-Configuration', 'Release', '-NoBuild',
             '-OutputRoot', (Join-Path $package 'publish'), '-Commit', $target, '-Branch', $branchName, '-Channel', 'approved',
@@ -853,6 +977,17 @@ Report-OtherLoaders -Fix:$FixStartup
 Write-Host ''
 Write-Host ('   Civil 3D will load this build automatically when it starts. NEXT: start Civil 3D and type ' +
             "FTFVERSION -- it should say $short.") -ForegroundColor Green
+if ($Quick) {
+    Write-Host ''
+    Say '   QUICK DEVELOPMENT INSTALL: installed, verified and backed up as always, but NOT validated as a release.' 'Yellow'
+    if ($skippedChecks.Count -gt 0) {
+        Say '   Not run in this run:' 'Yellow'
+        foreach ($s in $skippedChecks) { Say "     - $s" 'Yellow' }
+    } else {
+        Say '   Every check ran in this run (nothing to compare with, or the change touched shared code).' 'Yellow'
+    }
+    Say '   A run without -Quick, or the approved release (UPDATEFTF, UPDATEFTF -Publish), runs every check.' 'Yellow'
+}
 Write-Host "   log: $logFile"
 if ($notPublished) {
     Write-Host ''

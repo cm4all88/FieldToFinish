@@ -40,6 +40,12 @@ so a harness that would stop every UPDATEFTF fails first). `tools/check-before-p
 them; `git config core.hooksPath tools/githooks` makes git run it before every push. Then
 `UPDATEFTF` picks it up.
 
+What to run when, and how much, is in [docs/testing.md](docs/testing.md): a development iteration
+runs the tests for what it changed (`tools/test-plan.ps1`, `tools/check-before-push.sh --quick`,
+which the push hook runs, and `UPDATEFTF -Dev -Quick`); shared code, milestones and every approved
+release get the full check. `tests/areas.json` maps FTF's areas to their tests and records what has
+been verified where; `tools/test-plan.ps1 -Status` shows what needs revalidation.
+
 None of these has Civil 3D's own assemblies. Plugin files name Civil 3D types through aliases
 (`using CivDb = Autodesk.Civil.DatabaseServices;`), and the lint refuses a plain Civil import in a
 new file, so a Civil name cannot clash with an AutoCAD one there (`DBObject` stopped UPDATEFTF at
@@ -109,6 +115,7 @@ Only a clean build of `origin/integration` that passed all of that is stamped **
 | `-WaitForCivil3D` | Wait for Civil 3D to close instead of stopping. |
 | `-Force` | Rebuild and reinstall even if already current. |
 | `-Dev -Ref origin/claude/xyz` | Install a development branch for testing; stamped **DEV**, never approved. |
+| `-Dev -Ref origin/claude/xyz -Quick` | The faster development install: only the unit tests for what changed since the installed build, the installer tests only if the installer changed, no smoke test unless `-Smoke`; backup, install verification and rollback as always. Says what it skipped; never published. See [docs/testing.md](docs/testing.md). |
 | `-CheckReleaseFolder` | Check the office's approved release folder (`deploy\release-folder.txt`): the `\\server\share` path behind its drive letter, reachable, a write test that leaves nothing behind, who can read and change it. Builds and publishes nothing. |
 | `-Publish` | After every check above passed (smoke test included, never with `-SkipSmoke` or `-Dev`), publish the build to the office's approved release folder, the one survey staff install from. The folder is checked again before building. `-ReleaseNotes "..."` adds a note; `-PublishTo <folder>` publishes elsewhere instead. See [docs/network-deployment.md](docs/network-deployment.md). |
 | `-RestoreRelease` | Put the release the approved release folder had before back (from its `Previous releases`, verified first). Builds nothing. |

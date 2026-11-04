@@ -125,6 +125,146 @@ public sealed class DeploymentContractTests
         Assert.Contains("'build-info.json'", Code(Read("deploy", "install-dev.ps1")));   // a dev install never claims a stamp
     }
 
+    // ----------------------------------------------------------------- UPDATEFTF -Quick
+
+    [Fact]
+    public void QuickIsADevelopmentRunOnlyAndIsNeverPublished()
+    {
+        var code = Code(Read("UPDATEFTF.ps1"));
+        Assert.Matches(@"\[switch\]\$Quick,\s*\[switch\]\$Smoke,", code);
+        // Refused before anything else happens: before -Publish finds the office's folder, before
+        // the fetch, the build or any test.
+        var refuse = code.IndexOf("if ($Quick) {", StringComparison.Ordinal);
+        Assert.True(refuse > 0, "UPDATEFTF must check -Quick up front");
+        var block = code.Substring(refuse, code.IndexOf("} elseif ($Smoke) {", refuse, StringComparison.Ordinal) - refuse);
+        Assert.Contains("if (-not $Dev) { Fail '-Quick is for development builds only", block);
+        Assert.Contains("if ($Publish -or $PublishTo) { Fail '-Quick is never published", block);
+        foreach (var later in new[] { "$PublishTo = Get-OfficeReleaseFolder", "Step \"Latest approved build", "Step \"Build $short ($channel, Release)\"" })
+            Assert.True(code.IndexOf(later, StringComparison.Ordinal) > refuse, "the -Quick check must come before: " + later);
+        Assert.Matches(@"\} elseif \(\$Smoke\) \{\s*Fail '-Smoke goes with -Quick", code);
+        // And again where it would publish, should that ever be reached.
+        var publish = code.Substring(code.IndexOf("Step \"Publish the approved release: $PublishTo\"", StringComparison.Ordinal));
+        Assert.Matches(@"elseif \(\$Quick\) \{\s*\$notPublished = 'a -Quick run'", publish);
+        // The old UPDATEFTF hands over to a newer one only for approved runs; -Quick needs -Dev, so
+        // it never relaunches, and the build checkout's own copy must know -Quick (docs/testing.md).
+        Assert.Contains("if (-not $Relaunched -and -not $Dev -and (Test-Path $next) -and", code);
+        Assert.Contains("run UPDATEFTF once without -Quick", Read("UPDATEFTF.ps1"));
+    }
+
+    [Fact]
+    public void QuickStillBacksUpInstallsThroughTheInstallerAndVerifies()
+    {
+        var code = Code(Read("UPDATEFTF.ps1"));
+        // From the backup to the smoke test nothing depends on -Quick: the same backup, the same
+        // install.ps1 with its own verification and rollback, the same SHA-256 check and restore.
+        var from = code.IndexOf("Step 'Back up the installed FTF'", StringComparison.Ordinal);
+        var to = code.IndexOf("$smokeSkipped = ", StringComparison.Ordinal);
+        Assert.True(from > 0 && to > from, "backup and install come before the smoke test");
+        var install = code.Substring(from, to - from);
+        Assert.DoesNotContain("$Quick", install);
+        Assert.DoesNotContain("$plan", install);
+        Assert.Contains("Copy-Item -LiteralPath $installedDir -Destination $script:backup -Recurse -Force", install);
+        Assert.Contains("$installArgs = @('-Source', $setup, '-NoOfficeCopy', '-Force', '-NoBackup', '-LeaveOtherLoaders')", install);
+        Assert.Contains("(Join-Path $setup 'install.ps1') $installArgs", install);
+        Assert.Contains("$problem = Verify-Installed $target", install);
+        Assert.Contains("if ($problem) { Restore-Backup $problem;", install);
+        // The unit tests still run through dotnet test on the test project, a filter added only from
+        // a -Quick plan; the plan is made only for -Quick, and without one everything runs.
+        Assert.Contains("$testArgs = @('test', (Join-Path $BuildRoot 'tests\\FieldCodes.Tests\\FieldCodes.Tests.csproj'), '-c', 'Release', '--no-build', '--nologo')", code);
+        Assert.Matches(@"\$plan = \$null\s*if \(\$Quick\) \{", code);
+        Assert.Matches(@"if \(\$plan -and ""\$\(\$plan\.unitTests\)"" -eq 'targeted'\) \{\s*\$testArgs \+= @\('--filter', ""\$\(\$plan\.filter\)""\)", code);
+        Assert.Contains("if ($plan -and -not $plan.installerTests) {", code);
+        Assert.Contains("'-Since', $sinceCommit, '-Until', $target", code);
+        // It says what it skipped.
+        Assert.Contains("QUICK DEVELOPMENT INSTALL", code);
+        Assert.Matches(@"foreach \(\$s in \$skippedChecks\) \{ Say", code);
+    }
+
+    [Fact]
+    public void AQuickValidationIsRecordedAsQuickAndNeverReusedByAFullRun()
+    {
+        var code = Code(Read("UPDATEFTF.ps1"));
+        Assert.Matches(@"\$mode = 'full'\s*if \(\$Quick\) \{ \$mode = 'quick' \}", code);
+        Assert.Contains("mode = $mode; since = $sinceCommit;", code);
+        Assert.Contains("skipped = $recorded;", code);
+        // Reused only by another -Quick run against the same installed build.
+        var reuse = code.IndexOf("$reuse = ($v.commit -eq $target)", StringComparison.Ordinal);
+        var quick = code.IndexOf("if ($reuse -and \"$($v.mode)\" -eq 'quick') { $reuse = $Quick -and (\"$($v.since)\" -eq \"$sinceCommit\") }", StringComparison.Ordinal);
+        var used = code.IndexOf("if ($reuse) {", StringComparison.Ordinal);
+        Assert.True(reuse > 0 && quick > reuse && used > quick, "a quick validation must be ruled out before it is reused");
+        // Nothing else decides it.
+        var assignments = Regex.Matches(code, @"\$reuse = ([^\r\n;]*)").Select(m => m.Groups[1].Value.TrimEnd(' ', '}')).ToList();
+        var allowed = new[] { "$false", @"($v.commit -eq $target) -and (Test-Path (Join-Path $setup 'Bundle\build-info.json'))",
+                              "$Quick -and (\"$($v.since)\" -eq \"$sinceCommit\")" };
+        Assert.Equal(4, assignments.Count);
+        Assert.All(assignments, a => Assert.Contains(a, allowed));
+        // Reused, it still says what the quick validation skipped.
+        Assert.Contains("$skippedChecks = @($v.skipped | Where-Object { $_ -and \"$_\" -notlike 'smoke test*' })", code);
+    }
+
+    [Fact]
+    public void TheSmokeTestIsSkippedOnlyBySkipSmokeOrAQuickRunWithoutSmoke()
+    {
+        var code = Code(Read("UPDATEFTF.ps1"));
+        Assert.Single(Regex.Matches(code, @"\$smokeSkipped = "));
+        Assert.Contains("$smokeSkipped = $SkipSmoke -or ($Quick -and -not $Smoke)", code);
+        var gate = code.IndexOf("if ($smokeSkipped) {", StringComparison.Ordinal);
+        var run = code.IndexOf("deploy\\smoke-test.ps1') @('-PluginDll', $installedDll, '-Commit', $target", StringComparison.Ordinal);
+        Assert.True(gate > 0 && run > gate, "the smoke test runs in the else of the one gate");
+        var between = code.Substring(gate, run - gate);
+        Assert.Single(Regex.Matches(between, @"\} else \{"));
+        Assert.Single(Regex.Matches(code, @"smoke-test\.ps1'\) @\('-PluginDll'"));
+        // Never published without it.
+        Assert.Contains("if ($PublishTo -and $SkipSmoke) { Fail", code);
+    }
+
+    [Fact]
+    public void TheQuickPushCheckKeepsTheCompileChecksAndLintAndSkipsOnlyWhatThePlanAllows()
+    {
+        var check = Code(Read("tools", "check-before-push.sh")).Replace("\r\n", "\n");
+        var quick = check.IndexOf("if [ \"$quick\" -eq 1 ]; then\n  ps=\"\"", StringComparison.Ordinal);
+        Assert.True(quick > 0, "the quick branch chooses the unit tests");
+        // Before the quick branch, for both: the namespace lint and the three compile checks.
+        foreach (var always in new[] { "AmbiguousTypeNameTests|FullyQualifiedName~CompileCheckCoverageTests", "dotnet build tests/CadCompileCheck",
+                                       "dotnet build tests/RealApiCompileCheck", "dotnet build tests/SmokeHarnessCompileCheck" })
+        {
+            var at = check.IndexOf(always, StringComparison.Ordinal);
+            Assert.True(at > 0 && at < quick, "both checks run: " + always);
+        }
+        // The quick unit tests come from test-plan, or the whole suite when no PowerShell can choose.
+        Assert.Contains("-File ./tools/test-plan.ps1 -Run -OutFile \"$plan\"", check);
+        Assert.Contains("step \"Unit tests (no PowerShell here to choose them: the whole suite)\"", check);
+        // The CRLF run is in the full branch only.
+        var full = check.IndexOf("\nelse\n  step \"Unit tests\"", quick, StringComparison.Ordinal);
+        var crlf = check.IndexOf("git clone -q -c core.autocrlf=true", StringComparison.Ordinal);
+        Assert.True(full > quick && crlf > full, "the CRLF run belongs to the full check");
+        // The PowerShell lint runs for both; the installer test unless the plan says it did not change.
+        var lint = check.IndexOf("deploy/lint-powershell.ps1", StringComparison.Ordinal);
+        Assert.True(lint > crlf, "the PowerShell lint runs after either branch");
+        Assert.Contains("installer_needed=1\n", check);
+        Assert.Contains("if [ -f \"$plan\" ] && ! grep -Eq '\"installerTests\":[[:space:]]*true' \"$plan\"; then installer_needed=0; fi", check);
+        Assert.Single(Regex.Matches(check, "installer_needed=0"));
+
+        // The hook runs the quick check unless FTF_FULL_CHECK=1 asks for the full one.
+        var hook = Code(Read("tools", "githooks", "pre-push")).Replace("\r\n", "\n");
+        Assert.Matches(@"if \[ ""\$\{FTF_FULL_CHECK:-\}"" = ""1"" \]; then\s*exec ""\$top/tools/check-before-push\.sh""\s*fi", hook);
+        Assert.Contains("exec \"$top/tools/check-before-push.sh\" --quick", hook);
+    }
+
+    [Fact]
+    public void TheTestPlanCountsEveryChangeAndRunsEverythingForWhatItCannotPlace()
+    {
+        var plan = Code(Read("tools", "test-plan.ps1"));
+        Assert.Contains("'diff', '--name-only', '--no-renames', $sinceCommit)", plan);         // both names of a rename
+        Assert.Contains("'ls-files', '--others', '--exclude-standard'", plan);                  // new files too
+        Assert.Contains("(in no area: treated as shared)", plan);
+        Assert.Contains("$full = ($fullBecause.Count -gt 0)", plan);
+        Assert.Contains("& dotnet @dotnetArgs\n    exit $LASTEXITCODE", plan.Replace("\r\n", "\n"));
+        // Uncommitted work is in the plan unless -Until names a commit.
+        Assert.Contains("'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'", plan);
+        Assert.Contains("$Since = 'HEAD~1'", plan);
+    }
+
     // ----------------------------------------------------------------- the smoke test
 
     [Fact]
