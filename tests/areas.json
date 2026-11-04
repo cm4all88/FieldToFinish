@@ -63,7 +63,8 @@
       "paths": [
         "src/FieldCodes/Geometry/Angles.cs",
         "src/FieldCodes/Easements/CourseGeometry.cs",
-        "src/FieldCodes/Drafting/SurveyDirection.cs"
+        "src/FieldCodes/Drafting/SurveyDirection.cs",
+        "src/FieldCodes/Geometry/PlotScale.cs"
       ],
       "unitTests": [],
       "civil3d": [],
@@ -172,7 +173,11 @@
         "src/FieldCodes.Cad/OrientationCommands.cs",
         "tests/FieldCodes.Tests/OrientationTests.cs",
         "tests/FieldCodes.Tests/OrientationConfigTests.cs",
-        "tests/FieldCodes.Tests/PavementArrowDirectionTests.cs"
+        "tests/FieldCodes.Tests/PavementArrowDirectionTests.cs",
+        "src/FieldCodes.Cad/OwnerCommands.cs",
+        "tests/FieldCodes.Tests/RoadReferenceTests.cs",
+        "tests/FieldCodes.Tests/OrientationReviewTests.cs",
+        "tests/FieldCodes.Tests/OrientationSettingsEditingTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
@@ -185,6 +190,8 @@
         "FullyQualifiedName~FieldCodes.Tests.IgnoreReasonTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
         "FullyQualifiedName~FieldCodes.Tests.OrientationConfigTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.OrientationTests.",
         "FullyQualifiedName~FieldCodes.Tests.PavementArrowDirectionTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
@@ -192,6 +199,7 @@
         "FullyQualifiedName~FieldCodes.Tests.ReviewChecksTests.",
         "FullyQualifiedName~FieldCodes.Tests.ReviewDecisionTests.",
         "FullyQualifiedName~FieldCodes.Tests.RibbonLayoutTests.",
+        "FullyQualifiedName~FieldCodes.Tests.RoadReferenceTests.",
         "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
         "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
@@ -235,7 +243,8 @@
         "tests/FieldCodes.Tests/GenericFeatureTests.cs",
         "tests/FieldCodes.Tests/SurveyInventoryTests.cs",
         "tests/FieldCodes.Tests/StemAverageTests.cs",
-        "tests/FieldCodes.Tests/ParserTests.cs"
+        "tests/FieldCodes.Tests/ParserTests.cs",
+        "tests/FieldCodes.Tests/PlotScaleTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
@@ -259,7 +268,10 @@
         "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.ParserTests.",
+        "FullyQualifiedName~FieldCodes.Tests.PlotScaleTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
@@ -371,7 +383,8 @@
         "tests/FieldCodes.Tests/FeatureStandardTests.cs",
         "tests/FieldCodes.Tests/StandardsCheckTests.cs",
         "tests/FieldCodes.Tests/StandardsViewTests.cs",
-        "tests/FieldCodes.Tests/PropertyReaderTests.cs"
+        "tests/FieldCodes.Tests/PropertyReaderTests.cs",
+        "src/FieldCodes.Cad/OwnerCommands.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
@@ -388,6 +401,7 @@
         "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
         "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
@@ -529,6 +543,7 @@
         "FullyQualifiedName~FieldCodes.Tests.LineworkCodingTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineworkInventoryCsvTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineworkReviewTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationReviewTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointNotesTests.",
         "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
@@ -848,6 +863,7 @@
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
         "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
         "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
@@ -1098,6 +1114,7 @@
         "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineDiagnosticsTests.",
         "FullyQualifiedName~FieldCodes.Tests.NaturalOrderTests.",
+        "FullyQualifiedName~FieldCodes.Tests.OrientationReviewTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
         "FullyQualifiedName~FieldCodes.Tests.ProcessingRecordTests.",
         "FullyQualifiedName~FieldCodes.Tests.PropertyReaderTests.",
