@@ -1500,9 +1500,9 @@
       "installerTests": true,
       "verified": {
         "unit": {
-          "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+          "commit": "3e21f2661c0ee051a6fd720d8f21b54053103fc1",
           "date": "2026-11-04",
-          "where": "Linux, .NET 8: the full unit suite"
+          "where": "Linux, .NET 8: this area's tests and the always-run checks (tools/check-before-push.sh --quick)"
         },
         "civil3d": {
           "commit": "e979c7f00db4c76fe2a6793e812ac8757cac43f3",
@@ -1516,13 +1516,13 @@
         "installer": [
           {
             "script": "deploy/test-installer.ps1",
-            "commit": "777108511315f7da89d3955077d41d5ec23e9695",
+            "commit": "3e21f2661c0ee051a6fd720d8f21b54053103fc1",
             "date": "2026-11-04",
-            "where": "Linux, PowerShell 7.4 (its Windows-only checks, Civil 3D's startup record in the registry, did not run)",
+            "where": "Linux, PowerShell 7.4.6 (its Windows-only checks, Civil 3D's startup record in the registry and a folder without write rights, did not run)",
             "result": "114 PASS"
           }
         ],
-        "notes": "deploy/test-release.ps1 is not verified: on Windows at 8ab54ac it gave 77 PASS 1 FAIL (a fixture assumed U: was unmapped); the fix in 7771085 has not been run on Windows yet. deploy/test-installer.ps1 has never run on Windows."
+        "notes": "deploy/test-release.ps1 is not verified: on Windows at 8ab54ac it gave 77 PASS 1 FAIL (a fixture assumed U: was unmapped); the fix in 7771085 has not been run on Windows yet. deploy/test-installer.ps1 has never run on Windows. UPDATEFTF -Quick (3e21f26) is held only by its contract tests and by its refusals run under PowerShell 7 on Linux: it has not yet run on Windows."
       }
     },
     {
@@ -1635,9 +1635,13 @@
       ],
       "civil3d": [],
       "verified": {
-        "unit": null,
+        "unit": {
+          "commit": "3e21f2661c0ee051a6fd720d8f21b54053103fc1",
+          "date": "2026-11-04",
+          "where": "Linux, .NET 8: this area's tests and the always-run checks (tools/check-before-push.sh --quick, which passed end to end)"
+        },
         "civil3d": null,
-        "notes": "New with tools/test-plan.ps1: AreaMapTests and the new DeploymentContractTests passed on Linux in the commit that added them. Record that commit here once it is merged."
+        "notes": "tools/test-plan.ps1 has run under PowerShell 7.4.6 on Linux only; under Windows PowerShell 5.1 only its syntax is checked (deploy/lint-powershell.ps1)."
       }
     }
   ]
