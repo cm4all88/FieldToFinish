@@ -35,7 +35,20 @@ namespace FieldCodes.Review
         /// <summary>Its Civil 3D point style shows it, as its feature's standard has it.</summary>
         PointStyle = 8,
         /// <summary>The standard draws nothing for it: the survey point is the record.</summary>
-        PointOnly = 9
+        PointOnly = 9,
+        /// <summary>The drawing shows it (a visible marker, a point label), but FTF could not read
+        /// enough to confirm it is what its standard requires. Not accounted for and not missing: a
+        /// person confirms it (point.symbolunverified / point.labelunverified).</summary>
+        Unverified = 10
+    }
+
+    /// <summary>What a check of a required symbol found: it is there, it is not, or FTF could not
+    /// read enough to tell.</summary>
+    public enum SymbolVerdict
+    {
+        Verified = 0,
+        Missing = 1,
+        Unverified = 2
     }
 
     /// <summary>One thing that happened to a point: first recorded, changed, deleted, restored.</summary>
@@ -75,6 +88,9 @@ namespace FieldCodes.Review
         [JsonProperty("expected", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Expected { get; set; }
         [JsonProperty("found", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Found { get; set; }
         [JsonProperty("missing", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Missing { get; set; }
+        /// <summary>What it needs that the drawing appears to show but FTF could not confirm (as
+        /// it would be listed in Found: "symbol", "point style", "label (point label)").</summary>
+        [JsonProperty("unverified", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Unverified { get; set; }
         [JsonProperty("evidence", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Evidence { get; set; }
         /// <summary>Review items about it ("point.nosymbol:204", "line.gap:FNC:103-105").</summary>
         [JsonProperty("issues", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Issues { get; set; }
@@ -98,12 +114,13 @@ namespace FieldCodes.Review
             Expected = new List<string>();
             Found = new List<string>();
             Missing = new List<string>();
+            Unverified = new List<string>();
             Evidence = new List<string>();
             Issues = new List<string>();
             History = new List<LedgerEvent>();
         }
 
-        [JsonIgnore] public bool Accounted { get { return Disposition != PointDisposition.Review; } }
+        [JsonIgnore] public bool Accounted { get { return Disposition != PointDisposition.Review && Disposition != PointDisposition.Unverified; } }
 
         public void Log(DateTime at, string action, string note)
         {
@@ -129,18 +146,22 @@ namespace FieldCodes.Review
         [JsonProperty("gaps")] public int OpenLineItems { get; set; }
         /// <summary>Points accounted for with an open warning or note (not a required action).</summary>
         [JsonProperty("warnings")] public int Warnings { get; set; }
+        /// <summary>Points the drawing shows but FTF could not confirm (a symbol or label it could
+        /// not read): neither accounted for nor missing.</summary>
+        [JsonProperty("unverified")] public int Unverified { get; set; }
 
         public LedgerRun() { ByDisposition = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase); }
 
         /// <summary>"1,115 points: 1,080 accounted for (Drawn 400, Linework 500, ...), 15 for review, 2 deleted".</summary>
         public string Describe()
         {
-            var parts = ByDisposition.Where(p => p.Value > 0 && p.Key != "Review" && p.Key != "Deleted")
+            var parts = ByDisposition.Where(p => p.Value > 0 && p.Key != "Review" && p.Key != "Deleted" && p.Key != "Unverified")
                                      .Select(p => p.Key + " " + p.Value.ToString("N0", CultureInfo.InvariantCulture)).ToArray();
             return Points.ToString("N0", CultureInfo.InvariantCulture) + " points: " +
                    Accounted.ToString("N0", CultureInfo.InvariantCulture) + " accounted for" +
                    (parts.Length > 0 ? " (" + string.Join(", ", parts) + ")" : string.Empty) + ", " +
                    Review.ToString("N0", CultureInfo.InvariantCulture) + " for review" +
+                   (Unverified > 0 ? ", " + Unverified.ToString("N0", CultureInfo.InvariantCulture) + " shown but not verified" : string.Empty) +
                    (Warnings > 0 ? " (" + Warnings.ToString("N0", CultureInfo.InvariantCulture) + " more with a warning to look at)" : string.Empty) +
                    (Deleted > 0 ? ", " + Deleted.ToString("N0", CultureInfo.InvariantCulture) + " deleted since first recorded" : string.Empty) +
                    "; drafting complete for " + DraftingComplete.ToString("N0", CultureInfo.InvariantCulture) +
@@ -218,6 +239,12 @@ namespace FieldCodes.Review
         /// label component on, a label style set). Null: could not be read.</summary>
         public bool? LabelShown { get; set; }
         public string LabelStyleName { get; set; }
+        /// <summary>Why its point style (name, marker type, symbol) could not be read in full; null
+        /// when it was. <see cref="StyleName"/>, <see cref="MarkerType"/> and <see cref="SymbolName"/>
+        /// are null when not read, and empty when read as empty.</summary>
+        public string StyleProblem { get; set; }
+        /// <summary>Why <see cref="LabelShown"/> or <see cref="LabelStyleName"/> could not be read.</summary>
+        public string LabelProblem { get; set; }
     }
 
     /// <summary>A surface the point is part of.</summary>
@@ -446,8 +473,14 @@ namespace FieldCodes.Review
                     continue;
                 }
                 entry.DraftingComplete = open.Count == 0;
-                if (open.Count > 0) { entry.Disposition = PointDisposition.Review; continue; }
-                entry.Disposition = Strongest(entry);
+                if (open.Count > 0)
+                {
+                    // Held only by what FTF could not confirm: shown but unverified, not missing.
+                    entry.Disposition = open.All(i => ReviewKinds.IsUnverified(i.Kind)) ? PointDisposition.Unverified : PointDisposition.Review;
+                    continue;
+                }
+                // A person who checked an unverified symbol or label and accepted it confirmed it.
+                entry.Disposition = Strongest(entry, decided.Any(i => ReviewKinds.IsUnverified(i.Kind) && i.Status == ReviewItemStatus.Accepted));
                 if (entry.Disposition == PointDisposition.Review && decided.Count > 0) entry.Disposition = PointDisposition.Excluded;
             }
 
@@ -459,6 +492,7 @@ namespace FieldCodes.Review
                 run.Points++;
                 if (e.Accounted) run.Accounted++;
                 if (e.Disposition == PointDisposition.Review) run.Review++;
+                if (e.Disposition == PointDisposition.Unverified) run.Unverified++;
                 if (e.Represented) run.Represented++;
                 if (e.DraftingComplete) run.DraftingComplete++;
                 var key = e.Disposition.ToString();
@@ -573,8 +607,9 @@ namespace FieldCodes.Review
             entry.Represented = p.Outputs.Count > 0 || entry.Found.Any(f => f.StartsWith("linework ", StringComparison.Ordinal)) ||
                                 visibleMarker || vertexOfSurface || (marker != null && marker.LabelShown == true);
             if (marker != null && marker.Known && marker.Visible)
-                entry.Evidence.Add("marker: " + (marker.StyleName ?? "style") + " (" + (marker.MarkerType ?? "?") +
-                                   (string.IsNullOrWhiteSpace(marker.SymbolName) ? string.Empty : " " + marker.SymbolName) + ")");
+                entry.Evidence.Add("marker: " + (marker.StyleName ?? "point style name not read") + " (" + (string.IsNullOrEmpty(marker.MarkerType) ? "marker type not read" : marker.MarkerType) +
+                                   (string.IsNullOrWhiteSpace(marker.SymbolName) ? string.Empty : " " + marker.SymbolName) + ")" +
+                                   (string.IsNullOrWhiteSpace(marker.StyleProblem) ? string.Empty : "; not read: " + marker.StyleProblem));
             if (!string.IsNullOrWhiteSpace(req.Layer)) entry.Evidence.Add("standard layer " + req.Layer);
             entry.Found = entry.Found.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             // Never a point left for review with nothing anyone can close: if no evidence accounts
@@ -587,8 +622,16 @@ namespace FieldCodes.Review
                 items.Add(item);
                 entry.Issues.Add(item.Id);
             }
-            entry.Disposition = entry.Issues.Count == 0 && entry.Missing.Count == 0 ? Strongest(entry) : PointDisposition.Review;
+            entry.Disposition = entry.Issues.Count == 0 && entry.Missing.Count == 0 ? Strongest(entry)
+                : entry.Missing.Count == 0 && entry.Unverified.Count > 0 && entry.Issues.All(i => ReviewKinds.IsUnverified(KindOf(i))) ? PointDisposition.Unverified
+                : PointDisposition.Review;
             entry.DraftingComplete = entry.Missing.Count == 0 && entry.Issues.Count == 0;
+        }
+
+        private static string KindOf(string itemId)
+        {
+            var colon = (itemId ?? string.Empty).IndexOf(':');
+            return colon < 0 ? itemId : itemId.Substring(0, colon);
         }
 
         private static void PointCode(LedgerPoint entry, PointFacts p, string token, EffectiveRequirement req, AccountingContext ctx,
@@ -744,20 +787,36 @@ namespace FieldCodes.Review
                     var m = p.Marker;
                     // The point's own label stands in only where it says all FTF's label would.
                     var saysIt = FeatureRequirements.PointLabelSaysIt(forLabel, p.RawDescription);
-                    if (req.Label == LabelRequirement.PointLabel && saysIt && m != null && m.LabelShown == true &&
-                        (req.LabelStyles.Count == 0 || FeatureStandard.MatchesAny(req.LabelStyle, m.LabelStyleName)))
-                    {
-                        entry.Found.Add("label (point label)");
-                        entry.Evidence.Add("its own Civil 3D label shows it (label style " + (m.LabelStyleName ?? "?") + ")");
-                        return;
-                    }
                     string why;
-                    if (req.Label == LabelRequirement.PointLabel && !saysIt)
-                        why = "its FTF label (\"" + labelText + "\") says more than the description its Civil 3D label shows";
+                    if (req.Label == LabelRequirement.PointLabel && saysIt)
+                    {
+                        var named = req.LabelStyles.Count > 0;
+                        if (m != null && m.LabelShown == true && (!named || FeatureStandard.MatchesAny(req.LabelStyle, m.LabelStyleName)))
+                        {
+                            entry.Found.Add("label (point label)");
+                            entry.Evidence.Add("its own Civil 3D label shows it (label style " + (m.LabelStyleName ?? "name not read") + ")");
+                            return;
+                        }
+                        // Shown, or perhaps shown, but not confirmed: not a missing label.
+                        if (m == null || !m.LabelShown.HasValue)
+                        {
+                            Unverified(entry, items, ReviewKinds.PointLabelUnverified, "label (point label)", p, req,
+                                "FTF could not read whether its Civil 3D label is shown" + Because(m != null ? m.LabelProblem : "its point was not read"));
+                            return;
+                        }
+                        if (m.LabelShown == true && m.LabelStyleName == null)
+                        {
+                            Unverified(entry, items, ReviewKinds.PointLabelUnverified, "label (point label)", p, req,
+                                "its Civil 3D label is shown, but its label style's name could not be read, so FTF cannot tell whether it is one the standard names (" +
+                                req.LabelStyle + ")" + Because(m.LabelProblem));
+                            return;
+                        }
+                        why = m.LabelShown == false
+                            ? "its Civil 3D label is hidden" + (string.IsNullOrWhiteSpace(m.LabelProblem) ? string.Empty : " (" + m.LabelProblem + ")")
+                            : "its Civil 3D label style " + m.LabelStyleName + " is not one the standard names (" + req.LabelStyle + ")";
+                    }
                     else if (req.Label == LabelRequirement.PointLabel)
-                        why = m == null || !m.LabelShown.HasValue ? "its Civil 3D label could not be read"
-                            : m.LabelShown == false ? "its Civil 3D label is hidden"
-                            : "its Civil 3D label style " + (m.LabelStyleName ?? "?") + " is not one the standard names (" + req.LabelStyle + ")";
+                        why = "its FTF label (\"" + labelText + "\") says more than the description its Civil 3D label shows";
                     else why = "the standard requires a label";
                     Missing(entry, items, "label", Quote(p.RawDescription) + ": " + why + ", and no FTF label is drawn" +
                             (labelText == null ? " (no rule writes its label: label it by hand, or give it a rule)" : " (\"" + labelText + "\": FTFLABELS)") +
@@ -809,27 +868,28 @@ namespace FieldCodes.Review
             if (block) { entry.Found.Add("symbol"); return; }
             var m = p.Marker;
             string problem;
-            if (req.Symbol == SymbolRequirement.PointStyle)
+            var byStyle = req.Symbol == SymbolRequirement.PointStyle;
+            var verdict = byStyle ? PointStyleCheck(m, req, out problem) : SymbolCheck(m, token, ctx, acc, req, out problem);
+            if (verdict == SymbolVerdict.Verified)
             {
-                if (m != null && m.Known && m.Visible &&
-                    (req.SymbolStyles.Count == 0 || FeatureStandard.MatchesAny(req.SymbolStyle, m.StyleName) || FeatureStandard.MatchesAny(req.SymbolStyle, m.SymbolName)))
+                if (byStyle)
                 {
                     entry.Found.Add("point style");
-                    entry.Evidence.Add("shown by its point style " + (m.StyleName ?? "?"));
-                    return;
+                    entry.Evidence.Add("shown by its point style " + (m.StyleName ?? "(name not read)"));
                 }
-                problem = m == null || !m.Known ? "its marker could not be read" + (m != null && !string.IsNullOrWhiteSpace(m.Problem) ? " (" + m.Problem + ")" : string.Empty)
-                        : !m.Visible ? "its point style draws no marker (" + (m.StyleName ?? "style") + ")"
-                        : "its point style " + (m.StyleName ?? "?") + " is not one the standard names (" + req.SymbolStyle + ")";
-            }
-            else
-            {
-                if (OwnSymbol(m, token, ctx, acc, req, out problem))
+                else
                 {
                     entry.Found.Add("symbol");
-                    entry.Evidence.Add("its own symbol: " + (m.SymbolName ?? m.StyleName) + " (style " + (m.StyleName ?? "?") + ")");
-                    return;
+                    entry.Evidence.Add("its own symbol: " + (string.IsNullOrEmpty(m.SymbolName) ? m.StyleName : m.SymbolName) + " (style " + (m.StyleName ?? "name not read") + ")");
                 }
+                return;
+            }
+            if (verdict == SymbolVerdict.Unverified)
+            {
+                // A marker is there (or may be) but FTF could not read enough to judge it: not a
+                // missing symbol, and not passed either.
+                Unverified(entry, items, ReviewKinds.PointSymbolUnverified, byStyle ? "point style" : "symbol", p, req, problem);
+                return;
             }
             entry.Missing.Add("symbol");
             var item = Item(ReviewKinds.PointNoSymbol, entry, Quote(p.RawDescription) + ": " + problem + ". Standard: " + req.Source + " (" + req.Describe() + ").");
@@ -839,42 +899,146 @@ namespace FieldCodes.Review
             entry.Issues.Add(item.Id);
         }
 
+        /// <summary>Symbol PointStyle: any visible marker, or one of the styles the standard names.</summary>
+        public static SymbolVerdict PointStyleCheck(MarkerFact m, EffectiveRequirement req, out string problem)
+        {
+            problem = null;
+            if (m == null) { problem = "its marker was not read"; return SymbolVerdict.Unverified; }
+            if (!m.Known) { problem = "FTF could not read whether its point style draws a marker" + Because(m.Problem); return SymbolVerdict.Unverified; }
+            if (!m.Visible) { problem = "its point style draws no marker (" + (m.StyleName ?? "style") + ")"; return SymbolVerdict.Missing; }
+            if (req == null || req.SymbolStyles.Count == 0) return SymbolVerdict.Verified;
+            if (FeatureStandard.MatchesAny(req.SymbolStyle, m.StyleName) || FeatureStandard.MatchesAny(req.SymbolStyle, m.SymbolName)) return SymbolVerdict.Verified;
+            if (m.StyleName == null && m.SymbolName == null)
+            {
+                problem = "its point style draws a marker, but the style's name could not be read, so FTF cannot tell whether it is one the standard names (" +
+                          req.SymbolStyle + ")" + Because(m.StyleProblem);
+                return SymbolVerdict.Unverified;
+            }
+            problem = "its point style " + (m.StyleName ?? "?") + " is not one the standard names (" + req.SymbolStyle + ")";
+            return SymbolVerdict.Missing;
+        }
+
         /// <summary>True when the marker is the code's own symbol block, or a point style or symbol
         /// the standard names for it.</summary>
         public static bool OwnSymbol(MarkerFact m, string code, AccountingContext ctx, AccountabilitySettings acc, out string problem)
         {
-            return OwnSymbol(m, code, ctx, acc, null, out problem);
+            return SymbolCheck(m, code, ctx, acc, null, out problem) == SymbolVerdict.Verified;
         }
 
         public static bool OwnSymbol(MarkerFact m, string code, AccountingContext ctx, AccountabilitySettings acc, EffectiveRequirement req, out string problem)
         {
+            return SymbolCheck(m, code, ctx, acc, req, out problem) == SymbolVerdict.Verified;
+        }
+
+        /// <summary>
+        /// Symbol Specific: the code's own symbol block, or a style or symbol the standard names.
+        /// Missing only when what FTF read shows it is not there (no marker drawn, a generic marker,
+        /// another block). When the marker is drawn but its type or block could not be read, the
+        /// answer is Unverified, with the reason: a symbol FTF could not see is not a missing one.
+        /// </summary>
+        public static SymbolVerdict SymbolCheck(MarkerFact m, string code, AccountingContext ctx, AccountabilitySettings acc, EffectiveRequirement req, out string problem)
+        {
             problem = null;
             var bare = ContinuitySettings.BaseCode(code);
-            if (m == null || !m.Known) { problem = "its marker could not be read" + (m != null && !string.IsNullOrWhiteSpace(m.Problem) ? " (" + m.Problem + ")" : string.Empty); return false; }
-            if (!m.Visible) { problem = "its point style draws no marker (" + (m.StyleName ?? "style") + ")"; return false; }
+            if (m == null) { problem = "its marker was not read"; return SymbolVerdict.Unverified; }
+            if (!m.Known) { problem = "FTF could not read whether its point style draws a marker" + Because(m.Problem); return SymbolVerdict.Unverified; }
+            if (!m.Visible) { problem = "its point style draws no marker (" + (m.StyleName ?? "style") + ")"; return SymbolVerdict.Missing; }
             // A point style the standard names as the feature's own.
-            if (req != null && req.SymbolStyles.Count > 0 &&
-                (FeatureStandard.MatchesAny(req.SymbolStyle, m.StyleName) || FeatureStandard.MatchesAny(req.SymbolStyle, m.SymbolName)))
-                return true;
-            if (!string.Equals(m.MarkerType, "UseSymbolForMarker", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(m.SymbolName))
+            var named = req != null && req.SymbolStyles.Count > 0;
+            if (named && (FeatureStandard.MatchesAny(req.SymbolStyle, m.StyleName) || FeatureStandard.MatchesAny(req.SymbolStyle, m.SymbolName)))
+                return SymbolVerdict.Verified;
+            if (named && m.StyleName == null && m.SymbolName == null)
+            {
+                problem = "its point style draws a marker, but the style's name could not be read, so FTF cannot tell whether it is one the standard names (" +
+                          req.SymbolStyle + ")" + Because(m.StyleProblem);
+                return SymbolVerdict.Unverified;
+            }
+            if (string.IsNullOrEmpty(m.MarkerType))
+            {
+                problem = "its point style " + (m.StyleName ?? "(name not read)") + " draws a marker, but FTF could not read what kind, so it cannot tell whether it is " +
+                          bare + "'s symbol" + Because(m.StyleProblem);
+                return SymbolVerdict.Unverified;
+            }
+            if (!string.Equals(m.MarkerType, "UseSymbolForMarker", StringComparison.OrdinalIgnoreCase))
             {
                 problem = "its marker is a generic " + (string.Equals(m.MarkerType, "UsePointForMarker", StringComparison.OrdinalIgnoreCase) ? "point" : "custom") +
-                          " marker (style " + (m.StyleName ?? "?") + "), not " + bare + "'s symbol";
-                return false;
+                          " marker (style " + (m.StyleName ?? "name not read") + ", " + m.MarkerType + "), not " + bare + "'s symbol";
+                return SymbolVerdict.Missing;
+            }
+            if (m.SymbolName == null)
+            {
+                problem = "its point style " + (m.StyleName ?? "(name not read)") + " draws a symbol block, but FTF could not read which" + Because(m.StyleProblem);
+                return SymbolVerdict.Unverified;
+            }
+            if (m.SymbolName.Trim().Length == 0)
+            {
+                problem = "its point style " + (m.StyleName ?? "(name not read)") + " is set to draw a symbol but names no block, not " + bare + "'s symbol";
+                return SymbolVerdict.Missing;
             }
             var symbol = m.SymbolName.Trim();
             foreach (var pattern in acc.SymbolBlocksFor(bare))
-                if (OrientationStandard.Glob(pattern, symbol)) return true;
-            var orientation = ctx.Rules != null ? ctx.Rules.Orientation : null;
+                if (OrientationStandard.Glob(pattern, symbol)) return SymbolVerdict.Verified;
+            var orientation = ctx != null && ctx.Rules != null ? ctx.Rules.Orientation : null;
             var rule = orientation != null ? orientation.SymbolFor(code) : null;
-            if (rule != null && rule.DrawnWith(symbol)) return true;
+            if (rule != null && rule.DrawnWith(symbol)) return SymbolVerdict.Verified;
             foreach (var word in symbol.ToUpperInvariant().Split(new[] { '-', '_', ' ', '.', '$', '|' }, StringSplitOptions.RemoveEmptyEntries))
-                if (word == bare) return true;
-            problem = "its marker is block " + symbol + " (style " + (m.StyleName ?? "?") + "), which is not " + bare + "'s symbol" +
+                if (word == bare) return SymbolVerdict.Verified;
+            problem = "its marker is block " + symbol + " (style " + (m.StyleName ?? "name not read") + "), which is not " + bare + "'s symbol" +
                       (rule != null && !string.IsNullOrWhiteSpace(rule.Block) ? " (" + rule.Block + ")" : string.Empty) +
                       " -- name it in the feature's symbol style (Point Features) or under Point Accountability > symbol blocks if it is";
-            return false;
+            return SymbolVerdict.Missing;
         }
+
+        private static string Because(string problem)
+        {
+            return string.IsNullOrWhiteSpace(problem) ? string.Empty : " (" + problem.Trim() + ")";
+        }
+
+        /// <summary>
+        /// A required symbol or label the drawing appears to show but FTF could not confirm: listed
+        /// on one required item per kind and code (Points names them all), so one look and one
+        /// decision covers a code, and never reported as missing. The reasons are kept on the item.
+        /// </summary>
+        private static void Unverified(LedgerPoint entry, List<ReviewItem> items, string kind, string what, PointFacts p, EffectiveRequirement req, string why)
+        {
+            if (!entry.Unverified.Contains(what)) entry.Unverified.Add(what);
+            entry.Evidence.Add("not verified (" + what + "): " + why);
+            var code = ContinuitySettings.BaseCode(FieldCodeParser.FirstToken((p.RawDescription ?? string.Empty).Trim()));
+            if (code.Length == 0) code = "?";
+            var id = kind + ":" + code;
+            var group = items.FirstOrDefault(i => i.Id == id);
+            var whys = new List<string>();
+            if (group == null)
+            {
+                group = ReviewKinds.New(kind, code, null);
+                group.Source = ReviewKinds.PointsSource;
+                group.Code = code;
+                group.Points = string.Empty;
+                group.X = entry.X;
+                group.Y = entry.Y;
+                items.Add(group);
+            }
+            else
+            {
+                var at = (group.Reason ?? string.Empty).IndexOf(WhyMarker, StringComparison.Ordinal);
+                if (at >= 0) whys.AddRange(group.Reason.Substring(at + WhyMarker.Length).Split(new[] { " | " }, StringSplitOptions.RemoveEmptyEntries));
+            }
+            if (!whys.Contains(why) && whys.Count < 5) whys.Add(why);
+            var numbers = (group.Points ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
+            if (!numbers.Contains(p.Number)) numbers.Add(p.Number);
+            group.Points = string.Join(", ", numbers.ToArray());
+            if (!string.IsNullOrEmpty(entry.Handle) && group.Handles.Count < 50) group.Handles.Add(entry.Handle);
+            group.Reason = numbers.Count + " " + code + " point(s) " +
+                           (kind == ReviewKinds.PointLabelUnverified
+                               ? "may be labelled by their own Civil 3D label, as their standard allows, but FTF could not confirm the label is shown."
+                               : "show a marker, but FTF could not confirm it is the symbol their standard requires.") +
+                           " This is not a missing " + (kind == ReviewKinds.PointLabelUnverified ? "label" : "symbol") +
+                           ": check them and accept with a note, or fix them. Standard: " + req.Source + "." + WhyMarker + string.Join(" | ", whys.ToArray());
+            group.Fingerprint = Review.Fingerprint.Of(numbers.ToArray());
+            if (!entry.Issues.Contains(id)) entry.Issues.Add(id);
+        }
+
+        private const string WhyMarker = " Not confirmed because: ";
 
         /// <summary>
         /// Surface data. Accounted for as a designated surface point; checked against the surfaces
@@ -935,16 +1099,19 @@ namespace FieldCodes.Review
             if (!entry.Issues.Contains(id)) entry.Issues.Add(id);
         }
 
-        private static PointDisposition Strongest(LedgerPoint e)
+        /// <summary>The strongest evidence that accounts for the point. <paramref name="confirmed"/>:
+        /// a person accepted what FTF could not verify, so it counts as found.</summary>
+        private static PointDisposition Strongest(LedgerPoint e, bool confirmed = false)
         {
-            if (e.Evidence.Any(x => x.StartsWith("FTF ", StringComparison.Ordinal)) || e.Found.Contains("label (typed by hand)") || e.Found.Contains("gate label")) return PointDisposition.Drawn;
-            if (e.Found.Any(f => f.StartsWith("linework ", StringComparison.Ordinal))) return PointDisposition.Linework;
-            if (e.Found.Contains("control") || e.Found.Contains("control table") || e.Found.Contains("control check")) return PointDisposition.Control;
-            if (e.Found.Contains("symbol")) return PointDisposition.Symbol;
-            if (e.Found.Contains("point style") || e.Found.Contains("label (point label)")) return PointDisposition.PointStyle;
-            if (e.Found.Contains("surface") || e.Found.Contains("surface data")) return PointDisposition.Surface;
-            if (e.Found.Contains("excluded")) return PointDisposition.Excluded;
-            if (e.Found.Contains("point only")) return PointDisposition.PointOnly;
+            var found = confirmed ? e.Found.Concat(e.Unverified).ToList() : e.Found;
+            if (e.Evidence.Any(x => x.StartsWith("FTF ", StringComparison.Ordinal)) || found.Contains("label (typed by hand)") || found.Contains("gate label")) return PointDisposition.Drawn;
+            if (found.Any(f => f.StartsWith("linework ", StringComparison.Ordinal))) return PointDisposition.Linework;
+            if (found.Contains("control") || found.Contains("control table") || found.Contains("control check")) return PointDisposition.Control;
+            if (found.Contains("symbol")) return PointDisposition.Symbol;
+            if (found.Contains("point style") || found.Contains("label (point label)")) return PointDisposition.PointStyle;
+            if (found.Contains("surface") || found.Contains("surface data")) return PointDisposition.Surface;
+            if (found.Contains("excluded")) return PointDisposition.Excluded;
+            if (found.Contains("point only")) return PointDisposition.PointOnly;
             return PointDisposition.Review;
         }
 

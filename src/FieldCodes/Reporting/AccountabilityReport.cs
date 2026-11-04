@@ -22,7 +22,7 @@ namespace FieldCodes.Reporting
         public const string ControlChecksSuffix = ".ftf-control-checks.csv";
 
         public const string PointsHeader =
-            "Point,Handle,RawDescription,Easting,Northing,Elevation,Code,ReadAs,Class,Standard,Needs,Surface,Disposition,Represented,DraftingComplete,Expected,Found,Missing,Evidence,Issues,Decision,FirstSeen,LastSeen,Deleted";
+            "Point,Handle,RawDescription,Easting,Northing,Elevation,Code,ReadAs,Class,Standard,Needs,Surface,Disposition,Represented,DraftingComplete,Expected,Found,Missing,Unverified,Evidence,Issues,Decision,FirstSeen,LastSeen,Deleted";
 
         public const string ControlChecksHeader =
             "CheckPoint,CheckDescription,Easting,Northing,Elevation,ControlPoint,ControlDescription,DeltaNorthing,DeltaEasting,Horizontal,DeltaElevation,Note";
@@ -69,6 +69,7 @@ namespace FieldCodes.Reporting
                   .Append(Csv(Join(p.Expected))).Append(',')
                   .Append(Csv(Join(p.Found))).Append(',')
                   .Append(Csv(Join(p.Missing))).Append(',')
+                  .Append(Csv(Join(p.Unverified))).Append(',')
                   .Append(Csv(Join(p.Evidence))).Append(',')
                   .Append(Csv(Join(p.Issues))).Append(',')
                   .Append(Csv(p.Decision)).Append(',')

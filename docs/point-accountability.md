@@ -117,6 +117,7 @@ the drawing:
 | **Surface** | Designated surface data (its standard, or an ignore entry that expects a surface). Membership is checked only when asked (below). |
 | **PointOnly** | The standard draws nothing for it: the survey point is the record. |
 | **Excluded** | An ignore entry, or a reviewer's decision with a reason. |
+| **Unverified** | The drawing shows it (a visible marker, a point label), but FTF could not read enough to confirm it is what its standard requires. Neither accounted for nor missing (below). |
 | **Review** | A required deliverable is missing, or a required decision is open. Warnings never hold a point. |
 | **Deleted** | It was recorded before and is no longer in the drawing. |
 
@@ -160,6 +161,8 @@ Severity follows importance:
 | `point.nosymbol` | Required | Its standard requires a symbol (its own, or a point style it names), and the marker is not it. |
 | `point.missinglinework` | Warning, required | A linework shot on no line of its feature, not already covered by a continuity item. |
 | `point.review` | Warning, required | Its standard asks for every such point to be reviewed. |
+| `point.symbolunverified` | Warning, required | A required symbol FTF could not confirm: the point shows a marker, but its point style's type or block could not be read. One item per code, listing its points. |
+| `point.labelunverified` | Warning, required | A point label the standard lets stand in, whose visibility (or style name) FTF could not read. One item per code. |
 | `point.duplicate` | Warning | Another point within 0.01 ft in plan. Both points are listed. |
 | `point.excludednoreason` | Warning | On an ignore list whose entry gives no reason. |
 | `point.surfaceexcluded` | Warning | (Surface check on) In a surface's definition but left out of its triangulation. |
@@ -170,6 +173,23 @@ Severity follows importance:
 A run raises at most one item per point and kind. An item a run no longer finds resolves by itself
 with its history kept. This is how false positives from an earlier build go away. A person's
 decision stays while the point it was made on is unchanged.
+
+### Missing, or not verified
+
+A symbol or label is **missing** only when what FTF read shows it is not there:
+
+- the point style draws no marker, or draws a generic marker or another code's block;
+- the point's own label is turned off, its style draws no label, or it has no label style;
+- the standard requires a real label (`label: Required`) and none is drawn.
+
+When a read fails, the point is **not verified**: a Civil 3D member that cannot be read, or a
+style name, marker type, symbol block or label style that comes back unread. The item says which
+read failed. It is required, so QC waits for a person: they check the points once per code and
+accept with a note, or fix them. It resolves by itself once a later read works. A read that then
+shows the symbol is wrong is missing, so nothing is dismissed by a failed read.
+
+The ledger's `Unverified` column lists what each point is waiting on. The run's summary counts
+"shown but not verified" apart from "for review".
 
 ### Surface data and the optional surface check
 
@@ -321,7 +341,7 @@ control check shot. `CONS` has no reason, because its meaning is the office's to
 
 | File | Contents |
 |---|---|
-| `<drawing>.ftf-points.csv` | Every point ever recorded. Columns: raw description as stored, XYZ, how FTF read it, class, the standard that applied, what it needs, surface status, disposition, represented, drafting complete, expected, found, missing, evidence, issues, decision, first and last seen, deleted. Ends with the run's numbers, warnings counted apart. |
+| `<drawing>.ftf-points.csv` | Every point ever recorded. Columns: raw description as stored, XYZ, how FTF read it, class, the standard that applied, what it needs, surface status, disposition, represented, drafting complete, expected, found, missing, unverified, evidence, issues, decision, first and last seen, deleted. Ends with the run's numbers, warnings counted apart. |
 | `<drawing>.ftf-control-checks.csv` | Each control check shot, the control point it checks, and the differences (written when there are check shots). |
 | `<drawing>.ftf-continuity.csv` | Every continuity finding: intentional breaks included, with their evidence, status and decision. |
 
@@ -348,7 +368,8 @@ A trailing `*` names every open id that starts so (`point.duplicate:*`); commas 
 |---|---|
 | Library: continuity, ledger, decisions, ignore notes, reports | Unit tests (`LineContinuityTests`, `PointAccountingTests`, `ReviewDecisionTests`, `IgnoreReasonTests`, `AccountabilityHarnessExpectationTests`). |
 | Drafting standard | Unit tests (`FeatureStandardTests`, `RuleDocumentFeatureStandardTests`) cover: GS with and without a surface; ZK; house number signs; hydrants with their symbol and no label; bare codes shown by an acceptable point style; missing required symbols and labels; configuration changes and back; earlier false positives resolving while decisions are kept; Label All and FTFORIENT reading the same standard. |
-| Drafting standard in Civil 3D 2024 | The accountability harness seeds a bare hydrant, ZK shots, a house number sign and a hydrant whose point style draws its symbol block. STANDARD / RESTORED add a standard to the rules beside the drawing and take it away; SURFACE / SURFACEOFF turn the surface check on and off. **Not yet run in Civil 3D at the time of writing.** If the harness cannot give 1401 a symbol point style, that check is a NOTE, not a pass. |
+| Drafting standard in Civil 3D 2024 | The accountability harness seeds a bare hydrant, ZK shots, a house number sign with its label on (1301) and one with it turned off (1302), and a hydrant whose point style draws its symbol block (1401). STANDARD / RESTORED add a standard to the rules beside the drawing and take it away; SURFACE / SURFACEOFF turn the surface check on and off. What the harness set up is read back from Civil 3D's own typed API and compared with the ledger. If the harness cannot set something up, that check is a NOTE, not a pass. |
+| 65d1c05 in Civil 3D | Passed everything but HY and SG. Both came from the plugin's readers, not the standard: the point style's name and the label style were read by reflection with `Type.GetProperty(name)`. The style name came back null, which only an exception in that read can cause, and the exception was swallowed: every style read as "?", and the label as "could not be read". The only exception that call raises for a valid name is `AmbiguousMatchException`, thrown for a member a class declares again; the message itself was not logged. The engine then called the hydrant's symbol and the sign's label missing. Fixed: typed reads (`StyleBase.Name`, `PointStyle.MarkerType`, `PointStyle.MarkerSymbolName`, `CogoPoint.LabelStyleId`), `PropertyReader` for the rest, the reason kept, and "not verified" kept apart from "missing" (`PropertyReaderTests`, `UnverifiedEvidenceTests`). **The fix is not yet run in Civil 3D.** |
 | Settings > Point Features > Drafting Standard, Settings > Point Accountability | Compiled against AutoCAD 2024 (`tests/RealApiCompileCheck`). **Untested as UI.** The document they edit is unit tested. |
 | FTFORIENT and the standard | Unit tested only: FTFORIENT is not in FTFRUN, so the headless harness does not run it. |
 | Plugin | Compiles against the real AutoCAD 2024 API (`tests/RealApiCompileCheck`). Civil 3D types are named through aliases; Civil 3D members and names use stand-ins on Linux and are checked against Civil 3D itself only by the Windows build (fb3d1b2 failed there on an ambiguous `DBObject`, now fixed and covered by the checks). |

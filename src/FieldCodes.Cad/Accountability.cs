@@ -44,6 +44,7 @@ namespace FieldCodes.Cad
             return "Accounted for " + Run.Accounted.ToString("N0", CultureInfo.InvariantCulture) + " / " +
                    Run.Points.ToString("N0", CultureInfo.InvariantCulture) + " point(s); " +
                    Run.Review.ToString("N0", CultureInfo.InvariantCulture) + " for review" +
+                   (Run.Unverified > 0 ? ", " + Run.Unverified.ToString("N0", CultureInfo.InvariantCulture) + " shown but not verified" : string.Empty) +
                    (Run.Deleted > 0 ? ", " + Run.Deleted.ToString("N0", CultureInfo.InvariantCulture) + " deleted" : string.Empty) + "; " +
                    Run.OpenLineItems.ToString("N0", CultureInfo.InvariantCulture) + " linework continuity item(s) open" +
                    (Intentional > 0 ? ", " + Intentional.ToString("N0", CultureInfo.InvariantCulture) + " intentional break(s)" : string.Empty) +
@@ -320,9 +321,10 @@ namespace FieldCodes.Cad
         {
             var e = Compare.CogoPointPlotting.Resolve(cogo, db, tr);
             var fact = new MarkerFact { Known = e.MarkerKnown, Visible = e.MarkerVisible, Problem = e.Problem };
-            string labelStyle;
-            fact.LabelShown = Compare.CogoPointPlotting.LabelShown(cogo, db, tr, out labelStyle);
-            fact.LabelStyleName = labelStyle;
+            var label = Compare.CogoPointPlotting.ReadLabel(cogo, db, tr);
+            fact.LabelShown = label.Shown;
+            fact.LabelStyleName = label.StyleName;
+            fact.LabelProblem = label.Problem;
             bool visible;
             try { visible = cogo.Visible; } catch (System.Exception) { visible = true; }
             if (!visible) fact.Visible = false;
@@ -330,31 +332,62 @@ namespace FieldCodes.Cad
             MarkerFact style;
             if (!cache.TryGetValue(e.StyleId, out style))
             {
-                style = new MarkerFact();
-                try
-                {
-                    var obj = tr.GetObject(e.StyleId, OpenMode.ForRead);
-                    style.StyleName = Convert.ToString(Read(obj, "Name"));
-                    style.MarkerType = Convert.ToString(Read(obj, "MarkerType"));
-                    style.SymbolName = Convert.ToString(Read(obj, "MarkerSymbolName"));
-                }
-                catch (System.Exception ex) { style.Problem = ex.Message; }
+                style = ReadStyle(e.StyleId, tr);
                 cache[e.StyleId] = style;
             }
             fact.StyleName = style.StyleName;
             fact.MarkerType = style.MarkerType;
             fact.SymbolName = style.SymbolName;
-            if (string.IsNullOrEmpty(fact.MarkerType) && fact.Problem == null) fact.Problem = style.Problem ?? "the marker type could not be read";
+            fact.StyleProblem = style.StyleProblem;
             return fact;
+        }
+
+        /// <summary>
+        /// The point style's name, marker type and symbol block, through Civil 3D's own typed members
+        /// (StyleBase.Name, PointStyle.MarkerType, PointStyle.MarkerSymbolName), each on its own so
+        /// one that fails loses only itself. A value not read stays null, with the reason in
+        /// StyleProblem, so accountability can say "not verified" instead of "missing". At 65d1c05
+        /// these were read by reflection with GetProperty and a name, which throws on a member a Civil 3D class
+        /// declares more than once; the reason was dropped and every point's style read as "?".
+        /// </summary>
+        private static MarkerFact ReadStyle(ObjectId styleId, Transaction tr)
+        {
+            var style = new MarkerFact();
+            var problems = new List<string>();
+            CivDb.Styles.PointStyle pointStyle = null;
+            try { pointStyle = tr.GetObject(styleId, OpenMode.ForRead) as CivDb.Styles.PointStyle; }
+            catch (System.Exception ex) { problems.Add("the point style could not be opened: " + Why(ex)); }
+            if (pointStyle == null)
+            {
+                if (problems.Count == 0) problems.Add("its style is not a point style");
+            }
+            else
+            {
+                try { style.StyleName = pointStyle.Name ?? string.Empty; }
+                catch (System.Exception ex) { problems.Add("style name: " + Why(ex)); }
+                try { style.MarkerType = pointStyle.MarkerType.ToString(); }
+                catch (System.Exception ex) { problems.Add("marker type: " + Why(ex)); }
+                try { style.SymbolName = pointStyle.MarkerSymbolName ?? string.Empty; }
+                catch (System.Exception ex)
+                {
+                    // Only a symbol marker's block matters; for any other marker it is not needed.
+                    if (style.MarkerType == null || string.Equals(style.MarkerType, "UseSymbolForMarker", StringComparison.OrdinalIgnoreCase))
+                        problems.Add("marker symbol: " + Why(ex));
+                }
+            }
+            style.StyleProblem = problems.Count == 0 ? null : string.Join("; ", problems.ToArray());
+            return style;
+        }
+
+        private static string Why(System.Exception ex)
+        {
+            var inner = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+            return inner.GetType().Name + ": " + inner.Message;
         }
 
         private static object Read(object target, string property)
         {
-            if (target == null) return null;
-            var p = target.GetType().GetProperty(property, BindingFlags.Public | BindingFlags.Instance);
-            if (p == null) return null;
-            try { return p.GetValue(target, null); }
-            catch (TargetInvocationException) { return null; }
+            return FieldCodes.PropertyReader.Read(target, property);
         }
 
         // ---------------------------------------------------------------- surfaces

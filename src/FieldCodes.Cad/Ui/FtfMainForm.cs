@@ -2752,9 +2752,10 @@ namespace FieldCodes.Cad.Ui
                 accounting == null
                     ? "Not checked yet (FTFREVIEWCHECK)"
                     : N(accounting.Accounted) + " of " + N(accounting.Points) + "; " + N(accounting.Review) + " for review" +
+                      (accounting.Unverified > 0 ? ", " + N(accounting.Unverified) + " not verified" : string.Empty) +
                       (accounting.Deleted > 0 ? ", " + N(accounting.Deleted) + " deleted" : string.Empty) +
                       (accounting.OpenLineItems > 0 ? "; " + N(accounting.OpenLineItems) + " linework item(s)" : string.Empty),
-                accounting == null ? CaptionGray : accounting.Review > 0 || accounting.Deleted > 0 || accounting.OpenLineItems > 0 ? Amber : normal);
+                accounting == null ? CaptionGray : accounting.Review > 0 || accounting.Unverified > 0 || accounting.Deleted > 0 || accounting.OpenLineItems > 0 ? Amber : normal);
             SetStat(_drawingStats, "FTF objects",
                 _status.OwnedEntities == 0
                     ? "None"

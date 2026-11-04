@@ -74,6 +74,21 @@ namespace FieldCodes.Review
         /// <summary>Surface membership check (optional): surface points no surface can be shown to
         /// hold. One per code; Points lists them.</summary>
         public const string PointSurfaceUnverified = "point.surfaceunverified";
+        /// <summary>The standard requires a symbol; the point shows a marker, but FTF could not read
+        /// enough of its point style to confirm it is that symbol. Not the same as a missing symbol
+        /// (point.nosymbol). One per code; Points lists them.</summary>
+        public const string PointSymbolUnverified = "point.symbolunverified";
+        /// <summary>The standard lets the point's own Civil 3D label stand in for a label, and FTF
+        /// could not read whether that label is shown. Not the same as a missing label
+        /// (point.missingoutput). One per code; Points lists them.</summary>
+        public const string PointLabelUnverified = "point.labelunverified";
+
+        /// <summary>A required symbol or label FTF could not confirm, as against one it found missing.</summary>
+        public static bool IsUnverified(string kind)
+        {
+            return string.Equals(kind, PointSymbolUnverified, System.StringComparison.Ordinal) ||
+                   string.Equals(kind, PointLabelUnverified, System.StringComparison.Ordinal);
+        }
 
         // Linework continuity. Ids are made from the shots and line ends they are about.
         public const string LineGap = "line.gap";
@@ -162,6 +177,14 @@ namespace FieldCodes.Review
             new ReviewKind(PointSurfaceUnverified, PointsSource, "Point", "Surface membership not verifiable",
                 "Information: these surface points are accounted for as surface data; no surface in the drawing can be shown to hold them (none built, or not from point groups). Nothing to draft.",
                 null, "Point Accountability", ReviewSeverity.Info, false),
+            // Present but not confirmed: a person checks the drawing once per code and accepts it with a
+            // note, or fixes the style. Required, so it is never passed by silence; never called missing.
+            new ReviewKind(PointSymbolUnverified, PointsSource, "Point", "Required symbol not verified",
+                "The points show a marker, but FTF could not read enough of their point style to confirm it is the symbol their standard requires (the reason says what could not be read). Look at them: accept with a note when the symbol is right, or give them the right style. Nothing is missing until a check shows it is.",
+                null, "Point Features", ReviewSeverity.Warning, true, true),
+            new ReviewKind(PointLabelUnverified, PointsSource, "Point", "Required label not verified",
+                "Their standard lets the point's own Civil 3D label show the description, but FTF could not read whether that label is shown (the reason says why). Look at them: accept with a note when the label is on the plan, or label them (FTFLABELS).",
+                null, "Point Features", ReviewSeverity.Warning, true, true),
             new ReviewKind(PointDeleted, PointsSource, "Point", "Point gone since it was first recorded",
                 "Restore the point if it was deleted by mistake, or mark it not applicable with the reason it was removed.",
                 null, "Point Accountability", ReviewSeverity.Error, true, true),

@@ -1,7 +1,7 @@
 // Headless Civil 3D checks for point accountability and linework continuity, driven by
 // deploy\smoke-test.ps1 as a BLOCKING stage: a failure makes UPDATEFTF put the previous build back.
 //
-// ACCSEED     a fresh drawing gets 37 synthetic COGO points (invented local coordinates) and the plain
+// ACCSEED     a fresh drawing gets 38 synthetic COGO points (invented local coordinates) and the plain
 //             polylines drawn through them (the TBC-export reality), plus a TIN surface:
 //               A1  interrupted fence 101-103 / 105-107, "PP" 104 between, 105 re-begun   -> probable gap
 //               A2  gate: fence ends at FGP posts 202 / 203, 6 ft apart                  -> intentional, no item
@@ -12,8 +12,12 @@
 //               A9  GS 901-903 TIN vertices, GS 905 off the TIN                           -> surface data, no item
 //               A10 FIP 5/8 1001 (control); ZK 1002 beside it, ZK 904 alone              -> control; control checks
 //               A11 WFH 12 1101 with a generic marker                                     -> symbol missing, no label wanted
-//               SG  1301 "HOUSE NUMBER 4735 SIGN"                                         -> address sign, its description kept
+//               SG  1301 "HOUSE NUMBER 4735 SIGN", its point label on                       -> address sign, labelled by its point label
+//                   1302 "HOUSE NUMBER 4737 SIGN", its point label turned off              -> its missing label a required item
 //               HY  WFH 14 1401 whose point style draws a hydrant block                  -> accounted for by its symbol
+//               What the harness set up is read back from Civil 3D itself (typed API) and compared
+//               with what the ledger read, so a harness that set nothing up, a reader that read
+//               nothing and a standard that asks too much are told apart.
 //               MV  FNC 1201-1203, the line skips 1202                                     -> missing vertex
 // ACCVERIFY   first requires that the named command ran exactly once since the previous stage, then:
 //               RUN       after FTFRUN: the checks ran after it; the expected items, ledger dispositions,
@@ -105,6 +109,7 @@ namespace FtfAccountTest
         private static Dictionary<short, int> _ownedAfterRun;
         private static string _correctionHandle;
         private static string _hydrantStyleProblem = "not set up";
+        private static string _hiddenLabelProblem = "not set up";
         private static string _rulesOriginal;
         private static string _settingsOriginal;
         private static List<string> _openPointItemsAfterRun;
@@ -353,7 +358,10 @@ namespace FtfAccountTest
                 Point(tr, cdoc, 1101, 0, 800, 100, "WFH 12");
 
                 // SG a homeowner's house number sign; HY a hydrant whose point style draws its symbol
-                Point(tr, cdoc, 1301, 0, 1000, 100, "HOUSE NUMBER 4735 SIGN");
+                var shownSign = Point(tr, cdoc, 1301, 0, 1000, 100, "HOUSE NUMBER 4735 SIGN");
+                SetLabelVisible(tr, shownSign, true, "1301");
+                var hiddenSign = Point(tr, cdoc, 1302, 0, 1010, 100, "HOUSE NUMBER 4737 SIGN");
+                _hiddenLabelProblem = SetLabelVisible(tr, hiddenSign, false, "1302");
                 var hydrant = Point(tr, cdoc, 1401, 0, 1100, 100, "WFH 14");
                 HydrantStyle(db, tr, cdoc, hydrant);
 
@@ -374,7 +382,7 @@ namespace FtfAccountTest
             }
             _pointSnapshot = PointSnapshot(db);
             _lineSnapshot = LineSnapshot(db);
-            Check(ed, CountPoints(db) == 37, "37 synthetic COGO points seeded (" + CountPoints(db) + ")");
+            Check(ed, CountPoints(db) == 38, "38 synthetic COGO points seeded (" + CountPoints(db) + ")");
             Record("SEEDED");
         }
 
@@ -444,7 +452,7 @@ namespace FtfAccountTest
                   "A9/A10: a ground shot off the TIN and the control check shots are not on the list (surface verification is off)");
 
             var ledger = Ledger(db);
-            Check(ed, ledger != null && Count(P(ledger, "Points")) == 37, "the point ledger holds every point (" + (ledger == null ? 0 : Count(P(ledger, "Points"))) + ")");
+            Check(ed, ledger != null && Count(P(ledger, "Points")) == 38, "the point ledger holds every point (" + (ledger == null ? 0 : Count(P(ledger, "Points"))) + ")");
             foreach (var n in new[] { "901", "902", "903", "905" })
                 Check(ed, Disposition(ledger, n) == "Surface" && S(Point(ledger, n), "SurfaceStatus") == "designated" && S(Point(ledger, n), "Classification") == "Surface only",
                       "A9: GS " + n + " is surface data, surface only, with or without a surface (" + Disposition(ledger, n) + ", " + S(Point(ledger, n), "SurfaceStatus") + ")");
@@ -466,11 +474,30 @@ namespace FtfAccountTest
             Check(ed, !Owned(db).Any(o => o.Value == _labelKind && (Tag(o.Key, 2) == "1101" || Tag(o.Key, 2) == "1401" || Tag(o.Key, 2) == "702")),
                   "A11: FTFRUN drew no text label for a hydrant");
 
+            // The reader against Civil 3D itself: the style name the ledger read for 702 is the one
+            // Civil 3D gives, and no point style went unread (65d1c05 read every one as "?").
+            var civil702 = StyleOf(db, 702);
+            Note(ed, "Civil 3D says 702's point style is " + civil702);
+            Check(ed, Strings(P(Point(ledger, "702"), "Evidence")).Any(x => x.StartsWith("marker: " + StyleNameOf(civil702) + " (", StringComparison.Ordinal)),
+                  "the ledger reads a point style as Civil 3D names it (702: " + string.Join("; ", Strings(P(Point(ledger, "702"), "Evidence")).Where(x => x.StartsWith("marker:")).ToArray()) + ")");
+            var unread = Objects(P(ledger, "Points")).Where(p => Strings(P(p, "Evidence")).Any(x => x.StartsWith("marker:") && x.Contains("not read"))).Select(p => S(p, "Number")).ToList();
+            Check(ed, unread.Count == 0, "every point style was read in full (" + (unread.Count == 0 ? "all" : "not read for " + string.Join(", ", unread.ToArray())) + ")");
+            Check(ed, !Items(register).Any(i => S(i, "Kind") == "point.symbolunverified" || S(i, "Kind") == "point.labelunverified"),
+                  "nothing left unverified: FTF read every marker and label it needed (" +
+                  string.Join("; ", Items(register).Where(i => S(i, "Kind").EndsWith("unverified") && S(i, "Kind") != "point.surfaceunverified").Select(i => S(i, "Id") + ": " + S(i, "Reason")).ToArray()) + ")");
+
             // HY: a hydrant whose point style draws its symbol is accounted for by it.
             if (_hydrantStyleProblem == null)
+            {
+                // First that the harness set up what it meant to: read back from Civil 3D.
+                var civil1401 = StyleOf(db, 1401);
+                Note(ed, "Civil 3D says 1401's point style is " + civil1401);
+                Check(ed, civil1401 == HydrantBlock + " | UseSymbolForMarker | " + HydrantBlock,
+                      "HY setup: 1401's point style is " + HydrantBlock + ", drawing block " + HydrantBlock + " (Civil 3D: " + civil1401 + ")");
                 Check(ed, Disposition(ledger, "1401") == "Symbol" && !Items(register).Any(i => Names(i, "1401")),
                       "HY: a hydrant whose point style draws its symbol is accounted for, with nothing to review (" + Disposition(ledger, "1401") + "; " +
                       string.Join("; ", Strings(P(Point(ledger, "1401"), "Evidence")).ToArray()) + ")");
+            }
             else Note(ed, "HY: NOT VERIFIED in Civil 3D -- the harness could not set up 1401's symbol point style (" + _hydrantStyleProblem + ")");
 
             // SG: the house number sign keeps its description, is an address sign, not a code nothing handles.
@@ -478,21 +505,35 @@ namespace FtfAccountTest
             Check(ed, sign != null && S(sign, "RawDescription") == "HOUSE NUMBER 4735 SIGN" && S(sign, "Classification") == "Sign (address / house number)",
                   "SG: 1301 keeps its description and is an address / house number sign (" + S(sign, "Classification") + ")");
             Check(ed, item("code.unknown:HOUSE") == null, "SG: HOUSE is not a code nothing handles: the standard names the sign by its words");
-            var signLabel = item("point.missingoutput:1301");
-            if (Disposition(ledger, "1301") == "PointStyle" && Strings(P(sign, "Found")).Contains("label (point label)"))
-            {
-                Check(ed, signLabel == null, "SG: its own Civil 3D point label shows it; no separate label is required");
-                Note(ed, "SG: 1301's point label is shown: " + string.Join("; ", Strings(P(sign, "Evidence")).ToArray()));
-            }
+            // SG: what Civil 3D itself says of each sign's label, and that the ledger agrees.
+            bool? shown1301;
+            var label1301 = LabelState(db, 1301, out shown1301);
+            Note(ed, "Civil 3D says 1301's label: " + label1301);
+            var signEvidence = string.Join("; ", Strings(P(sign, "Evidence")).ToArray());
+            if (shown1301 == true)
+                Check(ed, Disposition(ledger, "1301") == "PointStyle" && Strings(P(sign, "Found")).Contains("label (point label)") && !Items(register).Any(i => Names(i, "1301")),
+                      "SG: its own Civil 3D point label shows it; no second label, nothing to review (" + Disposition(ledger, "1301") + "; " + signEvidence + ")");
             else
             {
-                Check(ed, signLabel != null && S(signLabel, "Reason").Contains("label is hidden"),
-                      "SG: with its point label hidden, the missing label is a required item that says so (" + Describe(signLabel) + ": " + S(signLabel, "Reason") + ")");
-                Note(ed, "SG: the template's point label for 1301 is hidden, so its description shows nowhere on the plan");
+                var signLabel = item("point.missingoutput:1301");
+                Check(ed, shown1301 == false && signLabel != null && (bool)P(signLabel, "Required") && S(signLabel, "Reason").Contains("label is hidden"),
+                      "SG: Civil 3D shows no label for 1301, and the ledger says so as a required item (" + Describe(signLabel) + ": " + S(signLabel, "Reason") + ")");
+                Note(ed, "SG: the visible-label case was NOT exercised: Civil 3D shows no label for 1301 (" + label1301 + ")");
             }
+            if (_hiddenLabelProblem == null)
+            {
+                bool? shown1302;
+                var label1302 = LabelState(db, 1302, out shown1302);
+                var hidden = item("point.missingoutput:1302");
+                Check(ed, shown1302 == false && hidden != null && (bool)P(hidden, "Required") && S(hidden, "Reason").Contains("label is hidden") &&
+                          S(Point(ledger, "1302"), "RawDescription") == "HOUSE NUMBER 4737 SIGN",
+                      "SG: a house number sign whose label is turned off is a required missing label, its description kept (Civil 3D: " + label1302 + "; " +
+                      Describe(hidden) + ": " + S(hidden, "Reason") + ")");
+            }
+            else Note(ed, "SG: NOT VERIFIED in Civil 3D -- the harness could not turn 1302's label off (" + _hiddenLabelProblem + ")");
 
             var run = P(ledger, "LastRun");
-            Check(ed, run != null && (int)P(run, "Points") == 37 && (int)P(run, "Review") > 0 && (int)P(run, "Accounted") > 0,
+            Check(ed, run != null && (int)P(run, "Points") == 38 && (int)P(run, "Review") > 0 && (int)P(run, "Accounted") > 0,
                   "the run's numbers: " + (run == null ? "none" : Convert.ToString(Call(_plugin, DescribeRunSignature, run))));
 
             var proposals = Owned(db).Where(o => o.Value == _proposalKind).ToList();
@@ -916,6 +957,83 @@ namespace FtfAccountTest
             try { cp.PointNumber = number; }
             catch (System.Exception ex) { Fatal("could not set point number " + number + ": " + ex.Message); }
             return id;
+        }
+
+        /// <summary>Turns a point's own label on or off (CogoPoint.IsLabelVisible). Null when done,
+        /// else why not (then the check that needs it is a NOTE, never a pass).</summary>
+        private static string SetLabelVisible(AcDb.Transaction tr, AcDb.ObjectId id, bool visible, string number)
+        {
+            try
+            {
+                var cp = (CivDb.CogoPoint)tr.GetObject(id, AcDb.OpenMode.ForWrite);
+                cp.IsLabelVisible = visible;
+                return null;
+            }
+            catch (System.Exception ex)
+            {
+                var why = ex.GetType().Name + ": " + ex.Message;
+                Note(Ed, "SG: could not turn " + number + "'s label " + (visible ? "on" : "off") + ": " + why);
+                return why;
+            }
+        }
+
+        /// <summary>"name | marker type | symbol block" of the point's own style, from Civil 3D's typed
+        /// members -- what the harness compares the ledger with.</summary>
+        private static string StyleOf(AcDb.Database db, uint number)
+        {
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var p = FindPoint(db, tr, number);
+                    if (p == null) return "(point " + number + " not found)";
+                    var style = tr.GetObject(p.StyleId, AcDb.OpenMode.ForRead) as CivDb.Styles.PointStyle;
+                    var text = "(no point style)";
+                    if (style != null)
+                    {
+                        string name = "?", type = "?", symbol = "?";
+                        try { name = style.Name; } catch (System.Exception ex) { name = "(name: " + ex.GetType().Name + ")"; }
+                        try { type = style.MarkerType.ToString(); } catch (System.Exception ex) { type = "(type: " + ex.GetType().Name + ")"; }
+                        try { symbol = style.MarkerSymbolName; } catch (System.Exception ex) { symbol = "(symbol: " + ex.GetType().Name + ")"; }
+                        text = name + " | " + type + " | " + symbol;
+                    }
+                    tr.Commit();
+                    return text;
+                }
+            }
+            catch (System.Exception ex) { return "(could not read: " + ex.GetType().Name + ": " + ex.Message + ")"; }
+        }
+
+        private static string StyleNameOf(string styleOf)
+        {
+            var bar = styleOf.IndexOf(" | ", StringComparison.Ordinal);
+            return bar < 0 ? styleOf : styleOf.Substring(0, bar);
+        }
+
+        /// <summary>What Civil 3D says of a point's own label: turned on, its style drawing the label
+        /// component, a label style set. <paramref name="shown"/> null when it could not be read.</summary>
+        private static string LabelState(AcDb.Database db, uint number, out bool? shown)
+        {
+            shown = null;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var p = FindPoint(db, tr, number);
+                    if (p == null) return "(point " + number + " not found)";
+                    var on = p.IsLabelVisible;
+                    var style = tr.GetObject(p.StyleId, AcDb.OpenMode.ForRead) as CivDb.Styles.PointStyle;
+                    var component = style != null && style.GetDisplayStylePlan(CivDb.Styles.PointDisplayStyleType.Label).Visible;
+                    var labelStyleId = p.LabelStyleId;
+                    var labelStyle = labelStyleId.IsNull ? null : tr.GetObject(labelStyleId, AcDb.OpenMode.ForRead) as CivDb.Styles.StyleBase;
+                    shown = on && component && labelStyle != null;
+                    var text = "label " + (on ? "on" : "off") + ", point style " + (style == null ? "?" : style.Name) + " draws labels: " + (component ? "yes" : "no") +
+                               ", label style " + (labelStyle == null ? "(none)" : labelStyle.Name);
+                    tr.Commit();
+                    return text;
+                }
+            }
+            catch (System.Exception ex) { return "(could not read: " + ex.GetType().Name + ": " + ex.Message + ")"; }
         }
 
         /// <summary>

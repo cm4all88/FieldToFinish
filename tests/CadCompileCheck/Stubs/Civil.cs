@@ -27,7 +27,7 @@ namespace Autodesk.Civil.ApplicationServices
 namespace Autodesk.Civil
 {
     public enum FeatureLinePointType { AllPoints, PIPoint, ElevationPoint }
-    public enum PointMarkerDisplayType { UseCustomMarker }
+    public enum PointMarkerDisplayType { UseCustomMarker, UseSymbolForMarker }
 }
 
 namespace Autodesk.Civil.Settings
@@ -73,6 +73,9 @@ namespace Autodesk.Civil.DatabaseServices.Styles
     public sealed class PointStyle : StyleBase
     {
         public Autodesk.Civil.PointMarkerDisplayType MarkerType { get; set; }
+        // Settable by this name and as a string in Civil 3D 2024: the accountability harness set it
+        // by reflection at 65d1c05 and its HY setup reported no problem.
+        public string MarkerSymbolName { get; set; }
         public DisplayStyle GetDisplayStylePlan(PointDisplayStyleType component) { return new DisplayStyle(); }
         public DisplayStyle GetDisplayStyleModel(PointDisplayStyleType component) { return new DisplayStyle(); }
     }

@@ -413,8 +413,15 @@ public sealed class PointAccountingTests : IClassFixture<RulesFixture>
         hidden.Marker = new MarkerFact { Known = false, Problem = "style unreadable" };
         var a = Account(null, new[] { hidden, P("2", "WFH"), P("3", "XYZQ 12") }, Ctx());
         var e = a.ledger.Find("1")!;
-        Assert.Equal(PointDisposition.Review, e.Disposition);
-        Assert.NotEmpty(e.Issues);                                       // something a person can close
+        // A marker FTF could not read is not reported missing, and not passed either: it is
+        // unverified, on a required item a person can close.
+        Assert.Equal(PointDisposition.Unverified, e.Disposition);
+        Assert.False(e.Accounted);
+        var item = a.register.Find("point.symbolunverified:SSCO")!;
+        Assert.True(item.Required);
+        Assert.Contains("style unreadable", item.Reason);
+        Assert.Contains("point.symbolunverified:SSCO", e.Issues);         // something a person can close
+        Assert.DoesNotContain(a.items, i => i.Id == "point.nosymbol:1");
         Assert.All(a.ledger.Points.Where(p => p.Disposition == PointDisposition.Review), p => Assert.NotEmpty(p.Issues));
     }
 

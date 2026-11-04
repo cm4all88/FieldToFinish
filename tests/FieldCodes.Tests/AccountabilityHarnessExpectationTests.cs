@@ -6,7 +6,7 @@ using FieldCodes.Settings;
 namespace FieldCodes.Tests;
 
 /// <summary>
-/// The Civil 3D accountability check (tests/LiveSmoke/AccountabilityTestHarness.cs) seeds 37 synthetic
+/// The Civil 3D accountability check (tests/LiveSmoke/AccountabilityTestHarness.cs) seeds 38 synthetic
 /// points, 7 polylines and a TIN, then expects particular review items and ledger dispositions after
 /// FTFRUN, after a drafting standard is added and taken away, and with surface verification on. These tests run the same seed through the same library code (continuity, then the
 /// ledger), so a wrong expectation fails here rather than in Civil 3D. They do not replace it.
@@ -29,14 +29,18 @@ public sealed class AccountabilityHarnessExpectationTests : IClassFixture<RulesF
         ("901", 0, 600, 100, "GS"), ("902", 10, 600, 101, "GS"), ("903", 0, 610, 102, "GS"), ("904", 30, 600, 100, "ZK"), ("905", 100, 650, 100, "GS"),
         ("1001", 0, 700, 100, "FIP 5/8"), ("1002", 0.03, 700.04, 100.02, "ZK"), ("1101", 0, 800, 100, "WFH 12"),
         ("1201", 0, 900, 100, "FNC B"), ("1202", 10, 903, 100, "FNC"), ("1203", 20, 900, 100, "FNC E"),
-        ("1301", 0, 1000, 100, "HOUSE NUMBER 4735 SIGN"), ("1401", 0, 1100, 100, "WFH 14"),
+        ("1301", 0, 1000, 100, "HOUSE NUMBER 4735 SIGN"), ("1302", 0, 1010, 100, "HOUSE NUMBER 4737 SIGN"), ("1401", 0, 1100, 100, "WFH 14"),
     };
 
-    // 1401's point style draws a hydrant symbol block (FTF-SMOKE-WFH); every other point has the
-    // drawing's generic marker and its default point label shown.
-    private static MarkerFact MarkerOf(string number) => number == "1401"
-        ? new MarkerFact { Known = true, Visible = true, MarkerType = "UseSymbolForMarker", SymbolName = "FTF-SMOKE-WFH", StyleName = "FTF-SMOKE-WFH", LabelShown = true, LabelStyleName = "Standard" }
-        : new MarkerFact { Known = true, Visible = true, MarkerType = "UseCustomMarker", StyleName = "Standard", LabelShown = true, LabelStyleName = "Standard" };
+    // 1401's point style draws a hydrant symbol block (FTF-SMOKE-WFH); 1302's label is turned off;
+    // every other point has the drawing's generic marker and its default point label shown -- read
+    // in full, as Accountability.ReadStyle and CogoPointPlotting.ReadLabel now read them.
+    private static MarkerFact MarkerOf(string number) => number switch
+    {
+        "1401" => new MarkerFact { Known = true, Visible = true, MarkerType = "UseSymbolForMarker", SymbolName = "FTF-SMOKE-WFH", StyleName = "FTF-SMOKE-WFH", LabelShown = true, LabelStyleName = "Standard" },
+        "1302" => new MarkerFact { Known = true, Visible = true, MarkerType = "UseCustomMarker", SymbolName = string.Empty, StyleName = "Standard", LabelShown = false, LabelStyleName = null, LabelProblem = "the point's label is turned off" },
+        _ => new MarkerFact { Known = true, Visible = true, MarkerType = "UseCustomMarker", SymbolName = string.Empty, StyleName = "Standard", LabelShown = true, LabelStyleName = "Standard" }
+    };
 
     private static readonly string[][] Lines =
     {
@@ -134,6 +138,7 @@ public sealed class AccountabilityHarnessExpectationTests : IClassFixture<RulesF
         // The house number sign is not a code nothing handles, and the hydrant with its symbol has no item.
         Assert.Null(Find("code.unknown:HOUSE"));
         Assert.DoesNotContain(register.Items, i => Names(i, "1301") || Names(i, "1401"));
+        Assert.NotNull(Find("point.missingoutput:1302"));
         var withGeometry = register.Items.Count(i => i.IsOpen && i.Source == ReviewKinds.ContinuitySource && i.Geometry != null && i.Geometry.Count >= 2);
         Assert.True(withGeometry >= 3);
     }
@@ -142,7 +147,7 @@ public sealed class AccountabilityHarnessExpectationTests : IClassFixture<RulesF
     public void TheDispositionsTheHarnessExpects()
     {
         var (register, ledger) = Check();
-        Assert.Equal(37, ledger.Points.Count);
+        Assert.Equal(38, ledger.Points.Count);
         foreach (var n in new[] { "901", "902", "903", "905" })
         {
             Assert.Equal(PointDisposition.Surface, ledger.Find(n)!.Disposition);
@@ -167,8 +172,17 @@ public sealed class AccountabilityHarnessExpectationTests : IClassFixture<RulesF
         Assert.Equal("Sign (address / house number)", sign.Classification);
         Assert.Equal(PointDisposition.PointStyle, sign.Disposition);
         Assert.Contains("label (point label)", sign.Found);
+        var hidden = register.Find("point.missingoutput:1302")!;
+        Assert.True(hidden.Required);
+        Assert.Contains("label is hidden", hidden.Reason);
+        Assert.Equal("HOUSE NUMBER 4737 SIGN", ledger.Find("1302")!.RawDescription);
+        Assert.Equal(PointDisposition.Review, ledger.Find("1302")!.Disposition);
+        // Every style and label read in full: nothing unverified, no marker evidence "not read".
+        Assert.DoesNotContain(register.Items, i => ReviewKinds.IsUnverified(i.Kind));
+        Assert.DoesNotContain(ledger.Points, p => p.Evidence.Any(x => x.StartsWith("marker:") && x.Contains("not read")));
+        Assert.Contains(ledger.Find("702")!.Evidence, x => x.StartsWith("marker: Standard ("));
         var run = ledger.LastRun!;
-        Assert.Equal(37, run.Points);
+        Assert.Equal(38, run.Points);
         Assert.True(run.Review > 0 && run.Accounted > 0);
         Assert.False(register.MarkQcComplete(new ReviewSettings(), "x", DateTime.Now, out _));
 
@@ -256,8 +270,14 @@ public sealed class AccountabilityHarnessExpectationTests : IClassFixture<RulesF
         var source = File.ReadAllText(Path.Combine(Root(), "tests", "LiveSmoke", "AccountabilityTestHarness.cs"));
         foreach (var s in Seed)
             Assert.Contains("\"" + s.D + "\"", source);
-        Assert.Contains("CountPoints(db) == 37,", source);
-        Assert.Contains("Count(P(ledger, \"Points\")) == 37", source);
+        Assert.Contains("CountPoints(db) == 38,", source);
+        Assert.Contains("Count(P(ledger, \"Points\")) == 38", source);
+        // The harness compares the ledger with what Civil 3D itself says, and cannot pass HY or SG
+        // on a reader that read nothing.
+        Assert.Contains("\"HY setup: 1401's point style is \"", source);
+        Assert.Contains("\"every point style was read in full (\"", source);
+        Assert.Contains("\"nothing left unverified: FTF read every marker and label it needed (\"", source);
+        Assert.Contains("var label1301 = LabelState(db, 1301, out shown1301);", source);
         // The stages that change the standard and the settings use exactly what these tests use.
         Assert.Contains(CleanoutStandard.Replace("\"", "\"\""), source);
         Assert.Contains(SurfaceSettings.Replace("\"", "\"\""), source);
