@@ -436,6 +436,13 @@ public sealed class DeploymentContractTests
         var run = bat.IndexOf("-File \"%STAGE%\\install.ps1\" -Source \"%~dp0.\"", StringComparison.Ordinal);
         Assert.True(civil > 0 && copy > civil && run > copy, "check Civil 3D, copy locally, then run the local copy");
         Assert.Contains("if errorlevel 8 goto copyfailed", bat);
+        // It works when opened by its \\server\share path, where cmd.exe has no current folder:
+        // every path is built from the batch file's own location (%~dp0) or %TEMP%, never "cd".
+        foreach (var line in bat.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && !l.StartsWith("rem", StringComparison.OrdinalIgnoreCase)))
+        {
+            Assert.False(Regex.IsMatch(line, @"^(cd|chdir|pushd|popd)\b", RegexOptions.IgnoreCase), "changes folder: " + line);
+            Assert.DoesNotMatch(@"(?i)\b[A-Z]:\\", line);                                     // no drive letter, U: included
+        }
         Assert.DoesNotContain("NETLOAD", bat.ToUpperInvariant().Replace("NO NETLOAD", string.Empty));
         // Staff never install a development build: neither the batch file nor the automatic
         // update passes what allows one.

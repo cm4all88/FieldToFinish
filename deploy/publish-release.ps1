@@ -170,6 +170,16 @@ function Open-Staging
     }
 }
 
+# A rename on the share, tried again for a few seconds when a file in it is held open for a moment
+# (antivirus on the server, a surveyor's copy reading it). A file held open for good still fails.
+function Move-Patiently([string]$from, [string]$to)
+{
+    for ($attempt = 1; ; $attempt++) {
+        try { Move-Item -LiteralPath $from -Destination $to -ErrorAction Stop; return }
+        catch { if ($attempt -ge 4) { throw }; Start-Sleep -Milliseconds (500 * $attempt) }
+    }
+}
+
 # Moves the current release's items into $keepAs and the items in $from up into the folder. On any
 # failure, moves everything back. Returns $null, or what went wrong.
 $script:movedOut = @()
@@ -183,12 +193,12 @@ function Switch-Release([string]$from, [string]$keepAs)
     try {
         if ($outgoing.Count -gt 0) { New-Item -ItemType Directory -Force -Path $keepAs | Out-Null }
         foreach ($o in $outgoing) {
-            Move-Item -LiteralPath $o.FullName -Destination (Join-Path $keepAs $o.Name) -ErrorAction Stop
+            Move-Patiently $o.FullName (Join-Path $keepAs $o.Name)
             $script:movedOut += $o.Name
         }
         if ($TestFault -eq 'MidSwap') { throw 'a failure injected in the middle of the swap (test fault)' }
         foreach ($i in @(Get-ChildItem -LiteralPath $from -Force)) {
-            Move-Item -LiteralPath $i.FullName -Destination (Join-Path $folder $i.Name) -ErrorAction Stop
+            Move-Patiently $i.FullName (Join-Path $folder $i.Name)
             $script:movedIn += $i.Name
         }
         return $null
@@ -204,10 +214,10 @@ function Undo-Switch([string]$from, [string]$keepAs)
 {
     $trouble = @()
     foreach ($n in @($script:movedIn)) {
-        try { Move-Item -LiteralPath (Join-Path $folder $n) -Destination (Join-Path $from $n) -ErrorAction Stop } catch { $trouble += "$n (" + $_.Exception.Message + ")" }
+        try { Move-Patiently (Join-Path $folder $n) (Join-Path $from $n) } catch { $trouble += "$n (" + $_.Exception.Message + ")" }
     }
     foreach ($n in @($script:movedOut)) {
-        try { Move-Item -LiteralPath (Join-Path $keepAs $n) -Destination (Join-Path $folder $n) -ErrorAction Stop } catch { $trouble += "$n (" + $_.Exception.Message + ")" }
+        try { Move-Patiently (Join-Path $keepAs $n) (Join-Path $folder $n) } catch { $trouble += "$n (" + $_.Exception.Message + ")" }
     }
     $script:movedIn = @()
     $script:movedOut = @()

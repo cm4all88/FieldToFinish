@@ -374,7 +374,12 @@ try
     Check (@(Get-ChildItem $serverRoot -Force).Count -eq 0) 'the check leaves nothing behind'
     $c = Check-Folder (Join-Path (Join-Path $scratch 'no-such-server') 'FieldToFinish-Setup')
     Check ($c.Code -eq 1 -and -not $c.Result.canPublish -and $c.Text -match 'cannot reach' -and $c.Text -match 'CANNOT PUBLISH') 'an unreachable folder is reported, and publishing is refused'
-    $free = @('Q', 'R', 'S', 'T', 'V', 'W', 'X', 'Y', 'Z' | Where-Object { -not (Test-Path ($_ + ':\')) }) | Select-Object -First 1
+    # A letter with no drive at all here: none in use, none mapped (a disconnected or saved mapping
+    # would still name a network path).
+    $free = @('Q', 'R', 'S', 'T', 'V', 'W', 'X', 'Y', 'Z' | Where-Object {
+        -not (Test-Path ($_ + ':\')) -and -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) -and
+        -not ($onWindows -and (Test-Path ('HKCU:\Network\' + $_)))
+    }) | Select-Object -First 1
     if ($free) {
         $c = Check-Folder ($free + ':\Survey\FieldToFinish-Setup')
         Check ($c.Code -eq 1 -and $c.Text -match "${free}: is not mapped") 'a drive letter that is not mapped stops it: installed copies would record a path that works nowhere else'
@@ -424,6 +429,27 @@ try
     Check ((ServerIntact) -and (NoStaging) -and -not (Test-Path (Join-Path $server 'Previous releases'))) 'the published copy verifies on the server, with nothing left over'
     $r = Install $server @()
     Check ($r.Code -eq 0 -and (Installed).commit -eq $commitB -and (Get-Content (Join-Path $installed 'source.txt') -First 1) -eq $server) 'installing from the published folder records it for updates'
+
+    Write-Host '-- where an installed copy takes its updates from'
+    # A copy of a release installed from anywhere (a local folder, a zip) takes its updates from
+    # the home its release names. The homes here are made up and never opened.
+    $copyB = Join-Path $releases 'B-local-copy'
+    Remove-Item $copyB -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item $relB -Destination $copyB -Recurse
+    $officeUnc = '\\ftf-installer-test.invalid\share\Survey\FieldToFinish-Setup'
+    Set-Content -Path (Join-Path $copyB 'updates-from.txt') -Value $officeUnc -Encoding utf8
+    $r = Install $copyB @()
+    $got = Get-Content (Join-Path $installed 'source.txt') -First 1
+    Check ($r.Code -eq 0 -and $got -eq $officeUnc -and $got -ne $copyB) "a copy installed from a local folder takes its updates from the \\server\share path its release names, exactly ($got)"
+    if ($free) {
+        $onFree = $free + ':\Survey\FieldToFinish-Setup'
+        Set-Content -Path (Join-Path $copyB 'updates-from.txt') -Value $onFree -Encoding utf8
+        $r = Install $copyB @()
+        $got = Get-Content (Join-Path $installed 'source.txt') -First 1
+        Check ($r.Code -eq 0 -and $got -eq $onFree) "a home on a drive letter with no drive behind it here is kept as written ($got)"
+    }
+    $r = Install $server @()
+    Check ($r.Code -eq 0 -and (Get-Content (Join-Path $installed 'source.txt') -First 1) -eq $server) 'installing from the release folder again records it again'
 
     $notesFile = Join-Path $server 'Office notes.txt'
     Set-Content -Path $notesFile -Value 'kept by the office' -Encoding utf8

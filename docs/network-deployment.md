@@ -269,9 +269,9 @@ What it covers:
 
 | What | Status |
 |---|---|
-| `test-installer.ps1` | 111 PASS, 0 FAIL on PowerShell 7.4 (Linux), 2026-11-04. Civil 3D's startup record (registry) is Windows-only and was not run there. |
+| `test-installer.ps1` | 114 PASS, 0 FAIL on PowerShell 7.4 (Linux), 2026-11-04. Civil 3D's startup record (registry) is Windows-only and was not run there. Not yet run on Windows. |
 | Release folder check refusing a folder the publisher cannot write | Run by hand as an unprivileged user on Linux: refused, nothing left behind. Not part of the suite (it needs a non-administrator account). |
 | Resolving a real mapped drive, reading real folder permissions | Windows only; **not yet run**. The joining of drive and path is tested with a stand-in drive map. |
-| `test-release.ps1`, and the whole flow in UPDATEFTF | Runs on Windows in UPDATEFTF; **not yet run** with this installer. |
+| `test-release.ps1`, and the whole flow in UPDATEFTF | First run on Windows in an UPDATEFTF dev run (2026-11-04): 77 PASS, 1 FAIL, and UPDATEFTF stopped before installing. The failing check expected a drive-letter home to be recorded as written, but U: is a mapped network drive on that computer, so the installer correctly recorded the network path behind it. The check now covers a `\\server\share` home, a drive that is not mapped, and a mapped one. **Not yet re-run.** |
 | The office's release folder | **Not checked.** Run `UPDATEFTF -CheckReleaseFolder` on the publishing workstation. |
 | A real Civil 3D workstation (the publisher's, and the first surveyor's) | **Not tested.** Nothing here claims a surveyor's computer works until the batch file has been run there. |

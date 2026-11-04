@@ -205,19 +205,55 @@ try
         }
         Check (-not (Test-Path $otherKey)) 'plain AutoCAD is left alone -- it cannot load a Civil 3D plugin'
 
-        # --- a copy that still updates from the office drive ---------------------
+        # --- a copy that still updates from the office folder --------------------
         # Installing from a local copy, or a zip somebody was emailed, must not cut the
-        # machine off from updates. The package carries its home address.
-        Write-Host '-- a local copy that updates from the office drive'
+        # machine off from updates. The package carries its home address (updates-from.txt),
+        # and the installer records it in the installed bundle (source.txt), by the network
+        # path behind a drive letter wherever this computer knows it, so that the copy finds
+        # its updates on computers where the drive is not mapped. Every home here is made up and
+        # never opened: only what gets recorded, inside this test's own scratch bundle, is checked.
+        Write-Host '-- a local copy that updates from the office folder'
         $localCopy = Join-Path $scratch 'local-copy'
         Remove-Item $localCopy -Recurse -Force -ErrorAction SilentlyContinue
         Copy-Item $setup -Destination $localCopy -Recurse -Force
-        $officeHome = 'U:\Somewhere\That\Is\Not\Mounted\FieldToFinish-Setup'
-        Set-Content -Path (Join-Path $localCopy 'updates-from.txt') -Value $officeHome -Encoding utf8
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $localCopy | Out-Null
-        Check ($LASTEXITCODE -eq 0) 'installing from a local copy works'
-        Check ((Get-Content $recorded -First 1) -eq $officeHome) `
-              ("and it takes its updates from the office drive, not the local folder (" + (Get-Content $recorded -First 1) + ")")
+        function Install-FromLocalCopy([string]$officeHome) {
+            Set-Content -Path (Join-Path $localCopy 'updates-from.txt') -Value $officeHome -Encoding utf8
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $localCopy 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $localCopy | Out-Null
+            return $LASTEXITCODE
+        }
+        $tail = '\Somewhere\That\Is\Not\Mounted\FieldToFinish-Setup'
+
+        # A published release names its home by its \\server\share path: recorded exactly as it is,
+        # whatever drives this computer has mapped.
+        $officeUnc = '\\ftf-release-test.invalid\share' + $tail
+        $code = Install-FromLocalCopy $officeUnc
+        Check ($code -eq 0) 'installing from a local copy works'
+        $got = (Get-Content $recorded -First 1)
+        Check ($got -eq $officeUnc -and $got -ne $localCopy) ("and it takes its updates from the office folder, not the local folder (" + $got + ")")
+
+        # An older release may name its home by a drive letter. Where that drive is a mapped
+        # network drive here, the network path behind it is recorded; where it is not mapped,
+        # the path is kept as written.
+        $letters = @('Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')
+        $free = $letters | Where-Object {
+            -not (Test-Path ($_ + ':\')) -and -not (Get-PSDrive -Name $_ -ErrorAction SilentlyContinue) -and -not (Test-Path ('HKCU:\Network\' + $_))
+        } | Select-Object -First 1
+        if ($free) {
+            $unmapped = $free + ':' + $tail
+            $code = Install-FromLocalCopy $unmapped
+            $got = (Get-Content $recorded -First 1)
+            Check ($code -eq 0 -and $got -eq $unmapped) ("a home on a drive that is not mapped here is kept as written (" + $got + ")")
+        } else { Write-Host '  [NOT RUN] a home on an unmapped drive: every letter from Q to Z is in use here' }
+        $mapped = Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue |
+                  Where-Object { "$($_.DisplayRoot)" -like '\\*' } | Select-Object -First 1
+        if ($mapped) {
+            $onDrive = $mapped.Name + ':' + $tail
+            $expected = "$($mapped.DisplayRoot)".TrimEnd('\') + $tail
+            $code = Install-FromLocalCopy $onDrive
+            $got = (Get-Content $recorded -First 1)
+            Check ($code -eq 0 -and $got -eq $expected -and $got.StartsWith('\\')) `
+                  ("a home on a mapped network drive (" + $mapped.Name + ":) is recorded by the network path behind it, so it works where the drive is not mapped (" + $got + ")")
+        } else { Write-Host '  [NOT RUN] a home on a mapped network drive: no network drive is mapped here' }
 
         # Back to the real setup folder for the update tests below.
         & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $setup 'install.ps1') -TargetRoot $plugins -RegistryRoot $regRoot -ProductRoot $regProducts -AllowDevelopmentBuild -Source $setup | Out-Null
