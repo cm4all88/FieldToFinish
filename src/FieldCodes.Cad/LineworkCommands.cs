@@ -1301,9 +1301,7 @@ namespace FieldCodes.Cad
                     ed.WriteMessage("\n{0} selected object(s) were not stair lines and " +
                                     "were not counted.", skipped);
 
-                var label = (cfg.StairsLabelFormat ?? "{count} STEPS")
-                    .Replace("{count}", count.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture));
+                var label = LineLabelPlanner.StairsText(cfg.StairsLabelFormat, count);
 
                 var direction = LineLabelPlanner.AverageDirection(directions);
 
