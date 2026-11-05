@@ -11,9 +11,10 @@ namespace FieldCodes.Cad.Setup
 {
     // ------------------------------------------------------------ storm & sewer dips
 
-    [SettingsPage(Group = "Survey Drafting", Label = "Utility Dips", Order = 50, Sections = "dips", Commands = "FTFDIP,FTFDIPCHECK,FTFDIPPDF")]
+    [SettingsPage(Group = "Survey Drafting", Label = "Utility Dips", Order = 50, Sections = "dips", Commands = "FTFDIP,FTFDIPCHECK,FTFDIPPDF,FTFDIPDRAW,FTFTILDE")]
     internal sealed class DipsPage : SetupPage
     {
+        private TextBox _outsideStub, _outsideMark;
         private TextBox _codes;
         private DataGridView _systems;
         private TextBox _materials;
@@ -79,7 +80,7 @@ namespace FieldCodes.Cad.Setup
         };
 
         public override string Title { get { return "Storm & Sewer Dips"; } }
-        public override string AffectedCommands { get { return "FTFDIP, FTFDIPCHECK, FTFDIPPDF"; } }
+        public override string AffectedCommands { get { return "FTFDIP, FTFDIPCHECK, FTFDIPPDF, FTFDIPDRAW, FTFTILDE"; } }
 
         protected override void BuildBody()
         {
@@ -161,6 +162,16 @@ namespace FieldCodes.Cad.Setup
             _labelOffset = TextRow("Pipe label offset (plotted)", null);
             _dipTextStyle = TextRow("Text style", "Office: Survey. Empty or not in the drawing uses the current style.", 240);
             _dipLeaderStyle = TextRow("Structure label leader style", "Office: xPMX SURV Text Arrow Anno (annotative, as the Storm Callout tool). Empty uses the current style.", 240);
+
+            Heading("Pipes that run outside the survey limits");
+            Note("A pipe marked \"Runs outside survey limits\" in the Dip Builder has no far structure to draw to. " +
+                 "Drafting (Dip Builder, FTFDIPDRAW) draws a short stub from the structure in the direction the pipe was " +
+                 "observed, on the system's pipe layer, with a mark at its loose end saying it carries on. The stub gets no label.");
+            _outsideStub = TextRow("Stub length (feet)",
+                "How long that stub is drawn, in survey feet. It is the office's length, not a measurement. 0 draws no stub.");
+            _outsideMark = TextRow("Mark at the end of the stub",
+                "Written across the loose end of the stub, on the system's label layer, in the text style and height above. " +
+                "Empty leaves the stub unmarked. FTFTILDE puts the same mark on any line where it leaves the view (~ when this is empty).", 80);
 
             Heading("Add pipe buttons");
             Note("The size and material buttons + Add pipe shows first, by structure. A row naming structure types " +
@@ -252,6 +263,8 @@ namespace FieldCodes.Cad.Setup
             _labelOffset.Text = Fmt(d.PipeLabelOffsetPlotted);
             _dipTextStyle.Text = d.TextStyle ?? string.Empty;
             _dipLeaderStyle.Text = d.LeaderStyle ?? string.Empty;
+            _outsideStub.Text = Fmt(d.OutsideLimitsStubFt);
+            _outsideMark.Text = d.OutsideLimitsMark ?? string.Empty;
             _commonCodes.Text = string.Join(", ", d.CommonStructureCodes.ToArray());
             _pipeChoices.Rows.Clear();
             foreach (var rule in d.PipeChoices.Where(r => r != null))
@@ -360,6 +373,8 @@ namespace FieldCodes.Cad.Setup
             v = d.PipeLabelOffsetPlotted; ReadDouble(_labelOffset, "Dips: pipe label offset", x => x >= 0, "cannot be negative", problems, ref v); d.PipeLabelOffsetPlotted = v;
             d.TextStyle = (_dipTextStyle.Text ?? string.Empty).Trim();
             d.LeaderStyle = (_dipLeaderStyle.Text ?? string.Empty).Trim();
+            v = d.OutsideLimitsStubFt; ReadDouble(_outsideStub, "Dips: outside-limits stub length", x => x >= 0 && x <= 100, "must be between 0 (no stub) and 100 feet", problems, ref v); d.OutsideLimitsStubFt = v;
+            d.OutsideLimitsMark = (_outsideMark.Text ?? string.Empty).Trim();
             d.CommonStructureCodes = Words(_commonCodes);
             _pipeChoices.EndEdit();
             var rules = new List<PipeChoiceRule>();
@@ -482,6 +497,16 @@ namespace FieldCodes.Cad.Setup
         private TextBox _seconds, _distanceDecimals;
         private TextBox _title, _purpose, _area, _acres, _sqftDecimals, _acresDecimals;
         private TextBox _textStyle, _textHeight, _tableStyle, _tolerance;
+        private ComboBox _tempHatchLayer, _tempTextLayer, _tempDimLayer;
+        private ComboBox _hatchColour, _tempHatchColour, _textColour, _textWeight, _tableColour, _tableWeight, _pointColour;
+        private CheckBox _labelMask, _askTable;
+        private TextBox _reproduction, _closurePrecision;
+
+        // The first item of each colour and lineweight list: what an empty setting means there.
+        private const string ColourByLayer = "(ByLayer)";
+        private const string ColourOfLayer = "(the layer's colour)";
+        private const string LookOfFamily = "(as the easement layers)";
+        private static readonly string[] ColourNames = { "red", "yellow", "green", "cyan", "blue", "magenta", "white" };
 
         public override string Title { get { return "Strip Easements"; } }
         public override string AffectedCommands { get { return "STRIPEASEMENT, FTFEASEMENTCHECK"; } }
@@ -498,7 +523,20 @@ namespace FieldCodes.Cad.Setup
             _dimLayer = ComboRow("Width dimensions", layers, null);
             _textLayer = ComboRow("Title, area and course labels", layers, null);
             _tableLayer = ComboRow("Line / curve tables", layers, null);
-            _tempLayer = ComboRow("Temporary construction easement", layers, null);
+
+            Heading("Temporary construction easements");
+            Note("A temporary construction easement has layers of its own, so one exhibit can show the permanent easement " +
+                 "and hide the temporary one (or the other way round) in its viewport.");
+            _tempLayer = ComboRow("Outline layer", layers,
+                "The layer STRIPEASEMENT and PORTIONEASEMENT draw a temporary construction easement's outline on.");
+            _tempHatchLayer = ComboRow("Hatch layer", layers,
+                "The layer a temporary construction easement's hatch goes on, kept apart from the permanent easement's hatch.");
+            _tempTextLayer = ComboRow("Title, area and course labels layer", layers,
+                "The layer a temporary construction easement's title, area and course labels go on.");
+            _tempDimLayer = ComboRow("Width dimensions layer", layers,
+                "The layer a temporary construction easement's width dimensions go on.");
+            _tempPattern = TextRow("Hatch pattern", "The hatch for a temporary construction easement, e.g. ANSI37. Empty draws it as an outline only.", 200);
+            _tempPurpose = TextRow("Purpose", "Used in its title, e.g. TEMPORARY CONSTRUCTION.", 260);
 
             Heading("What gets drawn");
             _sidelines = CheckRow("Draw sidelines as separate lines (the closed boundary is always drawn)", null);
@@ -508,8 +546,30 @@ namespace FieldCodes.Cad.Setup
             _hatchScale = TextRow("Hatch scale (plotted)", null);
             _dims = CheckRow("Dimension the width", null);
             _dimStyle = TextRow("Dimension style", "Leave empty to use the drawing's CURRENT dimension style.", 220);
-            _tempPattern = TextRow("Temporary easement hatch", "Empty draws the temporary construction easement as an outline only.", 200);
-            _tempPurpose = TextRow("Temporary easement purpose", "Used in its title, e.g. TEMPORARY CONSTRUCTION.", 260);
+
+            Heading("Colours and line weights");
+            Note("Pick a colour from the list or type an AutoCAD colour number (1-255). The first choice in each list " +
+                 "leaves the colour or lineweight to the layer.");
+            _hatchColour = ColourRow("Easement hatch colour", ColourByLayer,
+                "Set on the hatch STRIPEASEMENT draws, not on its layer. " +
+                "(ByLayer): the hatch takes its layer's colour.");
+            _tempHatchColour = ColourRow("Temporary easement hatch colour", ColourByLayer,
+                "Set on the hatch STRIPEASEMENT draws for a temporary construction easement. (ByLayer): the hatch takes its layer's colour.");
+            _textColour = ColourRow("New label layer colour", LookOfFamily,
+                "Only when an easement command (STRIPEASEMENT, PORTIONEASEMENT) has to create the title, area and course label layer or the width dimension layer: " +
+                "the colour that new layer gets. A layer already in the drawing is never changed. " +
+                "First choice: the new layer looks like the easement layers already in the drawing.");
+            _textWeight = LineWeightRow("New label layer lineweight",
+                "Only when an easement command has to create the label or width dimension layer: its lineweight, in millimetres. " +
+                "A layer already in the drawing is never changed.");
+            _tableColour = ColourRow("New table layer colour", LookOfFamily,
+                "Only when STRIPEASEMENT has to create the line / curve table layer: the colour that new layer gets. " +
+                "A layer already in the drawing is never changed.");
+            _tableWeight = LineWeightRow("New table layer lineweight",
+                "Only when STRIPEASEMENT has to create the line / curve table layer: its lineweight, in millimetres.");
+            _pointColour = ColourRow("Point label colour", ColourOfLayer,
+                "Written into the Point of Commencement, Point of Beginning and terminus labels themselves, " +
+                "the way office exhibits colour them. First choice: the labels take their layer's colour.");
 
             Heading("Lines and curves");
             _labelMode = ComboRow("Course labels", Enum.GetNames(typeof(EasementLabelMode)).Cast<object>(),
@@ -547,11 +607,93 @@ namespace FieldCodes.Cad.Setup
             _sqftDecimals = TextRow("Square feet decimals", null);
             _acresDecimals = TextRow("Acres decimals", null);
 
-            Heading("Text and tolerance");
+            Heading("Text");
             _textStyle = TextRow("Text style", "Empty uses the current style.", 200);
             _textHeight = TextRow("Text height (plotted)", null);
+            _labelMask = CheckRow("Mask behind the easement labels",
+                "A background mask behind the title, area, course and point labels (1.5 times the text, the drawing's " +
+                "background colour), so the hatch does not show through the text. STRIPEASEMENT, PORTIONEASEMENT, CONSTRUCTIONAREA.");
+
+            Heading("Tables");
             _tableStyle = TextRow("Table style", "Empty uses the current table style.", 200);
+            _askTable = CheckRow("Ask where the line / curve table goes",
+                "On: STRIPEASEMENT asks you to pick where its line / curve table goes in model space. " +
+                "Off: the table is put beside the easement without asking.");
+
+            Heading("Checks");
             _tolerance = TextRow("Closure tolerance (feet)", "Gaps larger than this are errors, never bridged.");
+            _reproduction = TextRow("Legal description must land within (feet)",
+                "The bearings and distances a legal description states are rounded. Walked from the start, they must land " +
+                "this close to the drawn corners, or the legal draft is flagged as not reproducing the drawing " +
+                "(FTFEASEMENTLEGAL, FTFEASEMENTINSPECT, FTFEXHIBITQA).");
+            _closurePrecision = TextRow("Flag a description closing worse than 1 in",
+                "A closed course description (an area, a parcel) whose stated courses close worse than 1:N is flagged, " +
+                "e.g. 10000 for 1:10,000 (FTFEASEMENTLEGAL, FTFEASEMENTINSPECT, FTFEXHIBITQA).");
+        }
+
+        /// <summary>A colour list: <paramref name="empty"/> (an empty setting), the seven named
+        /// colours, and any AutoCAD colour number typed in.</summary>
+        private ComboBox ColourRow(string caption, string empty, string hint)
+        {
+            var items = new List<object> { empty };
+            items.AddRange(ColourNames);
+            var combo = ComboRow(caption, items, hint, 160);
+            combo.DropDownStyle = ComboBoxStyle.DropDown;
+            return combo;
+        }
+
+        private static void ShowColour(ComboBox combo, string value)
+        {
+            var v = (value ?? string.Empty).Trim();
+            if (v.Length == 0) { combo.SelectedIndex = 0; return; }
+            for (var i = 1; i < combo.Items.Count; i++)
+                if (string.Equals(Convert.ToString(combo.Items[i]), v, StringComparison.OrdinalIgnoreCase)) { combo.SelectedIndex = i; return; }
+            combo.SelectedIndex = -1;
+            combo.Text = v;
+        }
+
+        /// <summary>The colour as the commands read it (LayerAppearance): empty, a colour name or
+        /// 1-255. Anything else is a problem, and the setting keeps its value.</summary>
+        private static string ReadColour(ComboBox combo, string name, ICollection<string> problems, string current)
+        {
+            var t = (combo.Text ?? string.Empty).Trim();
+            if (t.Length == 0 || string.Equals(t, Convert.ToString(combo.Items[0]), StringComparison.Ordinal)) return string.Empty;
+            var index = LayerAppearance.ColorIndex(t);
+            if (index.HasValue && index.Value >= 1 && index.Value <= 255) return t;
+            problems.Add("Easements: " + name + " \"" + t + "\" is not a colour: choose one from the list or type an AutoCAD colour number from 1 to 255.");
+            return current;
+        }
+
+        /// <summary>A lineweight list: an empty setting first, then Default and AutoCAD's widths in millimetres.</summary>
+        private ComboBox LineWeightRow(string caption, string hint)
+        {
+            var items = new List<object> { LookOfFamily };
+            items.AddRange(LayerStandards.LineWeightChoices());
+            return ComboRow(caption, items, hint, 160);
+        }
+
+        private static void ShowLineWeight(ComboBox combo, string value)
+        {
+            var v = (value ?? string.Empty).Trim();
+            if (v.Length == 0) { combo.SelectedIndex = 0; return; }
+            var hundredths = LayerAppearance.LineWeightHundredths(v);
+            var shown = hundredths.HasValue ? LayerStandards.FormatLineWeight(hundredths.Value) : v;
+            for (var i = 1; i < combo.Items.Count; i++)
+                if (string.Equals(Convert.ToString(combo.Items[i]), shown, StringComparison.OrdinalIgnoreCase)) { combo.SelectedIndex = i; return; }
+            // Not one of AutoCAD's widths: kept as written (and reported on Save) rather than changed silently.
+            combo.Items.Add(v);
+            combo.SelectedIndex = combo.Items.Count - 1;
+        }
+
+        private static string ReadLineWeight(ComboBox combo, string name, ICollection<string> problems, string current)
+        {
+            if (combo.SelectedIndex <= 0) return string.Empty;
+            var t = (Convert.ToString(combo.SelectedItem) ?? string.Empty).Trim();
+            int hundredths;
+            string why;
+            if (LayerStandards.TryParseLineWeight(t, out hundredths, out why)) return t;
+            problems.Add("Easements: " + name + ": " + why + ".");
+            return current;
         }
 
         public override void LoadFrom(FtfSettings s)
@@ -565,6 +707,20 @@ namespace FieldCodes.Cad.Setup
             ComboHelp.SelectOrAdd(_textLayer, e.TextLayer, false);
             ComboHelp.SelectOrAdd(_tableLayer, e.TableLayer, false);
             ComboHelp.SelectOrAdd(_tempLayer, e.TemporaryLayer, false);
+            ComboHelp.SelectOrAdd(_tempHatchLayer, e.TemporaryHatchLayer, false);
+            ComboHelp.SelectOrAdd(_tempTextLayer, e.TemporaryTextLayer, false);
+            ComboHelp.SelectOrAdd(_tempDimLayer, e.TemporaryDimensionLayer, false);
+            ShowColour(_hatchColour, e.HatchColor);
+            ShowColour(_tempHatchColour, e.TemporaryHatchColor);
+            ShowColour(_textColour, e.TextColor);
+            ShowLineWeight(_textWeight, e.TextLineWeight);
+            ShowColour(_tableColour, e.TableColor);
+            ShowLineWeight(_tableWeight, e.TableLineWeight);
+            ShowColour(_pointColour, e.PointLabelColor);
+            _labelMask.Checked = e.LabelMask;
+            _askTable.Checked = e.AskTableLocation;
+            _reproduction.Text = Fmt(e.ReproductionToleranceFt);
+            _closurePrecision.Text = Fmt(e.MinimumClosurePrecision);
             _tempPattern.Text = e.TemporaryHatchPattern;
             _tempPurpose.Text = e.TemporaryPurpose;
             _sidelines.Checked = e.DrawSidelines;
@@ -618,6 +774,18 @@ namespace FieldCodes.Cad.Setup
             e.TextLayer = Convert.ToString(_textLayer.SelectedItem) ?? string.Empty;
             e.TableLayer = Convert.ToString(_tableLayer.SelectedItem) ?? string.Empty;
             e.TemporaryLayer = Convert.ToString(_tempLayer.SelectedItem) ?? string.Empty;
+            e.TemporaryHatchLayer = Convert.ToString(_tempHatchLayer.SelectedItem) ?? string.Empty;
+            e.TemporaryTextLayer = Convert.ToString(_tempTextLayer.SelectedItem) ?? string.Empty;
+            e.TemporaryDimensionLayer = Convert.ToString(_tempDimLayer.SelectedItem) ?? string.Empty;
+            e.HatchColor = ReadColour(_hatchColour, "easement hatch colour", problems, e.HatchColor);
+            e.TemporaryHatchColor = ReadColour(_tempHatchColour, "temporary easement hatch colour", problems, e.TemporaryHatchColor);
+            e.TextColor = ReadColour(_textColour, "new label layer colour", problems, e.TextColor);
+            e.TextLineWeight = ReadLineWeight(_textWeight, "new label layer lineweight", problems, e.TextLineWeight);
+            e.TableColor = ReadColour(_tableColour, "new table layer colour", problems, e.TableColor);
+            e.TableLineWeight = ReadLineWeight(_tableWeight, "new table layer lineweight", problems, e.TableLineWeight);
+            e.PointLabelColor = ReadColour(_pointColour, "point label colour", problems, e.PointLabelColor);
+            e.LabelMask = _labelMask.Checked;
+            e.AskTableLocation = _askTable.Checked;
             e.TemporaryHatchPattern = (_tempPattern.Text ?? string.Empty).Trim();
             e.TemporaryPurpose = (_tempPurpose.Text ?? string.Empty).Trim().ToUpperInvariant();
             e.DrawSidelines = _sidelines.Checked;
@@ -658,6 +826,8 @@ namespace FieldCodes.Cad.Setup
             v = e.TextHeightPlotted; ReadDouble(_textHeight, "Easements: text height", x => x > 0, "must be greater than zero", problems, ref v); e.TextHeightPlotted = v;
             e.TableStyle = (_tableStyle.Text ?? string.Empty).Trim();
             v = e.ToleranceFt; ReadDouble(_tolerance, "Easements: tolerance", x => x > 0 && x < 1, "must be between 0 and 1 foot", problems, ref v); e.ToleranceFt = v;
+            v = e.ReproductionToleranceFt; ReadDouble(_reproduction, "Easements: legal description must land within", x => x > 0 && x <= 1, "must be more than 0 and at most 1 foot", problems, ref v); e.ReproductionToleranceFt = v;
+            v = e.MinimumClosurePrecision; ReadDouble(_closurePrecision, "Easements: closure precision (1 in N)", x => x >= 1, "must be 1 or more, e.g. 10000", problems, ref v); e.MinimumClosurePrecision = v;
         }
 
         public override void RestoreDefaults(FtfSettings s)

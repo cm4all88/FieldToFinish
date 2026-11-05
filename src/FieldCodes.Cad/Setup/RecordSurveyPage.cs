@@ -23,6 +23,14 @@ namespace FieldCodes.Cad.Setup
         private TextBox _textHeight, _offset, _seconds, _decimals, _measuredFormat, _recordFormat, _tableLayer, _lotFormat, _lotHeight;
         private CheckBox _keepImages, _projectFile, _createLayers, _monuments, _civil, _mask, _stacked, _foot, _spaces, _chord, _tangent, _recordAndMeasured, _lotLabels, _areas, _separate;
         private DataGridView _entities, _monumentGrid;
+        private ComboBox _language, _defaultType, _lotType, _tableStyle, _lotTextLayer;
+        private TextBox _linePrefix, _curvePrefix, _areaFormat;
+
+        /// <summary>Languages offered for Windows OCR. Any other language tag may be typed; its OCR
+        /// pack must be installed on the machine.</summary>
+        private static readonly object[] OcrLanguages = { "en-US", "en-GB", "en-CA", "es-ES", "es-MX", "fr-FR", "fr-CA", "de-DE" };
+
+        private const string NoLotTextLayer = "(the lot entity's label layer)";
 
         public override string Title { get { return "Recorded Surveys"; } }
         public override string AffectedCommands { get { return "FTFRECORD, FTFRECORDCHECK, FTFRECORDLABEL, FTFRECORDSOURCE, FTFRECORDREBUILD"; } }
@@ -34,6 +42,10 @@ namespace FieldCodes.Cad.Setup
                  "Survey annotation runs at every angle, so each page is read at each of the rotations below and the passes are merged. " +
                  "Sidecar reads a .ocr.json beside the document written by another OCR tool instead.");
             _engine = ComboRow("OCR engine", new object[] { RecordSurveySettings.OcrWindows, RecordSurveySettings.OcrSidecar }, "Windows: the built-in engine. Sidecar: a .ocr.json in the FTF OCR schema beside the document.", 140);
+            _language = ComboRow("OCR language", OcrLanguages,
+                "The language the Windows OCR engine reads the document in, as a language tag (en-US is US English). Pick one or type another. " +
+                "Its OCR pack must be installed (Windows Settings > Time & Language); when it is not, or this is empty, FTFRECORD uses the languages of your Windows profile.", 140);
+            _language.DropDownStyle = ComboBoxStyle.DropDown;
             _dpi = TextRow("Resolution (dpi)", "Pages are rendered at this resolution for OCR. 300 suits most scans; 400 for small annotation.");
             _rotations = TextRow("Page rotations read (degrees)", "Comma separated. 0,90,270,180 reads text at every right angle; add 45,135,225,315 for plats with diagonal lots (slower).", 220);
             _keepImages = CheckRow("Keep page images for the review window", "Saved under %LOCALAPPDATA%\\FieldToFinish\\record-pages, never beside the document.");
@@ -80,6 +92,14 @@ namespace FieldCodes.Cad.Setup
             _entities.Columns.Add("Height", "Text ht (plotted)");
             _entities.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Label", HeaderText = "Label", FillWeight = 40 });
             _createLayers = CheckRow("Create a configured layer that is missing from the drawing (otherwise its courses are withheld and reported)", null);
+            _defaultType = ComboRow("Entity for a course of no known type", new object[0],
+                "A course read from the document whose type has no entity standard above (or that has no type) is drawn and labelled " +
+                "with this entity's layer and styles. One of the entities above.", 200);
+            _lotType = ComboRow("Entity for lot numbers", new object[0],
+                "When no lot text layer is chosen below, lot and tract numbers go on this entity's label layer. One of the entities above.", 200);
+            _entities.RowsAdded += (o, e) => RefreshEntityChoices();
+            _entities.RowsRemoved += (o, e) => RefreshEntityChoices();
+            _entities.CellValueChanged += (o, e) => { if (e.ColumnIndex == 0) RefreshEntityChoices(); };
 
             Heading("Monuments");
             Note("The block and layer for found, set and calculated monuments. No block is shipped: choose the office symbol from this drawing. Monuments without a block are listed in the review but not drawn.");
@@ -116,10 +136,21 @@ namespace FieldCodes.Cad.Setup
             _measuredFormat = TextRow("Measured label format", "{value} is the bearing and distance; e.g. \"{value} (M)\".", 200);
             _recordFormat = TextRow("Record label format", "{value} and {source} (R1); e.g. \"{value} ({source})\".", 200);
             _tableLayer = TextRow("Line/curve table layer", "Must exist in the drawing when the table is needed.", 200);
+            _tableStyle = ComboRow("Line/curve table style", new object[] { string.Empty }.Concat(Context.Drawing.TableStyles.Cast<object>()),
+                "The table style of the line/curve table FTFRECORD and FTFRECORDLABEL draw. Pick one of this drawing's or type a name. " +
+                "Empty, or not in the drawing: the drawing's current table style (reported).", 200);
+            _tableStyle.DropDownStyle = ComboBoxStyle.DropDown;
+            _linePrefix = TextRow("Line tag prefix", "A line labelled in the table is tagged with this and a number: L1, L2...", 60);
+            _curvePrefix = TextRow("Curve tag prefix", "A curve labelled in the table is tagged with this and a number: C1, C2...", 60);
             _lotLabels = CheckRow("Label lots and tracts inside each closed figure", null);
             _lotFormat = TextRow("Lot label format", "{lot} and {block}.", 160);
             _lotHeight = TextRow("Lot text height (plotted)", null);
+            _lotTextLayer = ComboRow("Lot text layer", new object[] { NoLotTextLayer }.Concat(Context.Drawing.Layers.Cast<object>()),
+                "The layer lot and tract numbers (and their areas) go on. First choice, or a layer this drawing does not have: " +
+                "the label layer of the entity for lot numbers above.", 220);
             _areas = CheckRow("Add the area under the lot label (from the traversed calls)", null);
+            _areaFormat = TextRow("Area label format", "What the area under a lot label says: {sqft} is square feet (12,345), {acres} is acres (0.283), " +
+                                                       "e.g. \"{sqft} SQ. FT.\"", 200);
         }
 
         private static DataGridViewComboBoxColumn Combo(string name, string header, IEnumerable<string> items)
@@ -145,6 +176,7 @@ namespace FieldCodes.Cad.Setup
             _engine.SelectedItem = Match(_engine, r.OcrEngine);
             _dpi.Text = r.OcrDpi.ToString(CultureInfo.InvariantCulture);
             _rotations.Text = r.OcrRotations;
+            ShowEditable(_language, r.OcrLanguage);
             _keepImages.Checked = r.KeepPageImages;
             _threshold.Text = Fmt(r.ReviewThreshold);
             _alternatives.Text = r.MaxAlternatives.ToString(CultureInfo.InvariantCulture);
@@ -169,6 +201,9 @@ namespace FieldCodes.Cad.Setup
                 row.Cells["Label"].Value = e.Label;
             }
             _createLayers.Checked = r.CreateMissingLayers;
+            RefreshEntityChoices();
+            ComboHelp.SelectOrAdd(_defaultType, r.DefaultObjectType, false);
+            ComboHelp.SelectOrAdd(_lotType, r.LotObjectType, false);
 
             _monumentGrid.Rows.Clear();
             foreach (var m in r.Monuments)
@@ -191,7 +226,42 @@ namespace FieldCodes.Cad.Setup
             _foot.Checked = r.FootSymbol; _spaces.Checked = r.BearingSpaces; _chord.Checked = r.CurveShowChord; _tangent.Checked = r.CurveShowTangent;
             _recordAndMeasured.Checked = r.LabelRecordAndMeasured;
             _measuredFormat.Text = r.MeasuredLabelFormat; _recordFormat.Text = r.RecordLabelFormat; _tableLayer.Text = r.TableLayer;
+            ShowEditable(_tableStyle, r.TableStyle);
+            _linePrefix.Text = r.LinePrefix ?? string.Empty; _curvePrefix.Text = r.CurvePrefix ?? string.Empty;
             _lotLabels.Checked = r.LabelLots; _lotFormat.Text = r.LotLabelFormat; _lotHeight.Text = Fmt(r.LotTextHeightPlotted); _areas.Checked = r.LabelAreas;
+            ComboHelp.SelectOrAdd(_lotTextLayer, r.LotTextLayer, true);
+            _areaFormat.Text = r.AreaLabelFormat ?? string.Empty;
+        }
+
+        /// <summary>An editable list: the matching item when there is one, else the text as written.</summary>
+        private static void ShowEditable(ComboBox combo, string value)
+        {
+            var v = value ?? string.Empty;
+            foreach (var item in combo.Items)
+                if (string.Equals(Convert.ToString(item), v, StringComparison.OrdinalIgnoreCase)) { combo.SelectedItem = item; return; }
+            combo.SelectedIndex = -1;
+            combo.Text = v;
+        }
+
+        /// <summary>The entity choices follow the standards grid as it is edited, keeping what was chosen.</summary>
+        private void RefreshEntityChoices()
+        {
+            if (_defaultType == null || _lotType == null) return;
+            var names = new List<string>();
+            foreach (DataGridViewRow row in _entities.Rows)
+            {
+                if (row.IsNewRow) continue;
+                var name = (Convert.ToString(row.Cells["Name"].Value) ?? string.Empty).Trim();
+                if (name.Length > 0 && !names.Contains(name, StringComparer.OrdinalIgnoreCase)) names.Add(name);
+            }
+            foreach (var combo in new[] { _defaultType, _lotType })
+            {
+                var chosen = Convert.ToString(combo.SelectedItem);
+                combo.Items.Clear();
+                foreach (var name in names) combo.Items.Add(name);
+                if (!string.IsNullOrEmpty(chosen)) ComboHelp.SelectOrAdd(combo, chosen, false);
+                else if (combo.Items.Count > 0) combo.SelectedIndex = 0;
+            }
         }
 
         private static object Match(ComboBox combo, string value)
@@ -206,6 +276,10 @@ namespace FieldCodes.Cad.Setup
             r.OcrEngine = _engine.SelectedItem as string ?? RecordSurveySettings.OcrWindows;
             var dpi = r.OcrDpi; if (ReadInt(_dpi, "Recorded surveys: OCR resolution", v => v >= 72 && v <= 1200, "must be between 72 and 1200", problems, ref dpi)) r.OcrDpi = dpi;
             r.OcrRotations = _rotations.Text.Trim();
+            var language = (_language.Text ?? string.Empty).Trim();
+            if (language.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(language, @"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"))
+                problems.Add("Recorded surveys: OCR language \"" + language + "\" is not a language tag; pick one from the list or type one like en-US.");
+            else r.OcrLanguage = language;
             r.KeepPageImages = _keepImages.Checked;
             var threshold = r.ReviewThreshold; if (ReadDouble(_threshold, "Recorded surveys: review threshold", v => v >= 0 && v <= 1, "must be between 0 and 1", problems, ref threshold)) r.ReviewThreshold = threshold;
             var alternatives = r.MaxAlternatives; if (ReadInt(_alternatives, "Recorded surveys: alternatives", v => v >= 0 && v <= 10, "must be between 0 and 10", problems, ref alternatives)) r.MaxAlternatives = alternatives;
@@ -245,6 +319,9 @@ namespace FieldCodes.Cad.Setup
             }
             if (entities.Count > 0) r.Entities = entities;
             r.CreateMissingLayers = _createLayers.Checked;
+            // Checked against the entities just saved, by Validate below.
+            r.DefaultObjectType = Convert.ToString(_defaultType.SelectedItem) ?? r.DefaultObjectType;
+            r.LotObjectType = Convert.ToString(_lotType.SelectedItem) ?? r.LotObjectType;
 
             var monuments = new List<MonumentStandard>();
             foreach (DataGridViewRow row in _monumentGrid.Rows)
@@ -271,8 +348,21 @@ namespace FieldCodes.Cad.Setup
             r.FootSymbol = _foot.Checked; r.BearingSpaces = _spaces.Checked; r.CurveShowChord = _chord.Checked; r.CurveShowTangent = _tangent.Checked;
             r.LabelRecordAndMeasured = _recordAndMeasured.Checked;
             r.MeasuredLabelFormat = _measuredFormat.Text; r.RecordLabelFormat = _recordFormat.Text; r.TableLayer = _tableLayer.Text.Trim();
+            r.TableStyle = (_tableStyle.Text ?? string.Empty).Trim();
+            var linePrefix = (_linePrefix.Text ?? string.Empty).Trim();
+            var curvePrefix = (_curvePrefix.Text ?? string.Empty).Trim();
+            if (linePrefix.Length == 0 || curvePrefix.Length == 0)
+                problems.Add("Recorded surveys: the line and curve tag prefixes cannot be empty (a table would tag lines and curves 1, 2... alike).");
+            else if (string.Equals(linePrefix, curvePrefix, StringComparison.OrdinalIgnoreCase))
+                problems.Add("Recorded surveys: the line and curve tag prefixes must differ, or L1 could be a line or a curve.");
+            else { r.LinePrefix = linePrefix; r.CurvePrefix = curvePrefix; }
             r.LabelLots = _lotLabels.Checked; r.LotLabelFormat = _lotFormat.Text; r.LabelAreas = _areas.Checked;
             Positive(_lotHeight, "lot text height", problems, v => r.LotTextHeightPlotted = v);
+            r.LotTextLayer = _lotTextLayer.SelectedIndex <= 0 ? string.Empty : Convert.ToString(_lotTextLayer.SelectedItem) ?? string.Empty;
+            var areaFormat = (_areaFormat.Text ?? string.Empty).Trim();
+            if (areaFormat.IndexOf("{sqft}", StringComparison.Ordinal) < 0 && areaFormat.IndexOf("{acres}", StringComparison.Ordinal) < 0)
+                problems.Add("Recorded surveys: the area label format must contain {sqft} or {acres}, e.g. \"{sqft} SQ. FT.\".");
+            else r.AreaLabelFormat = areaFormat;
             r.Validate(problems);
         }
 

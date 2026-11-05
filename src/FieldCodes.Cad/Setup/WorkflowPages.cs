@@ -331,88 +331,194 @@ namespace FieldCodes.Cad.Setup
 namespace FieldCodes.Cad.Setup
 {
     /// <summary>
-    /// Settings > Diagnostics: the codes marked "intentionally ignored" on the Unknown Codes
-    /// screen. An ignored code is reported as informational, not as needing configuration; a
-    /// rule added for it later still wins. Codes are added from Unknown Codes (Mark Ignored).
+    /// Settings > Diagnostics: the codes the office has marked "intentionally ignored". An
+    /// ignored code is reported as informational, not as needing configuration; a rule added for
+    /// it later still wins. Codes are added here (Add Code...) or from Unknown Codes (Mark
+    /// Ignored); each row says why, what accounts for its points instead (a surface built from
+    /// them, or nothing), and who decided it and when.
     /// </summary>
-    [SettingsPage(Group = "Administration", Label = "Diagnostics", Order = 20, Sections = "diagnostics", Commands = "FTFPOINTS,FTF")]
+    [SettingsPage(Group = "Administration", Label = "Diagnostics", Order = 20, Sections = "diagnostics", Commands = "FTFPOINTS,FTF,FTFQC")]
     internal sealed class DiagnosticsPage : SetupPage
     {
-        private System.Windows.Forms.ListBox _codes;
+        private DataGridView _codes;
 
-        /// <summary>One ignored code and the documented reason for it.</summary>
-        private sealed class Entry
-        {
-            public string Code;
-            public CodeNote Note;
-            public override string ToString()
-            {
-                return Note != null && Note.HasReason ? Code + "  --  " + Note.Reason : Code + "  (no reason given)";
-            }
-        }
+        private const int ColCode = 0, ColReason = 1, ColExpect = 2, ColDecided = 3;
+
+        // What an ignore entry says holds its points instead ("expect" in the file), in the
+        // order the column offers them. Index IS the mapping, so keep these together.
+        private static readonly string[] ExpectValues = { string.Empty, "surface" };
+        private static readonly string[] ExpectLabels = { "Nothing (just excluded)", "A surface built from them" };
+
+        private bool _filling;
 
         public override string Title { get { return "Diagnostics"; } }
-        public override string AffectedCommands { get { return "FTFPOINTS and the FTF window's Unknown Codes, Overview and Reports"; } }
+        public override string AffectedCommands { get { return "FTFPOINTS, FTFQC and the FTF window's Unknown Codes, Overview and Reports"; } }
 
         protected override void BuildBody()
         {
             Heading("Codes you marked as intentionally ignored");
-            _codes = new System.Windows.Forms.ListBox { Width = 420, Height = 160, IntegralHeight = false, Sorted = true };
-            var remove = new System.Windows.Forms.Button { Text = "Stop Ignoring" };
+            Note("FTF draws nothing for these codes and reports their points as ignored by you, not as unknown codes. " +
+                 "A code also covers its sequence numbers (XYZ covers XYZ2). A rule added for the code later still wins. " +
+                 "Errors (blank or unreadable descriptions) are never hidden by this list.");
+
+            _codes = new DataGridView
+            {
+                Width = NoteWidth, Height = 200, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                RowHeadersVisible = false, BackgroundColor = SystemColors.Window, MultiSelect = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
+            };
+            _codes.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Code", ReadOnly = true, FillWeight = 18,
+                ToolTipText = "The field code, as shot. Add Code... adds one; Stop Ignoring takes one off." });
+            _codes.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Why it is ignored", FillWeight = 46,
+                ToolTipText = "The reason, in plain words. Point Accountability (FTFQC) lists the points of a code ignored without a reason for review." });
+            var expect = new DataGridViewComboBoxColumn { HeaderText = "What accounts for its points", FillWeight = 36, FlatStyle = FlatStyle.Flat,
+                ToolTipText = "A surface built from them: Point Accountability (FTFQC) checks each of its points is in a surface (a ground shot used " +
+                              "for the TIN). Nothing: the points are simply excluded, with the reason." };
+            expect.Items.AddRange(ExpectLabels.Cast<object>().ToArray());
+            _codes.Columns.Add(expect);
+            _codes.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Decided by", ReadOnly = true, FillWeight = 26,
+                ToolTipText = "Who last set the reason or what accounts for the points, and when. Recorded for you." });
+            _codes.DataError += (s, e) => { e.ThrowException = false; };
+            _codes.CurrentCellDirtyStateChanged += (s, e) =>
+            {
+                if (_codes.IsCurrentCellDirty && _codes.CurrentCell is DataGridViewComboBoxCell)
+                    _codes.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+            _codes.CellValueChanged += (s, e) => OnEdited(e.RowIndex, e.ColumnIndex);
+
+            var add = new Button { Text = "Add Code..." };
+            add.Click += (s, e) => AddCode();
+            Tip(add, "Type a field code to ignore. FTFPOINTS then draws nothing for it and reports its points as ignored by you.");
+            var remove = new Button { Text = "Stop Ignoring" };
             remove.Click += (s, e) =>
             {
-                if (_codes.SelectedItem != null) { _codes.Items.Remove(_codes.SelectedItem); MarkChanged(); }
-            };
-            var reason = new System.Windows.Forms.Button { Text = "Reason..." };
-            reason.Click += (s, e) =>
-            {
-                var entry = _codes.SelectedItem as Entry;
-                if (entry == null) return;
-                var text = AskReason(entry.Code, entry.Note != null ? entry.Note.Reason : string.Empty);
-                if (text == null) return;
-                var index = _codes.SelectedIndex;
-                entry.Note = new CodeNote { Code = entry.Code, Reason = text, By = Environment.UserName, At = DateTime.Now };
-                _codes.Items[index] = entry;
+                if (_codes.CurrentRow == null) return;
+                _codes.Rows.Remove(_codes.CurrentRow);
                 MarkChanged();
             };
-            AddWithSideButtons(_codes, SideButtons(remove, reason));
-            Note("Add codes from Unknown Codes > Mark Ignored. A code also covers its sequence numbers (XYZ covers XYZ2). " +
-                 "Errors (blank or unreadable descriptions) are never hidden by this list. " +
-                 "Give every code a reason: Point Accountability lists the points of a code ignored without one for review.");
+            Tip(remove, "Takes the selected code off the list: its points are reported as unknown codes again until a rule is added.");
+            AddWithSideButtons(_codes, SideButtons(add, remove));
+            Note("Give every code a reason: Point Accountability lists the points of a code ignored without one for review. " +
+                 "Codes can also be marked from the FTF window: Unknown Codes > Mark Ignored.");
         }
 
-        private string AskReason(string code, string current)
+        private static string ExpectLabel(string expect)
         {
-            using (var form = new System.Windows.Forms.Form { Text = "Why is " + code + " ignored?", Width = 460, Height = 140,
-                       StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
-                       FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false })
+            var index = Array.FindIndex(ExpectValues, v => string.Equals(v, (expect ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase));
+            return ExpectLabels[index < 0 ? 0 : index];
+        }
+
+        private static string ExpectValue(object label)
+        {
+            var index = Array.IndexOf(ExpectLabels, Convert.ToString(label));
+            return ExpectValues[index < 0 ? 0 : index];
+        }
+
+        private static string DecidedBy(CodeNote note)
+        {
+            if (note == null) return string.Empty;
+            var who = string.IsNullOrWhiteSpace(note.By) ? string.Empty : note.By.Trim();
+            var when = note.At.HasValue ? note.At.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : string.Empty;
+            return who.Length > 0 && when.Length > 0 ? who + ", " + when : who + when;
+        }
+
+        /// <summary>One row per ignored code; the row keeps its own copy of the note.</summary>
+        private void AddRow(CodeNote note)
+        {
+            _filling = true;
+            try
             {
-                var box = new System.Windows.Forms.TextBox { Dock = System.Windows.Forms.DockStyle.Top, Text = current ?? string.Empty };
-                var ok = new System.Windows.Forms.Button { Text = "OK", DialogResult = System.Windows.Forms.DialogResult.OK, Dock = System.Windows.Forms.DockStyle.Bottom };
-                form.Controls.Add(ok);
-                form.Controls.Add(box);
-                form.AcceptButton = ok;
-                if (form.ShowDialog(_codes) != System.Windows.Forms.DialogResult.OK) return null;
-                var text = (box.Text ?? string.Empty).Trim();
-                return text.Length == 0 ? null : text;
+                var index = _codes.Rows.Add(note.Code, note.Reason ?? string.Empty, ExpectLabel(note.Expect), DecidedBy(note));
+                _codes.Rows[index].Tag = note;
             }
+            finally { _filling = false; }
+        }
+
+        private void OnEdited(int row, int column)
+        {
+            if (_filling || row < 0 || row >= _codes.Rows.Count) return;
+            if (column != ColReason && column != ColExpect) return;
+            var note = _codes.Rows[row].Tag as CodeNote;
+            if (note == null) return;
+            note.Reason = (Convert.ToString(_codes.Rows[row].Cells[ColReason].Value) ?? string.Empty).Trim();
+            note.Expect = ExpectValue(_codes.Rows[row].Cells[ColExpect].Value);
+            note.By = Environment.UserName;
+            note.At = DateTime.Now;
+            _filling = true;
+            try { _codes.Rows[row].Cells[ColDecided].Value = DecidedBy(note); }
+            finally { _filling = false; }
+            MarkChanged();
+        }
+
+        private IEnumerable<string> Listed()
+        {
+            return _codes.Rows.Cast<DataGridViewRow>().Select(r => r.Tag as CodeNote).Where(n => n != null).Select(n => n.Code);
+        }
+
+        private void AddCode()
+        {
+            var typed = Prompt.Show("Field code to ignore (letters, digits, - or _):", "Ignore a code");
+            if (typed == null) return;
+            var code = typed.Trim().ToUpperInvariant();
+            string problem = null;
+            if (code.Length == 0) problem = "Type the code as it is shot, e.g. XYZ.";
+            else if (!System.Text.RegularExpressions.Regex.IsMatch(code, @"^[A-Za-z0-9_-]+$"))
+                problem = "\"" + code + "\" is not a plain field code: use letters, digits, - or _ only (no spaces).";
+            else
+            {
+                var covering = Listed().FirstOrDefault(c => DiagnosticsSettings.Matches(new[] { c }, code));
+                if (covering != null)
+                    problem = string.Equals(covering, code, StringComparison.OrdinalIgnoreCase)
+                        ? code + " is already ignored."
+                        : code + " is already covered by " + covering + " (a code covers its sequence numbers).";
+            }
+            if (problem != null)
+            {
+                MessageBox.Show(_codes.FindForm(), problem, "Ignore a code", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            AddRow(new CodeNote { Code = code, By = Environment.UserName, At = DateTime.Now });
+            var last = _codes.Rows[_codes.Rows.Count - 1];
+            _codes.CurrentCell = last.Cells[ColReason];
+            _codes.BeginEdit(true);
+            MarkChanged();
         }
 
         public override void LoadFrom(FtfSettings s)
         {
-            _codes.Items.Clear();
-            foreach (var c in s.Diagnostics != null ? s.Diagnostics.Codes() : new List<string>())
-                _codes.Items.Add(new Entry { Code = c, Note = s.Diagnostics.NoteFor(c) });
+            _codes.Rows.Clear();
+            var d = s.Diagnostics ?? new DiagnosticsSettings();
+            foreach (var code in d.Codes())
+            {
+                var note = d.NoteFor(code) ?? new CodeNote { Code = code };
+                // A copy: editing a row must not change the loaded settings before Save.
+                AddRow(new CodeNote { Code = code, Reason = note.Reason, Expect = note.Expect, By = note.By, At = note.At });
+            }
         }
 
         public override void SaveTo(FtfSettings s, ICollection<string> problems)
         {
+            _codes.EndEdit();
             if (s.Diagnostics == null) s.Diagnostics = new DiagnosticsSettings();
             var list = new NotedCodeList();
-            foreach (var entry in _codes.Items.OfType<Entry>())
+            foreach (DataGridViewRow row in _codes.Rows)
             {
-                list.Add(entry.Code);
-                if (entry.Note != null && entry.Note.HasReason) list.SetNote(entry.Note);
+                var note = row.Tag as CodeNote;
+                if (note == null || string.IsNullOrWhiteSpace(note.Code)) continue;
+                list.Add(note.Code);
+                var reason = (note.Reason ?? string.Empty).Trim();
+                var expect = (note.Expect ?? string.Empty).Trim();
+                if (reason.Length > 0 || expect.Length > 0)
+                    list.SetNote(new CodeNote
+                    {
+                        Code = note.Code,
+                        Reason = reason.Length > 0 ? reason : null,
+                        Expect = expect.Length > 0 ? expect : null,
+                        By = note.By,
+                        At = note.At
+                    });
             }
             s.Diagnostics.IgnoredCodes = list;
         }
