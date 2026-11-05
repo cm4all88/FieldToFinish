@@ -17,7 +17,7 @@ using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 namespace FieldCodes.Cad.Setup
 {
     /// <summary>
-    /// Settings > Symbols and Rotations, two tabs over the active rules file:
+    /// Settings > Symbols and Rotations, four tabs over the active rules file:
     ///
     /// Symbol standard -- the "orientation" symbol rules FTFORIENT and FTFPOINTS use to turn the
     /// markers Civil 3D draws: codes (first match wins, so a code's own rule goes above its
@@ -30,6 +30,15 @@ namespace FieldCodes.Cad.Setup
     /// rule opts in: block, layer, scale (fixed or from a field), insertion (on the point or
     /// offset), rotation (field azimuth, none, the point's marker), whether it is inserted at all
     /// (turning that on asks first: it puts a second symbol over Civil 3D's), and attribute text.
+    ///
+    /// Rotation evidence and review -- how FTFORIENT weighs road lines, how near is near for each
+    /// relationship it looks for (intersections, stop bars, posts, panels, luminaires, mains, valve
+    /// clusters, hydrants), what a fallback rule may do, hand rotations, and the QC graphics, layers
+    /// and sizes.
+    ///
+    /// Road lines and lists -- which survey linework is which road or utility line (role, layers,
+    /// codes; PMX's list until the first edit copies it into the file), and the stop sign codes, stop
+    /// sign words and luminaire codes, one a line.
     ///
     /// Blocks are chosen from the drawing's and the approved symbol library's; a library block is
     /// brought into the drawing only by Bring into Drawing. Previews draw the block turned to a
@@ -120,6 +129,39 @@ namespace FieldCodes.Cad.Setup
         private ComboBox _qcGraphics;
         private CheckBox _qcConnections;
 
+        // The rest of the orientation section: distances, QC layers and sizes (evidence tab), road
+        // lines and the stop sign and luminaire lists (their own tab). Staged by StageDetails.
+        private bool _detailsTouched;
+        private readonly Dictionary<string, NumericUpDown> _distances = new Dictionary<string, NumericUpDown>(StringComparer.OrdinalIgnoreCase);
+        private ComboBox _qcLayer;
+        private ComboBox _qcInferredLayer;
+        private NumericUpDown _qcArrow;
+        private NumericUpDown _qcText;
+        private Label _linesBanner;
+        private DataGridView _lineGrid;
+        private TextBox _stopCodes;
+        private TextBox _stopWords;
+        private TextBox _luminaireCodes;
+        private Label _stopCodesNote;
+        private Label _stopWordsNote;
+        private Label _luminaireNote;
+
+        /// <summary>The road and utility line roles, in words, as the lines grid offers them.</summary>
+        private static readonly Dictionary<string, string> RoleWords = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Centerline", "Centre line (two-way road)" },
+            { "OneWay", "One-way road (drawn in the direction of travel)" },
+            { "LaneLine", "Lane or fog line" },
+            { "Edge", "Pavement edge, curb or flowline" },
+            { "RoadContext", "Edge of concrete or sidewalk (support only)" },
+            { "StopBar", "Stop bar" },
+            { "Crosswalk", "Crosswalk" },
+            { "SignPanel", "Shot sign panel" },
+            { "WaterMain", "Water line" },
+            { "GasMain", "Gas line" },
+            { "Other", "Not a road or utility line" }
+        };
+
         /// <summary>A choice shown in words, stored as the rules file's value.</summary>
         private sealed class WordChoice
         {
@@ -189,6 +231,9 @@ namespace FieldCodes.Cad.Setup
             tabs.TabPages.Add(symbolsTab);
             tabs.TabPages.Add(blocksTab);
             tabs.TabPages.Add(evidenceTab);
+            var linesTab = new TabPage("Road lines and lists");
+            linesTab.Controls.Add(BuildLinesTab());
+            tabs.TabPages.Add(linesTab);
             root.Controls.Add(tabs, 0, 2);
 
             _problems = new Label { AutoSize = true, MaximumSize = new Size(900, 0), ForeColor = Bad, Margin = new Padding(0, 6, 0, 4) };
@@ -473,6 +518,48 @@ namespace FieldCodes.Cad.Setup
             _intersections = choose(new[] { new WordChoice("Approach", "Decide from the approach it stands on"), new WordChoice("Review", "List for review") });
             add("Signs and markings at an intersection", _intersections, null);
 
+            heading("How near is near",
+                    "How far FTFORIENT looks for the thing that turns a feature: an intersection, a stop bar, the post a sign shares, a shot sign " +
+                    "panel, a luminaire shot, a water or gas line, the rest of a valve cluster, a hydrant. Further than this, it is not related.");
+            foreach (var d in new[]
+            {
+                Tuple.Create("intersectionSearchFeet", "Intersections within (ft)",
+                             "A sign or signal pole this close to an intersection is decided by the approach it stands on: a sign faces the traffic " +
+                             "coming in, a mast arm reaches across its leg. A stop bar this close to one takes that approach's traffic. Also how far back " +
+                             "along an approach a sign may stand and still belong to it."),
+                Tuple.Create("stopBarSearchFeet", "A stop or yield sign's stop bar within (ft)",
+                             "A stop or yield sign (Road lines and lists says which) faces the traffic that stops at a stop bar this close to it, " +
+                             "standing on that traffic's right."),
+                Tuple.Create("samePostFeet", "Signs on one post within (ft)",
+                             "Signs this close together are on one post. One whose facing was not recorded (FACES N) goes to review, because signs on " +
+                             "one post often face different ways."),
+                Tuple.Create("panelSnapFeet", "A shot sign panel within (ft)",
+                             "A sign this close to a shot sign panel line (SNL) is turned by the panel: its face is on the side away from the post."),
+                Tuple.Create("luminaireSearchFeet", "A luminaire shot within (ft) of its pole",
+                             "A light's arm points from the pole to the nearest luminaire shot (Road lines and lists says which codes) this close. " +
+                             "More shots within half this distance are more arms."),
+                Tuple.Create("mainSnapFeet", "A valve on its water or gas line within (ft)",
+                             "A valve this close to a surveyed water or gas line lies along it. Further off, it is worked out with the valves around it."),
+                Tuple.Create("valveClusterFeet", "Valves in one cluster within (ft)",
+                             "Valves this close to one another are worked out together: a tee, or a hydrant's valves."),
+                Tuple.Create("hydrantSearchFeet", "A hydrant within (ft) of a valve cluster",
+                             "A water valve cluster with a hydrant this close is read as that hydrant's tee and lateral. With two hydrants about as " +
+                             "close, its valves go to review.")
+            })
+            {
+                var range = RuleDocument.OrientationDistances.First(r => r.Key == d.Item1);
+                var small = range.Minimum < 1;
+                var n = new NumericUpDown
+                {
+                    Minimum = (decimal)range.Minimum, Maximum = (decimal)range.Maximum, DecimalPlaces = small ? 2 : 0,
+                    Increment = small ? 0.5m : 5m, Width = 70
+                };
+                n.ValueChanged += (s, e) => { if (!_loading) StageDetails(); };
+                _distances[d.Item1] = n;
+                add(d.Item2, n, d.Item3 + " (" + range.Minimum.ToString("0.##", CultureInfo.InvariantCulture) + " to " +
+                                range.Maximum.ToString("0.##", CultureInfo.InvariantCulture) + " ft.)");
+            }
+
             heading("What a fallback rule may do",
                     "A fallback rule decides only when nothing recorded or related does: a light's arm toward the road, a hydrant's nozzle toward the " +
                     "street, a sign facing the traffic beside it. Apply turns the symbol (the report says it was the fallback); Review lists it with the " +
@@ -497,6 +584,30 @@ namespace FieldCodes.Cad.Setup
             Tip(_qcConnections, "Off: they are on the review list and in the report only. Never drawn as utility linework, never plotted.");
             grid.Controls.Add(_qcConnections, 0, row);
             grid.SetColumnSpan(_qcConnections, 2);
+            row++;
+
+            Func<ComboBox> layerBox = () =>
+            {
+                var c = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 260, AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems };
+                if (Context != null && Context.Drawing != null && Context.Drawing.Layers != null)
+                    foreach (var l in Context.Drawing.Layers.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)) c.Items.Add(l);
+                c.TextChanged += (s, e) => { if (!_loading) Schedule(StageDetails); };
+                return c;
+            };
+            _qcLayer = layerBox();
+            add("QC layer (made not to plot)", _qcLayer,
+                "FTFORIENT's direction arrows and notes go on this layer; FTFORIENTRESET removes them. FTFORIENT sets the layer not to plot, " +
+                "so use a layer kept for QC only, never one with plan work on it. Pick one of this drawing's layers or type a name. PMX: FTF-QC-ORIENT.");
+            _qcInferredLayer = layerBox();
+            add("Inferred connections layer (made not to plot)", _qcInferredLayer,
+                "Inferred water mains and hydrant laterals go on this layer when they are drawn (the box above); never utility linework. " +
+                "FTFORIENT sets it not to plot, so use a QC-only layer. PMX: FTF-QC-ORIENT-INFERRED.");
+            _qcArrow = new NumericUpDown { Minimum = (decimal)RuleDocument.QcArrowMinimum, Maximum = (decimal)RuleDocument.QcArrowMaximum, DecimalPlaces = 2, Increment = 0.05m, Width = 70 };
+            _qcArrow.ValueChanged += (s, e) => { if (!_loading) StageDetails(); };
+            add("QC arrow length (inches, plotted)", _qcArrow, "The length of a QC direction arrow on the sheet; the drawing length follows the annotation scale. PMX: 0.3.");
+            _qcText = new NumericUpDown { Minimum = 0.01m, Maximum = 1m, DecimalPlaces = 3, Increment = 0.01m, Width = 70 };
+            _qcText.ValueChanged += (s, e) => { if (!_loading) StageDetails(); };
+            add("QC text height (inches, plotted)", _qcText, "The height of QC notes on the sheet; the drawing height follows the annotation scale. PMX: 0.06.");
             return scroll;
         }
 
@@ -521,6 +632,305 @@ namespace FieldCodes.Cad.Setup
         {
             if (n == null) return;
             n.Value = Math.Max(n.Minimum, Math.Min(n.Maximum, (decimal)value));
+        }
+
+        /// <summary>
+        /// Which survey linework is which road or utility line (FTFORIENT reads a feature's road, stop
+        /// bar, shot sign panel, water or gas line from it), and the codes and words that make a sign a
+        /// stop or yield sign and a shot a luminaire. Each list in the rules file replaces PMX's whole
+        /// list; until the file names one, PMX's is shown.
+        /// </summary>
+        private Control BuildLinesTab()
+        {
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(6, 4, 4, 4) };
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            _linesBanner = new Label { AutoSize = true, MaximumSize = new Size(940, 0), Margin = new Padding(0, 2, 0, 4) };
+            root.Controls.Add(_linesBanner, 0, 0);
+
+            _lineGrid = new DataGridView
+            {
+                Dock = DockStyle.Fill, RowHeadersVisible = false, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                SelectionMode = DataGridViewSelectionMode.CellSelect, MultiSelect = false, EditMode = DataGridViewEditMode.EditOnEnter,
+                AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None, MinimumSize = new Size(0, 160)
+            };
+            var role = new DataGridViewComboBoxColumn
+            {
+                HeaderText = "What the line is", Width = 290, FlatStyle = FlatStyle.Flat,
+                ToolTipText = "Centre lines, one-way lines, lane lines and edges give a road's direction (Rotation evidence says how far each is trusted); " +
+                              "edges of concrete only support one. Stop bars turn stop signs and pavement arrows; a shot sign panel turns its sign; " +
+                              "water and gas lines turn their valves. Not a road or utility line: never used (for linework a pattern would otherwise catch)."
+            };
+            foreach (var name in EditableOrientationDetails.Roles) role.Items.Add(RoleWords[name]);
+            _lineGrid.Columns.Add(role);
+            _lineGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Layers", Width = 380,
+                ToolTipText = "Layer names, separated by commas; * and ? are wildcards (V-ROAD-CNTR* is every layer starting V-ROAD-CNTR)."
+            });
+            _lineGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Figure codes", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                ToolTipText = "Survey figure names or codes, separated by spaces; figure digits are ignored (EP1 is EP); * and ? are wildcards. " +
+                              "A figure's code is looked at before its layer."
+            });
+            _lineGrid.CurrentCellDirtyStateChanged += (s, e) =>
+            {
+                if (_lineGrid.IsCurrentCellDirty && _lineGrid.CurrentCell is DataGridViewComboBoxCell) _lineGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+            _lineGrid.CellValueChanged += (s, e) => { if (!_loading) Schedule(StageDetails); };
+            _lineGrid.DataError += (s, e) => { e.ThrowException = false; };
+            root.Controls.Add(_lineGrid, 0, 1);
+
+            var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Margin = new Padding(0, 4, 0, 0) };
+            buttons.Controls.Add(SmallButton("Add", "A new rule below the selected one.", AddLine));
+            buttons.Controls.Add(SmallButton("Remove", "Removes the selected rule.", RemoveLine));
+            buttons.Controls.Add(SmallButton("Move Up", "The first rule that matches wins: a specific layer goes above a wildcard that also covers it.", () => MoveLine(-1)));
+            buttons.Controls.Add(SmallButton("Move Down", null, () => MoveLine(1)));
+            buttons.Controls.Add(SmallButton("Use the PMX List", "Shows PMX's built-in list; saving takes the rules file's own list out, so PMX's applies again.", UseBuiltInLinesClicked));
+            root.Controls.Add(buttons, 0, 2);
+
+            root.Controls.Add(new Label
+            {
+                Text = "Sign and light codes, one a line. Each list in the rules file replaces PMX's whole list; an empty box is PMX's list.",
+                AutoSize = true, MaximumSize = new Size(940, 0), Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(0, 10, 0, 2)
+            }, 0, 3);
+
+            var lists = new TableLayoutPanel { AutoSize = true, ColumnCount = 3, RowCount = 4, Margin = new Padding(0) };
+            for (var i = 0; i < 3; i++) lists.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            Func<int, string, string, TextBox> list = (column, caption, tip) =>
+            {
+                lists.Controls.Add(new Label { Text = caption, AutoSize = true, Margin = new Padding(0, 2, 16, 2) }, column, 0);
+                var box = new TextBox { Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, Width = 230, Height = 110, Margin = new Padding(0, 0, 16, 2) };
+                box.TextChanged += (s, e) => { if (!_loading) Schedule(StageDetails); };
+                Tip(box, tip);
+                lists.Controls.Add(box, column, 1);
+                return box;
+            };
+            _stopCodes = list(0, "Stop and yield sign codes",
+                "Sign codes that control an approach: a stop bar or the intersection decides which way they face. Figure digits are ignored; * and ? are wildcards.");
+            _stopWords = list(1, "Words that make a sign a stop or yield sign",
+                "A sign whose description or note has one of these words (whole words; ALL WAY may have a space) is a stop or yield sign, whatever its code.");
+            _luminaireCodes = list(2, "Luminaire codes (the end of a light's arm)",
+                "Codes of a shot at a light's head: the light's arm points from the pole to the nearest one (Rotation evidence says how near).");
+            Func<int, Label> note = column =>
+            {
+                var n = new Label { AutoSize = true, MaximumSize = new Size(240, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 16, 2) };
+                lists.Controls.Add(n, column, 2);
+                return n;
+            };
+            _stopCodesNote = note(0);
+            _stopWordsNote = note(1);
+            _luminaireNote = note(2);
+            var pmx = OrientationStandard.Pmx();
+            Action<int, TextBox, List<string>> pmxButton = (column, box, values) =>
+                lists.Controls.Add(SmallButton("Use the PMX List", "Puts PMX's list back: " + string.Join(", ", values.ToArray()) + ".",
+                                               () => { box.Text = string.Join(Environment.NewLine, values.ToArray()); }), column, 3);
+            pmxButton(0, _stopCodes, pmx.StopSignCodes);
+            pmxButton(1, _stopWords, pmx.StopSignWords);
+            pmxButton(2, _luminaireCodes, pmx.LuminaireCodes);
+            root.Controls.Add(lists, 0, 4);
+            return root;
+        }
+
+        private static double DistanceOf(EditableOrientationDetails d, string key)
+        {
+            switch (key)
+            {
+                case "intersectionSearchFeet": return d.IntersectionSearchFeet;
+                case "stopBarSearchFeet": return d.StopBarSearchFeet;
+                case "samePostFeet": return d.SamePostFeet;
+                case "valveClusterFeet": return d.ValveClusterFeet;
+                case "hydrantSearchFeet": return d.HydrantSearchFeet;
+                case "mainSnapFeet": return d.MainSnapFeet;
+                case "panelSnapFeet": return d.PanelSnapFeet;
+                case "luminaireSearchFeet": return d.LuminaireSearchFeet;
+                default: return 0;
+            }
+        }
+
+        private static void SetDistance(EditableOrientationDetails d, string key, double value)
+        {
+            switch (key)
+            {
+                case "intersectionSearchFeet": d.IntersectionSearchFeet = value; break;
+                case "stopBarSearchFeet": d.StopBarSearchFeet = value; break;
+                case "samePostFeet": d.SamePostFeet = value; break;
+                case "valveClusterFeet": d.ValveClusterFeet = value; break;
+                case "hydrantSearchFeet": d.HydrantSearchFeet = value; break;
+                case "mainSnapFeet": d.MainSnapFeet = value; break;
+                case "panelSnapFeet": d.PanelSnapFeet = value; break;
+                case "luminaireSearchFeet": d.LuminaireSearchFeet = value; break;
+            }
+        }
+
+        /// <summary>Shows the lines, lists, distances and QC layers (call with _loading set).</summary>
+        private void FillDetails(EditableOrientationDetails d)
+        {
+            foreach (var n in _distances) SetNumber(n.Value, DistanceOf(d, n.Key));
+            ShowLayer(_qcLayer, d.QcLayer);
+            ShowLayer(_qcInferredLayer, d.QcInferredLayer);
+            SetNumber(_qcArrow, d.QcArrowPlotted);
+            SetNumber(_qcText, d.QcTextPlotted);
+            FillLineGrid(d.Lines);
+            _stopCodes.Text = string.Join(Environment.NewLine, d.StopSignCodes.ToArray());
+            _stopWords.Text = string.Join(Environment.NewLine, d.StopSignWords.ToArray());
+            _luminaireCodes.Text = string.Join(Environment.NewLine, d.LuminaireCodes.ToArray());
+            ShowDetailNotes(d);
+        }
+
+        /// <summary>A layer box shows the name as written, offered in its list even when this drawing lacks it.</summary>
+        private static void ShowLayer(ComboBox box, string layer)
+        {
+            var name = (layer ?? string.Empty).Trim();
+            if (name.Length > 0 && !box.Items.Cast<object>().Any(i => string.Equals(Convert.ToString(i), name, StringComparison.OrdinalIgnoreCase)))
+                box.Items.Add(name);
+            box.Text = layer ?? string.Empty;
+        }
+
+        private void FillLineGrid(IEnumerable<EditableLineRole> lines)
+        {
+            var role = (DataGridViewComboBoxColumn)_lineGrid.Columns[0];
+            _lineGrid.Rows.Clear();
+            foreach (var l in lines)
+            {
+                // A role this build does not know is shown as written, so the check can name it.
+                var words = RoleText(l.Role);
+                if (!role.Items.Contains(words)) role.Items.Add(words);
+                var i = _lineGrid.Rows.Add(words, l.LayersText, l.CodesText);
+                _lineGrid.Rows[i].Tag = l.SourceIndex;
+            }
+        }
+
+        private static string RoleText(string role)
+        {
+            string words;
+            return RoleWords.TryGetValue((role ?? string.Empty).Trim(), out words) ? words : (role ?? string.Empty).Trim();
+        }
+
+        private static string RoleName(string words)
+        {
+            var hit = RoleWords.FirstOrDefault(kv => string.Equals(kv.Value, words, StringComparison.Ordinal));
+            return hit.Key ?? (words ?? string.Empty).Trim();
+        }
+
+        private List<EditableLineRole> ReadLineGrid()
+        {
+            _lineGrid.EndEdit();
+            var result = new List<EditableLineRole>();
+            foreach (DataGridViewRow row in _lineGrid.Rows)
+            {
+                if (row.IsNewRow) continue;
+                result.Add(new EditableLineRole
+                {
+                    SourceIndex = row.Tag is int ? (int)row.Tag : -1,
+                    Role = RoleName(Convert.ToString(row.Cells[0].Value)),
+                    Layers = EditableLineRole.ParseLayers(Convert.ToString(row.Cells[1].Value)),
+                    Codes = EditableLineRole.ParseCodes(Convert.ToString(row.Cells[2].Value))
+                });
+            }
+            return result;
+        }
+
+        private void ShowDetailNotes(EditableOrientationDetails d)
+        {
+            if (d.LinesBuiltIn)
+            {
+                _linesBanner.ForeColor = Color.FromArgb(160, 90, 0);
+                _linesBanner.Text = "PMX's built-in list is in force: the rules file has none of its own. Your first edit copies these " + d.Lines.Count +
+                                    " rules into the rules file, where they become the office's to change (a list in the file replaces PMX's whole list).";
+            }
+            else
+            {
+                _linesBanner.ForeColor = SystemColors.GrayText;
+                _linesBanner.Text = "The rules file's own list (" + d.Lines.Count + " rules), in place of PMX's. A line's figure code is looked at first, " +
+                                    "then its layer; the first rule that matches wins. Use the PMX List goes back to the built-in one.";
+            }
+            Func<bool, string> say = builtIn => builtIn ? "PMX's list (the rules file names none)." : "The rules file's own list. Empty: PMX's list applies.";
+            _stopCodesNote.Text = say(d.StopSignCodesBuiltIn);
+            _stopWordsNote.Text = say(d.StopSignWordsBuiltIn);
+            _luminaireNote.Text = say(d.LuminaireCodesBuiltIn);
+        }
+
+        private int SelectedLine()
+        {
+            return _lineGrid.CurrentCell != null ? _lineGrid.CurrentCell.RowIndex : -1;
+        }
+
+        private void AddLine()
+        {
+            var at = SelectedLine() + 1;
+            if (at <= 0 || at > _lineGrid.Rows.Count) at = _lineGrid.Rows.Count;
+            _loading = true;
+            try
+            {
+                _lineGrid.Rows.Insert(at, RoleText("Other"), string.Empty, string.Empty);
+                _lineGrid.Rows[at].Tag = -1;
+            }
+            finally { _loading = false; }
+            _lineGrid.CurrentCell = _lineGrid.Rows[at].Cells[0];
+            StageDetails();
+        }
+
+        private void RemoveLine()
+        {
+            var i = SelectedLine();
+            if (i < 0 || i >= _lineGrid.Rows.Count) return;
+            _loading = true;
+            try { _lineGrid.Rows.RemoveAt(i); }
+            finally { _loading = false; }
+            StageDetails();
+        }
+
+        private void MoveLine(int step)
+        {
+            var i = SelectedLine();
+            var j = i + step;
+            if (i < 0 || j < 0 || j >= _lineGrid.Rows.Count) return;
+            var lines = ReadLineGrid();
+            var moved = lines[i];
+            lines.RemoveAt(i);
+            lines.Insert(j, moved);
+            _loading = true;
+            try { FillLineGrid(lines); }
+            finally { _loading = false; }
+            _lineGrid.CurrentCell = _lineGrid.Rows[j].Cells[0];
+            StageDetails();
+        }
+
+        private void UseBuiltInLinesClicked()
+        {
+            _loading = true;
+            try { FillLineGrid(OrientationStandard.Pmx().Lines.Select(r => EditableLineRole.From(r, -1))); }
+            finally { _loading = false; }
+            StageDetails();
+        }
+
+        /// <summary>Puts the lines, lists, distances and QC layers on the staged document.</summary>
+        private void StageDetails()
+        {
+            if (_document == null || _loading || _lineGrid == null) return;
+            var d = _document.GetOrientationDetails();
+            d.Lines = ReadLineGrid();
+            d.StopSignCodes = EditableOrientationDetails.ParseList(_stopCodes.Text);
+            d.StopSignWords = EditableOrientationDetails.ParseList(_stopWords.Text);
+            d.LuminaireCodes = EditableOrientationDetails.ParseList(_luminaireCodes.Text);
+            foreach (var n in _distances) SetDistance(d, n.Key, (double)n.Value.Value);
+            d.QcLayer = (_qcLayer.Text ?? string.Empty).Trim();
+            d.QcInferredLayer = (_qcInferredLayer.Text ?? string.Empty).Trim();
+            d.QcArrowPlotted = (double)_qcArrow.Value;
+            d.QcTextPlotted = (double)_qcText.Value;
+            _document.ApplyOrientationDetails(d);
+            // Written rows now sit at their grid places in the file (or are PMX's again).
+            for (var i = 0; i < d.Lines.Count && i < _lineGrid.Rows.Count; i++) _lineGrid.Rows[i].Tag = d.Lines[i].SourceIndex;
+            _detailsTouched = true;
+            SetDirty(true);
+            ShowDetailNotes(_document.GetOrientationDetails());
+            ShowValidation();
         }
 
         private Control BuildBlocksTab()
@@ -658,6 +1068,7 @@ namespace FieldCodes.Cad.Setup
 
             _symbolsTouched = false;
             _applyTouched = false;
+            _detailsTouched = false;
             _blockTouched.Clear();
             _extraBlockRules.Clear();
             _builtIn = _document == null || _document.SymbolsAreBuiltIn();
@@ -704,6 +1115,7 @@ namespace FieldCodes.Cad.Setup
                     Select(_qcGraphics, defaults.QcGraphics.ToString());
                     _qcConnections.Checked = defaults.QcShowInferredConnections;
                 }
+                FillDetails(_document != null ? _document.GetOrientationDetails() : EditableOrientationDetails.BuiltIn());
             }
             finally { _loading = false; }
 
@@ -1680,6 +2092,7 @@ namespace FieldCodes.Cad.Setup
             catch (IOException ex) { Problem("Not saved: " + ex.Message); return; }
             if (_symbolsTouched) _document.CopySymbolsTo(fresh);
             if (_applyTouched) _document.CopyOrientationApplyTo(fresh);
+            if (_detailsTouched) _document.CopyOrientationDetailsTo(fresh);
             foreach (var id in _blockTouched) _document.CopyBlockInsertTo(fresh, id);
 
             problems = fresh.Validate();

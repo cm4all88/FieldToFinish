@@ -7,6 +7,180 @@ using Newtonsoft.Json.Linq;
 namespace FieldCodes.Editing
 {
     /// <summary>
+    /// One exception of a drafting standard entry as Settings > Point Features > Drafting Standard
+    /// shows it, a row of the exceptions grid: every field as the grid's text. Blank or (inherit)
+    /// leaves a field to the entry; the flags are Yes or No. A row that is not right yet is kept as
+    /// typed, and <see cref="ToExceptions"/> names what is wrong with it.
+    /// </summary>
+    public sealed class EditableFeatureException
+    {
+        public const string Inherit = "(inherit)";
+
+        public string Name { get; set; }
+
+        /// <summary>A <see cref="FieldCodes.Standards.SignCategory"/> name, or blank: the exception is
+        /// for a sign of this category.</summary>
+        public string SignCategory { get; set; }
+
+        /// <summary>A regular expression on the description (or the crew's note), or blank.</summary>
+        public string When { get; set; }
+
+        public string Classification { get; set; }
+        public string Disposition { get; set; }
+        public string Symbol { get; set; }
+        public string Label { get; set; }
+
+        /// <summary>Yes, No, or blank / (inherit).</summary>
+        public string Surface { get; set; }
+        public string Rotation { get; set; }
+        public string Review { get; set; }
+
+        public string Layer { get; set; }
+        public string SymbolStyle { get; set; }
+        public string LabelStyle { get; set; }
+        public string Note { get; set; }
+
+        /// <summary>The sign categories an exception can be for (blank first: not by category).</summary>
+        public static string[] SignCategories()
+        {
+            return new[] { string.Empty }.Concat(Enum.GetNames(typeof(SignCategory)).Where(n => n != FieldCodes.Standards.SignCategory.None.ToString()))
+                                        .Concat(new[] { FieldCodes.Standards.SignCategory.None.ToString() }).ToArray();
+        }
+
+        public static EditableFeatureException From(FeatureException x)
+        {
+            return new EditableFeatureException
+            {
+                Name = x.Name ?? string.Empty,
+                SignCategory = x.SignCategory.HasValue ? x.SignCategory.Value.ToString() : string.Empty,
+                When = x.When ?? string.Empty,
+                Classification = Show(x.Classification),
+                Disposition = Show(x.Disposition),
+                Symbol = Show(x.Symbol),
+                Label = Show(x.Label),
+                Surface = Show(x.Surface),
+                Rotation = Show(x.Rotation),
+                Review = Show(x.Review),
+                Layer = x.Layer ?? string.Empty,
+                SymbolStyle = x.SymbolStyle ?? string.Empty,
+                LabelStyle = x.LabelStyle ?? string.Empty,
+                Note = x.Note ?? string.Empty
+            };
+        }
+
+        public static List<EditableFeatureException> FromList(IEnumerable<FeatureException> exceptions)
+        {
+            return (exceptions ?? Enumerable.Empty<FeatureException>()).Where(x => x != null).Select(From).ToList();
+        }
+
+        /// <summary>True when nothing has been typed in the row: it is left out, not reported.</summary>
+        public bool IsBlank
+        {
+            get
+            {
+                return new[] { Name, SignCategory, When, Layer, SymbolStyle, LabelStyle, Note }.All(string.IsNullOrWhiteSpace) &&
+                       new[] { Classification, Disposition, Symbol, Label, Surface, Rotation, Review }.All(IsInherit);
+            }
+        }
+
+        /// <summary>"Signs; Address / house number sign": what the requirement grid's Exceptions column shows.</summary>
+        public static string Summary(IEnumerable<EditableFeatureException> rows)
+        {
+            return string.Join("; ", (rows ?? Enumerable.Empty<EditableFeatureException>()).Where(x => x != null && !x.IsBlank)
+                .Select(x => !string.IsNullOrWhiteSpace(x.Name) ? x.Name.Trim()
+                           : !string.IsNullOrWhiteSpace(x.SignCategory) ? x.SignCategory.Trim()
+                           : "when " + (x.When ?? string.Empty).Trim()).ToArray());
+        }
+
+        /// <summary>
+        /// The rows as the standard reads them, in order; null when there are none. Blank rows are left
+        /// out. A row that is wrong is named in <paramref name="problems"/> ("Row 3 (Signs), exception 2
+        /// (House number): ...") and left out.
+        /// </summary>
+        public static List<FeatureException> ToExceptions(IEnumerable<EditableFeatureException> rows, string owner, ICollection<string> problems)
+        {
+            var result = new List<FeatureException>();
+            var n = 0;
+            foreach (var row in rows ?? Enumerable.Empty<EditableFeatureException>())
+            {
+                n++;
+                if (row == null || row.IsBlank) continue;
+                var x = row.ToException(owner + ", exception " + n + (string.IsNullOrWhiteSpace(row.Name) ? string.Empty : " (" + row.Name.Trim() + ")") + ": ", problems);
+                if (x != null) result.Add(x);
+            }
+            return result.Count == 0 ? null : result;
+        }
+
+        /// <summary>The exception, or null with what is wrong added to <paramref name="problems"/> (each prefixed by <paramref name="where"/>).</summary>
+        public FeatureException ToException(string where, ICollection<string> problems)
+        {
+            var before = problems.Count;
+            var x = new FeatureException { Name = Blank(Name), When = Blank(When) };
+
+            if (!IsInherit(SignCategory))
+            {
+                SignCategory category;
+                if (Enum.TryParse(SignCategory.Trim(), true, out category) && Enum.IsDefined(typeof(SignCategory), category)) x.SignCategory = category;
+                else problems.Add(where + "sign category '" + SignCategory.Trim() + "' is not one of " +
+                                  string.Join(", ", Enum.GetNames(typeof(SignCategory))) + ".");
+            }
+            if (!x.SignCategory.HasValue && x.When == null && problems.Count == before)
+                problems.Add(where + "needs a sign category or a description pattern (when), to say which points it is for.");
+            if (x.When != null)
+            {
+                try { new System.Text.RegularExpressions.Regex(x.When); }
+                catch (ArgumentException ex)
+                {
+                    problems.Add(where + "the description pattern '" + x.When + "' is not a valid regular expression (" + ex.Message + ").");
+                }
+            }
+
+            x.Classification = Read<PointClass>(Classification, "class", where, problems);
+            x.Disposition = Read<IntendedDisposition>(Disposition, "disposition", where, problems);
+            x.Symbol = Read<SymbolRequirement>(Symbol, "symbol", where, problems);
+            x.Label = Read<LabelRequirement>(Label, "label", where, problems);
+            x.Surface = ReadFlag(Surface, "surface", where, problems);
+            x.Rotation = ReadFlag(Rotation, "rotate", where, problems);
+            x.Review = ReadFlag(Review, "review", where, problems);
+            x.Layer = Blank(Layer);
+            x.SymbolStyle = Blank(SymbolStyle);
+            x.LabelStyle = Blank(LabelStyle);
+            x.Note = Blank(Note);
+            return problems.Count == before ? x : null;
+        }
+
+        private static bool IsInherit(string text)
+        {
+            return string.IsNullOrWhiteSpace(text) || string.Equals(text.Trim(), Inherit, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static T? Read<T>(string text, string field, string where, ICollection<string> problems) where T : struct
+        {
+            if (IsInherit(text)) return null;
+            T value;
+            if (Enum.TryParse(text.Trim(), true, out value) && Enum.IsDefined(typeof(T), value)) return value;
+            problems.Add(where + field + " '" + text.Trim() + "' is not one of " + string.Join(", ", Enum.GetNames(typeof(T))) + " (or " + Inherit + ").");
+            return null;
+        }
+
+        private static bool? ReadFlag(string text, string field, string where, ICollection<string> problems)
+        {
+            if (IsInherit(text)) return null;
+            var t = text.Trim();
+            if (string.Equals(t, "Yes", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "true", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(t, "No", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "false", StringComparison.OrdinalIgnoreCase)) return false;
+            problems.Add(where + field + " must be Yes, No or " + Inherit + " (not '" + t + "').");
+            return null;
+        }
+
+        private static string Show<T>(T? value) where T : struct { return value.HasValue ? value.Value.ToString() : Inherit; }
+
+        private static string Show(bool? value) { return value.HasValue ? (value.Value ? "Yes" : "No") : Inherit; }
+
+        private static string Blank(string s) { return string.IsNullOrWhiteSpace(s) ? null : s.Trim(); }
+    }
+
+    /// <summary>
     /// The drafting standard per feature ("featureStandard"), as Settings > Point Features edits it.
     /// The file lists only what the office changes from the built-in PMX standard
     /// (<see cref="FeatureStandard.Pmx"/>): an entry replaces the built-in entry with the same key

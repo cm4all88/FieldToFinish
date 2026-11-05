@@ -140,4 +140,111 @@ public sealed class RuleDocumentFeatureStandardTests
         Assert.Equal("office note", (string?)section["//"]);
         Assert.Equal("every ground shot checked this year", (string?)section["requirements"]![0]!["note"]);
     }
+
+    // ------------------------------------------------------------ exceptions, one grid row each
+
+    [Fact]
+    public void ExceptionsRoundTripThroughTheirGridRowsUnchanged()
+    {
+        var doc = Factory();
+        var rows = doc.GetFeatureRequirements();
+        var signs = rows.Single(r => r.Name == "Signs");
+        Assert.Equal(3, signs.Exceptions!.Count);
+
+        var grid = EditableFeatureException.FromList(signs.Exceptions);
+        Assert.Equal("Address", grid[0].SignCategory);
+        Assert.Equal("PointStyle", grid[0].Symbol);
+        Assert.Equal("No", grid[0].Rotation);
+        Assert.Equal(EditableFeatureException.Inherit, grid[0].Label);
+        Assert.Equal(EditableFeatureException.Inherit, grid[0].Review);
+        Assert.Equal(string.Empty, grid[0].When);
+        Assert.Equal("Address / house number sign; Private sign; Other descriptive sign", EditableFeatureException.Summary(grid));
+
+        var problems = new List<string>();
+        foreach (var r in rows) r.Exceptions = EditableFeatureException.ToExceptions(EditableFeatureException.FromList(r.Exceptions), "Row", problems);
+        Assert.Empty(problems);
+        Assert.True(Newtonsoft.Json.Linq.JToken.DeepEquals(
+            Newtonsoft.Json.Linq.JArray.FromObject(FeatureStandard.Pmx().Requirements.Single(r => r.Name == "Signs").Exceptions!),
+            Newtonsoft.Json.Linq.JArray.FromObject(rows.Single(r => r.Name == "Signs").Exceptions!)));
+        Assert.All(rows.Where(r => r.Name != "Signs"), r => Assert.Null(r.Exceptions));
+
+        doc.SetFeatureStandard(rows, doc.GetSignCategories());
+        Assert.True(doc.FeatureStandardIsBuiltIn());                // nothing changed: nothing written
+    }
+
+    [Fact]
+    public void AnExceptionAddedInTheGridIsSavedInTheSameShapeAndApplies()
+    {
+        var doc = Factory();
+        var rows = doc.GetFeatureRequirements();
+        var signs = rows.Single(r => r.Name == "Signs");
+        var grid = EditableFeatureException.FromList(signs.Exceptions);
+        grid[1].Review = "Yes";
+        grid.Add(new EditableFeatureException
+        {
+            Name = " Memorial sign ", SignCategory = "", When = @"\bMEMORIAL\b", Classification = EditableFeatureException.Inherit,
+            Symbol = "PointStyle", Label = "None", Rotation = "No", Review = "", Note = "A roadside memorial: not a traffic sign."
+        });
+        grid.Add(new EditableFeatureException { Classification = EditableFeatureException.Inherit });     // a blank row: left out
+        var problems = new List<string>();
+        signs.Exceptions = EditableFeatureException.ToExceptions(grid, "Row 5 (Signs)", problems);
+        Assert.Empty(problems);
+        doc.SetFeatureStandard(rows, doc.GetSignCategories());
+
+        var written = (Newtonsoft.Json.Linq.JArray)Newtonsoft.Json.Linq.JObject.Parse(doc.Render())["featureStandard"]!["requirements"]![0]!["exceptions"]!;
+        Assert.Equal(4, written.Count);
+        var memorial = (Newtonsoft.Json.Linq.JObject)written[3];
+        Assert.Equal(new[] { "label", "name", "note", "rotation", "symbol", "when" }, memorial.Properties().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Equal("Memorial sign", (string?)memorial["name"]);
+        Assert.Equal("PointStyle", (string?)memorial["symbol"]);
+        Assert.False((bool)memorial["rotation"]!);
+        Assert.True((bool)written[1]["review"]!);
+        Assert.Equal("Private", (string?)written[1]["signCategory"]);
+
+        var cfg = doc.CompileCandidate();
+        var memorialSign = Resolve(cfg, "SN MEMORIAL");
+        Assert.Equal(LabelRequirement.None, memorialSign.Label);
+        Assert.False(memorialSign.Rotation);
+        Assert.Contains("Memorial sign", memorialSign.Exceptions);
+        Assert.True(Resolve(cfg, "SN PRIVATE DRIVE").Review);
+
+        // Read back into the grid: the same rows, as typed (trimmed).
+        var again = EditableFeatureException.FromList(doc.GetFeatureRequirements().Single(r => r.Name == "Signs").Exceptions);
+        Assert.Equal("Memorial sign", again[3].Name);
+        Assert.Equal(@"\bMEMORIAL\b", again[3].When);
+        Assert.Equal("Yes", again[1].Review);
+    }
+
+    [Fact]
+    public void EachExceptionMistakeIsNamedByItsRow()
+    {
+        var grid = new List<EditableFeatureException>
+        {
+            new() { Name = "No condition", Symbol = "PointStyle" },
+            new() { When = "(unclosed" },
+            new() { Name = "Stop", SignCategory = "Stop" },
+            new() { SignCategory = "Private", Classification = "Tree", Disposition = "Gone", Symbol = "Big", Label = "Loud" },
+            new() { SignCategory = "Address", Surface = "Maybe", Rotation = "1", Review = "yes" },
+            new() { Name = "Fine", SignCategory = "warning", Rotation = "no" }
+        };
+        var problems = new List<string>();
+        var read = EditableFeatureException.ToExceptions(grid, "Row 5 (Signs)", problems);
+
+        Assert.Contains("Row 5 (Signs), exception 1 (No condition): needs a sign category or a description pattern (when), to say which points it is for.", problems);
+        Assert.Contains(problems, p => p.StartsWith("Row 5 (Signs), exception 2: the description pattern '(unclosed' is not a valid regular expression"));
+        Assert.Contains(problems, p => p.StartsWith("Row 5 (Signs), exception 3 (Stop): sign category 'Stop' is not one of None, Regulatory, Warning"));
+        Assert.DoesNotContain(problems, p => p.StartsWith("Row 5 (Signs), exception 3 (Stop): needs"));     // one problem, the real one
+        Assert.Contains(problems, p => p.StartsWith("Row 5 (Signs), exception 4: class 'Tree' is not one of Feature, Surface"));
+        Assert.Contains(problems, p => p.StartsWith("Row 5 (Signs), exception 4: disposition 'Gone' is not one of"));
+        Assert.Contains(problems, p => p.StartsWith("Row 5 (Signs), exception 4: symbol 'Big' is not one of None, PointStyle, Specific"));
+        Assert.Contains(problems, p => p.StartsWith("Row 5 (Signs), exception 4: label 'Loud' is not one of AsPlanned, None, Required, PointLabel"));
+        Assert.Contains("Row 5 (Signs), exception 5: surface must be Yes, No or (inherit) (not 'Maybe').", problems);
+        Assert.Contains("Row 5 (Signs), exception 5: rotate must be Yes, No or (inherit) (not '1').", problems);
+        Assert.Equal(9, problems.Count);
+
+        var fine = Assert.Single(read!);
+        Assert.Equal(SignCategory.Warning, fine.SignCategory);
+        Assert.False(fine.Rotation);
+        Assert.Null(EditableFeatureException.ToExceptions(new List<EditableFeatureException> { new() }, "Row 1", problems));
+    }
 }

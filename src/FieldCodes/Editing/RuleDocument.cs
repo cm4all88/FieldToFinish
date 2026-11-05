@@ -402,6 +402,7 @@ namespace FieldCodes.Editing
             WetlandBufferProblems(problems);
             BenchProblems(problems);
             LineLabelProblems(problems);
+            OrientationDetailProblems(problems);
             if (problems.Count > 0) return problems;
 
             RulesConfig cfg;
