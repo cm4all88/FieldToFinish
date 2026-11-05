@@ -272,10 +272,15 @@ public sealed class StripTrimRegressionTests
 {
     private const double Tol = EasementBuilder.DefaultTolerance;
 
-    [Fact(Timeout = 10000)]
-    public async Task SmokeDrawingUtilityEasement()
+    /// <summary>The smoke drawing's utility easement must build, split and merge in well under
+    /// 10 s; a hang fails here rather than stalling the suite. The work runs on its own thread
+    /// and only the work is timed: with xUnit's Timeout, the test also had to wait for one of
+    /// xUnit's few worker threads to resume after the work (60 ms alone), and in the full
+    /// suite that wait alone passed 10 s in about half the runs.</summary>
+    [Fact]
+    public void SmokeDrawingUtilityEasement()
     {
-        await Task.Run(() =>
+        var work = Task.Factory.StartNew(() =>
         {
             var route = new List<Course>
             {
@@ -293,7 +298,11 @@ public sealed class StripTrimRegressionTests
             var merged = StripTrim.Merge(split, new[] { 1 }, Tol, out var failure);
             Assert.True(merged != null, failure);
             Assert.Equal(20 * (350 + 50 * Math.PI), Math.Abs(Loops.SignedArea(merged!)), 4);
-        });
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        var finished = ((IAsyncResult)work).AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(10));
+        Assert.True(finished, "The smoke drawing's utility easement did not finish in 10 s.");
+        // Its own assertion, if one failed, as itself.
+        if (work.Exception != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(work.Exception.InnerException ?? work.Exception).Throw();
     }
 }
 
