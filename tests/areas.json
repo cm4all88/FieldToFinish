@@ -268,6 +268,7 @@
         "FullyQualifiedName~FieldCodes.Tests.LabelPlacerTests.",
         "FullyQualifiedName~FieldCodes.Tests.LayerCatalogTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineFeatureEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineLabelRulesEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
         "FullyQualifiedName~FieldCodes.Tests.OrientationReviewTests.",
         "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
@@ -403,6 +404,7 @@
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
         "FullyQualifiedName~FieldCodes.Tests.LayerCatalogCoverageTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineLabelRulesEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
         "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointAccountingTests.",
@@ -542,6 +544,7 @@
         "FullyQualifiedName~FieldCodes.Tests.LineContinuityTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineDiagnosticsTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineLabelPlannerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineLabelRulesEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineNameAliasTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineSideTests.",
         "FullyQualifiedName~FieldCodes.Tests.LineworkCodingTests.",
@@ -867,7 +870,8 @@
         "tests/FieldCodes.Tests/RuleDocumentFeatureStandardTests.cs",
         "tests/FieldCodes.Tests/PointFeatureEditingTests.cs",
         "tests/FieldCodes.Tests/SymbolStandardEditingTests.cs",
-        "tests/FieldCodes.Tests/AuditRegressionTests.cs"
+        "tests/FieldCodes.Tests/AuditRegressionTests.cs",
+        "tests/FieldCodes.Tests/LineLabelRulesEditingTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
@@ -876,6 +880,7 @@
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
+        "FullyQualifiedName~FieldCodes.Tests.LineLabelRulesEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.NoteLabelTests.",
         "FullyQualifiedName~FieldCodes.Tests.OrientationSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.PointFeatureEditingTests.",

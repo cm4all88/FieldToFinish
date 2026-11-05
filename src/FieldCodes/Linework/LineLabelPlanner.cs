@@ -78,6 +78,17 @@ namespace FieldCodes.Linework
     /// </summary>
     public static class LineLabelPlanner
     {
+        /// <summary>What FTFLABELSTAIRS says when the rules file has no stairsLabelFormat.</summary>
+        public const string DefaultStairsFormat = "{count} STEPS";
+
+        /// <summary>What FTFLABELSTAIRS writes for this many stair lines: the wording with {count}
+        /// (exactly so, in lower case) replaced by the number; the built-in wording when there is
+        /// none. Settings > Line Labels previews the same.</summary>
+        public static string StairsText(string format, int count)
+        {
+            return (format ?? DefaultStairsFormat).Replace("{count}", count.ToString(CultureInfo.InvariantCulture));
+        }
+
         public static IList<PlannedLineLabel> Plan(ILinePath path, LineLabelOptions options)
         {
             if (path == null) throw new ArgumentNullException("path");
