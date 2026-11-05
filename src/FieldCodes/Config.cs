@@ -57,7 +57,7 @@ namespace FieldCodes
         /// turn these into figures; this tool labels the resulting polylines, so the
         /// points themselves need no rule and are not reported as unhandled.
         /// </summary>
-        [JsonProperty("lineworkCodes")]
+        [JsonProperty("lineworkCodes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> LineworkCodes { get; set; }
 
         [JsonIgnore]
@@ -81,7 +81,7 @@ namespace FieldCodes
         /// text layer the code's data-carrying rule uses. Every entry is an explicit
         /// office decision; an unlisted bare code still does nothing.
         /// </summary>
-        [JsonProperty("symbolLabels")]
+        [JsonProperty("symbolLabels", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<SymbolLabelRule> SymbolLabels { get; set; }
 
         /// <summary>
@@ -101,7 +101,7 @@ namespace FieldCodes
         /// <summary>Codes whose points belong in the control table -- the survey
         /// control and found monuments. Matched against the first token of the
         /// raw description, exactly.</summary>
-        [JsonProperty("controlCodes")]
+        [JsonProperty("controlCodes", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> ControlCodes { get; set; }
 
         /// <summary>
@@ -119,7 +119,7 @@ namespace FieldCodes
         [JsonProperty("codes")]
         public List<CodeRule> Codes { get; set; }
 
-        [JsonProperty("modifiers")]
+        [JsonProperty("modifiers", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<ModifierRule> Modifiers { get; set; }
 
         /// <summary>FTFBENCH: the outline and size label drawn from a bench's two end shots.</summary>

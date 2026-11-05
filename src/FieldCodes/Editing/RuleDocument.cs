@@ -403,6 +403,7 @@ namespace FieldCodes.Editing
             BenchProblems(problems);
             LineLabelProblems(problems);
             OrientationDetailProblems(problems);
+            CodeListProblems(problems);
             if (problems.Count > 0) return problems;
 
             RulesConfig cfg;
