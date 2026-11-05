@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TRACE review queue</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ui{font-family:"Segoe UI",Inter,system-ui,sans-serif}
+.wm{font-family:Montserrat,"Segoe UI",sans-serif;font-weight:800;font-style:italic;letter-spacing:.01em}
+.mono{font-family:"IBM Plex Mono",Consolas,monospace}
+.fl{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:6px;font-size:13px}
+.fl.on{background:#fff;box-shadow:inset 3px 0 0 #F2A93B;font-weight:600}
+.n{font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:#fff;border:1px solid #D5DDE5}
+.btn{font:inherit;font-size:12px;border:1px solid #BAC5D0;background:#fff;border-radius:4px;padding:6px 11px;color:#0B2E4F}
+.btn.p{background:#1E6FB8;border-color:#1E6FB8;color:#fff;font-weight:600}
+th{font-size:11px;text-align:left;color:#52627A;font-weight:600;padding:7px 10px;background:#EEF2F5;border-bottom:1px solid #D5DDE5}
+td{font-size:12px;padding:8px 10px;border-bottom:1px solid #E3E9EE;vertical-align:top;line-height:1.35}
+tr.sel td{background:#FFF6E6}
+.b{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap}
+.b.m{background:#E8F4DC;color:#2D5A12}
+.b.i{background:#FFF1D6;color:#7A4800;border:1px dashed #9A5B00}
+.b.t{background:#E3E9EE;color:#2B3A4D}
+.b.c{background:#E3E9EE;color:#2B3A4D}
+</style>
+</helmet>
+<div class="ui" style="width:1100px;height:660px;background:#F4F6F9;color:#0B2E4F;border:1px solid #9AA8B6;box-sizing:border-box;display:flex;flex-direction:column">
+
+<div style="height:38px;background:#0B2E4F;color:#fff;display:flex;align-items:center;padding:0 14px;gap:10px;flex:none">
+<svg viewBox="0 0 48 48" width="22" height="22" role="img" aria-label="TRACE mark"><rect width="48" height="48" rx="10" fill="#0B2E4F"/><path d="M5 36 C16 31 30 32 44 21" fill="none" stroke="#7CC84A" stroke-width="3" stroke-linecap="round"/><path d="M6 30 L17 17 L24 24 L33 11 L43 28" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="10" r="3.4" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M14 5.2v9.6M9.2 10h9.6" stroke="#fff" stroke-width="1.2"/></svg>
+<span class="wm" style="font-size:13px">TRACE</span><span style="font-size:13px;color:#9FB3C8">Review queue &middot; sample.dwg</span>
+</div>
+
+<div style="flex:1;display:flex;min-height:0">
+<div style="width:230px;flex:none;background:#EEF2F5;border-right:1px solid #D5DDE5;padding:14px 12px;display:flex;flex-direction:column;gap:4px">
+<div class="fl on"><span>All open</span><span class="n" style="background:#F2A93B;border-color:#F2A93B">7</span></div>
+<div class="fl"><span>Codes with no rule</span><span class="n">3</span></div>
+<div class="fl"><span>Lines not identified</span><span class="n">2</span></div>
+<div class="fl"><span>Label conflicts</span><span class="n">1</span></div>
+<div class="fl"><span>Missing connections</span><span class="n">1</span></div>
+<div style="height:1px;background:#D5DDE5;margin:8px 0"></div>
+<div class="fl"><span>Reviewed</span><span class="n">0</span></div>
+<div class="fl"><span>Your edits (kept)</span><span class="n">4</span></div>
+<div style="margin-top:auto;font-size:11px;line-height:1.5;color:#2B3A4D;background:#fff;border:1px solid #D5DDE5;border-radius:6px;padding:10px 12px">
+<b style="display:block;font-size:12px;margin-bottom:3px">How to read the Basis column</b>
+<span class="b m">&#10003; Measured</span> came from the survey data as shot.<br><span class="b i" style="margin-top:4px">&#8943; Inferred</span> worked out by TRACE. Verify it.
+</div>
+</div>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="padding:14px 18px 8px;display:flex;align-items:center;gap:10px">
+<div style="font-size:18px;font-weight:600">7 items need a decision</div>
+<div style="margin-left:auto;display:flex;gap:8px"><button class="btn">Export CSV</button><button class="btn">Refresh</button></div>
+</div>
+
+<div style="margin:0 18px;border:1px solid #D5DDE5;border-radius:6px;overflow:hidden;background:#fff">
+<table style="border-collapse:collapse;width:100%">
+<thead><tr><th style="width:150px">Item</th><th>What TRACE found</th><th style="width:96px">Basis</th><th style="width:190px">Suggested next step</th></tr></thead>
+<tbody>
+<tr><td><b>Point 31</b><br><span class="mono">XYZ 12</span></td><td>No rule for this code. Nothing was drawn for it.</td><td><span class="b m">&#10003; Measured</span></td><td>Add a point feature, or ignore the code</td></tr>
+<tr><td><b>Point 44</b><br><span class="mono">BCN 3</span></td><td>No rule for this code. Nothing was drawn for it.</td><td><span class="b m">&#10003; Measured</span></td><td>Add a point feature, or ignore the code</td></tr>
+<tr><td><b>Point 52</b><br><span class="mono">SGN 90</span></td><td>No rule for this code. Your profile has a similar code, <span class="mono">SIGN</span>, but TRACE did not apply it.</td><td><span class="b m">&#10003; Measured</span></td><td>Add an alias, or fix the point code</td></tr>
+<tr class="sel"><td><b>Polyline</b><br><span class="mono">C-FENC</span></td><td>The layer is shared by two features (Fence, Gate). TRACE will not choose between them.</td><td><span class="b i">&#8943; Inferred</span></td><td>Assign the feature</td></tr>
+<tr><td><b>Polyline</b><br><span class="mono">0</span></td><td>No figure name, note or layer identifies this line.</td><td><span class="b i">&#8943; Inferred</span></td><td>Assign a feature, or ignore</td></tr>
+<tr><td><b>Label</b><br><span class="mono">POLE 1234</span></td><td>Could not avoid overlapping the curb text within the search area.</td><td><span class="b c">TRACE placement</span></td><td>Move it by hand. TRACE will keep it</td></tr>
+<tr><td><b>Fence</b><br>2 ends</td><td>Ends are 14.2 ft apart with no connecting segment.</td><td><span class="b m">&#10003; Measured</span></td><td>Check the field notes, then connect or leave</td></tr>
+</tbody></table>
+</div>
+
+<div style="margin:12px 18px 0;border:1px solid #E8C37A;background:#FFF6E6;border-radius:6px;padding:12px 14px;display:flex;gap:16px;align-items:center">
+<div style="flex:1;font-size:12px;line-height:1.5"><b style="font-size:13px">Polyline on C-FENC</b><br>Identified by layer only. Two features use this layer, so the label standard is not applied until you choose.</div>
+<div style="display:flex;gap:8px;flex:none"><button class="btn">Zoom to</button><button class="btn p">Assign feature &#9662;</button><button class="btn">Ignore with note</button></div>
+</div>
+
+<div style="margin-top:auto;border-top:1px solid #D5DDE5;background:#EEF2F5;padding:10px 18px;font-size:12px;color:#2B3A4D;display:flex;gap:10px;align-items:center">
+Ignored items stay listed, with your note. Nothing is removed from the queue silently.
+<span style="margin-left:auto;color:#52627A">Reviewed 0 of 7</span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":660}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TRACE profiles and standards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ui{font-family:"Segoe UI",Inter,system-ui,sans-serif}
+.wm{font-family:Montserrat,"Segoe UI",sans-serif;font-weight:800;font-style:italic;letter-spacing:.01em}
+.mono{font-family:"IBM Plex Mono",Consolas,monospace}
+.pf{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:13px;border:1px solid transparent}
+.pf.on{background:#fff;border-color:#1E6FB8;box-shadow:inset 3px 0 0 #1E6FB8;font-weight:600}
+.tag{font-size:10px;font-weight:600;letter-spacing:.04em;padding:2px 6px;border-radius:3px;background:#E3E9EE;color:#2B3A4D;margin-left:auto}
+.tab{padding:9px 12px;font-size:12px;color:#52627A;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#0B2E4F;font-weight:600;border-bottom-color:#1E6FB8}
+.btn{font:inherit;font-size:12px;border:1px solid #BAC5D0;background:#fff;border-radius:4px;padding:6px 11px;color:#0B2E4F}
+.btn.p{background:#1E6FB8;border-color:#1E6FB8;color:#fff;font-weight:600}
+th{font-size:11px;text-align:left;color:#52627A;font-weight:600;padding:7px 10px;background:#EEF2F5;border-bottom:1px solid #D5DDE5}
+td{font-size:12px;padding:7px 10px;border-bottom:1px solid #E3E9EE}
+.sum{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;border:1px solid #D5DDE5;background:#fff}
+</style>
+</helmet>
+<div class="ui" style="width:1100px;height:760px;background:#F4F6F9;color:#0B2E4F;border:1px solid #9AA8B6;box-sizing:border-box;display:flex;flex-direction:column">
+
+<div style="height:38px;background:#0B2E4F;color:#fff;display:flex;align-items:center;padding:0 14px;gap:10px;flex:none">
+<svg viewBox="0 0 48 48" width="22" height="22" role="img" aria-label="TRACE mark"><rect width="48" height="48" rx="10" fill="#0B2E4F"/><path d="M5 36 C16 31 30 32 44 21" fill="none" stroke="#7CC84A" stroke-width="3" stroke-linecap="round"/><path d="M6 30 L17 17 L24 24 L33 11 L43 28" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="10" r="3.4" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M14 5.2v9.6M9.2 10h9.6" stroke="#fff" stroke-width="1.2"/></svg>
+<span class="wm" style="font-size:13px">TRACE</span><span style="font-size:13px;color:#9FB3C8">Profiles &amp; Standards</span>
+</div>
+
+<div style="flex:1;display:flex;min-height:0">
+<div style="width:260px;flex:none;background:#EEF2F5;border-right:1px solid #D5DDE5;padding:14px 12px;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#52627A;padding:0 4px">Built in</div>
+<div class="pf"><span>TRACE Default</span><span class="tag">READ-ONLY</span></div>
+<div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#52627A;padding:10px 4px 0">Yours</div>
+<div class="pf on"><span>Acme Survey Standard</span><span class="tag" style="background:#E3EEF9;color:#14588F">OFFICE</span></div>
+<div class="pf"><span>County DOT Roads</span><span class="tag">CLIENT</span></div>
+<div class="pf"><span>Plat Set 2026</span><span class="tag">PROJECT</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+<button class="btn">New</button><button class="btn">Duplicate</button><button class="btn">Import&hellip;</button><button class="btn">Export&hellip;</button>
+</div>
+<div style="margin-top:auto;background:#fff;border:1px solid #D5DDE5;border-radius:6px;padding:10px 12px;font-size:11px;line-height:1.5;color:#2B3A4D">
+<b style="display:block;font-size:12px;margin-bottom:3px">Which profile applies</b>
+1. Profile saved in the drawing<br>2. Your office profile<br>3. TRACE Default
+<div style="margin-top:6px;color:#52627A">Updating TRACE never overwrites your profiles.</div>
+</div>
+</div>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="padding:14px 20px 0;display:flex;align-items:baseline;gap:12px"><div style="font-size:20px;font-weight:600">Acme Survey Standard</div><div style="font-size:12px;color:#52627A">Office profile &middot; last saved today 09:42</div></div>
+<div style="display:flex;padding:6px 14px 0;border-bottom:1px solid #D5DDE5;overflow:hidden">
+<div class="tab">Layers &amp; styles</div><div class="tab">Point features</div><div class="tab on">Line features</div><div class="tab">Labels &amp; text</div><div class="tab">Trees</div><div class="tab">Blocks &amp; rotation</div><div class="tab">Clean up &amp; order</div><div class="tab">Tables</div>
+</div>
+
+<div style="padding:14px 20px;display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn p">Import from CSV&hellip;</button><button class="btn">Export CSV</button><button class="btn">Add line feature</button>
+<div style="margin-left:auto;font-size:12px;color:#52627A">21 line features</div>
+</div>
+
+<div style="border:1px solid #D5DDE5;border-radius:6px;overflow:hidden;background:#fff">
+<table style="border-collapse:collapse;width:100%">
+<thead><tr><th>Code</th><th>Name</th><th>Layer</th><th>Label text</th><th>Side</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td class="mono">FNC</td><td>Fence</td><td class="mono">C-FENC</td><td>CHAIN LINK FENCE</td><td>Left</td><td style="color:#52627A">Import fences.csv</td></tr>
+<tr><td class="mono">EOP</td><td>Edge of pavement</td><td class="mono">C-ROAD-EDGE</td><td>EDGE OF PAVEMENT</td><td>On line</td><td style="color:#52627A">Import fences.csv</td></tr>
+<tr><td class="mono">CRB</td><td>Curb</td><td class="mono">C-ROAD-CURB</td><td>CURB</td><td>Right</td><td style="color:#52627A">Typed in</td></tr>
+<tr><td class="mono">RWC</td><td>Concrete wall</td><td class="mono">C-WALL-CONC</td><td>CONC WALL</td><td>On line</td><td style="color:#52627A">Import fences.csv</td></tr>
+<tr><td class="mono">TOS</td><td>Top of slope</td><td class="mono">C-TOPO-SLOP</td><td style="color:#52627A">(no label)</td><td>On line</td><td style="color:#52627A">Typed in</td></tr>
+</tbody></table>
+</div>
+
+<div style="border:1px solid #D5DDE5;border-radius:6px;background:#fff;padding:12px 14px">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="font-size:13px;font-weight:600">Last import: fences.csv</div>
+<span class="sum"><b style="color:#3E7A1C">18</b> added</span><span class="sum"><b>2</b> updated</span><span class="sum"><b>1</b> unchanged</span><span class="sum" style="border-color:#E8C37A;background:#FFF6E6"><b style="color:#9A5B00">1</b> rejected</span>
+<span style="margin-left:auto;font-size:11px;color:#52627A">Every row is listed. Nothing is skipped silently.</span></div>
+<table style="border-collapse:collapse;width:100%">
+<thead><tr><th style="width:70px">Line</th><th style="width:90px">Code</th><th style="width:110px">Result</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>14</td><td class="mono">WALLX</td><td><b style="color:#9A5B00">Rejected</b></td><td>Placement "Sideways" is not one of Left, Right, OnLine.</td></tr>
+<tr><td>9</td><td class="mono">EOP</td><td><b>Updated</b></td><td>Layer changed from C-ROAD to C-ROAD-EDGE.</td></tr>
+<tr><td>3</td><td class="mono">FNC</td><td><b style="color:#3E7A1C">Added</b></td><td style="color:#52627A">New line feature.</td></tr>
+</tbody></table>
+</div>
+</div>
+
+<div style="border-top:1px solid #D5DDE5;background:#EEF2F5;padding:10px 20px;display:flex;align-items:center;gap:10px;flex:none;font-size:12px">
+<span style="color:#52627A">Saving to <b style="color:#0B2E4F">Office</b> &middot; <span class="mono">%APPDATA%\TRACE</span></span>
+<span style="margin-left:auto;color:#3E7A1C;font-weight:600">&#10003; Profile is valid</span>
+<button class="btn">Revert</button><button class="btn p">Save</button>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

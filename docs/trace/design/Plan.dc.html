@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TRACE build plan and decisions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@1,800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ui{font-family:"Segoe UI",Inter,system-ui,sans-serif}
+.wm{font-family:Montserrat,"Segoe UI",sans-serif;font-weight:800;font-style:italic;letter-spacing:.01em}
+.mono{font-family:"IBM Plex Mono",Consolas,monospace}
+.h{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#52627A;margin:0 0 10px}
+th{font-size:11px;text-align:left;color:#52627A;font-weight:600;padding:6px 8px;background:#EEF2F5;border-bottom:1px solid #D5DDE5}
+td{font-size:12px;padding:7px 8px;border-bottom:1px solid #E3E9EE;vertical-align:top;line-height:1.4}
+.ph{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #E3E9EE;font-size:12px;line-height:1.4}
+.ph .n{width:24px;height:24px;border-radius:12px;background:#0B2E4F;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;font-size:12px}
+.ph .w{margin-left:auto;font-weight:600;white-space:nowrap;color:#14588F}
+.dq{display:flex;gap:10px;font-size:12px;line-height:1.45;padding:6px 0}
+.dq b{flex:none;width:18px;color:#9A5B00}
+</style>
+</helmet>
+<div class="ui" style="width:1100px;height:760px;background:#F4F6F9;color:#0B2E4F;box-sizing:border-box;padding:30px 40px;display:flex;flex-direction:column;gap:18px">
+
+<div style="display:flex;align-items:baseline;gap:14px"><div class="wm" style="font-size:20px">TRACE</div><div style="font-size:13px;color:#52627A">Build plan. Nothing here is implemented. It starts only after the Civil 3D baseline is confirmed.</div></div>
+
+<div style="display:flex;gap:32px;flex:1;min-height:0">
+<div style="flex:1.15;min-width:0">
+<p class="h">What exists today and what changes</p>
+<table style="border-collapse:collapse;width:100%;background:#fff;border:1px solid #D5DDE5">
+<thead><tr><th style="width:100px">Piece</th><th>Today (from the code)</th><th>Proposed</th></tr></thead>
+<tbody>
+<tr><td><b>Ribbon</b></td><td><span class="mono">FtfRibbon.cs</span> builds one FTF tab, 6 panels, icons drawn in code</td><td>Same builder: logo button plus 5 panels (Drawing Cleanup, Labeling &amp; Features, Drafting, Data &amp; Review, Settings), split buttons for the groups, <span class="mono">TRACE*</span> aliases. Reports and Help are new thin commands</td></tr>
+<tr><td><b>Palette</b></td><td><span class="mono">FtfMainForm</span>: a modeless WinForms window with side navigation (Overview, Process, Review, Settings)</td><td>New narrow dockable palette hosting the Run button, tool grid and attention summary. Calls the same pipeline and status services</td></tr>
+<tr><td><b>Profiles</b></td><td><span class="mono">SettingsPanel</span> already hosts the setup pages; profiles are files with list / save / use commands</td><td>Profile list and level indicator around the existing pages; CSV import screen over the tested importer</td></tr>
+<tr><td><b>Review</b></td><td>Review, unknown-code and line-inventory tables and CSV reports exist</td><td>One queue with a Basis column (measured or inferred). Reviewed and ignored state with a note needs a small new store</td></tr>
+<tr><td><b>Welcome, About</b></td><td>None</td><td>Two small dialogs; About reuses what <span class="mono">FTFWHERE</span> already reports</td></tr>
+<tr><td><b>Installer</b></td><td>Inno script (untested)</td><td>Side-panel and icon artwork, acronym text</td></tr>
+<tr><td><b>Commands</b></td><td>All <span class="mono">FTF*</span> commands</td><td>Unchanged. Aliases only</td></tr>
+</tbody></table>
+<p style="font-size:12px;color:#52627A;line-height:1.5;margin:10px 0 0"><b style="color:#0B2E4F">Known limits.</b> Civil 3D styles the ribbon, so branding there is the tab, panel names and icons. Hosting WinForms pages in a dockable palette, DPI scaling and keyboard focus while a command is prompting must be verified in Civil 3D 2024. Light theme only for 1.0; the dark token set is defined on the brand board.</p>
+</div>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+<div>
+<p class="h">Phases and rough effort (one developer)</p>
+<div class="ph"><div class="n">0</div><div><b>Windows baseline</b> (in progress). No UI changes until it passes.</div><div class="w">now</div></div>
+<div class="ph"><div class="n">1</div><div><b>Identity and ribbon.</b> Icons, regrouped panels, strings, aliases.</div><div class="w">1 to 1.5 wk</div></div>
+<div class="ph"><div class="n">2</div><div><b>Palette and Start window.</b> Run, tool grid, attention summary, dock behaviour.</div><div class="w">1.5 to 2.5 wk</div></div>
+<div class="ph"><div class="n">3</div><div><b>Profiles and Standards.</b> Profile list, import screen, levels.</div><div class="w">2 to 3 wk</div></div>
+<div class="ph"><div class="n">4</div><div><b>Review queue.</b> Basis column, reviewed and ignore-with-note.</div><div class="w">1.5 to 2 wk</div></div>
+<div class="ph" style="border-bottom:none"><div class="n">5</div><div><b>Welcome, About, installer art, docs.</b></div><div class="w">1 wk</div></div>
+<div style="font-size:12px;margin-top:6px;font-weight:600">About 7 to 10 weeks in total. Each phase ships on its own, so a pilot can start after phase 2.</div>
+</div>
+
+<div style="background:#FFF6E6;border:1px solid #E8C37A;border-radius:8px;padding:12px 16px">
+<p class="h" style="color:#9A5B00">Decisions I need from you</p>
+<div class="dq"><b>1</b><div>Navy, blue and green palette and the ridge-and-swoosh logo: approve. I will redraw it as a clean vector, and it needs a trademark search.</div></div>
+<div class="dq"><b>2</b><div>Main button wording: "Run TRACE" or "Finish drawing".</div></div>
+<div class="dq"><b>3</b><div>Palette: open at startup, or only when the technician asks.</div></div>
+<div class="dq"><b>4</b><div>Hide Production and Sheets in the TRACE edition: confirm. Also approve wording "for Autodesk Civil 3D" with the Autodesk trademark footnote, no Autodesk logo.</div></div>
+<div class="dq"><b>5</b><div>Company name for the copyright line and installer publisher.</div></div>
+<div class="dq"><b>6</b><div>Segoe UI in the windows (no font install), with the wordmark shipped as artwork only.</div></div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
