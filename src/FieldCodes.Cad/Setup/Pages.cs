@@ -190,8 +190,8 @@ namespace FieldCodes.Cad.Setup
             _worked = LiveNote();
 
             Heading("Species");
-            Note("Species codes come from the rules file and are listed on the Field Codes " +
-                 "tab. The tree pattern is generated from them, so the two cannot drift apart.");
+            Note("Species codes and names are edited on Settings > Point Features: select the Tree " +
+                 "feature. The tree pattern is generated from them, so the two cannot drift apart.");
 
             _average.SelectedIndexChanged += (s, e) => Refresh();
             _decimals.TextChanged += (s, e) => Refresh();
