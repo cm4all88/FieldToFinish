@@ -15,14 +15,33 @@ namespace FieldCodes.Editing
     /// </summary>
     public sealed class EditableRule
     {
+        public EditableRule()
+        {
+            Species = new List<KeyValuePair<string, string>>();
+            RotationMode = "Azimuth";
+            DripUnify = true;
+            Checks = new List<EditableRangeCheck>();
+            NotesUnknown = "Flag";
+            NotesUnknownGroup = "other";
+            NoteTerms = new List<EditableNoteTerm>();
+            NoteGroups = new List<EditableNoteGroup>();
+            NoteOrder = new List<string>();
+        }
+
         public string Id { get; set; }
         public bool Enabled { get; set; }
         public string Description { get; set; }
 
-        /// <summary>The match pattern. Advanced; validated before it can be saved.</summary>
+        /// <summary>The match pattern: a regular expression tried against the whole description
+        /// (see <see cref="RuleDocument.ReadPattern"/>). Validated before it can be saved.</summary>
         public string Match { get; set; }
 
         public string LabelFormat { get; set; }
+
+        /// <summary>label.clusterFormat: used instead of <see cref="LabelFormat"/> when more than one
+        /// trunk size was recorded. Blank: the label text is used for clusters too.</summary>
+        public string ClusterFormat { get; set; }
+
         public string LabelLayer { get; set; }
         public string Leader { get; set; }
         public string TagPrefix { get; set; }
@@ -31,9 +50,40 @@ namespace FieldCodes.Editing
         /// OtherPoints); blank means worked out from the rule and code.</summary>
         public string Category { get; set; }
 
-        /// <summary>Editable only when the rule already has a dripline.</summary>
+        /// <summary>species: the code the crew types and the name the label shows, in file order.
+        /// {SPECIES} in the match pattern stands for exactly these codes.</summary>
+        public List<KeyValuePair<string, string>> Species { get; set; }
+
+        /// <summary>rotation: the Civil 3D marker is turned by a number read from the description.</summary>
+        public bool HasRotation { get; set; }
+        /// <summary>rotation.from: the named group the angle is read from.</summary>
+        public string RotationFrom { get; set; }
+        /// <summary>rotation.mode: Azimuth (clockwise from north) or Cartesian (AutoCAD, counter-clockwise from east).</summary>
+        public string RotationMode { get; set; }
+
+        /// <summary>dripLine: FTFDRIP draws a canopy circle; adding or removing it is a setting too.</summary>
         public bool HasDripline { get; set; }
         public string DripLayer { get; set; }
+        /// <summary>dripLine.radiusFrom: the named group holding the drip radius, in survey feet.</summary>
+        public string DripRadiusFrom { get; set; }
+        /// <summary>dripLine.unify: overlapping canopies are trimmed to one outline (when Settings >
+        /// Driplines trims too); off draws this feature's canopies as whole circles.</summary>
+        public bool DripUnify { get; set; }
+
+        /// <summary>validate: range checks on the numbers read from the description.</summary>
+        public List<EditableRangeCheck> Checks { get; set; }
+
+        /// <summary>notes: the words after the code are read as notes (a vocabulary), not only as modifiers.</summary>
+        public bool HasNotes { get; set; }
+        /// <summary>notes.unknown: Keep, Flag or Refuse.</summary>
+        public string NotesUnknown { get; set; }
+        /// <summary>notes.unknownGroup: the group words in no term are kept in.</summary>
+        public string NotesUnknownGroup { get; set; }
+        public List<EditableNoteTerm> NoteTerms { get; set; }
+        /// <summary>notes.groups: per-group reading order and joiner (only groups with a setting).</summary>
+        public List<EditableNoteGroup> NoteGroups { get; set; }
+        /// <summary>notes.order: the group order for {notes}; empty means the order groups first appear.</summary>
+        public List<string> NoteOrder { get; set; }
 
         // Read-only context the editor displays but never writes.
         public string RotationSummary { get; set; }
@@ -312,6 +362,7 @@ namespace FieldCodes.Editing
                 HasDripline = drip != null,
                 DripLayer = drip != null ? (string)drip["layer"] ?? string.Empty : string.Empty
             };
+            ReadCodeRuleParts(rule, editable);
 
             editable.RotationSummary = rotation == null
                 ? "None"
@@ -329,9 +380,10 @@ namespace FieldCodes.Editing
         // ------------------------------------------------------------------ editing
 
         /// <summary>
-        /// Writes the editable fields back onto the document. Only the properties the
-        /// editor owns are touched; sibling properties (clusterFormat, validate,
-        /// species, unknown future keys, comments) are untouched by construction.
+        /// Writes the editable fields back onto the document. Only what differs from the
+        /// document is written: an edit that changes nothing leaves the file exactly as it was.
+        /// Only the properties the editor owns are touched; sibling properties (the inserted
+        /// block's, unknown future keys, comments) are untouched by construction.
         /// </summary>
         public void ApplyEdit(EditableRule edit)
         {
@@ -340,47 +392,75 @@ namespace FieldCodes.Editing
             var rule = FindRule(edit.Id);
             if (rule == null)
                 throw new ConfigException("No rule with id '" + edit.Id + "'.");
+            RefuseUnwritable(edit);
+            var current = GetEditable(edit.Id);
 
             // enabled: absent means true, so the property only exists when disabling.
-            if (edit.Enabled) rule.Remove("enabled");
-            else rule["enabled"] = false;
+            if (edit.Enabled != current.Enabled)
+            {
+                if (edit.Enabled) rule.Remove("enabled");
+                else rule["enabled"] = false;
+            }
 
-            SetOrRemove(rule, "description", edit.Description);
-            if (!string.IsNullOrWhiteSpace(edit.Match)) rule["match"] = edit.Match;
-            SetOrRemove(rule, "tagPrefix", edit.TagPrefix);
-            SetOrRemove(rule, "category", edit.Category);
+            if (Differs(current.Description, edit.Description)) SetOrRemove(rule, "description", edit.Description);
+            // The pattern is written as typed (spaces in a regex mean something); blank removes it,
+            // and the checks then say the feature can never match.
+            if (!string.Equals(current.Match ?? string.Empty, edit.Match ?? string.Empty, StringComparison.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(edit.Match)) rule.Remove("match");
+                else rule["match"] = edit.Match;
+            }
+            if (Differs(current.TagPrefix, edit.TagPrefix)) SetOrRemove(rule, "tagPrefix", edit.TagPrefix);
+            if (Differs(current.Category, edit.Category)) SetOrRemove(rule, "category", edit.Category);
 
-            // Label: created when text is set on a rule that had none; the object is
-            // only removed when it would carry nothing at all, so a clusterFormat or
-            // any future property keeps it alive.
+            ApplyLabel(rule, current, edit);
+            ApplyCodeRuleParts(rule, current, edit);
+        }
+
+        /// <summary>
+        /// Label: created when text is set on a rule that had none; the object is only removed
+        /// when it would carry nothing but a default leader, so a clusterFormat or any future
+        /// property keeps it alive.
+        /// </summary>
+        private static void ApplyLabel(JObject rule, EditableRule current, EditableRule edit)
+        {
+            var leader = string.IsNullOrWhiteSpace(edit.Leader) ? "Auto" : edit.Leader.Trim();
+            var formatChanged = Differs(current.LabelFormat, edit.LabelFormat);
+            var clusterChanged = Differs(current.ClusterFormat, edit.ClusterFormat);
+            var layerChanged = Differs(current.LabelLayer, edit.LabelLayer);
+            var leaderChanged = !string.Equals(current.Leader ?? "Auto", leader, StringComparison.OrdinalIgnoreCase);
+            if (!formatChanged && !clusterChanged && !layerChanged && !leaderChanged) return;
+
             var label = rule["label"] as JObject;
-            var wantsLabel = !string.IsNullOrWhiteSpace(edit.LabelFormat);
-
+            var wantsLabel = !string.IsNullOrWhiteSpace(edit.LabelFormat) || !string.IsNullOrWhiteSpace(edit.ClusterFormat);
             if (label == null && wantsLabel)
             {
                 label = new JObject();
                 rule["label"] = label;
             }
+            if (label == null) return;
 
-            if (label != null)
+            if (formatChanged) SetOrRemove(label, "format", edit.LabelFormat);
+            if (clusterChanged) SetOrRemove(label, "clusterFormat", edit.ClusterFormat);
+            if (layerChanged) SetOrRemove(label, "layer", edit.LabelLayer);
+            if (leaderChanged)
             {
-                SetOrRemove(label, "format", edit.LabelFormat);
-                SetOrRemove(label, "layer", edit.LabelLayer);
-
-                if (!string.IsNullOrWhiteSpace(edit.Leader) && edit.Leader != "Auto")
-                    label["leader"] = edit.Leader;
-                else
-                    label.Remove("leader");
-
-                if (!label.Properties().Any())
-                    rule.Remove("label");
+                if (leader.Equals("Auto", StringComparison.OrdinalIgnoreCase)) label.Remove("leader");
+                else label["leader"] = leader;
             }
 
-            // Dripline: the editor can retarget its layer, never create or delete the
-            // dripline itself -- that is a feature-design decision, not a setting.
-            var drip = rule["dripLine"] as JObject;
-            if (drip != null && !string.IsNullOrWhiteSpace(edit.DripLayer))
-                drip["layer"] = edit.DripLayer;
+            // Comments and an Auto leader alone are no label.
+            if (!label.Properties().Any(p => !p.Name.StartsWith("//", StringComparison.Ordinal) &&
+                                             !(p.Name == "leader" && string.Equals(p.Value.ToString(), "Auto", StringComparison.OrdinalIgnoreCase))))
+                rule.Remove("label");
+        }
+
+        /// <summary>Text the editor treats as the same: null and blank are both "not set".</summary>
+        private static bool Differs(string current, string edit)
+        {
+            var a = string.IsNullOrWhiteSpace(current) ? string.Empty : current;
+            var b = string.IsNullOrWhiteSpace(edit) ? string.Empty : edit;
+            return !string.Equals(a, b, StringComparison.Ordinal);
         }
 
         private static void SetOrRemove(JObject owner, string name, string value)
@@ -404,6 +484,7 @@ namespace FieldCodes.Editing
             LineLabelProblems(problems);
             OrientationDetailProblems(problems);
             CodeListProblems(problems);
+            CodeRuleProblems(problems);
             if (problems.Count > 0) return problems;
 
             RulesConfig cfg;
@@ -513,6 +594,7 @@ namespace FieldCodes.Editing
                 }
 
                 CheckBlockInsertion(where, rule, valid, problems);
+                CodeRuleChecks(rule, groups, valid, problems);
             }
 
             CheckConflicts(cfg, problems);
