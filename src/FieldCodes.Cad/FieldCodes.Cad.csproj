@@ -20,7 +20,10 @@
     <C3D2024 Condition="'$(C3D2024)' == ''">C:\Program Files\Autodesk\AutoCAD 2024</C3D2024>
 
     <LangVersion>7.3</LangVersion>
-    <AssemblyName>FieldCodes.Cad</AssemblyName>
+    <!-- TRACE.Cad.dll for the commercial edition; FieldCodes.Cad.dll (unchanged) for the
+         internal one. -->
+    <AssemblyName Condition="'$(TraceEdition)' == 'Parametrix'">FieldCodes.Cad</AssemblyName>
+    <AssemblyName Condition="'$(TraceEdition)' != 'Parametrix'">TRACE.Cad</AssemblyName>
     <RootNamespace>FieldCodes.Cad</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

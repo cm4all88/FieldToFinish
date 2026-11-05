@@ -40,11 +40,13 @@ function Expand-TraceScript {
     <# The checked-in AutoCAD .scr files were written with the author's location baked in
        (C:\dev\FieldToFinish). Writes a copy with that replaced by this repository's real
        location, and returns the copy's path. The checked-in file is never modified. #>
-    param([string]$Template, [string]$Output)
+    param([string]$Template, [string]$Output, [string]$PluginDll)
 
     $root = (Get-TraceRepoRoot).TrimEnd('\')
     $text = [System.IO.File]::ReadAllText($Template)
     $text = $text.Replace('C:\dev\FieldToFinish', $root)
+    # The commercial edition's plugin is TRACE.Cad.dll; the checked-in scripts name the internal one.
+    if ($PluginDll) { $text = $text.Replace('FieldCodes.Cad.dll', $PluginDll) }
     [System.IO.File]::WriteAllText($Output, $text, (New-Object System.Text.UTF8Encoding($false)))
     return $Output
 }

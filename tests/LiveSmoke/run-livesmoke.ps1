@@ -12,7 +12,7 @@ $csc = Get-TraceCsc
 $template = "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D (Imperial) NCS.dwt"
 
 # 1. Current plugin build.
-dotnet build (Join-Path $here '..\..\FieldToFinish.sln') | Out-Null
+dotnet build (Join-Path $here '..\..\FieldToFinish.sln') -p:TraceEdition=Default | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'plugin build failed' }
 
 # 2. Harness.
@@ -27,7 +27,7 @@ Remove-Item "$here\seeddraft.dwg" -ErrorAction SilentlyContinue
 Copy-Item $template "$here\seeddraft.dwg"
 
 # 4. Run. The checked-in script names the author's folder; use a copy for this location.
-$scr = Expand-TraceScript -Template "$here\rundraft.scr" -Output "$here\rundraft.generated.scr"
+$scr = Expand-TraceScript -Template "$here\rundraft.scr" -Output "$here\rundraft.generated.scr" -PluginDll 'TRACE.Cad.dll'
 # Output is character-spaced UTF-16: strip nulls/spaces afterwards.
 $raw = & "$acad\accoreconsole.exe" /i "$here\seeddraft.dwg" /s "$scr" `
     /product C3D /language en-US 2>&1 | Out-String

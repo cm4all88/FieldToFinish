@@ -1,4 +1,7 @@
-# Plan: commercial assembly `TRACE.Cad.dll` (do during the Windows phase)
+# Commercial assembly names (DONE 2026-11-05: `TRACE.Cad.dll` and `TRACE.Core.dll`)
+
+Status: implemented via `Directory.Build.props` and conditional `AssemblyName` in both projects. The internal edition keeps `FieldCodes.dll` / `FieldCodes.Cad.dll`. The notes below are the original plan; the TRACE manifest, `install-dev.ps1`, `Run-TraceBaseline.ps1` and the headless smoke script are updated. Internal-edition harnesses (cleanup, production, DIP, RealWorld) still expect the internal names: build with `-p:TraceEdition=Parametrix` for them.
+
 
 Nothing is renamed yet. This lists every reference found by searching the whole repo for `FieldCodes.Cad`, and what changes.
 

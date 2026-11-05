@@ -10,6 +10,7 @@ $template = "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D
 $bin = Join-Path $here '..\..\src\FieldCodes.Cad\bin\Debug\net48'
 $profile = Join-Path $env:APPDATA 'FieldToFinish\profiles\LIVESMOKE CLEANUP.json'
 
+if (-not (Test-Path "$bin\FieldCodes.dll")) { throw 'Internal-edition test: build it first with  dotnet build -p:TraceEdition=Parametrix' }
 & $csc /nologo /target:library /out:"$here\CleanupTestHarness.dll" "$here\CleanupTestHarness.cs" `
     /r:"$acad\accoremgd.dll" /r:"$acad\acdbmgd.dll" /r:"$acad\acmgd.dll" /r:"$bin\FieldCodes.dll" /r:System.Core.dll `
     /r:"$(Split-Path -Parent $csc)\netstandard.dll"

@@ -17,7 +17,8 @@ $bin = Join-Path $here '..\..\src\FieldCodes.Cad\bin\Debug\net48'
 $profile = Join-Path $env:APPDATA 'FieldToFinish\profiles\LIVESMOKE CLIENT.json'
 $wide = Join-Path $env:APPDATA 'FieldToFinish\profiles\LIVESMOKE WIDE.json'
 
-dotnet build (Join-Path $here '..\..\FieldToFinish.sln') | Out-Null
+# Internal-edition test: builds FieldCodes.dll / FieldCodes.Cad.dll
+dotnet build (Join-Path $here '..\..\FieldToFinish.sln') -p:TraceEdition=Parametrix | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'plugin build failed' }
 
 & $csc /nologo /target:library /out:"$here\ProductionTestHarness.dll" "$here\ProductionTestHarness.cs" `

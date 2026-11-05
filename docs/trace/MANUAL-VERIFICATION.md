@@ -4,6 +4,9 @@ Do this after `deploy\Run-TraceBaseline.ps1` reports all PASS. It uses a **throw
 
 Everything is typed at the Civil 3D command line unless it says otherwise. After each command, look at the command line for error text.
 
+## Before you start Civil 3D
+If you have a FieldToFinish installation, run `deploy\Switch-TraceTestMode.ps1 -Begin` first and `-End` when you finish (see `docs\trace\COEXISTENCE.md`). It only renames the folder and proves nothing inside changed.
+
 ## 0. Make the test drawing
 1. Start Civil 3D 2024. New drawing from **_Autodesk Civil 3D (Imperial) NCS.dwt**.
 2. Save it as `<repo>\logs\trace-test\sample.dwg` (any folder you like works; this one keeps things together). Remember the folder: reports are written beside the drawing.

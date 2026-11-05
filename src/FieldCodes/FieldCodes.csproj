@@ -5,7 +5,10 @@
          and .NET 8 (C3D 2026). Do NOT add an Autodesk reference to this project. -->
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>7.3</LangVersion>
-    <AssemblyName>FieldCodes</AssemblyName>
+    <!-- Distinct identity per edition so the two can never be confused or shared by
+         Civil 3D when both bundles exist. The internal name is unchanged. -->
+    <AssemblyName Condition="'$(TraceEdition)' == 'Parametrix'">FieldCodes</AssemblyName>
+    <AssemblyName Condition="'$(TraceEdition)' != 'Parametrix'">TRACE.Core</AssemblyName>
     <RootNamespace>FieldCodes</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

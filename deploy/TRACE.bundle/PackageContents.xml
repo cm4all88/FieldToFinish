@@ -26,7 +26,7 @@
     <ComponentEntry
         AppName="TRACE"
         Version="0.1.0"
-        ModuleName="./Contents/2024/FieldCodes.Cad.dll"
+        ModuleName="./Contents/2024/TRACE.Cad.dll"
         AppDescription="TRACE (Civil 3D 2024)"
         LoadOnAutoCADStartup="True" />
   </Components>

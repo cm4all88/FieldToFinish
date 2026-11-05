@@ -47,6 +47,38 @@ $root = if ($AllUsers) {
 }
 $target = Join-Path $root $bundleName
 
+function Get-BundleName {
+    # The Name attribute of <ApplicationPackage> in a bundle's PackageContents.xml, read as
+    # text (the internal manifest is not strict XML), or $null when it cannot be read.
+    param([string]$Folder)
+    $manifest = Join-Path $Folder 'PackageContents.xml'
+    if (-not (Test-Path -LiteralPath $manifest)) { return $null }
+    $text = [System.IO.File]::ReadAllText($manifest)
+    $m = [regex]::Match($text, '<ApplicationPackage[^>]*?\sName="([^"]+)"', 'Singleline')
+    if ($m.Success) { return $m.Groups[1].Value } else { return $null }
+}
+
+# --- verify the destination BEFORE anything is copied or removed ------------------
+# Each edition owns exactly one bundle folder and is only ever allowed to touch that one.
+$expectedName = if ($Edition -eq 'Parametrix') { 'Field to Finish' } else { 'TRACE' }
+$sourceName = Get-BundleName $source
+if ($sourceName -ne $expectedName) {
+    Write-Error ("Refusing to continue: the manifest in $source is named '$sourceName', expected '$expectedName'.")
+}
+if ((Split-Path -Leaf $target) -ne $bundleName) {
+    Write-Error ("Refusing to continue: destination '$target' is not '$bundleName'.")
+}
+if ($Edition -ne 'Parametrix' -and (Split-Path -Leaf $target) -like 'FieldToFinish*') {
+    Write-Error ("Refusing to continue: the TRACE edition must never write to a FieldToFinish folder ($target).")
+}
+if (Test-Path -LiteralPath $target) {
+    $existingName = Get-BundleName $target
+    if ($existingName -ne $expectedName) {
+        Write-Error ("Refusing to continue: '$target' already exists but is not a '$expectedName' bundle (found '$existingName'). Nothing was changed.")
+    }
+}
+Write-Host "Destination verified: $target  (edition $Edition, bundle '$expectedName')"
+
 # --- Civil 3D must not be running -------------------------------------------------
 
 $running = Get-Process -Name acad -ErrorAction SilentlyContinue
@@ -82,14 +114,9 @@ if ($Uninstall) {
 
 if ($otherFound.Count -gt 0 -and -not $Uninstall) {
     $list = ($otherFound | ForEach-Object { '  ' + $_ }) -join "`n"
-    if ($Edition -eq 'Parametrix') {
-        Write-Warning ("TRACE.bundle is also installed:`n$list`nBoth define the same commands; only one should be active in Civil 3D.")
-    } else {
-        Write-Error ("$otherName is installed:`n$list`n" +
-                     "It is NOT touched. Both editions define the same FTF commands, so Civil 3D could silently run the wrong one. " +
-                     "To test TRACE, set that folder aside yourself first (for example rename it to $otherName.off), " +
-                     "and rename it back afterwards.")
-    }
+    Write-Warning ("$otherName is also installed (it is NOT touched):`n$list`n" +
+                   "Both editions define the same FTF commands. Do not run both in one Civil 3D session. " +
+                   "See docs\trace\COEXISTENCE.md; deploy\Switch-TraceTestMode.ps1 sets the other one aside reversibly.")
 }
 
 # --- locate the build output ------------------------------------------------------
@@ -100,9 +127,10 @@ $builds = @(
     @{ Series = '2024'; Path = Join-Path $repo 'src\FieldCodes.Cad\bin\Debug\net48' }
 )
 
-$found = @($builds | Where-Object { Test-Path (Join-Path $_.Path 'FieldCodes.Cad.dll') })
+$mainDll = if ($Edition -eq 'Parametrix') { 'FieldCodes.Cad.dll' } else { 'TRACE.Cad.dll' }
+$found = @($builds | Where-Object { Test-Path (Join-Path $_.Path $mainDll) })
 if ($found.Count -eq 0) {
-    Write-Error ("No build output found. Run 'dotnet build FieldToFinish.sln' first. " +
+    Write-Error ("No $mainDll found. Build the $Edition edition first (Parametrix: add -p:TraceEdition=Parametrix). " +
                  "Looked in:`n  " + (($builds | ForEach-Object { $_.Path }) -join "`n  "))
 }
 
@@ -118,8 +146,10 @@ foreach ($build in $found) {
     # Everything except the Autodesk assemblies, which must never be copied: the host
     # already has them loaded and a duplicate is the classic "works on my machine"
     # load failure.
+    # A build folder can hold leftovers from the other edition; never copy those.
+    $otherEditionFiles = if ($Edition -eq 'Parametrix') { '^TRACE\.' } else { '^FieldCodes(\.|$)' }
     Get-ChildItem $build.Path -File |
-        Where-Object { $_.Name -notmatch '^(Ac|Aecc)' } |
+        Where-Object { $_.Name -notmatch '^(Ac|Aecc)' -and $_.Name -notmatch $otherEditionFiles } |
         Copy-Item -Destination $contents -Force
 
     # The factory rules ship from config\ directly, NOT from the build output copy:

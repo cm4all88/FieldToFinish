@@ -1,0 +1,10 @@
+<Project>
+  <!-- One shared default for every project, so the library and the CAD plugin always
+       agree on the edition:
+         Default    = TRACE (commercial): TRACE.Core.dll + TRACE.Cad.dll
+         Parametrix = internal edition:   FieldCodes.dll + FieldCodes.Cad.dll (unchanged)
+       Internal build:  dotnet build -p:TraceEdition=Parametrix -->
+  <PropertyGroup>
+    <TraceEdition Condition="'$(TraceEdition)' == ''">Default</TraceEdition>
+  </PropertyGroup>
+</Project>

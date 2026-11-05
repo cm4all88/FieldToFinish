@@ -72,6 +72,27 @@ function Invoke-Logged {
     }
 }
 
+function Get-BundleFingerprint {
+    # SHA-256 of every file in a folder (relative path + hash), so "untouched" can be proven.
+    param([string]$Folder)
+    $root = (Resolve-Path -LiteralPath $Folder).Path.TrimEnd('\')
+    $items = Get-ChildItem -LiteralPath $root -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+        $_.FullName.Substring($root.Length + 1) + '|' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+    }
+    return @($items)
+}
+
+function Get-BundleName {
+    param([string]$Folder)
+    $manifest = Join-Path $Folder 'PackageContents.xml'
+    if (-not (Test-Path -LiteralPath $manifest)) { return $null }
+    $text = [System.IO.File]::ReadAllText($manifest)
+    $m = [regex]::Match($text, '<ApplicationPackage[^>]*?\sName="([^"]+)"', 'Singleline')
+    if ($m.Success) { return $m.Groups[1].Value } else { return $null }
+}
+
+$script:isolationNeeded = $false
+
 function Write-Summary {
     param([bool]$Finished)
     $failed = @($results | Where-Object { $_.Status -eq 'FAIL' })
@@ -85,6 +106,11 @@ function Write-Summary {
     foreach ($r in $results) { $lines += ('[{0}] {1}  {2}' -f $r.Status, $r.Step, $r.Detail) }
     if ($notes.Count -gt 0) { $lines += ''; $lines += 'Notes:'; foreach ($n in $notes) { $lines += ('  - ' + $n) } }
     $lines += ''
+    if ($script:isolationNeeded) {
+        $lines += ''
+        $lines += 'CIVIL 3D ISOLATION REQUIRED: an existing FieldToFinish.bundle is active in this user profile. It was not touched.'
+        $lines += 'Before starting Civil 3D for TRACE tests, run: deploy\Switch-TraceTestMode.ps1 -Begin  (reversible), and -End afterwards.'
+    }
     $clean = ($failed.Count -eq 0 -and $Finished)
     if ($clean -and $SkipTests) { $lines += 'RESULT: PARTIAL. Unit tests were skipped, so this is not a full baseline.' }
     elseif ($clean) { $lines += 'RESULT: all automated steps passed. Now do the manual Civil 3D checks.' }
@@ -162,6 +188,22 @@ if ($git) {
     Add-Note ("git: branch $branch, commit $head, $dirty changed file(s)")
 }
 
+# Fingerprint any existing FieldToFinish bundle now, so the end of the run can prove it was not touched.
+$ftfRoots = @(
+    (Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'),
+    (Join-Path $env:ProgramFiles 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'),
+    (Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins\FieldToFinish.bundle')
+)
+$ftfBefore = @{}
+foreach ($f in $ftfRoots) {
+    if (Test-Path -LiteralPath $f) {
+        $ftfBefore[$f] = Get-BundleFingerprint $f
+        $script:isolationNeeded = $true
+        Add-Note ("Existing FieldToFinish bundle found (will not be touched): " + $f + " [" + $ftfBefore[$f].Count + " files fingerprinted]")
+    }
+}
+$ftfBefore.Keys | ForEach-Object { $ftfBefore[$_] } | Out-File -FilePath (Join-Path $logDir 'fieldtofinish-bundle-before.txt') -Encoding utf8
+
 if (@($results | Where-Object { $_.Status -eq 'FAIL' }).Count -gt 0) { Stop-Run 'A prerequisite is missing (see above).' }
 
 # ---------------------------------------------------------------------- 2. build
@@ -170,8 +212,8 @@ Write-Host 'Building TRACE (this can take a minute the first time)...'
 $bin = Join-Path $repo 'src\FieldCodes.Cad\bin\Debug\net48'
 $buildLog = Join-Path $logDir 'build.log'
 $code = Invoke-Logged 'dotnet' @('build', (Join-Path $repo 'src\FieldCodes.Cad\FieldCodes.Cad.csproj'), '-c', 'Debug', '-p:TraceEdition=Default', ('-p:C3D2024=' + $c3d), '-nologo') $buildLog
-$dll = Join-Path $bin 'FieldCodes.Cad.dll'
-$built = ($code -eq 0) -and (Test-Path -LiteralPath $dll)
+$dll = Join-Path $bin 'TRACE.Cad.dll'
+$built = ($code -eq 0) -and (Test-Path -LiteralPath $dll) -and (Test-Path -LiteralPath (Join-Path $bin 'TRACE.Core.dll'))
 $buildWarn = @(Select-String -Path $buildLog -Pattern ' warning ' -ErrorAction SilentlyContinue).Count
 Add-Result 'Build TRACE edition' $built $(if ($built) { "ok ($buildWarn warning line(s))" } else { "failed, exit code $code. See build.log" })
 if (-not $built) {
@@ -200,30 +242,21 @@ if ($SkipTests) {
 }
 
 # --------------------------------------------------------------------- 4. install
-# Another edition's bundle must never be replaced or altered. Check before installing anything.
-$fieldToFinishBundles = @(
-    (Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'),
-    (Join-Path $env:ProgramFiles 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'),
-    (Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins\FieldToFinish.bundle')
-) | Where-Object { Test-Path -LiteralPath $_ }
-if (@($fieldToFinishBundles).Count -gt 0) {
-    Add-Result 'No existing FieldToFinish bundle in the way' $false (($fieldToFinishBundles) -join '; ')
-    Write-Host ''
-    Write-Host 'An existing FieldToFinish installation was found. It has NOT been touched.' -ForegroundColor Yellow
-    Write-Host 'Both editions define the same FTF commands, so Civil 3D could silently run the wrong one.'
-    Write-Host 'Set it aside yourself, then run this script again. For example:'
-    foreach ($b in $fieldToFinishBundles) { Write-Host ('   Rename-Item "' + $b + '" "FieldToFinish.bundle.off"') }
-    Write-Host 'To restore it afterwards, rename it back.'
-    Stop-Run 'An existing FieldToFinish bundle would conflict with TRACE. Nothing was installed.'
+# Verify the destination BEFORE anything is copied. TRACE writes only to TRACE.bundle.
+$bundle = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\TRACE.bundle'
+$destOk = ((Split-Path -Leaf $bundle) -eq 'TRACE.bundle') -and (-not ($ftfRoots -contains $bundle))
+if ($destOk -and (Test-Path -LiteralPath $bundle)) {
+    $existingName = Get-BundleName $bundle
+    if ($existingName -ne 'TRACE') { $destOk = $false }
 }
-Add-Result 'No existing FieldToFinish bundle in the way' $true 'none found'
+Add-Result 'Install destination verified' $destOk $(if ($destOk) { $bundle } else { 'Destination is not a TRACE.bundle: ' + $bundle })
+if (-not $destOk) { Stop-Run 'The install destination is not safe. Nothing was installed.' }
 
 Write-Host ''
 Write-Host 'Installing the TRACE development bundle for the current user...'
 $installLog = Join-Path $logDir 'install.log'
 $code = Invoke-Logged 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $repo 'deploy\install-dev.ps1'), '-Edition', 'Default') $installLog
-$bundle = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\TRACE.bundle'
-$installedDll = Join-Path $bundle 'Contents\2024\FieldCodes.Cad.dll'
+$installedDll = Join-Path $bundle 'Contents\2024\TRACE.Cad.dll'
 $installedRules = Join-Path $bundle 'Contents\2024\rules.json'
 $manifest = Join-Path $bundle 'PackageContents.xml'
 $installOk = ($code -eq 0) -and (Test-Path -LiteralPath $installedDll) -and (Test-Path -LiteralPath $manifest)
@@ -234,8 +267,19 @@ if ($installOk) {
     Add-Result 'Installed manifest is the TRACE manifest' $manifestOk $(if ($manifestOk) { 'ok' } else { 'PackageContents.xml is not the TRACE manifest' })
     $rulesOk = (Test-Path -LiteralPath $installedRules) -and ((Get-FileHash -LiteralPath $installedRules).Hash -eq $wanted)
     Add-Result 'Installed rules are the neutral TRACE rules' $rulesOk $(if ($rulesOk) { 'ok' } else { 'installed rules.json differs from config\default' })
+    $stray = @(Get-ChildItem -LiteralPath (Join-Path $bundle 'Contents\2024') -File | Where-Object { $_.Name -match '^FieldCodes(\.|$)' })
+    Add-Result 'No internal-edition files in the TRACE bundle' ($stray.Count -eq 0) $(if ($stray.Count -eq 0) { 'ok' } else { ($stray | ForEach-Object { $_.Name }) -join ', ' })
+    $coreOk = Test-Path -LiteralPath (Join-Path $bundle 'Contents\2024\TRACE.Core.dll')
+    Add-Result 'TRACE.Core.dll installed' $coreOk $(if ($coreOk) { 'ok' } else { 'missing' })
     $autodeskCopies = @(Get-ChildItem -LiteralPath (Join-Path $bundle 'Contents\2024') -File | Where-Object { $_.Name -match '^(Ac|Aecc)' })
     Add-Result 'No Autodesk DLLs copied into the bundle' ($autodeskCopies.Count -eq 0) $(if ($autodeskCopies.Count -eq 0) { 'ok' } else { ($autodeskCopies | ForEach-Object { $_.Name }) -join ', ' })
+}
+
+# Prove any existing FieldToFinish bundle is exactly as it was before this run.
+foreach ($f in $ftfBefore.Keys) {
+    $after = Get-BundleFingerprint $f
+    $same = (@($ftfBefore[$f]) -join "`n") -eq (@($after) -join "`n")
+    Add-Result 'Existing FieldToFinish bundle untouched' $same $(if ($same) { $f + ' (' + @($after).Count + ' files identical)' } else { 'CHANGED: ' + $f })
 }
 
 # ------------------------------------------------------------ 5. optional smoke
