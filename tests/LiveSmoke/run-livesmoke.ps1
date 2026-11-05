@@ -5,8 +5,10 @@
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
-$csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+. (Join-Path $here '..\..\deploy\TraceEnv.ps1')
+$acad = Find-Civil3D2024
+if (-not $acad) { throw 'Civil 3D 2024 not found. Set the C3D2024 environment variable to its install folder.' }
+$csc = Get-TraceCsc
 $template = "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D (Imperial) NCS.dwt"
 
 # 1. Current plugin build.
@@ -24,8 +26,10 @@ Remove-Item "$here\outdraft.dwg" -ErrorAction SilentlyContinue
 Remove-Item "$here\seeddraft.dwg" -ErrorAction SilentlyContinue
 Copy-Item $template "$here\seeddraft.dwg"
 
-# 4. Run. Output is character-spaced UTF-16: strip nulls/spaces afterwards.
-$raw = & "$acad\accoreconsole.exe" /i "$here\seeddraft.dwg" /s "$here\rundraft.scr" `
+# 4. Run. The checked-in script names the author's folder; use a copy for this location.
+$scr = Expand-TraceScript -Template "$here\rundraft.scr" -Output "$here\rundraft.generated.scr"
+# Output is character-spaced UTF-16: strip nulls/spaces afterwards.
+$raw = & "$acad\accoreconsole.exe" /i "$here\seeddraft.dwg" /s "$scr" `
     /product C3D /language en-US 2>&1 | Out-String
 
 $clean = ($raw -replace "`0", '') -split "`r?`n" | ForEach-Object {

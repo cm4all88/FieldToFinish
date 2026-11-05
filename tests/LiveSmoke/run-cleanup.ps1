@@ -2,19 +2,21 @@
 # content, stamp, wording, grouped QA) on state plane coordinates. Output: clean_out.log.
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
-$csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+. (Join-Path $here '..\..\deploy\TraceEnv.ps1')
+$acad = Find-Civil3D2024
+if (-not $acad) { throw 'Civil 3D 2024 not found. Set the C3D2024 environment variable to its install folder.' }
+$csc = Get-TraceCsc
 $template = "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D (Imperial) NCS.dwt"
 $bin = Join-Path $here '..\..\src\FieldCodes.Cad\bin\Debug\net48'
 $profile = Join-Path $env:APPDATA 'FieldToFinish\profiles\LIVESMOKE CLEANUP.json'
 
 & $csc /nologo /target:library /out:"$here\CleanupTestHarness.dll" "$here\CleanupTestHarness.cs" `
     /r:"$acad\accoremgd.dll" /r:"$acad\acdbmgd.dll" /r:"$acad\acmgd.dll" /r:"$bin\FieldCodes.dll" /r:System.Core.dll `
-    /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\netstandard.dll"
+    /r:"$(Split-Path -Parent $csc)\netstandard.dll"
 if ($LASTEXITCODE -ne 0) { throw 'cleanup harness compile failed' }
 
 Copy-Item -LiteralPath $template -Destination "$here\seedclean.dwg" -Force
-& (Join-Path $here 'run-accore.ps1') -Drawing "$here\seedclean.dwg" -Script "$here\runcleanup.scr" -Log "$here\clean_out.log" -TimeoutSeconds 240
+& (Join-Path $here 'run-accore.ps1') -Drawing "$here\seedclean.dwg" -Script (Expand-TraceScript -Template "$here\runcleanup.scr" -Output "$here\runcleanup.generated.scr") -Log "$here\clean_out.log" -TimeoutSeconds 240
 if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile }
 
 # The QA summary is text on the command line: check its grouping here.

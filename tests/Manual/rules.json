@@ -1,0 +1,155 @@
+{
+  "version": "1.0",
+  "//about": "TRACE manual-test override: the neutral default plus ONE fence line feature on layer C-FENC. Copy this file beside the test drawing (same folder, named rules.json); a rules.json beside the drawing wins over the installed one.",
+  "unitsPerFoot": 1.0,
+  "trunkDecimals": 0,
+  "multiStemAverage": "Arithmetic",
+  "protectedLayers": [],
+  "maskableLayers": [],
+  "//ignoreCodes": "Codes that never produce drawing content (for example ground shots). Keep this short: a code with no rule belongs in the unhandled report, not here.",
+  "ignoreCodes": [
+    "GS",
+    "NOTE",
+    "INFO"
+  ],
+  "//lineworkCodes": "Codes whose points define linework that Civil 3D already built. Add your own firm's figure codes (Setup, or the standards CSV import) so they are not reported as unhandled.",
+  "lineworkCodes": [
+    "FNC"
+  ],
+  "//lineFeatures": "Identifies existing Civil 3D linework by figure code and layer so it can be labelled. Empty by default: import or add your own.",
+  "lineFeatures": [
+    {
+      "code": "FNC",
+      "name": "Fence",
+      "layer": "C-FENC",
+      "label": "CHAIN LINK FENCE"
+    }
+  ],
+  "ignoreLineNames": [],
+  "controlCodes": [],
+  "stairsLabelFormat": "STAIRS",
+  "spanMarkers": [],
+  "symbolLabels": [],
+  "labelPlacement": {
+    "textHeightPlotted": 0.08,
+    "paddingPlotted": 0.02,
+    "baseOffsetPlotted": 0.06,
+    "ringStepPlotted": 0.06,
+    "ringCount": 4,
+    "movedTolerance": 0.001
+  },
+  "codes": [
+    {
+      "id": "tree",
+      "description": "Tree",
+      "match": "^(?<code>(?<species>{SPECIES}))\\s+(?<trunk>[0-9]+(?:\\.[0-9]+)?(?:\\s+[0-9]+(?:\\.[0-9]+)?)*)(?:\\s+\\.\\s+(?<drip>[0-9]+(?:\\.[0-9]+)?))?(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "species": {
+        "CON": "CONIFER",
+        "DEC": "DECIDUOUS",
+        "PINE": "PINE",
+        "OAK": "OAK",
+        "MAP": "MAPLE",
+        "FIR": "FIR",
+        "CED": "CEDAR"
+      },
+      "dripLine": {
+        "layer": "V-TREE-DRIP",
+        "radiusFrom": "drip",
+        "unify": true
+      },
+      "label": {
+        "format": "{trunk}\" {species}",
+        "clusterFormat": "CLUSTER OF {trunk.count} STEMS, AVG {trunk}\" {species}",
+        "layer": "V-TREE-TEXT",
+        "leader": "Auto"
+      },
+      "tagPrefix": "T",
+      "validate": [
+        {
+          "field": "drip",
+          "min": 2,
+          "max": 80,
+          "severity": "Warning",
+          "message": "Drip radius is outside the expected 2-80 ft range."
+        },
+        {
+          "field": "trunk",
+          "min": 1,
+          "max": 120,
+          "severity": "Warning",
+          "message": "Trunk diameter is outside the expected 1-120 in range."
+        }
+      ],
+      "//tree": "Tree format: SPECIES diameter [diameter ...] . drip radius, e.g. 'CON 18 . 25'. Several diameters make a cluster. Edit the species list to match your codes."
+    },
+    {
+      "//pole": "Example point feature: a code followed by a number gets a label. Change the code, label text and layer to match your point-code list. Civil 3D's description keys draw the symbol; TRACE does not insert a second one.",
+      "id": "pole",
+      "description": "Utility Pole",
+      "match": "^(?<code>PP)\\s+(?<number>[0-9]+)(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "label": {
+        "format": "POLE {number}",
+        "layer": "V-UTIL-POWR-TEXT",
+        "leader": "Auto"
+      },
+      "tagPrefix": "P"
+    },
+    {
+      "//sign": "Example rotating feature: the azimuth after the code rotates the existing sign marker and labels it.",
+      "id": "sign",
+      "description": "Sign",
+      "match": "^(?<code>SIGN)\\s+(?<type>[A-Z0-9-]+)(?:\\s+(?<rotation>[0-9.]+))?(?<mods>(?:\\s+[A-Z0-9-]+)*)\\s*$",
+      "rotation": {
+        "from": "rotation",
+        "mode": "Azimuth"
+      },
+      "label": {
+        "format": "{type} SIGN",
+        "layer": "V-SIGN-TEXT",
+        "leader": "Always"
+      },
+      "tagPrefix": "S",
+      "validate": [
+        {
+          "field": "rotation",
+          "min": 0,
+          "max": 360,
+          "severity": "Warning",
+          "message": "Azimuth is outside 0-360."
+        }
+      ]
+    }
+  ],
+  "modifiers": [
+    {
+      "id": "cluster",
+      "pattern": "^CL(?<count>[0-9]+)$",
+      "priority": 10,
+      "labelFormat": "CLUSTER OF {count} TREES AVERAGE {trunk}\"",
+      "stemCountFrom": "count"
+    },
+    {
+      "id": "dead",
+      "pattern": "^DEAD$",
+      "priority": 20,
+      "labelSuffix": " (DEAD)",
+      "layerSuffix": "-DEAD",
+      "flag": true
+    },
+    {
+      "id": "remove",
+      "pattern": "^REM(OVE)?$",
+      "priority": 30,
+      "labelSuffix": " (REMOVE)",
+      "layerSuffix": "-RMV"
+    },
+    {
+      "id": "protected",
+      "pattern": "^PROT(ECTED)?$",
+      "priority": 40,
+      "labelSuffix": " (PROTECTED)",
+      "layerSuffix": "-PROT",
+      "flag": true
+    }
+  ]
+}

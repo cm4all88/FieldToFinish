@@ -8,8 +8,10 @@
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
-$csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+. (Join-Path $here '..\..\deploy\TraceEnv.ps1')
+$acad = Find-Civil3D2024
+if (-not $acad) { throw 'Civil 3D 2024 not found. Set the C3D2024 environment variable to its install folder.' }
+$csc = Get-TraceCsc
 $template = "$env:LOCALAPPDATA\Autodesk\C3D 2024\enu\Template\_Autodesk Civil 3D (Imperial) NCS.dwt"
 $bin = Join-Path $here '..\..\src\FieldCodes.Cad\bin\Debug\net48'
 $profile = Join-Path $env:APPDATA 'FieldToFinish\profiles\LIVESMOKE CLIENT.json'
@@ -21,7 +23,7 @@ if ($LASTEXITCODE -ne 0) { throw 'plugin build failed' }
 & $csc /nologo /target:library /out:"$here\ProductionTestHarness.dll" "$here\ProductionTestHarness.cs" `
     /r:"$acad\accoremgd.dll" /r:"$acad\acdbmgd.dll" /r:"$acad\acmgd.dll" `
     /r:"$acad\C3D\AeccDbMgd.dll" /r:"$bin\FieldCodes.dll" /r:System.Core.dll `
-    /r:"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\netstandard.dll"
+    /r:"$(Split-Path -Parent $csc)\netstandard.dll"
 if ($LASTEXITCODE -ne 0) { throw 'harness compile failed' }
 
 foreach ($stale in @("$here\outprod.dwg", "$here\seedprod.dwg", $profile, $wide)) {
@@ -29,9 +31,9 @@ foreach ($stale in @("$here\outprod.dwg", "$here\seedprod.dwg", $profile, $wide)
 }
 Copy-Item -LiteralPath $template -Destination "$here\seedprod.dwg"
 
-& (Join-Path $here 'run-accore.ps1') -Drawing "$here\seedprod.dwg" -Script "$here\runprod.scr" -Log "$here\prod_out.log" -TimeoutSeconds 240
+& (Join-Path $here 'run-accore.ps1') -Drawing "$here\seedprod.dwg" -Script (Expand-TraceScript -Template "$here\runprod.scr" -Output "$here\runprod.generated.scr") -Log "$here\prod_out.log" -TimeoutSeconds 240
 if (Test-Path "$here\outprod.dwg") {
-    & (Join-Path $here 'run-accore.ps1') -Drawing "$here\outprod.dwg" -Script "$here\runprod2.scr" -Log "$here\prod_out2.log" -TimeoutSeconds 180
+    & (Join-Path $here 'run-accore.ps1') -Drawing "$here\outprod.dwg" -Script (Expand-TraceScript -Template "$here\runprod2.scr" -Output "$here\runprod2.generated.scr") -Log "$here\prod_out2.log" -TimeoutSeconds 180
 }
 if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile }
 if (Test-Path -LiteralPath $wide) { Remove-Item -LiteralPath $wide }

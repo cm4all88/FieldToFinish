@@ -3,7 +3,10 @@
 #   run-accore.ps1 <drawing> <script> <log> [timeoutSeconds]
 param([string]$Drawing, [string]$Script, [string]$Log, [int]$TimeoutSeconds = 300, [string]$Profile)
 
-$acad = 'C:\Program Files\Autodesk\AutoCAD 2024'
+$here0 = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $here0 '..\..\deploy\TraceEnv.ps1')
+$acad = Find-Civil3D2024
+if (-not $acad) { throw 'Civil 3D 2024 not found. Set the C3D2024 environment variable to its install folder.' }
 $rawPath = "$Log.raw"
 $argsLine = '/i "' + $Drawing + '" /s "' + $Script + '" /product C3D /language en-US'
 if ($Profile) { $argsLine += ' /p "' + $Profile + '"' }

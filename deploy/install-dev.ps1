@@ -109,7 +109,8 @@ foreach ($build in $found) {
 # FACTORY DEFAULT; user configuration lives in %APPDATA%\FieldToFinish and is never
 # touched here, so redeploying cannot destroy office standards.
 
-$officeRules = Join-Path $env:APPDATA 'FieldToFinish\rules.json'
+$cfgFolder = if ($Edition -eq 'Parametrix') { 'FieldToFinish' } else { 'TRACE' }
+$officeRules = Join-Path $env:APPDATA "$cfgFolder\rules.json"
 if (Test-Path $officeRules) {
     Write-Host "Office configuration preserved: $officeRules (deploys never touch it)."
 } else {
