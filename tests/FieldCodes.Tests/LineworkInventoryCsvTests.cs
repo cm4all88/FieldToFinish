@@ -67,8 +67,9 @@ public sealed class LineworkInventoryCsvTests : IClassFixture<RulesFixture>
     [Fact]
     public void ReportSitsBesideTheDrawing()
     {
-        Assert.Equal(@"C:\jobs\survey.ftf-linework.csv",
-                     LineworkInventoryCsv.PathFor(@"C:\jobs\survey.dwg"));
+        var dir = Path.Combine(Path.GetTempPath(), "jobs");
+        Assert.Equal(Path.Combine(dir, "survey.ftf-linework.csv"),
+                     LineworkInventoryCsv.PathFor(Path.Combine(dir, "survey.dwg")));
         Assert.Null(LineworkInventoryCsv.PathFor(""));
     }
 

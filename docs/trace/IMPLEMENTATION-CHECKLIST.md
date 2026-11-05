@@ -14,7 +14,8 @@ TRACE = Topographic Reconstruction and Automated CAD Engine. A Civil 3D producti
 7. Separate private commercial repository, only after ownership/reuse rights are cleared.
 8. Preserve all existing repositories, history and working versions.
 
-## Gate 0: Ownership clearance (blocks any copy into a commercial repo)
+## Gate 0: Ownership (superseded 2026-11-05)
+Owner states TRACE predates Parametrix employment; remaining legal questions handled separately before distribution. Not a development blocker. Keep Parametrix standards/confidential data out of the commercial product.
 - [ ] Owner written determination of who owns the FTF code (employer agreements, contributors, third-party code).
 - [ ] Confirm Newtonsoft.Json (MIT) and any other dependencies are redistributable; list in a third-party notices file.
 - [ ] Decide which files are cleared for reuse; record as a manifest (path, status, reviewer, date).
@@ -32,7 +33,7 @@ TRACE = Topographic Reconstruction and Automated CAD Engine. A Civil 3D producti
 ## Phase 2: Separate customer configuration from company standards
 - [ ] Inventory every Parametrix-specific item (list in "Standards inventory" below) with file/line.
 - [ ] Define a profile schema: layers/colors/linetypes/lineweights, text styles, label layers, feature/line definitions, tree grammar, symbol labels, protected/maskable layers, units.
-- [ ] Neutral default profile (generic layer names, minimal codes) that works on a clean template.
+
 - [ ] Profile import/export in the setup UI; validation messages; `.bak` on save (already present).
 - [ ] Replace hard-coded `V-…` layer derivation in `LabelLayerResolver`, `ProductionLayerResolver`, `LayerClassifier`, `SpotCommands`, `Pages` with profile-driven values.
 - [ ] Move `lineworkCodes`, `controlCodes`, `symbolLabels`, `lineFeatures` out of factory `rules.json` into default profile content.
@@ -84,3 +85,7 @@ Next in line (not in the first five): FTFTAGS/FTFTABLE, FTFSPOT, FTFCONTROL, FTF
 - `tests/RealWorld/*` (OFFICE-STANDARD.md, cases/, scripts with `U:\`, `C:\PMX`, `C:\dev`): proprietary project data; never copied.
 - `checkpoints/*/build-net48/rules.json`: historic builds; keep in evidence repo only.
 - Excluded modules (code stays in the evidence repo, not copied): Easement*, Exhibit*, Sheet*, Utility*, Dip*, LegalDescription, Closure, Composition, CurveChain, StripTrim, Ties, CourseGeometry, StandardsView, and their Settings and tests.
+
+## Progress log
+- 2026-11-05: Non-CAD baseline 943/947, then 968/968 after fixes (see BASELINE-NONCAD.md).
+- 2026-11-05: Neutral `config/default/rules.json`; Parametrix files moved to `config/internal/parametrix`; `TraceEdition` build switch; CSV standards importer with tests; 4 path tests made portable; TRACE bundle manifest, release-guard build script and Inno installer script (all UNTESTED on Windows). See CONFIGURATION.md.

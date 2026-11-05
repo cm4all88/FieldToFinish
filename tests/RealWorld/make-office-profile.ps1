@@ -1,12 +1,12 @@
 # Writes the "PMX SURVEY EXHIBIT" FTF profile from the office's own exhibit standard, as measured
 # from delivered exhibits and the office templates (see tests\RealWorld\OFFICE-STANDARD.md).
 # The generic FTF defaults are not changed; this is a separate named profile.
-#   make-office-profile.ps1 [-Out <file>]   (default: config\profiles\PMX SURVEY EXHIBIT.json)
+#   make-office-profile.ps1 [-Out <file>]   (default: config\internal\parametrix\profiles\PMX SURVEY EXHIBIT.json)
 param([string]$Out)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Resolve-Path (Join-Path $here '..\..')
-if (-not $Out) { $Out = Join-Path $root 'config\profiles\PMX SURVEY EXHIBIT.json' }
+if (-not $Out) { $Out = Join-Path $root 'config\internal\parametrix\profiles\PMX SURVEY EXHIBIT.json' }
 $bin = Join-Path $root 'src\FieldCodes.Cad\bin\Debug\net48'
 Add-Type -Path 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\netstandard.dll' -ErrorAction SilentlyContinue
 Add-Type -Path (Join-Path $bin 'Newtonsoft.Json.dll')

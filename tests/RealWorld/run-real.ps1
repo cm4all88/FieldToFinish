@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw 'harness compile failed' }
 # The office exhibit profile, where FTFPROFILE and FTFEXHIBIT look for it.
 $profiles = Join-Path $env:APPDATA 'FieldToFinish\profiles'
 New-Item -ItemType Directory -Force $profiles | Out-Null
-Get-ChildItem -LiteralPath (Join-Path $root 'config\profiles') -Filter '*.json' | Copy-Item -Destination $profiles -Force
+Get-ChildItem -LiteralPath (Join-Path $root 'config\internal\parametrix\profiles') -Filter '*.json' | Copy-Item -Destination $profiles -Force
 
 $work = Join-Path $out ([IO.Path]::GetFileNameWithoutExtension($Drawing) + '-FTF.dwg')
 Copy-Item -LiteralPath $Drawing -Destination $work -Force

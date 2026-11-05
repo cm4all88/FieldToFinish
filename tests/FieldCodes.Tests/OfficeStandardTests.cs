@@ -104,7 +104,7 @@ public sealed class OfficeStandardTests
     {
         foreach (var name in new[] { "PMX SURVEY EXHIBIT", "PMX SURVEY EXHIBIT TABLES" })
         {
-            var path = Path.Combine(Repo(), "config", "profiles", name + ".json");
+            var path = Path.Combine(Repo(), "config", "internal", "parametrix", "profiles", name + ".json");
             Assert.True(File.Exists(path), path);
             var s = FtfSettings.Load(path);
             var problems = new List<string>();

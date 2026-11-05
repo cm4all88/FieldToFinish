@@ -7,7 +7,7 @@ $bin = Join-Path $root 'src\FieldCodes.Cad\bin\Debug\net48'
 Add-Type -Path 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\netstandard.dll' -ErrorAction SilentlyContinue
 Add-Type -Path (Join-Path $bin 'Newtonsoft.Json.dll')
 Add-Type -Path (Join-Path $bin 'FieldCodes.dll')
-$s = [FieldCodes.Settings.FtfSettings]::Load((Join-Path $root 'config\profiles\PMX SURVEY EXHIBIT.json'))
+$s = [FieldCodes.Settings.FtfSettings]::Load((Join-Path $root 'config\internal\parametrix\profiles\PMX SURVEY EXHIBIT.json'))
 $x = $s.Exhibits
 $x.SheetWidthIn = 34; $x.SheetHeightIn = 22; $x.MarginIn = 0.5
 $x.MediaName = 'ANSI_full_bleed_D_(34.00_x_22.00_Inches)'

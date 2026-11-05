@@ -92,8 +92,9 @@ public sealed class UnhandledSummaryTests
     [Fact]
     public void ReportSitsBesideTheDrawing()
     {
-        Assert.Equal(@"C:\jobs\survey.ftf-unhandled.csv",
-                     UnhandledSummary.PathFor(@"C:\jobs\survey.dwg"));
+        var dir = Path.Combine(Path.GetTempPath(), "jobs");
+        Assert.Equal(Path.Combine(dir, "survey.ftf-unhandled.csv"),
+                     UnhandledSummary.PathFor(Path.Combine(dir, "survey.dwg")));
     }
 
     [Fact]

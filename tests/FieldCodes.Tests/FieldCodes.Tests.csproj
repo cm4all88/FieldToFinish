@@ -23,7 +23,11 @@
   <ItemGroup>
     <!-- Test against the real shipped grammar, not a synthetic fixture. If a rule
          in config/rules.json changes, these tests are supposed to notice. -->
-    <None Include="..\..\config\rules.json" Link="rules.json">
+    <None Include="..\..\config\internal\parametrix\rules.json" Link="rules.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- The neutral commercial configuration, tested separately (DefaultProfileTests). -->
+    <None Include="..\..\config\default\rules.json" Link="default-rules.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

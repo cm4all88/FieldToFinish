@@ -9,3 +9,6 @@ The 4 failures are platform artefacts, not product defects: `ReportSitsBesideThe
 Not covered: everything in `FieldCodes.Cad` (needs Windows + Civil 3D 2024). Windows baseline is still required.
 
 Environment note: dotnet installed via `apt-get install dotnet-sdk-8.0`; NuGet restore works; dot.net download hosts are blocked.
+
+## Update after configuration separation
+The four path tests were made portable (paths built with `Path.Combine`; product code unchanged). The fixture still tests the Parametrix grammar from `config/internal/parametrix/rules.json`; the neutral default is covered by `DefaultProfileTests` and `StandardsImportTests`.

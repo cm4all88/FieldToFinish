@@ -84,11 +84,17 @@ public sealed class ExceptionReportTests
         Assert.Equal(4, lines.Length);
     }
 
+    // Paths are built with Path.Combine so the test follows the host's separators;
+    // a literal C:\ path is not a rooted path on Linux. Product behaviour is unchanged.
     [Theory]
-    [InlineData(@"C:\jobs\1234\survey.dwg", @"C:\jobs\1234\survey.ftf-exceptions.csv")]
-    [InlineData(@"C:\a b\c.dwg", @"C:\a b\c.ftf-exceptions.csv")]
-    public void ReportSitsBesideTheDrawing(string dwg, string expected)
-        => Assert.Equal(expected, ExceptionReport.PathFor(dwg));
+    [InlineData("jobs", "1234", "survey")]
+    [InlineData("a b", "", "c")]
+    public void ReportSitsBesideTheDrawing(string folder, string subfolder, string name)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), folder, subfolder);
+        Assert.Equal(Path.Combine(dir, name + ".ftf-exceptions.csv"),
+                     ExceptionReport.PathFor(Path.Combine(dir, name + ".dwg")));
+    }
 
     [Theory]
     [InlineData(null)]

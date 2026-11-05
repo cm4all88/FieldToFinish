@@ -22,7 +22,11 @@
 [CmdletBinding()]
 param(
     [switch]$AllUsers,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    # Which factory configuration to deploy. 'Default' is the neutral TRACE
+    # configuration; 'Parametrix' is the internal office standard (internal use only).
+    [ValidateSet('Default', 'Parametrix')]
+    [string]$Edition = 'Default'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -91,7 +95,10 @@ foreach ($build in $found) {
     # The factory rules ship from config\ directly, NOT from the build output copy:
     # the output copy only refreshes on a rebuild of the CAD project, so a
     # config-only change could otherwise deploy stale (it did, once - FOG's label).
-    Copy-Item (Join-Path $repo 'config\rules.json') -Destination $contents -Force
+    $rulesSource = if ($Edition -eq 'Parametrix') { 'config\internal\parametrix\rules.json' } else { 'config\default\rules.json' }
+    Copy-Item (Join-Path $repo $rulesSource) -Destination $contents -Force
+    Write-Host "Factory rules edition: $Edition"
+
 
     $count = (Get-ChildItem $contents -File).Count
     Write-Host ("Installed Civil 3D {0}: {1} file(s) -> {2}" -f $build.Series, $count, $contents)
