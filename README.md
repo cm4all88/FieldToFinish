@@ -670,9 +670,10 @@ the linetype's definition (its text and shape elements), from the line's own lin
 or its layer's when ByLayer, never from the name. Gate labels along such a line are
 still placed, `FTFLABELLINE` still labels one you click (with a note), and the summary
 lists them by linetype (`Left to the legend: WATER (W) 12, POWER (P) 4`). Turn it off
-under Settings > Line Labels. **Fences are the exception:** every fence code carries
-`"alwaysLabel": true` in `rules.json`, so a fence is labelled whether or not its
-linetype draws x's. Any other line feature can be given the same flag. A survey figure whose style gives it a lettered linetype
+under Settings > Line Labels. **Fences are the exception:** every fence code has "label
+even on a lettered linetype" ticked (Settings > Line Labels > Line features;
+`"alwaysLabel": true` in `rules.json`), so a fence is labelled whether or not its
+linetype draws x's. Any other line feature can be given the same tick. A survey figure whose style gives it a lettered linetype
 of its own, rather than by layer, is not seen. `FTFLEGEND` itself lists only the line
 features configured in `rules.json`, so an unconfigured water or power line is in the
 office legend, not FTF's.
@@ -699,10 +700,10 @@ The FTF window's Settings page is grouped the way the work goes:
 
 | Group | Pages |
 |---|---|
-| FieldToFinish | General, **Layers**, Point Features, Symbols and Rotations (read only), Trees, Point Labels, Line Labels, **Label All**, Tags, Schedule, Driplines, Drawing Order |
+| FieldToFinish | General, **Layers**, Point Features, **Field Code Lists**, Symbols and Rotations, Trees, Point Labels, Text Styles, Leader Styles, Style Assignments, Line Labels, Gates, **Label All**, Tags, Schedule, Driplines, Drawing Order, Workflows, Review and QC, Point Accountability |
 | Survey Drafting | Spot Elevations, Contours, Drafting Lines, Benches, Wetland Buffers, Sheets, Utility Dips |
 | Boundary and Easements | Right of Way, Platted Blocks, Recorded Surveys, Survey Comparison, Strip Easements, Easement Exhibits |
-| Administration | Profiles, Diagnostics (codes you marked ignored), Advanced Settings |
+| Administration | Profiles, Where Values Come From, Diagnostics (codes you marked ignored), Advanced Settings, Commands |
 
 Every page shows "Unsaved changes" as soon as something is edited; **Save** writes to the
 level chosen at the bottom (my settings, this drawing's folder, or the drawing's
@@ -712,13 +713,65 @@ is in force for the drawing, selects or saves a project/client profile, and impo
 or exports a whole configuration (an import loads into the window; nothing is written
 until Save). Read-only pages and cells are greyed.
 
-**Point Features** is two panels: the feature list (search by code or name, filter by
-Label All family or disabled, sortable) beside the selected rule's editor. Edits are
-staged as you type, validated and previewed against a sample description, and **Save
-Rules** writes the rules file (comments and unknown properties kept, `.bak` written,
-never the factory file). Each rule's Label All family can be set there (an optional
-`"category"` in `rules.json`). **Line Labels** lists every line feature with its label
-text, label layer and side, saved to the rules file the same way.
+**Everything is in Settings.** Every value either file holds that a command reads is
+changed in the Settings window; nothing needs editing by hand. Two tests keep it so: a
+setting added to `ftf-settings.json` or a key added to `rules.json` without a page to
+change it fails the build (`EverySettingIsOnAPageTests`, `EveryRuleIsOnAPageTests`).
+
+The pages that edit the rules file have their own Save button (**Save Rules**, **Save
+Bench Settings**, ...). Each one reads the file as it is at that moment and puts only
+its own part onto it, so saving one page never undoes another's save. They write the
+office configuration, or the drawing override when one is active, never the factory
+file (comments and unknown properties kept, `.bak` written). Every mistake is named
+before anything is saved. Because every rules page checks the whole file, an office
+file that already holds a mistake (two line features with one code, say) cannot be
+saved from any rules page until it is fixed on the page the message names.
+
+- **Point Features** is two panels: the feature list (search by code or name, filter
+  by Label All family or disabled, sortable) beside the selected feature's editor,
+  which edits every part of it: the match pattern (the codes and fields it reads shown
+  as you type), species (`CODE = NAME`, one a line), the cluster label, the notes
+  vocabulary (terms, how each group reads, the `{notes}` order, what happens to
+  unknown words), range checks, rotation (angle field, azimuth or AutoCAD angle),
+  dripline (on/off, radius field, layer, trim overlaps), label, leader, tag, layers
+  and its Label All family (an optional `"category"`). Edits are previewed against a
+  sample description. **New Feature...** and **Delete Feature...** sit under the list;
+  a deletion names the code and what else refers to it, and nothing is written until
+  Save Rules (Discard Edits undoes it).
+- **Field Code Lists** has one tab per list: Never Drawn (each code with its reason,
+  and A surface (TIN) for surface data; Point Accountability flags a code left without
+  a reason), Labelled Symbols, Control, Linework, Line Commands (your Civil 3D linework
+  codes, B begin, E end, C close... and the `/` escape; with none in the file the
+  built-in PMX-Universal set is shown and the first save writes it) and Modifiers (each
+  word after a code is tried against the patterns from the top, and Order decides which
+  applies first; "Adds to the label" is written exactly as typed, so start it with a
+  space: ` (DEAD)`). Every tab has Use the Shipped List (Line Commands: Use the Built-in
+  Set), and **Try a description** shows how the edited lists read a description before
+  you save.
+- **Line Labels** keeps the rules file's line labelling in four tabs: Line features
+  (click a row to edit everything about it: code, name, the layer it is identified on,
+  label text and layer, side, on/off, "label even on a lettered linetype", "read
+  heights from its shots", other wordings for FTFLABELLINE, the wording between two
+  edges for FTFLABELBETWEEN, and other names; Add and Remove Line Feature), Span markers
+  (the note word, its label and on/off, such as two FGP shots labelled GATE), Ignored
+  TBC names, and the Stairs label (`{count}`, previewed). **Save Line Label Rules**
+  writes them; the window's Save writes the settings only.
+- **Symbols and Rotations** edits the symbol standard, blocks and rotation evidence
+  (see "Orienting symbols"), and on its Road lines and lists tab which survey linework
+  is which road or utility line, and the stop and yield sign codes, stop sign words and
+  luminaire codes. Its "How near is near" distances, QC layers and QC sizes are there
+  too.
+- **Benches** and **Wetland Buffers** (Survey Drafting) edit FTFBENCH and
+  FTFWETLANDBUFFER; see those commands.
+
+The rest of the window edits `ftf-settings.json`, which now includes FTFROWDIM's width
+text height and decimals (Drafting Lines), FTFMATCHLINE's zigzag (Sheets), the stub and
+mark for a pipe that runs outside the survey limits (Utility Dips; FTFTILDE's mark too),
+Strip Easements' temporary easement layers, hatch, label and table colours and
+lineweights, label mask, table placement and legal-description checks, the Easement
+Exhibits label mask, Recorded Surveys' OCR language, default and lot entity, table
+style, tag prefixes, lot text layer and area wording, and on Diagnostics an ignored code
+added by typing it, with whether a surface accounts for its points.
 
 ### Layers
 
@@ -841,8 +894,8 @@ the docs named below.
 | Settings levels | footer of the Settings window; Administration > Where Values Come From | Built-in < Office < My defaults < Profile < Project, merged value by value. Each value shows the level it comes from and the values it hides; Inherit removes one. Saves write only differences. Office saves need confirmation and the office PIN once one is set. | `docs/settings-levels.md` |
 | Layers | FieldToFinish > Layers | Every layer FTF draws on (labels, symbols, linework labels, trees, dips, leaders, spots, contours, pavement, control, tables, easements...): the mapping to a project layer and its colour, linetype, lineweight, plot and description. Applied when FTF creates a layer. `FTFLAYERUPDATE` previews and then updates existing layers FTF uses; `FTFCHECKSTANDARDS` checks every layer, linetype, style and block the settings name and offers fixes. | `docs/layer-standards.md` |
 | Text and leader styles | FieldToFinish > Text Styles, Leader Styles, Style Assignments | Named text looks (text style, height, width, oblique, rotation, justification, colour, mask, prefix, suffix, decimals, annotative) and multileader looks (multileader style, arrowhead and size, straight or spline, colour, linetype, lineweight, landing, gap, attachment, maximum length, annotative), assigned to every feature, a family, a rule or one code, separately for point labels, tags and line labels. A tester shows every value a label will get and where it comes from. | `docs/annotation-styles.md` |
-| One feature, one screen | FieldToFinish > Point Features | Per feature: label text, label layer, leader use, tag prefix, dripline layer, **and** label on/off, label text style, leader style, offset, tag style, the effective look with a preview, and a link to the feature's symbol and block. Line features get a text style column on Line Labels. | `docs/annotation-styles.md` |
-| Symbols and blocks | FieldToFinish > Symbols and Rotations | The symbol standard FTFORIENT turns markers by (block, native zero, period, two-sided), editable, with a block preview; blocks FTF inserts (opt-in per rule): block, layer, scale, insertion point, rotation method, attributes. | `docs/symbols-and-blocks.md` |
+| One feature, one screen | FieldToFinish > Point Features | Per feature: the match pattern, species, cluster label, notes vocabulary, range checks, rotation, dripline (on/off, radius field, layer, trim), label text, label layer, leader use, tag prefix, **and** label on/off, label text style, leader style, offset, tag style, the effective look with a preview, and a link to the feature's symbol and block. Line features get a text style column on Line Labels. | `docs/annotation-styles.md` |
+| Symbols and blocks | FieldToFinish > Symbols and Rotations | The symbol standard FTFORIENT turns markers by (block, native zero, period, two-sided), editable, with a block preview; blocks FTF inserts (opt-in per rule): block, layer, scale, insertion point, rotation method, attributes; the road and utility lines and sign and luminaire code lists FTFORIENT reads; how far it looks; its QC layers and sizes. | `docs/symbols-and-blocks.md` |
 | Commands and workflows | Administration > Commands; FieldToFinish > Workflows | Every command, its settings pages and ribbon place; your own ribbon panel ("My Commands"); saved processing workflows that appear in Process Drawing and FTFRUN. Pages register themselves, so a new command's settings appear without editing the window. | `docs/settings-registry.md` |
 
 **Existing drawings.** New output takes the current standards on its own. For what is
@@ -1225,8 +1278,9 @@ to that shot and `5' FENCE` after it.
 - A number that cannot be a fence height (over the configured highest height, or
   under 0.5 ft), or two different heights on one shot, is reported on the command
   line as `Check: ...` and never used.
-- Any feature whose name or label says FENCE reads heights; `"readHeight": true` on
-  a line feature in `rules.json` turns it on for others (a wall), `false` turns it off.
+- Any feature whose name or label says FENCE reads heights; "Read heights from its
+  shots" on the feature's row (Settings > Line Labels > Line features; `"readHeight"`
+  in `rules.json`) turns it on for others (a wall), or off.
 - `FTFLABELLINE` shows the height in force where the cursor is while you drag; the
   automatic pass and Label All write each label with the height at its own spot.
 - Settings > Line Labels > Fence heights: the wording (`{height}' {label}`, empty to
@@ -1696,9 +1750,9 @@ Factory defaults          ->  Office configuration        ->  Drawing override
 
 The factory file belongs to the installer and the installer only ever writes
 inside the bundle — so **updating or redeploying FTF cannot overwrite user
-configuration, by construction**. The rule editor never writes the factory file:
+configuration, by construction**. No Settings page writes the factory file:
 the first save creates the office configuration; a drawing override, when active,
-is edited in place. The Point Features page states which level is active.
+is edited in place. Each rules page states which level is active.
 
 **Restore Factory Defaults** is an explicit button that copies the shipped rules
 over the office configuration (previous version kept as `.bak`), after
@@ -1710,7 +1764,7 @@ reload; it never restores.
 
 | File | Holds | Written by |
 |---|---|---|
-| `config/rules.json` | **Grammar.** Codes, species, modifiers, ignore list, layers per rule, validation ranges. | People, deliberately. **Never by the plugin.** |
+| `config/rules.json` | **Grammar.** Codes, species, modifiers, ignore list, layers per rule, validation ranges. | People, deliberately, through the Settings window's rules pages, which write the office copy or a drawing override. **The shipped file is never written by the plugin.** |
 | `ftf-settings.json` | **Behaviour.** How the commands act — text style, sizes, offsets, masking, report location. | `FTFSETUP` |
 
 They are separate because `rules.json` ships with the plugin and is replaced on

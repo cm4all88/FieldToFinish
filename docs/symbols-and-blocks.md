@@ -83,10 +83,30 @@ How FTFORIENT weighs the road lines around a feature and what a feature's fallba
 - intersections (`intersectionHandling`);
 - per kind, Apply, Review or Leave (`fallbacks`);
 - hand rotations (`handTurned`);
-- QC graphics (`qcGraphics`, `qcShowInferredConnections`, `qcTextPlotted`).
+- QC graphics (`qcGraphics`, `qcShowInferredConnections`), their layers (`qcLayer`,
+  `qcInferredLayer`; FTFORIENT sets both not to plot, so use layers that hold only QC) and
+  plotted sizes (`qcArrowPlotted`, 0.3 in; `qcTextPlotted`, 0.06 in);
+- **How near is near**: how far FTFORIENT looks for an intersection
+  (`intersectionSearchFeet`, 150 ft), a stop sign's stop bar (`stopBarSearchFeet`, 60),
+  signs on one post (`samePostFeet`, 1.5), a shot sign panel (`panelSnapFeet`, 3), a
+  luminaire shot (`luminaireSearchFeet`, 40), a valve's water or gas line (`mainSnapFeet`,
+  5), the rest of a valve cluster (`valveClusterFeet`, 20) and a hydrant near a cluster
+  (`hydrantSearchFeet`, 60).
 
 All are in the rules file's `orientation` section and checked on save. Why they exist, with
 before and after: `docs/orientation-review-2026-11.md`.
+
+## Road lines and lists (tab 4)
+
+- **Road lines**: which survey linework is which road or utility line (`orientation >
+  lines`): what the line is (centre line, lane line, pavement edge, stop bar, main...), the
+  layers it is on and the survey figure codes it is drawn from. PMX's list is shown until
+  your first edit copies it into the rules file; **Use the PMX List** takes the file's list
+  out again. A list in the file replaces PMX's whole list.
+- **Lists**, one a line: the sign codes that control an approach (stop, yield;
+  `stopSignCodes`), the words that make a sign a stop or yield sign (`stopSignWords`) and
+  the codes of a luminaire shot at the end of an arm (`luminaireCodes`). An empty box means
+  PMX's list, so an office cannot have none.
 
 ## Blocks FTF inserts (tab 2)
 

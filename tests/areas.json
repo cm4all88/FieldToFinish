@@ -183,6 +183,7 @@
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockPreviewMathTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
@@ -256,6 +257,7 @@
         "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.DiagnosticsSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.FieldCodeListsEditingTests.",
@@ -343,6 +345,7 @@
         "tests/FieldCodes.Tests/StyleResolverTests.cs"
       ],
       "unitTests": [
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
@@ -398,6 +401,7 @@
         "FullyQualifiedName~FieldCodes.Tests.BenchSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.FieldCodeListsEditingTests.",
@@ -463,6 +467,7 @@
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.FieldNoteHeightTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
@@ -532,6 +537,7 @@
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.DrivewayLabelTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.FenceHeightTests.",
@@ -624,6 +630,7 @@
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.ContourTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
@@ -688,6 +695,7 @@
         "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
         "FullyQualifiedName~FieldCodes.Tests.EasementBuilderTests.",
         "FullyQualifiedName~FieldCodes.Tests.EasementDraftingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.ExhibitEasementTests.",
         "FullyQualifiedName~FieldCodes.Tests.ExhibitLabelTests.",
@@ -765,6 +773,7 @@
         "FullyQualifiedName~FieldCodes.Tests.BenchTests.",
         "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
         "FullyQualifiedName~FieldCodes.Tests.DraftingSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
@@ -811,6 +820,7 @@
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
         "FullyQualifiedName~FieldCodes.Tests.DripLineTrimmerTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
@@ -855,9 +865,10 @@
         "tests/FieldCodes.Tests/BlockPreviewMathTests.cs"
       ],
       "unitTests": [
-        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertionSafeguardTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockPreviewMathTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
@@ -893,12 +904,14 @@
         "tests/FieldCodes.Tests/AuditRegressionTests.cs",
         "tests/FieldCodes.Tests/LineLabelRulesEditingTests.cs",
         "src/FieldCodes.Cad/Setup/FieldCodeListsPage.cs",
-        "tests/FieldCodes.Tests/FieldCodeListsEditingTests.cs"
+        "tests/FieldCodes.Tests/FieldCodeListsEditingTests.cs",
+        "tests/FieldCodes.Tests/EveryRuleIsOnAPageTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
         "FullyQualifiedName~FieldCodes.Tests.BenchSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FieldCodeListsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
@@ -945,6 +958,7 @@
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
         "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
@@ -1001,6 +1015,7 @@
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
         "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
@@ -1069,6 +1084,7 @@
         "FullyQualifiedName~FieldCodes.Tests.DipReferenceDecisionTests.",
         "FullyQualifiedName~FieldCodes.Tests.DipWindowQueueTests.",
         "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
@@ -1148,6 +1164,7 @@
         "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.DiagnosticsSettingsTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.ExceptionReportTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureReviewTests.",
@@ -1221,6 +1238,7 @@
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
         "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
@@ -1289,6 +1307,7 @@
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
@@ -1346,6 +1365,7 @@
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.DipWindowQueueTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.FtfSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
@@ -1382,6 +1402,7 @@
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
@@ -1414,6 +1435,7 @@
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.BreakLineTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",
@@ -1457,6 +1479,7 @@
         "FullyQualifiedName~FieldCodes.Tests.DiscrepancyMarkTests.",
         "FullyQualifiedName~FieldCodes.Tests.EasementBuilderTests.",
         "FullyQualifiedName~FieldCodes.Tests.EasementDraftingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.EverySettingIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.ExactnessAndVisibilityTests.",
         "FullyQualifiedName~FieldCodes.Tests.ExhibitEasementTests.",
@@ -1520,6 +1543,7 @@
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.BuildStampTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
+        "FullyQualifiedName~FieldCodes.Tests.EveryRuleIsOnAPageTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.LabelEverythingFixTests.",

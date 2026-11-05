@@ -72,12 +72,22 @@ today's pages keep their groups and order, and allows pages between them.
    its `[JsonProperty("key")]`, constructor default, `FillMissingSections` line and entry in
    `Sections`), as before. Update the section count in `FtfSettingsTests`.
 2. The page: a `SetupPage` with `[SettingsPage(...)]`, naming the new section in `Sections` and the
-   command in `Commands`.
+   command in `Commands`. Every setting the page owns must be shown in LoadFrom and saved in
+   SaveTo: `EverySettingIsOnAPageTests` fails, naming the setting and its page, when one is not. A
+   value deliberately edited elsewhere goes in its `NotOnAPage` list with the reason; a value read
+   through a member of its object (a lookup) goes in `ReadThrough`.
 3. Nothing else. The navigation, Settings > Commands (with its link to the page) and My Commands
    pick up both the command (from its `[CommandMethod]`) and the page.
 
 If a section deliberately has no page, add its key to `SettingsRegistry.SectionsWithoutPage` with
 the reason; otherwise `EverySettingsSectionIsEditedByARegisteredPage` fails.
+
+A new key in the rules file (`RulesConfig`) needs a page too: one deriving from
+`RulesSectionPage` (its own Save button; it re-reads the file and copies only its own section
+onto it) with Get/Apply/Copy methods and checks on `RuleDocument`. `EveryRuleIsOnAPageTests`
+fails until the key is listed with the page that edits it and the `RuleDocument` methods that page
+calls, and until the editing code names every key inside it. A key that only seeds
+`ftf-settings.json` goes in its `SeedOnly` list with the setting that takes it over.
 
 ## Settings > Commands
 

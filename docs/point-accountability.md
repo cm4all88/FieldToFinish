@@ -84,8 +84,9 @@ Sign categories come from the sign's code, then its words, in this order:
 The description is never changed. A private sign is not assumed to face a road.
 
 The Drafting Standard editor lists every row in force. A built-in row keeps its codes, family and
-pattern; switch it off and add your own instead. Save Rules writes only what differs from the
-built-in standard. An office file that changes nothing gets no section, and later corrections to the
+pattern; switch it off and add your own instead. A row's exceptions are a grid below it: each
+applies by sign category and/or a pattern on the description or note, then names the fields it
+changes. Save Rules writes only what differs from the built-in standard. An office file that changes nothing gets no section, and later corrections to the
 built-in standard still reach it.
 
 ```json
