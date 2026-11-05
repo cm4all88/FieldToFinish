@@ -85,7 +85,10 @@ function Write-Summary {
     foreach ($r in $results) { $lines += ('[{0}] {1}  {2}' -f $r.Status, $r.Step, $r.Detail) }
     if ($notes.Count -gt 0) { $lines += ''; $lines += 'Notes:'; foreach ($n in $notes) { $lines += ('  - ' + $n) } }
     $lines += ''
-    $lines += $(if ($failed.Count -eq 0 -and $Finished) { 'RESULT: all automated steps passed. Now do the manual Civil 3D checks.' } else { 'RESULT: not clean. Send the log folder.' })
+    $clean = ($failed.Count -eq 0 -and $Finished)
+    if ($clean -and $SkipTests) { $lines += 'RESULT: PARTIAL. Unit tests were skipped, so this is not a full baseline.' }
+    elseif ($clean) { $lines += 'RESULT: all automated steps passed. Now do the manual Civil 3D checks.' }
+    else { $lines += 'RESULT: NOT A VALID BASELINE. A step failed or the run stopped early. Send the log folder.' }
     $lines | Out-File -FilePath (Join-Path $logDir 'summary.txt') -Encoding utf8
     try {
         $zip = $logDir + '.zip'
@@ -180,6 +183,7 @@ $builtRules = Join-Path $bin 'rules.json'
 $wanted = (Get-FileHash -LiteralPath (Join-Path $repo 'config\default\rules.json')).Hash
 $gotRules = if (Test-Path -LiteralPath $builtRules) { (Get-FileHash -LiteralPath $builtRules).Hash } else { '' }
 Add-Result 'Build shipped the neutral TRACE rules' ($wanted -eq $gotRules) $(if ($wanted -eq $gotRules) { 'rules.json matches config\default' } else { 'rules.json in the build is NOT the neutral default' })
+if ($wanted -ne $gotRules) { Stop-Run 'The build does not carry the neutral TRACE rules. Nothing was installed.' }
 
 # ----------------------------------------------------------------------- 3. tests
 if ($SkipTests) {
@@ -192,20 +196,42 @@ if ($SkipTests) {
     $summaryLine = (Select-String -Path $testLog -Pattern '^(Passed|Failed)!' -ErrorAction SilentlyContinue | Select-Object -Last 1)
     $text = if ($summaryLine) { $summaryLine.Line.Trim() } else { 'no summary line, see unit-tests.log' }
     Add-Result 'Unit tests (non-CAD)' ($code -eq 0) $text
+    if ($code -ne 0) { Stop-Run 'Unit tests failed. Nothing was installed. See unit-tests.log.' }
 }
 
 # --------------------------------------------------------------------- 4. install
+# Another edition's bundle must never be replaced or altered. Check before installing anything.
+$fieldToFinishBundles = @(
+    (Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'),
+    (Join-Path $env:ProgramFiles 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'),
+    (Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins\FieldToFinish.bundle')
+) | Where-Object { Test-Path -LiteralPath $_ }
+if (@($fieldToFinishBundles).Count -gt 0) {
+    Add-Result 'No existing FieldToFinish bundle in the way' $false (($fieldToFinishBundles) -join '; ')
+    Write-Host ''
+    Write-Host 'An existing FieldToFinish installation was found. It has NOT been touched.' -ForegroundColor Yellow
+    Write-Host 'Both editions define the same FTF commands, so Civil 3D could silently run the wrong one.'
+    Write-Host 'Set it aside yourself, then run this script again. For example:'
+    foreach ($b in $fieldToFinishBundles) { Write-Host ('   Rename-Item "' + $b + '" "FieldToFinish.bundle.off"') }
+    Write-Host 'To restore it afterwards, rename it back.'
+    Stop-Run 'An existing FieldToFinish bundle would conflict with TRACE. Nothing was installed.'
+}
+Add-Result 'No existing FieldToFinish bundle in the way' $true 'none found'
+
 Write-Host ''
-Write-Host 'Installing the development bundle for the current user...'
+Write-Host 'Installing the TRACE development bundle for the current user...'
 $installLog = Join-Path $logDir 'install.log'
 $code = Invoke-Logged 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $repo 'deploy\install-dev.ps1'), '-Edition', 'Default') $installLog
-$bundle = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\FieldToFinish.bundle'
+$bundle = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\TRACE.bundle'
 $installedDll = Join-Path $bundle 'Contents\2024\FieldCodes.Cad.dll'
 $installedRules = Join-Path $bundle 'Contents\2024\rules.json'
 $manifest = Join-Path $bundle 'PackageContents.xml'
 $installOk = ($code -eq 0) -and (Test-Path -LiteralPath $installedDll) -and (Test-Path -LiteralPath $manifest)
 Add-Result 'Install bundle' $installOk $(if ($installOk) { $bundle } else { "failed, exit code $code. See install.log" })
 if ($installOk) {
+    $manifestText = Get-Content -LiteralPath $manifest -Raw
+    $manifestOk = $manifestText.Contains('Name="TRACE"') -and (-not $manifestText.Contains('Parametrix'))
+    Add-Result 'Installed manifest is the TRACE manifest' $manifestOk $(if ($manifestOk) { 'ok' } else { 'PackageContents.xml is not the TRACE manifest' })
     $rulesOk = (Test-Path -LiteralPath $installedRules) -and ((Get-FileHash -LiteralPath $installedRules).Hash -eq $wanted)
     Add-Result 'Installed rules are the neutral TRACE rules' $rulesOk $(if ($rulesOk) { 'ok' } else { 'installed rules.json differs from config\default' })
     $autodeskCopies = @(Get-ChildItem -LiteralPath (Join-Path $bundle 'Contents\2024') -File | Where-Object { $_.Name -match '^(Ac|Aecc)' })

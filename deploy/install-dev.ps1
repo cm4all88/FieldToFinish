@@ -32,7 +32,12 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repo       = Split-Path -Parent $PSScriptRoot
-$bundleName = 'FieldToFinish.bundle'
+
+# Each edition has its OWN bundle (folder, manifest, product code), so installing or
+# removing one can never replace or alter the other:
+#   Default    -> TRACE.bundle          (commercial test edition)
+#   Parametrix -> FieldToFinish.bundle  (internal; unchanged)
+$bundleName = if ($Edition -eq 'Parametrix') { 'FieldToFinish.bundle' } else { 'TRACE.bundle' }
 $source     = Join-Path $PSScriptRoot $bundleName
 
 $root = if ($AllUsers) {
@@ -50,6 +55,19 @@ if ($running) {
                  'It holds the plugin assembly open. Close it and run this again.')
 }
 
+# --- the other edition's bundle ----------------------------------------------------
+# Both editions define the same FTF commands and (for now) the same assembly name, so if
+# both are installed Civil 3D can load the wrong one without telling you. This script
+# never touches the other bundle. For TRACE it stops; for the internal edition it warns.
+
+$otherName = if ($Edition -eq 'Parametrix') { 'TRACE.bundle' } else { 'FieldToFinish.bundle' }
+$otherRoots = @(
+    (Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins'),
+    (Join-Path $env:ProgramFiles 'Autodesk\ApplicationPlugins'),
+    (Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins')
+)
+$otherFound = @($otherRoots | Where-Object { $_ } | ForEach-Object { Join-Path $_ $otherName } | Where-Object { Test-Path -LiteralPath $_ })
+
 # --- uninstall --------------------------------------------------------------------
 
 if ($Uninstall) {
@@ -60,6 +78,18 @@ if ($Uninstall) {
         Write-Host "Nothing installed at $target"
     }
     return
+}
+
+if ($otherFound.Count -gt 0 -and -not $Uninstall) {
+    $list = ($otherFound | ForEach-Object { '  ' + $_ }) -join "`n"
+    if ($Edition -eq 'Parametrix') {
+        Write-Warning ("TRACE.bundle is also installed:`n$list`nBoth define the same commands; only one should be active in Civil 3D.")
+    } else {
+        Write-Error ("$otherName is installed:`n$list`n" +
+                     "It is NOT touched. Both editions define the same FTF commands, so Civil 3D could silently run the wrong one. " +
+                     "To test TRACE, set that folder aside yourself first (for example rename it to $otherName.off), " +
+                     "and rename it back afterwards.")
+    }
 }
 
 # --- locate the build output ------------------------------------------------------
@@ -119,6 +149,7 @@ if (Test-Path $officeRules) {
 }
 
 Write-Host ""
+Write-Host "Installed bundle: $target"
 Write-Host "Done. Start Civil 3D - the FTF commands will be available without NETLOAD."
 Write-Host "Rebuilding still needs Civil 3D closed first; a loaded assembly is never released."
 Write-Host ""

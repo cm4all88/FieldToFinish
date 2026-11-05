@@ -8,7 +8,7 @@ Everything is typed at the Civil 3D command line unless it says otherwise. After
 1. Start Civil 3D 2024. New drawing from **_Autodesk Civil 3D (Imperial) NCS.dwt**.
 2. Save it as `<repo>\logs\trace-test\sample.dwg` (any folder you like works; this one keeps things together). Remember the folder: reports are written beside the drawing.
 3. Import the points: type `IMPORTPOINTS` (if Civil 3D does not know it: Toolspace, Prospector tab, right-click **Points**, **Create…**, then the *Import Points* button). Choose format **PNEZD (comma delimited)** and the file `tests\Manual\trace-sample-points.csv`. Zoom Extents (`Z`, `E`).
-4. You should see 12 points. Check the ribbon has an **FTF** tab and `FTFWHERE` prints a rules path inside `...\ApplicationPlugins\FieldToFinish.bundle\Contents\2024\` and an office folder under `%APPDATA%\TRACE`.
+4. You should see 12 points. Check the ribbon has an **FTF** tab and `FTFWHERE` prints a rules path inside `...\ApplicationPlugins\TRACE.bundle\Contents\2024\` and an office folder under `%APPDATA%\TRACE`.
 5. Draw one stray `LINE` anywhere and one `TEXT` saying `HAND` (default layer). These are "technician work": they must survive everything below.
 
 **Count objects.** Several steps ask you to count. Type `SELECT`, Enter, `ALL`, Enter. Civil 3D prints `N found`. Press Esc. Call the first count **N0** (points, your line and your text).

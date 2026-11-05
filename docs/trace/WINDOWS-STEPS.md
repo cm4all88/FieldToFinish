@@ -9,6 +9,8 @@ Needs: Windows, Civil 3D 2024, the .NET 8 SDK (https://dotnet.microsoft.com/down
 powershell -ExecutionPolicy Bypass -File .\deploy\Run-TraceBaseline.ps1
 ```
 
+It installs a separate `TRACE.bundle` and never touches an existing `FieldToFinish.bundle`. If one is found it stops before installing and tells you how to set it aside yourself (and restore it afterwards), because both define the same FTF commands. It also stops, installing nothing, if the build, the neutral-rules check or the unit tests fail.
+
 It checks prerequisites, builds TRACE, runs the non-CAD tests, installs the development bundle, and puts every log plus a zip in `logs\trace-baseline-<time>\`. It never starts Civil 3D or opens a drawing.
 
 3. Follow `docs\trace\MANUAL-VERIFICATION.md` by hand in Civil 3D.
