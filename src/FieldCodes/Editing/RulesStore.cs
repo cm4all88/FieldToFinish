@@ -54,12 +54,13 @@ namespace FieldCodes.Editing
     {
         public const string RulesFileName = "rules.json";
 
-        /// <summary>%APPDATA%\FieldToFinish -- shared with ftf-settings.json.</summary>
+        /// <summary>%APPDATA%\FieldToFinish (internal build) or %APPDATA%\TRACE (commercial
+        /// build) -- see <see cref="Branding"/>. Shared with ftf-settings.json.</summary>
         public static string OfficeDirectory()
         {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FieldToFinish");
+                Branding.ConfigFolderName);
         }
 
         public static string OfficeRulesPath()

@@ -41,6 +41,15 @@
     <FactoryRulesPath Condition="'$(TraceEdition)' != 'Parametrix'">$(MSBuildThisFileDirectory)..\..\config\default\rules.json</FactoryRulesPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Stamps the edition into the assembly; FieldCodes.Branding reads it to choose
+         %APPDATA%\TRACE (Default) or %APPDATA%\FieldToFinish (Parametrix). -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>TraceEdition</_Parameter1>
+      <_Parameter2>$(TraceEdition)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <Target Name="_FtfCheckCivil3D" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('$(C3D2024)\AcDbMgd.dll') Or !Exists('$(C3D2024)\C3D\AeccDbMgd.dll')"
            Text="Civil 3D 2024 not found. Looked for AcDbMgd.dll and C3D\AeccDbMgd.dll under '$(C3D2024)'. Set -p:C3D2024=... to the install root." />

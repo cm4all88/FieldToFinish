@@ -89,3 +89,4 @@ Next in line (not in the first five): FTFTAGS/FTFTABLE, FTFSPOT, FTFCONTROL, FTF
 ## Progress log
 - 2026-11-05: Non-CAD baseline 943/947, then 968/968 after fixes (see BASELINE-NONCAD.md).
 - 2026-11-05: Neutral `config/default/rules.json`; Parametrix files moved to `config/internal/parametrix`; `TraceEdition` build switch; CSV standards importer with tests; 4 path tests made portable; TRACE bundle manifest, release-guard build script and Inno installer script (all UNTESTED on Windows). See CONFIGURATION.md.
+- 2026-11-05: Settings folder is edition-aware: TRACE edition uses `%APPDATA%\TRACE`, internal keeps `%APPDATA%\FieldToFinish`; no migration (TRACE starts from neutral defaults). Assembly rename plan written (ASSEMBLY-RENAME-PLAN.md); Windows build/test steps written (WINDOWS-STEPS.md). 978 non-CAD tests pass.

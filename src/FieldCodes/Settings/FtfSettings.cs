@@ -139,7 +139,7 @@ namespace FieldCodes.Settings
         {
             var dir = ProfileDirectoryOverride ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FieldToFinish");
+                Branding.ConfigFolderName);
             return Path.Combine(dir, FileName);
         }
 
