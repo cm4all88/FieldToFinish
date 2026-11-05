@@ -301,6 +301,7 @@
         "FullyQualifiedName~FieldCodes.Tests.SymbolLabelTests.",
         "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.WorkflowFollowUpTests.",
         "FullyQualifiedName~FieldCodes.Tests.WorkflowTests."
       ],
@@ -418,7 +419,8 @@
         "FullyQualifiedName~FieldCodes.Tests.StandardsCheckTests.",
         "FullyQualifiedName~FieldCodes.Tests.StandardsViewTests.",
         "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
-        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests."
+        "FullyQualifiedName~FieldCodes.Tests.UnverifiedEvidenceTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferSettingsEditingTests."
       ],
       "civil3d": [
         "accountability"
@@ -729,7 +731,8 @@
         "tests/FieldCodes.Tests/DraftingProfileTests.cs",
         "src/FieldCodes/Wetlands/**",
         "src/FieldCodes.Cad/WetlandBufferCommands.cs",
-        "tests/FieldCodes.Tests/WetlandBufferTests.cs"
+        "tests/FieldCodes.Tests/WetlandBufferTests.cs",
+        "tests/FieldCodes.Tests/WetlandBufferSettingsEditingTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
@@ -748,6 +751,7 @@
         "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
         "FullyQualifiedName~FieldCodes.Tests.SpotPlacerTests.",
         "FullyQualifiedName~FieldCodes.Tests.SurveyDirectionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.WetlandBufferTests."
       ],
       "civil3d": [],
@@ -877,7 +881,8 @@
         "FullyQualifiedName~FieldCodes.Tests.RuleEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.RulesStoreTests.",
         "FullyQualifiedName~FieldCodes.Tests.SettingsRegistryTests.",
-        "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests."
+        "FullyQualifiedName~FieldCodes.Tests.SymbolStandardEditingTests.",
+        "FullyQualifiedName~FieldCodes.Tests.WetlandBufferSettingsEditingTests."
       ],
       "civil3d": [],
       "verified": {

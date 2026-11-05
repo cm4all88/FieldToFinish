@@ -119,7 +119,7 @@
     "labelFormat": "BENCH {length:0.#}'x{depth:0.#}'"
   },
 
-  "//wetlandBuffer": "FTFWETLANDBUFFER (FTFWLB). Offsets a wetland line by the buffer distance with round, tangent outside corners, so every point of the buffer is exactly that far from the wetland; smoothing > 0 rounds the inside corners too, without coming closer. A closed wetland is buffered outward; an open edge to the side picked. The buffer is cut back where a line on a hardSurfaceLayers layer lies between it and the wetland (it stops at the edge of the road instead of running across it). distance and smoothing are what the command offers first, in drawing units. Layers may use * (V-SURF-ASPH*). The wetland and hard-surface lines are never changed; running the command again on a wetland replaces its buffer.",
+  "//wetlandBuffer": "FTFWETLANDBUFFER (FTFWLB). Offsets a wetland line by the buffer distance with round, tangent outside corners, so every point of the buffer is exactly that far from the wetland; smoothing > 0 rounds the inside corners too, without coming closer. A closed wetland is buffered outward; an open edge to the side picked. The buffer is cut back where a line on a hardSurfaceLayers layer lies between it and the wetland (it stops at the edge of the road instead of running across it). distance and smoothing are what the command offers first, in drawing units. Layers may use * (V-SURF-ASPH*). The wetland and hard-surface lines are never changed; running the command again on a wetland replaces its buffer. Settings > Survey Drafting > Wetland Buffers edits this section.",
   "wetlandBuffer": {
     "layer": "V-WATR-WTLD-BUFR-E",
     "distance": 50,

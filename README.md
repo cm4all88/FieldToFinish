@@ -565,6 +565,12 @@ lines, give the buffer distance and, if wanted, a smoothing radius for the insid
   running the command again on the same wetland replaces its buffer instead of adding a second.
 - **Defaults.** `wetlandBuffer.distance` (50) and `wetlandBuffer.smoothing` (0) are what it
   offers first. It remembers what you typed for the rest of the session.
+- **Settings > Survey Drafting > Wetland Buffers** edits all of this: the buffer layer, the
+  distance and smoothing radius offered first, whether the trim prompt defaults to Yes, and the
+  hard-surface layers. It has **Add Drawing Layers...** (layers whose names suggest a hard surface
+  listed first) and **Use the PMX List**, and shows which of the open drawing's layers the list
+  matches. Like Symbols and Rotations, the page writes the rules file with its own **Save Wetland
+  Buffer Settings** button, to the office standard or the drawing override, never the shipped file.
 
 ## Between two edges: FTFLABELBETWEEN
 
@@ -689,7 +695,7 @@ The FTF window's Settings page is grouped the way the work goes:
 | Group | Pages |
 |---|---|
 | FieldToFinish | General, **Layers**, Point Features, Symbols and Rotations (read only), Trees, Point Labels, Line Labels, **Label All**, Tags, Schedule, Driplines, Drawing Order |
-| Survey Drafting | Spot Elevations, Contours, Drafting Lines, Sheets, Utility Dips |
+| Survey Drafting | Spot Elevations, Contours, Drafting Lines, Wetland Buffers, Sheets, Utility Dips |
 | Boundary and Easements | Right of Way, Platted Blocks, Recorded Surveys, Survey Comparison, Strip Easements, Easement Exhibits |
 | Administration | Profiles, Diagnostics (codes you marked ignored), Advanced Settings |
 

@@ -413,6 +413,7 @@ namespace FieldCodes.Editing
             // Checked on the document first: a symbol kind the enum does not know would stop the
             // typed read below with a JSON error that names no row.
             OrientationProblems(problems);
+            WetlandBufferProblems(problems);
             if (problems.Count > 0) return problems;
 
             RulesConfig cfg;

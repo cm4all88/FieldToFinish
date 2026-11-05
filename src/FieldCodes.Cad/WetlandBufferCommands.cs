@@ -30,6 +30,8 @@ namespace FieldCodes.Cad
     /// drafting on the wetland buffer layer: FTFCLEAN leaves it, FTFWHAT names it, and running
     /// the command again on the same wetland replaces its buffer instead of adding a second.
     ///
+    /// Its settings are on Settings > Survey Drafting > Wetland Buffers (WetlandBufferPage).
+    ///
     /// UNTESTED in Civil 3D. The offset and the trim are unit tested in FieldCodes.Wetlands.
     /// </summary>
     public sealed class WetlandBufferCommands
