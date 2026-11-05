@@ -535,6 +535,11 @@ feet, `[ ]` and `\P` as above).
   on the same two shots replaces that bench rather than drawing a second.
 - The outline goes on `V-SURF-LAND-E` and the label on `V-SURF-LAND-TEXT-E` (PMX keeps
   benches with landscape features); `bench.layer` / `bench.labelLayer` change them.
+- **Settings > Survey Drafting > Benches** edits all of it: the outline and label layers, the
+  label wording (Length, Depth, Height and New Line buttons put the fields in, and a preview shows
+  exactly what FTFBENCH writes for a 6 x 1.5 x 1.5 ft bench) and the bench codes. The label's text
+  height, style and placement are the Line Labels page's, linked from there. The page writes the
+  rules file with its own **Save Bench Settings** button, like the other rules-file pages.
 
 ## Wetland buffers: FTFWETLANDBUFFER
 
@@ -695,7 +700,7 @@ The FTF window's Settings page is grouped the way the work goes:
 | Group | Pages |
 |---|---|
 | FieldToFinish | General, **Layers**, Point Features, Symbols and Rotations (read only), Trees, Point Labels, Line Labels, **Label All**, Tags, Schedule, Driplines, Drawing Order |
-| Survey Drafting | Spot Elevations, Contours, Drafting Lines, Wetland Buffers, Sheets, Utility Dips |
+| Survey Drafting | Spot Elevations, Contours, Drafting Lines, Benches, Wetland Buffers, Sheets, Utility Dips |
 | Boundary and Easements | Right of Way, Platted Blocks, Recorded Surveys, Survey Comparison, Strip Easements, Easement Exhibits |
 | Administration | Profiles, Diagnostics (codes you marked ignored), Advanced Settings |
 

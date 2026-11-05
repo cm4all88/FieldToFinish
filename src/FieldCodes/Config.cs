@@ -447,7 +447,7 @@ namespace FieldCodes
     {
         /// <summary>Codes a bench end is shot with. Used to say when a picked point is
         /// coded as something else; a picked point is never refused for its code.</summary>
-        [JsonProperty("codes")] public List<string> Codes { get; set; }
+        [JsonProperty("codes", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> Codes { get; set; }
 
         [JsonProperty("layer")] public string Layer { get; set; }
         [JsonProperty("labelLayer")] public string LabelLayer { get; set; }

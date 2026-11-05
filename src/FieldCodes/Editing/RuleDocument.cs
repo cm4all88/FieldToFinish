@@ -414,6 +414,7 @@ namespace FieldCodes.Editing
             // typed read below with a JSON error that names no row.
             OrientationProblems(problems);
             WetlandBufferProblems(problems);
+            BenchProblems(problems);
             if (problems.Count > 0) return problems;
 
             RulesConfig cfg;

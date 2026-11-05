@@ -210,6 +210,14 @@ namespace FieldCodes.Drafting
             return plan;
         }
 
+        /// <summary>What FTFBENCH writes for a sample bench (6 ft long, 1.5 ft deep, 1.5 ft high),
+        /// as Settings > Benches previews it; lines joined with " / ".</summary>
+        public static string Preview(string labelFormat)
+        {
+            var plan = Plan(new P2(0, 0), new P2(6, 0), 1.5, 1.5, labelFormat, 1.0);
+            return plan.LabelLines == null ? string.Empty : string.Join(" / ", plan.LabelLines.ToArray());
+        }
+
         /// <summary>True when the format shows the height, so it is worth asking for one.</summary>
         public static bool UsesHeight(string labelFormat)
         {

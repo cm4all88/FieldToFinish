@@ -250,6 +250,7 @@
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
         "FullyQualifiedName~FieldCodes.Tests.AnnotationPolicyTests.",
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BenchSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.CodeDiagnosticsTests.",
         "FullyQualifiedName~FieldCodes.Tests.CommandCatalogTests.",
@@ -391,6 +392,7 @@
         "FullyQualifiedName~FieldCodes.Tests.AccountabilityHarnessExpectationTests.",
         "FullyQualifiedName~FieldCodes.Tests.AccountabilitySettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BenchSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.DeploymentContractTests.",
         "FullyQualifiedName~FieldCodes.Tests.FeatureStandardTests.",
@@ -732,10 +734,12 @@
         "src/FieldCodes/Wetlands/**",
         "src/FieldCodes.Cad/WetlandBufferCommands.cs",
         "tests/FieldCodes.Tests/WetlandBufferTests.cs",
-        "tests/FieldCodes.Tests/WetlandBufferSettingsEditingTests.cs"
+        "tests/FieldCodes.Tests/WetlandBufferSettingsEditingTests.cs",
+        "tests/FieldCodes.Tests/BenchSettingsEditingTests.cs"
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BenchSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.BenchTests.",
         "FullyQualifiedName~FieldCodes.Tests.DraftingProfileTests.",
         "FullyQualifiedName~FieldCodes.Tests.DraftingSettingsTests.",
@@ -867,6 +871,7 @@
       ],
       "unitTests": [
         "FullyQualifiedName~FieldCodes.Tests.AuditRegressionTests.",
+        "FullyQualifiedName~FieldCodes.Tests.BenchSettingsEditingTests.",
         "FullyQualifiedName~FieldCodes.Tests.BlockInsertSettingsTests.",
         "FullyQualifiedName~FieldCodes.Tests.GateSourceTests.",
         "FullyQualifiedName~FieldCodes.Tests.HarnessContractTests.",
