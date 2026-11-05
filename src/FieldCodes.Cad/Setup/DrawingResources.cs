@@ -25,6 +25,9 @@ namespace FieldCodes.Cad.Setup
         /// <summary>Multileader styles (MLEADERSTYLE), for the Leader Styles page.</summary>
         public IList<string> MLeaderStyles { get; private set; }
 
+        /// <summary>Table styles (TABLESTYLE), for the pages that name the style of a table FTF draws.</summary>
+        public IList<string> TableStyles { get; private set; }
+
         /// <summary>Text style name to its TrueType typeface; an SHX style maps to its font
         /// file name. The style previews draw with the typeface when Windows has it.</summary>
         public Dictionary<string, string> TextStyleFonts { get; private set; }
@@ -54,6 +57,7 @@ namespace FieldCodes.Cad.Setup
             Blocks = new List<string>();
             Linetypes = new List<string>();
             MLeaderStyles = new List<string>();
+            TableStyles = new List<string>();
             TextStyleFonts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             LineLabelStyles = new List<string>();
             CurveLabelStyles = new List<string>();
@@ -82,6 +86,7 @@ namespace FieldCodes.Cad.Setup
             ReadBlocks(db, tr);
             ReadLinetypes(db, tr);
             ReadMLeaderStyles(db, tr);
+            ReadTableStyles(db, tr);
             LineLabelStyles = CivilLabels.LineLabelStyleNames(db, tr);
             CurveLabelStyles = CivilLabels.CurveLabelStyleNames(db, tr);
         }
@@ -152,6 +157,19 @@ namespace FieldCodes.Cad.Setup
             catch (Autodesk.AutoCAD.Runtime.Exception) { }
             names.Sort(StringComparer.OrdinalIgnoreCase);
             MLeaderStyles = names;
+        }
+
+        private void ReadTableStyles(Database db, Transaction tr)
+        {
+            var names = new List<string>();
+            try
+            {
+                var dict = (DBDictionary)tr.GetObject(db.TableStyleDictionaryId, OpenMode.ForRead);
+                foreach (DBDictionaryEntry entry in dict) names.Add(entry.Key);
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception) { }
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+            TableStyles = names;
         }
 
         private void ReadLinetypes(Database db, Transaction tr)

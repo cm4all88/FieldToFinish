@@ -24,9 +24,11 @@ namespace FieldCodes.Cad.Setup
     ///
     /// UNTESTED: never shown in AutoCAD.
     /// </summary>
-    [SettingsPage(Group = "Survey Drafting", Label = "Drafting Lines", Order = 30, Sections = "drafting", Commands = "FTFDRAWLINE,FTFDRAFTCLEAN,FTFROW,FTFLOTS,FTFROWDIM,FTFBENCH")]
+    [SettingsPage(Group = "Survey Drafting", Label = "Drafting Lines", Order = 30, Sections = "drafting,lineLabels", Commands = "FTFDRAWLINE,FTFDRAFTCLEAN,FTFROW,FTFLOTS,FTFROWDIM,FTFBENCH")]
     internal sealed class DraftingLinesPage : SetupPage
     {
+        private TextBox _rowWidthHeight;
+        private ComboBox _rowWidthDecimals;
         private ComboBox _typePicker;
         private CheckBox _enabled;
         private ComboBox _layer;
@@ -65,7 +67,14 @@ namespace FieldCodes.Cad.Setup
         };
 
         public override string Title { get { return "Drafting Lines"; } }
-        public override string AffectedCommands { get { return "FTFDRAWLINE, FTFDRAFTCLEAN"; } }
+        public override string AffectedCommands { get { return "FTFDRAWLINE, FTFDRAFTCLEAN, FTFROWDIM"; } }
+
+        /// <summary>Right-of-way width decimals offered, with what a 30.2468 ft width then reads.
+        /// The index IS the decimal count.</summary>
+        private static readonly object[] RowWidthDecimalChoices =
+        {
+            "0  (30')", "1  (30.2')", "2  (30.25')", "3  (30.247')", "4  (30.2468')"
+        };
 
         protected override void BuildBody()
         {
@@ -146,6 +155,17 @@ namespace FieldCodes.Cad.Setup
                 new object[] { "1 foot", "0.1", "0.01", "0.001", "0.0001" },
                 null);
             _footSymbol = CheckRow("Append the foot symbol (')", null);
+
+            Heading("Right-of-way width labels (FTFROWDIM)");
+            Note("FTFROWDIM writes the width between a centerline and a right-of-way line you click, midway " +
+                 "between them: 30' for a 30.00 ft half width, 30.25' for an odd one. Its text style and the " +
+                 "label layer it falls back to are the ones on Settings > Line Labels.");
+            _rowWidthHeight = TextRow("Text height (plotted)",
+                "How tall FTFROWDIM writes a right-of-way width on the sheet, in plotted inches. " +
+                "0.10 by default: a little larger than a line label, because it is read off the sheet.");
+            _rowWidthDecimals = ComboRow("Most decimal places", RowWidthDecimalChoices,
+                "The most decimal places FTFROWDIM writes (the example is a 30.2468 ft width). " +
+                "Trailing zeros are always dropped, so a 30.00 ft width reads 30' whatever is chosen here.", 160);
         }
 
         private static IList<object> Prepend(string first, IList<object> rest)
@@ -195,6 +215,33 @@ namespace FieldCodes.Cad.Setup
 
             _current = -1;
             if (_typePicker.Items.Count > 0) _typePicker.SelectedIndex = 0;
+
+            var lineLabels = settings.LineLabels ?? new LineLabelSettings();
+            _rowWidthHeight.Text = Fmt(lineLabels.RowWidthTextPlotted);
+            ShowDecimals(_rowWidthDecimals, lineLabels.RowWidthDecimals);
+        }
+
+        /// <summary>Selects a decimal count; one outside the list (a hand-edited file) is added
+        /// rather than silently changed.</summary>
+        private static void ShowDecimals(ComboBox combo, int decimals)
+        {
+            if (decimals >= 0 && decimals < RowWidthDecimalChoices.Length)
+            {
+                combo.SelectedIndex = decimals;
+                return;
+            }
+            var text = decimals.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (!combo.Items.Contains(text)) combo.Items.Add(text);
+            combo.SelectedItem = text;
+        }
+
+        private static int DecimalsOf(ComboBox combo, int fallback)
+        {
+            var index = combo.SelectedIndex;
+            if (index >= 0 && index < RowWidthDecimalChoices.Length) return index;
+            int value;
+            return int.TryParse(Convert.ToString(combo.SelectedItem), System.Globalization.NumberStyles.Integer,
+                                System.Globalization.CultureInfo.InvariantCulture, out value) ? value : fallback;
         }
 
         private void OnTypePicked(object sender, EventArgs e)
@@ -331,12 +378,26 @@ namespace FieldCodes.Cad.Setup
 
             if (settings.Drafting == null) settings.Drafting = new DraftingSettings();
             settings.Drafting.LineTypes = saved;
+
+            if (settings.LineLabels == null) settings.LineLabels = new LineLabelSettings();
+            var lineLabels = settings.LineLabels;
+            var height = lineLabels.RowWidthTextPlotted;
+            if (ReadDouble(_rowWidthHeight, "Drafting lines: right-of-way width text height", v => v > 0,
+                           "must be greater than zero", problems, ref height))
+                lineLabels.RowWidthTextPlotted = height;
+            lineLabels.RowWidthDecimals = DecimalsOf(_rowWidthDecimals, lineLabels.RowWidthDecimals);
         }
 
         public override void RestoreDefaults(FtfSettings settings)
         {
             if (settings.Drafting == null) settings.Drafting = new DraftingSettings();
             settings.Drafting.RestoreDefaults();
+
+            // Only the two right-of-way width values: the rest of Line Labels is that page's.
+            var shipped = new LineLabelSettings();
+            if (settings.LineLabels == null) settings.LineLabels = new LineLabelSettings();
+            settings.LineLabels.RowWidthTextPlotted = shipped.RowWidthTextPlotted;
+            settings.LineLabels.RowWidthDecimals = shipped.RowWidthDecimals;
             LoadFrom(settings);
         }
     }

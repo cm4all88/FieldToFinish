@@ -1195,10 +1195,12 @@ namespace FieldCodes.Cad.Setup
         private TextBox _matchFormat;
         private TextBox _matchHeight;
         private TextBox _keymapWidth;
+        private TextBox _zigAmplitude;
+        private TextBox _zigPeriod;
         private Label _worked;
 
         public override string Title { get { return "Sheets"; } }
-        public override string AffectedCommands { get { return "FTFSHEETPLAN, FTFSHEETS"; } }
+        public override string AffectedCommands { get { return "FTFSHEETPLAN, FTFSHEETS, FTFMATCHLINE"; } }
 
         protected override void BuildBody()
         {
@@ -1228,6 +1230,17 @@ namespace FieldCodes.Cad.Setup
             _matchHeight = TextRow("Match line text height (plotted)", null);
             _keymapWidth = TextRow("Key map width (inches)",
                 "The index diagram FTFKEYMAP puts on each sheet.");
+
+            Heading("Zigzag match line (FTFMATCHLINE)");
+            Note("FTFMATCHLINE draws a zigzag break line along the side of a viewport you pick, in model space, " +
+                 "so both sheets show the same line. Its teeth are sized on the paper, so a 1\" = 20' sheet and a " +
+                 "1\" = 100' sheet draw the same zigzag. It goes on the match line layer above.");
+            _zigAmplitude = TextRow("Tooth height (plotted inches)",
+                "How far each tooth of the FTFMATCHLINE zigzag stands off the sheet edge, in inches on the paper. " +
+                "0 draws a straight line.");
+            _zigPeriod = TextRow("Tooth spacing (plotted inches)",
+                "The length of one full tooth (one either side of the edge), in inches on the paper. " +
+                "A run shorter than one tooth is drawn straight.");
 
             _paperW.TextChanged += (s, e) => Refresh();
             _paperH.TextChanged += (s, e) => Refresh();
@@ -1267,6 +1280,8 @@ namespace FieldCodes.Cad.Setup
             _matchFormat.Text = s.Sheets.MatchlineLabelFormat ?? string.Empty;
             _matchHeight.Text = Fmt(s.Sheets.MatchlineTextPlotted);
             _keymapWidth.Text = Fmt(s.Sheets.KeymapWidthIn);
+            _zigAmplitude.Text = Fmt(s.Sheets.MatchlineZigAmplitudePlotted);
+            _zigPeriod.Text = Fmt(s.Sheets.MatchlineZigPeriodPlotted);
             Refresh();
         }
 
@@ -1311,6 +1326,16 @@ namespace FieldCodes.Cad.Setup
             ReadDouble(_keymapWidth, "Sheets: key map width", v => v > 0,
                        "must be greater than zero", problems, ref kw);
             s.Sheets.KeymapWidthIn = kw;
+
+            var za = s.Sheets.MatchlineZigAmplitudePlotted;
+            ReadDouble(_zigAmplitude, "Sheets: match line tooth height", v => v >= 0 && v <= 2,
+                       "must be between 0 (a straight line) and 2 inches", problems, ref za);
+            s.Sheets.MatchlineZigAmplitudePlotted = za;
+
+            var zp = s.Sheets.MatchlineZigPeriodPlotted;
+            ReadDouble(_zigPeriod, "Sheets: match line tooth spacing", v => v > 0 && v <= 10,
+                       "must be more than 0 and at most 10 inches", problems, ref zp);
+            s.Sheets.MatchlineZigPeriodPlotted = zp;
         }
 
         public override void RestoreDefaults(FtfSettings s)

@@ -16,7 +16,7 @@ namespace FieldCodes.Cad.Setup
         private ComboBox _orientation, _areaTable, _narrow, _power, _hatches, _stamp, _headings;
         private readonly Dictionary<string, TextBox> _officeTexts = new Dictionary<string, TextBox>();
         private readonly Dictionary<string, TextBox> _officeNumbers = new Dictionary<string, TextBox>();
-        private CheckBox _areaLabelTitle, _stripAlong;
+        private CheckBox _areaLabelTitle, _stripAlong, _labelMask;
 
         // The office's own exhibit standard: its drawings, blocks, styles and what the viewport shows.
         private static readonly List<Tuple<string, string, string, Func<ExhibitSettings, string>, Action<ExhibitSettings, string>>> OfficeTexts =
@@ -181,6 +181,9 @@ namespace FieldCodes.Cad.Setup
             foreach (var n in OfficeNumbers) _officeNumbers[n.Item1] = TextRow(n.Item2, n.Item3);
             _areaLabelTitle = CheckRow("Repeat the easement title in the plan label", "Off when the sheet title already names the easement.");
             _stripAlong = CheckRow("Strip labels run along the strip", "Off: the title/area label reads horizontally beside the strip.");
+            _labelMask = CheckRow("Mask behind every label on the exhibit",
+                "FTFEXHIBIT and FTFEXHIBITREBUILD put a background mask behind the labels they write on the sheet " +
+                "(1.5 times the text, the drawing's background colour), so a label does not read over the linework and hatch under it.");
             _narrow = ComboRow("Narrow strip label", new object[] { "NoLeader", "Leader", "Ask" }, "When a strip is too narrow on paper for its label: beside it, beside it with a leader, or ask each time.");
             _power = ComboRow("Overhead power in the viewport", new object[] { ExhibitSettings.User, ExhibitSettings.Show, ExhibitSettings.Hide }, "User leaves it as the drawing has it. In the exhibit viewport only; each exhibit can choose otherwise.");
             _hatches = ComboRow("Other exhibits' hatches", new object[] { ExhibitSettings.User, ExhibitSettings.Relevant, ExhibitSettings.Show, ExhibitSettings.Hide }, "Relevant shows them only where they belong to the easements on the exhibit. In the viewport only.");
@@ -200,6 +203,7 @@ namespace FieldCodes.Cad.Setup
             foreach (var n in OfficeNumbers) _officeNumbers[n.Item1].Text = Fmt(n.Item4(x));
             _areaLabelTitle.Checked = x.AreaLabelTitle;
             _stripAlong.Checked = x.StripLabelAlong;
+            _labelMask.Checked = x.LabelMask;
             ComboHelp.SelectOrAdd(_narrow, x.NarrowStripLabel, false);
             ComboHelp.SelectOrAdd(_power, x.OverheadPower, false);
             ComboHelp.SelectOrAdd(_hatches, x.OtherHatches, false);
@@ -227,6 +231,7 @@ namespace FieldCodes.Cad.Setup
             }
             x.AreaLabelTitle = _areaLabelTitle.Checked;
             x.StripLabelAlong = _stripAlong.Checked;
+            x.LabelMask = _labelMask.Checked;
             x.NarrowStripLabel = Convert.ToString(_narrow.SelectedItem) ?? "NoLeader";
             x.OverheadPower = Convert.ToString(_power.SelectedItem) ?? ExhibitSettings.User;
             x.OtherHatches = Convert.ToString(_hatches.SelectedItem) ?? ExhibitSettings.User;
