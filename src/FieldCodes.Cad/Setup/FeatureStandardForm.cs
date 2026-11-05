@@ -6,7 +6,6 @@ using System.Windows.Forms;
 using FieldCodes.Editing;
 using FieldCodes.Settings;
 using FieldCodes.Standards;
-using Newtonsoft.Json;
 
 namespace FieldCodes.Cad.Setup
 {
@@ -14,8 +13,9 @@ namespace FieldCodes.Cad.Setup
     /// Settings > Point Features > Drafting Standard: what each field code and feature family needs
     /// on the plan -- class, disposition, symbol, label, surface, rotation, review, layer, symbol and
     /// label styles, and exceptions (a sign category, or words in the description) -- plus the words
-    /// that put a sign in a category. Point accountability, Label All, FTFLABELS and FTFORIENT all read
-    /// this one standard.
+    /// that put a sign in a category. The selected row's exceptions are a grid of their own below it,
+    /// one exception a line, with the same choices as the row (EditableFeatureException, unit tested).
+    /// Point accountability, Label All, FTFLABELS and FTFORIENT all read this one standard.
     ///
     /// Every entry in force is listed; a built-in entry's codes, family and description pattern are
     /// its identity and stay fixed (switch it off and add your own instead). OK stages the result on
@@ -34,8 +34,14 @@ namespace FieldCodes.Cad.Setup
         private readonly RuleDocument _document;
         private readonly DataGridView _rows;
         private readonly DataGridView _signs;
-        private readonly TextBox _exceptions;
+        private const int XName = 0, XSignCategory = 1, XWhen = 2, XClass = 3, XDisposition = 4, XSymbol = 5, XLabel = 6, XSurface = 7,
+                          XRotation = 8, XReview = 9, XLayer = 10, XSymbolStyle = 11, XLabelStyle = 12, XNote = 13;
+        private readonly DataGridView _exceptions;
+        private readonly Button _addException;
+        private readonly Button _removeException;
         private readonly Label _exceptionsCaption;
+        /// <summary>Each requirement row's exceptions as typed (kept as typed until OK reads them).</summary>
+        private readonly Dictionary<DataGridViewRow, List<EditableFeatureException>> _exceptionEdits = new Dictionary<DataGridViewRow, List<EditableFeatureException>>();
         private readonly TextBox _try;
         private readonly Label _result;
         private readonly Label _problems;
@@ -55,7 +61,7 @@ namespace FieldCodes.Cad.Setup
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 62f));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150f));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 38f));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -88,7 +94,7 @@ namespace FieldCodes.Cad.Setup
             _rows.Columns.Add(TextColumn("Symbol style", 100, "Point styles or symbol blocks that show it, comma separated, * and ? allowed."));
             _rows.Columns.Add(TextColumn("Label style", 90, "Point label styles that label it (with Label PointLabel)."));
             _rows.Columns.Add(TextColumn("Note", 110, "Why: shown in the evidence and the Review window."));
-            _rows.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Exceptions", Width = 120, ReadOnly = true, ToolTipText = "Edited below for the selected row." });
+            _rows.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Exceptions", Width = 120, ReadOnly = true, ToolTipText = "Edited in the grid below, for the selected row." });
             _rows.AllowUserToAddRows = true;
             _rows.AllowUserToDeleteRows = true;
             _rows.UserDeletingRow += (s, e) =>
@@ -106,11 +112,45 @@ namespace FieldCodes.Cad.Setup
             _rows.DataError += (s, e) => { e.ThrowException = false; };
             layout.Controls.Add(_rows, 0, 1);
 
-            _exceptionsCaption = new Label { AutoSize = true, Margin = new Padding(0, 6, 0, 2), Text = "Exceptions of the selected row (JSON)" };
+            _exceptionsCaption = new Label { AutoSize = true, MaximumSize = new Size(1140, 0), Margin = new Padding(0, 6, 0, 2), Text = "Exceptions of the selected row" };
             layout.Controls.Add(_exceptionsCaption, 0, 2);
-            _exceptions = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true, Font = new Font("Consolas", 9f) };
-            _exceptions.Leave += (s, e) => TakeExceptions();
-            layout.Controls.Add(_exceptions, 0, 3);
+            var exceptionPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0) };
+            exceptionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            exceptionPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _exceptions = Grid();
+            _exceptions.Columns.Add(TextColumn("Name", 130, "Shown in the evidence and reports (\"Address / house number sign\")."));
+            _exceptions.Columns.Add(Choice("Sign category", 96, EditableFeatureException.SignCategories(),
+                "The exception is for a sign of this category (the words under Sign categories decide a sign's category). Blank: not by category."));
+            _exceptions.Columns.Add(TextColumn("When (description)", 120,
+                "Words in the description or the crew's note, as a regular expression: \\bPRIVATE\\b. Blank: not by words. " +
+                "An exception needs a sign category, a pattern, or both (then both must fit)."));
+            _exceptions.Columns.Add(Choice("Class", 80, Options<PointClass>(), "(inherit) keeps the row's value."));
+            _exceptions.Columns.Add(Choice("Disposition", 96, Options<IntendedDisposition>(), "(inherit) keeps the row's value."));
+            _exceptions.Columns.Add(Choice("Symbol", 78, Options<SymbolRequirement>(), "(inherit) keeps the row's value."));
+            _exceptions.Columns.Add(Choice("Label", 82, Options<LabelRequirement>(), "(inherit) keeps the row's value."));
+            _exceptions.Columns.Add(Choice("Surface", 66, YesNo(), "(inherit) keeps the row's value."));
+            _exceptions.Columns.Add(Choice("Rotate", 62, YesNo(), "No: turned only by a direction the crew recorded, never assumed (a house number sign). (inherit) keeps the row's value."));
+            _exceptions.Columns.Add(Choice("Review", 62, YesNo(), "(inherit) keeps the row's value."));
+            _exceptions.Columns.Add(TextColumn("Layer", 90, "Blank keeps the row's layer."));
+            _exceptions.Columns.Add(TextColumn("Symbol style", 100, "Blank keeps the row's symbol styles."));
+            _exceptions.Columns.Add(TextColumn("Label style", 90, "Blank keeps the row's label styles."));
+            _exceptions.Columns.Add(TextColumn("Note", 110, "Why: shown in the evidence and the Review window."));
+            _exceptions.AllowUserToAddRows = false;
+            _exceptions.AllowUserToDeleteRows = true;
+            _exceptions.CellValueChanged += (s, e) => { if (!_loading) { TakeExceptions(); UpdatePreview(); } };
+            _exceptions.UserDeletedRow += (s, e) => { if (!_loading) { TakeExceptions(); UpdatePreview(); } };
+            _exceptions.CurrentCellDirtyStateChanged += (s, e) => { if (_exceptions.IsCurrentCellDirty && _exceptions.CurrentCell is DataGridViewComboBoxCell) _exceptions.CommitEdit(DataGridViewDataErrorContexts.Commit); };
+            _exceptions.DataError += (s, e) => { e.ThrowException = false; };
+            exceptionPanel.Controls.Add(_exceptions, 0, 0);
+            var exceptionButtons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = new Padding(6, 0, 0, 0) };
+            _addException = new Button { Text = "Add Exception", AutoSize = true };
+            _removeException = new Button { Text = "Remove Exception", AutoSize = true };
+            _addException.Click += (s, e) => AddException();
+            _removeException.Click += (s, e) => RemoveException();
+            exceptionButtons.Controls.Add(_addException);
+            exceptionButtons.Controls.Add(_removeException);
+            exceptionPanel.Controls.Add(exceptionButtons, 1, 0);
+            layout.Controls.Add(exceptionPanel, 0, 3);
 
             layout.Controls.Add(new Label
             {
@@ -167,6 +207,8 @@ namespace FieldCodes.Cad.Setup
             try
             {
                 _rows.Rows.Clear();
+                _exceptionEdits.Clear();
+                _exceptions.Rows.Clear();
                 foreach (var r in requirements) AddRow(r.Copy());
                 _signs.Rows.Clear();
                 foreach (var c in signs)
@@ -186,9 +228,11 @@ namespace FieldCodes.Cad.Setup
             var i = _rows.Rows.Add(r.Enabled, r.Name ?? string.Empty, string.Join(", ", (r.Codes ?? new List<string>()).ToArray()), family,
                                    r.Match ?? string.Empty, Show(r.Classification), Show(r.Disposition), Show(r.Symbol), Show(r.Label),
                                    Show(r.Surface), Show(r.Rotation), Show(r.Review), r.Layer ?? string.Empty, r.SymbolStyle ?? string.Empty,
-                                   r.LabelStyle ?? string.Empty, r.Note ?? string.Empty, ExceptionSummary(r.Exceptions));
+                                   r.LabelStyle ?? string.Empty, r.Note ?? string.Empty, string.Empty);
             var row = _rows.Rows[i];
             row.Tag = r;
+            _exceptionEdits[row] = EditableFeatureException.FromList(r.Exceptions);
+            row.Cells[ColExceptions].Value = EditableFeatureException.Summary(_exceptionEdits[row]);
             if (RuleDocument.BuiltInRequirement(r.Key) != null)
             {
                 foreach (var c in new[] { ColCodes, ColFamily, ColMatch })
@@ -230,9 +274,12 @@ namespace FieldCodes.Cad.Setup
                 r.SymbolStyle = Cell(row, ColSymbolStyle);
                 r.LabelStyle = Cell(row, ColLabelStyle);
                 r.Note = Cell(row, ColNote);
+                List<EditableFeatureException> exceptions;
+                if (_exceptionEdits.TryGetValue(row, out exceptions))
+                    r.Exceptions = EditableFeatureException.ToExceptions(exceptions, RowName(row), problems);
                 if ((r.Codes == null || r.Codes.Count == 0) && string.IsNullOrWhiteSpace(r.Family) && string.IsNullOrWhiteSpace(r.Match))
                 {
-                    problems.Add("Row " + (row.Index + 1) + (string.IsNullOrWhiteSpace(r.Name) ? "" : " (" + r.Name + ")") + " needs codes, a family or a description match.");
+                    problems.Add(RowName(row) + " needs codes, a family or a description match.");
                     continue;
                 }
                 result.Add(r);
@@ -266,45 +313,96 @@ namespace FieldCodes.Cad.Setup
 
         // ------------------------------------------------------------------ exceptions
 
+        /// <summary>"Row 3 (Signs)": how a requirement row is named in a problem.</summary>
+        private static string RowName(DataGridViewRow row)
+        {
+            var name = Cell(row, ColName);
+            return "Row " + (row.Index + 1) + (string.IsNullOrWhiteSpace(name) ? string.Empty : " (" + name + ")");
+        }
+
+        /// <summary>Shows the selected requirement row's exceptions, after putting the grid's back on the row it showed.</summary>
         private void ShowExceptions()
         {
             if (_loading) return;
             TakeExceptions();
             var row = _rows.CurrentRow;
             _exceptionsRow = row != null && !row.IsNewRow ? row : null;
-            var r = _exceptionsRow != null ? _exceptionsRow.Tag as FeatureRequirement : null;
-            _exceptions.Enabled = _exceptionsRow != null;
-            _exceptionsCaption.Text = "Exceptions of " + (_exceptionsRow == null ? "the selected row" : "row " + (_exceptionsRow.Index + 1) + " " + Cell(_exceptionsRow, ColName)) +
-                                      " (JSON: [ { \"name\", \"signCategory\" or \"when\", then the fields to change: \"symbol\": \"PointStyle\", \"rotation\": false ... } ])";
-            _exceptions.Text = r != null && r.Exceptions != null && r.Exceptions.Count > 0
-                ? JsonConvert.SerializeObject(r.Exceptions, Formatting.Indented) : string.Empty;
-        }
-
-        /// <summary>Puts the exceptions text back on its row; a text that does not read is reported and kept.</summary>
-        private bool TakeExceptions()
-        {
-            if (_exceptionsRow == null || _exceptionsRow.DataGridView == null) return true;
-            var r = _exceptionsRow.Tag as FeatureRequirement;
-            if (r == null) { r = new FeatureRequirement(); _exceptionsRow.Tag = r; }
-            var text = (_exceptions.Text ?? string.Empty).Trim();
+            _exceptions.Enabled = _removeException.Enabled = _exceptionsRow != null;
+            _exceptionsCaption.Text = (_exceptionsRow == null ? "Exceptions of the selected row" : "Exceptions of " + RowName(_exceptionsRow)) +
+                                      ": one a line, for a sign category, words in the description (a pattern), or both. Each changes only the " +
+                                      "fields it sets; (inherit) and blank keep the row's.";
+            List<EditableFeatureException> list = null;
+            if (_exceptionsRow != null && !_exceptionEdits.TryGetValue(_exceptionsRow, out list))
+            {
+                list = new List<EditableFeatureException>();
+                _exceptionEdits[_exceptionsRow] = list;
+            }
+            _loading = true;
             try
             {
-                r.Exceptions = text.Length == 0 ? null : JsonConvert.DeserializeObject<List<FeatureException>>(text);
-                _exceptionsRow.Cells[ColExceptions].Value = ExceptionSummary(r.Exceptions);
-                return true;
+                _exceptions.Rows.Clear();
+                foreach (var x in list ?? new List<EditableFeatureException>()) AddExceptionRow(x);
             }
-            catch (JsonException ex)
-            {
-                _problems.Text = "The exceptions of row " + (_exceptionsRow.Index + 1) + " do not read: " + ex.Message;
-                return false;
-            }
+            finally { _loading = false; }
         }
 
-        private static string ExceptionSummary(List<FeatureException> exceptions)
+        private void AddExceptionRow(EditableFeatureException x)
         {
-            if (exceptions == null || exceptions.Count == 0) return string.Empty;
-            return string.Join("; ", exceptions.Select(x => !string.IsNullOrWhiteSpace(x.Name) ? x.Name
-                : x.SignCategory.HasValue ? x.SignCategory.Value.ToString() : "when " + x.When).ToArray());
+            _exceptions.Rows.Add(x.Name ?? string.Empty, Known(EditableFeatureException.SignCategories(), x.SignCategory, string.Empty), x.When ?? string.Empty,
+                                 Known(Options<PointClass>(), x.Classification, Inherit), Known(Options<IntendedDisposition>(), x.Disposition, Inherit),
+                                 Known(Options<SymbolRequirement>(), x.Symbol, Inherit), Known(Options<LabelRequirement>(), x.Label, Inherit),
+                                 Known(YesNo(), x.Surface, Inherit), Known(YesNo(), x.Rotation, Inherit), Known(YesNo(), x.Review, Inherit),
+                                 x.Layer ?? string.Empty, x.SymbolStyle ?? string.Empty, x.LabelStyle ?? string.Empty, x.Note ?? string.Empty);
+        }
+
+        /// <summary>The list's own spelling of a value (a drop-down cell refuses any other), or the fallback.</summary>
+        private static string Known(string[] items, string value, string fallback)
+        {
+            return items.FirstOrDefault(i => string.Equals(i, (value ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)) ?? fallback;
+        }
+
+        /// <summary>Puts the exceptions grid back on the row it shows, as typed, and updates that row's summary.</summary>
+        private void TakeExceptions()
+        {
+            if (_exceptionsRow == null || _exceptionsRow.DataGridView == null) return;
+            _exceptions.EndEdit();
+            var list = new List<EditableFeatureException>();
+            foreach (DataGridViewRow row in _exceptions.Rows)
+            {
+                if (row.IsNewRow) continue;
+                list.Add(new EditableFeatureException
+                {
+                    Name = Cell(row, XName), SignCategory = Cell(row, XSignCategory), When = Cell(row, XWhen),
+                    Classification = Cell(row, XClass), Disposition = Cell(row, XDisposition), Symbol = Cell(row, XSymbol), Label = Cell(row, XLabel),
+                    Surface = Cell(row, XSurface), Rotation = Cell(row, XRotation), Review = Cell(row, XReview),
+                    Layer = Cell(row, XLayer), SymbolStyle = Cell(row, XSymbolStyle), LabelStyle = Cell(row, XLabelStyle), Note = Cell(row, XNote)
+                });
+            }
+            _exceptionEdits[_exceptionsRow] = list;
+            _exceptionsRow.Cells[ColExceptions].Value = EditableFeatureException.Summary(list);
+        }
+
+        private void AddException()
+        {
+            // A row just typed into the grid's new line is a row now: show its (empty) exceptions.
+            if (_exceptionsRow == null && _rows.CurrentRow != null && !_rows.CurrentRow.IsNewRow) ShowExceptions();
+            if (_exceptionsRow == null) { _problems.Text = "Select a row first (for a new row, type its codes, family or description match)."; return; }
+            TakeExceptions();
+            _loading = true;
+            try { AddExceptionRow(new EditableFeatureException { Name = "New exception" }); }
+            finally { _loading = false; }
+            _exceptions.CurrentCell = _exceptions.Rows[_exceptions.Rows.Count - 1].Cells[XSignCategory];
+            TakeExceptions();
+            UpdatePreview();
+        }
+
+        private void RemoveException()
+        {
+            var row = _exceptions.CurrentRow;
+            if (row == null || row.IsNewRow) { _problems.Text = "Select the exception to remove."; return; }
+            _exceptions.Rows.Remove(row);
+            TakeExceptions();
+            UpdatePreview();
         }
 
         // ------------------------------------------------------------------ preview and OK
@@ -336,7 +434,6 @@ namespace FieldCodes.Cad.Setup
         private void OkClicked()
         {
             var problems = new List<string>();
-            if (!TakeExceptions()) return;
             var rows = ReadRows(problems);
             var signs = ReadSigns(problems);
             if (problems.Count > 0) { _problems.Text = string.Join(Environment.NewLine, problems.ToArray()); return; }

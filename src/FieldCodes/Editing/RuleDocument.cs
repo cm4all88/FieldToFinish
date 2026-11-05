@@ -415,6 +415,7 @@ namespace FieldCodes.Editing
             OrientationProblems(problems);
             WetlandBufferProblems(problems);
             BenchProblems(problems);
+            OrientationDetailProblems(problems);
             if (problems.Count > 0) return problems;
 
             RulesConfig cfg;
