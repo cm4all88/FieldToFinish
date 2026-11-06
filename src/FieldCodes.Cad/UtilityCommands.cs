@@ -72,7 +72,7 @@ namespace FieldCodes.Cad
                 return false;
             }
             Pending.Enqueue(new KeyValuePair<string, DipWork>(name, work));
-            doc.SendStringToExecute("FTFDIPACT ", true, false, true);
+            doc.SendStringToExecute(CommandNames.FTFDIPACT + " ", true, false, true);
             return true;
         }
 
@@ -107,7 +107,7 @@ namespace FieldCodes.Cad
     {
         private static bool _undoHooked;
 
-        [CommandMethod("FTFDIP", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIP, CommandFlags.Modal)]
         public void OpenDipBuilder()
         {
             HookUndo();
@@ -125,7 +125,7 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>Runs one queued Dip Builder action. Not meant to be typed.</summary>
-        [CommandMethod("FTFDIPACT", CommandFlags.Modal | CommandFlags.NoHistory)]
+        [CommandMethod(CommandNames.FTFDIPACT, CommandFlags.Modal | CommandFlags.NoHistory)]
         public void RunDipAction()
         {
             DipSession.RunPending();
@@ -170,7 +170,7 @@ namespace FieldCodes.Cad
         /// twin of the window's "Import notes file". Existing observations for the
         /// structures in the file are replaced by the file's; nothing else changes.
         /// </summary>
-        [CommandMethod("FTFDIPNOTES", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPNOTES, CommandFlags.Modal)]
         public void ImportNotesFile()
         {
             FtfSession.Run("FTFDIPNOTES", (db, tr, ed) =>
@@ -203,7 +203,7 @@ namespace FieldCodes.Cad
         /// candidate structures with their confidence and reasons, and asks. A
         /// suggestion is never accepted without an answer.
         /// </summary>
-        [CommandMethod("FTFDIPCONNECT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPCONNECT, CommandFlags.Modal)]
         public void ConnectPipes()
         {
             FtfSession.Run("FTFDIPCONNECT", (db, tr, ed) =>
@@ -299,7 +299,7 @@ namespace FieldCodes.Cad
         /// shows the assumed elevation, and asks. Confirming changes the reference only;
         /// the measurement and its field-note source are never touched.
         /// </summary>
-        [CommandMethod("FTFDIPCONFIRM", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPCONFIRM, CommandFlags.Modal)]
         public void ConfirmReferences()
         {
             FtfSession.Run("FTFDIPCONFIRM", (db, tr, ed) =>
@@ -337,7 +337,7 @@ namespace FieldCodes.Cad
 
         /// <summary>Drafts every confirmed connection, asking what to do where a pipe
         /// is already drawn.</summary>
-        [CommandMethod("FTFDIPDRAW", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPDRAW, CommandFlags.Modal)]
         public void DrawPipes()
         {
             FtfSession.Run("FTFDIPDRAW", (db, tr, ed) =>
@@ -353,7 +353,7 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>Places a structure's leader label from its observations.</summary>
-        [CommandMethod("FTFDIPLABEL", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPLABEL, CommandFlags.Modal)]
         public void LabelStructure()
         {
             FtfSession.Run("FTFDIPLABEL", (db, tr, ed) =>
@@ -483,7 +483,7 @@ namespace FieldCodes.Cad
         /// their pipes and labels were drafted, and offers to rebuild each one.
         /// Nothing is changed without a yes.
         /// </summary>
-        [CommandMethod("FTFDIPCHECK", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPCHECK, CommandFlags.Modal)]
         public void CheckDips()
         {
             FtfSession.Run("FTFDIPCHECK", (db, tr, ed) =>
@@ -568,7 +568,7 @@ namespace FieldCodes.Cad
 
         /// <summary>Shows where a drafted pipe or structure label's information came
         /// from: point, rim, dip, reference, calculation, connection and warnings.</summary>
-        [CommandMethod("FTFDIPINSPECT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPINSPECT, CommandFlags.Modal)]
         public void InspectDip()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -645,7 +645,7 @@ namespace FieldCodes.Cad
         // =============================================================== revisit
 
         /// <summary>Writes the field revisit list beside the drawing.</summary>
-        [CommandMethod("FTFDIPREVISIT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDIPREVISIT, CommandFlags.Modal)]
         public void ExportRevisit()
         {
             FtfSession.Run("FTFDIPREVISIT", (db, tr, ed) =>

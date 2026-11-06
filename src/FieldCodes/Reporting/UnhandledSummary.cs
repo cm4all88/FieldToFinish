@@ -79,7 +79,7 @@ namespace FieldCodes.Reporting
                 .ToList();
         }
 
-        public const string Suffix = ".ftf-unhandled.csv";
+        public static readonly string Suffix = "." + Branding.FilePrefix + "-unhandled.csv";
 
         public static string PathFor(string drawingPath)
         {

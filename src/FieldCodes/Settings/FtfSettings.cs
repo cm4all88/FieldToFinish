@@ -54,7 +54,7 @@ namespace FieldCodes.Settings
     /// </summary>
     public sealed class FtfSettings
     {
-        public const string FileName = "ftf-settings.json";
+        public static readonly string FileName = Branding.FilePrefix + "-settings.json";
 
         /// <summary>Schema version of this file, not the rules version.</summary>
         [JsonProperty("version")]

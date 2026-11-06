@@ -67,7 +67,7 @@ namespace FieldCodes.Cad
 
         // =============================================================== FTFDRAWLINE
 
-        [CommandMethod("FTFDRAWLINE", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDRAWLINE, CommandFlags.Modal)]
         public void FtfDrawLine()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -159,7 +159,7 @@ namespace FieldCodes.Cad
         /// to reverse; the geometry itself is the user's deliberate work and is only
         /// ever erased after an explicit confirmation.
         /// </summary>
-        [CommandMethod("FTFDRAFTCLEAN", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDRAFTCLEAN, CommandFlags.Modal)]
         public void FtfDraftClean()
         {
             FtfSession.Run("FTFDRAFTCLEAN", (db, tr, ed) =>

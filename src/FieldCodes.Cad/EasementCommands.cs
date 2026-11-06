@@ -102,7 +102,7 @@ namespace FieldCodes.Cad
         /// lines it is trimmed to, then keep the right pieces in the preview. A temporary
         /// construction easement on the same centerline is built alongside when asked.
         /// </summary>
-        [CommandMethod("STRIPEASEMENT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.STRIPEASEMENT, CommandFlags.Modal)]
         public void StripEasement()
         {
             FtfSession.Run("STRIPEASEMENT", (db, tr, ed) =>
@@ -128,7 +128,7 @@ namespace FieldCodes.Cad
         }
 
         /// <summary>Same command under the FTF prefix.</summary>
-        [CommandMethod("FTFEASEMENT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENT, CommandFlags.Modal)]
         public void FtfEasement() { StripEasement(); }
 
         private const short RouteColor = 1;    // red, like an easement line on a markup
@@ -1634,7 +1634,7 @@ namespace FieldCodes.Cad
         /// changed or erased source is reported; nothing changes unless the user
         /// chooses to rebuild that easement.
         /// </summary>
-        [CommandMethod("FTFEASEMENTCHECK", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTCHECK, CommandFlags.Modal)]
         public void CheckEasements()
         {
             FtfSession.Run("FTFEASEMENTCHECK", (db, tr, ed) =>
@@ -2045,7 +2045,7 @@ namespace FieldCodes.Cad
         /// beginning, courses, terminus, width, area -- beside the drawing. It is
         /// the raw material for a legal description, clearly marked as not one.
         /// </summary>
-        [CommandMethod("FTFEASEMENTEXPORT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTEXPORT, CommandFlags.Modal)]
         public void ExportEasements()
         {
             FtfSession.Run("FTFEASEMENTEXPORT", (db, tr, ed) =>

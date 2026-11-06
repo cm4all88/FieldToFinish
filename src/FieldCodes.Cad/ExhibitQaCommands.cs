@@ -27,7 +27,7 @@ namespace FieldCodes.Cad
     {
         internal const string Error = "Error", Review = "Warning", Info = "";
 
-        [CommandMethod("FTFEXHIBITQA", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEXHIBITQA, CommandFlags.Modal)]
         public void Qa()
         {
             List<InspectRow> rows = null;
@@ -51,7 +51,7 @@ namespace FieldCodes.Cad
                 EasementInspectCommands.ShowWindow(title + ": " + Verdict(rows), rows);
         }
 
-        [CommandMethod("FTFEXHIBITPREVIEW", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEXHIBITPREVIEW, CommandFlags.Modal)]
         public void Preview()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -125,7 +125,7 @@ namespace FieldCodes.Cad
         /// profile places stamp blocks. FTF offers the blocks and places the one chosen at the profile's stamp place --
         /// it never picks a surveyor or a seal from the project, and "None" takes the stamp off again.
         /// </summary>
-        [CommandMethod("FTFEXHIBITSTAMP", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEXHIBITSTAMP, CommandFlags.Modal)]
         public void Stamp()
         {
             FtfSession.Run("FTFEXHIBITSTAMP", (db, tr, ed) =>

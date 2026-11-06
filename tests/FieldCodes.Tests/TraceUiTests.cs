@@ -22,19 +22,21 @@ public sealed class TraceUiTests
                     .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
                              && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar));
 
+    /// <summary>Command names the TRACE edition registers: its own literal ones plus the TRACE branch of CommandNames.</summary>
     private static HashSet<string> CommandNames()
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var rx = new Regex("\\[CommandMethod\\(\"([A-Za-z0-9_]+)\"");
+        var literal = new Regex("\\[CommandMethod\\(\"([A-Za-z0-9_]+)\"");
         foreach (var f in CadSources())
-            foreach (Match m in rx.Matches(File.ReadAllText(f)))
+            foreach (Match m in literal.Matches(File.ReadAllText(f)))
                 names.Add(m.Groups[1].Value);
+        foreach (var n in RuntimeIndependenceTests.TraceBranch()) names.Add(n);
         return names;
     }
 
     private static readonly string[] ExcludedModulePrefixes =
     {
-        "FTFDIP", "FTFEASEMENT", "FTFEXHIBIT", "FTFSHEET", "FTFKEYMAP", "STRIPEASEMENT", "PORTIONEASEMENT", "CONSTRUCTIONAREA", "FTFAREA", "FTFPORTION"
+        "TRACEDIP", "TRACEEASEMENT", "TRACEEXHIBIT", "TRACESHEET", "TRACEKEYMAP", "TRACESTRIPEASEMENT", "TRACEPORTIONEASEMENT", "TRACECONSTRUCTIONAREA", "TRACEAREA", "TRACEPORTION"
     };
 
     [Fact]
@@ -225,11 +227,8 @@ public sealed class TraceWordingTests
     [Fact]
     public void EveryCommandNameInThePluginComesOutWithoutAnFtfName()
     {
-        var rx = new Regex("\\[CommandMethod\\(\"(FTF[A-Za-z0-9_]*)\"");
-        var names = Directory.GetFiles(Path.Combine(Repo(), "src", "FieldCodes.Cad"), "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
-            .SelectMany(f => rx.Matches(File.ReadAllText(f)).Cast<Match>().Select(m => m.Groups[1].Value))
-            .Distinct().ToList();
+        // The internal command names (the table of originals) are what the tools' messages mention.
+        var names = RuntimeIndependenceTests.InternalBranch();
         Assert.NotEmpty(names);
         foreach (var n in names)
             Assert.DoesNotMatch(new Regex(@"\bFTF"), TraceWording.Brand("Run " + n + " again."));

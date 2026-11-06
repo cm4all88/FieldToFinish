@@ -62,44 +62,44 @@ namespace FieldCodes.TraceUi
                 {
                     new TraceGroup { Title = "Cleanup", Buttons = new List<TraceButton>
                     {
-                        B("Clean up", "Remove everything TRACE made. Survey geometry and your own drafting are not touched.", "FTFCLEAN", "clean", L),
-                        B("Draw order", "Put symbols, linework and labels in the right display order.", "FTFORDER", "order", S)
+                        B("Clean up", "Remove everything TRACE made. Survey geometry and your own drafting are not touched.", "TRACECLEAN", "clean", L),
+                        B("Draw order", "Put symbols, linework and labels in the right display order.", "TRACEORDER", "order", S)
                     }},
                     new TraceGroup { Title = "Labels", Buttons = new List<TraceButton>
                     {
-                        B("Point labels", "Label points, avoiding existing work. Labels you moved by hand stay where you put them.", "FTFLABELS", "labels", L),
-                        B("Spot elevations", "Place spot elevation markers and text.", "FTFSPOT", "spot", S),
-                        B("Tags", "Number features and keep the same numbers on every run.", "FTFTAGS", "tags", S)
+                        B("Point labels", "Label points, avoiding existing work. Labels you moved by hand stay where you put them.", "TRACELABELS", "labels", L),
+                        B("Spot elevations", "Place spot elevation markers and text.", "TRACESPOT", "spot", S),
+                        B("Tags", "Number features and keep the same numbers on every run.", "TRACETAGS", "tags", S)
                     }},
                     new TraceGroup { Title = "Trees", Buttons = new List<TraceButton>
                     {
-                        B("Trees", "Read tree points and finish them: sizes, species and labels.", "FTFTREES", "trees", L),
-                        B("Driplines", "Draw tree driplines, trimmed to their outer outline.", "FTFDRIP", "drip", S)
+                        B("Trees", "Read tree points and finish them: sizes, species and labels.", "TRACETREES", "trees", L),
+                        B("Driplines", "Draw tree driplines, trimmed to their outer outline.", "TRACEDRIP", "drip", S)
                     }},
                     new TraceGroup { Title = "Linework", Buttons = new List<TraceButton>
                     {
-                        B("Label line", "Click a line, slide the preview, click to place its label.", "FTFLABELLINE", "labelline", L),
-                        B("Label between", "Label the surface between two edges.", "FTFLABELBETWEEN", "between", S),
-                        B("Stairs", "Select the stair lines; the step count labels itself.", "FTFLABELSTAIRS", "stairs", S),
-                        B("All lines", "Label every recognised line in one pass (off unless enabled in Setup).", "FTFLINELABELS", "labelline", S),
-                        B("Line inventory", "List the linework TRACE recognises and what it could not identify.", "FTFLINES", "review", S)
+                        B("Label line", "Click a line, slide the preview, click to place its label.", "TRACELABELLINE", "labelline", L),
+                        B("Label between", "Label the surface between two edges.", "TRACELABELBETWEEN", "between", S),
+                        B("Stairs", "Select the stair lines; the step count labels itself.", "TRACELABELSTAIRS", "stairs", S),
+                        B("All lines", "Label every recognised line in one pass (off unless enabled in Setup).", "TRACELINELABELS", "labelline", S),
+                        B("Line inventory", "List the linework TRACE recognises and what it could not identify.", "TRACELINES", "review", S)
                     }},
                     new TraceGroup { Title = "Drafting", Buttons = new List<TraceButton>
                     {
-                        B("Draw line", "Draft a line by bearing and distance, with its annotation.", "FTFDRAWLINE", "drawline", L),
-                        B("Clean drafted", "Remove drafted-line annotation, or the drafted lines after you confirm.", "FTFDRAFTCLEAN", "clean", S)
+                        B("Draw line", "Draft a line by bearing and distance, with its annotation.", "TRACEDRAWLINE", "drawline", L),
+                        B("Clean drafted", "Remove drafted-line annotation, or the drafted lines after you confirm.", "TRACEDRAFTCLEAN", "clean", S)
                     }},
                     new TraceGroup { Title = "Tables", Buttons = new List<TraceButton>
                     {
-                        B("Schedule", "Build the schedule table.", "FTFTABLE", "table", L),
-                        B("Control table", "List survey control and found monuments.", "FTFCONTROL", "control", S),
-                        B("Legend", "Build the legend of line features in the drawing.", "FTFLEGEND", "legend", S)
+                        B("Schedule", "Build the schedule table.", "TRACETABLE", "table", L),
+                        B("Control table", "List survey control and found monuments.", "TRACECONTROL", "control", S),
+                        B("Legend", "Build the legend of line features in the drawing.", "TRACELEGEND", "legend", S)
                     }},
                     new TraceGroup { Title = "Setup", Buttons = new List<TraceButton>
                     {
-                        B("Profiles & Standards", "Layers, labels, codes and line features. Choose or edit your standards.", "FTFSETUP", "setup", L),
-                        B("Switch profile", "Show, choose, save or clear this drawing's profile.", "FTFPROFILE", "profiles", S),
-                        B("Diagnostics", "Show which configuration files TRACE is using.", "FTFWHERE", "diag", S)
+                        B("Profiles & Standards", "Layers, labels, codes and line features. Choose or edit your standards.", "TRACESETUP", "setup", L),
+                        B("Switch profile", "Show, choose, save or clear this drawing's profile.", "TRACEPROFILE", "profiles", S),
+                        B("Diagnostics", "Show which configuration files TRACE is using.", "TRACEWHERE", "diag", S)
                     }}
                 };
             }

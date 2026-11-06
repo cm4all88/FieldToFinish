@@ -25,7 +25,7 @@ namespace FieldCodes.Cad
         ///
         /// Safe to run twice.
         /// </summary>
-        [CommandMethod("FTFDRIP", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFDRIP, CommandFlags.Modal)]
         public void FtfDrip()
         {
             FtfSession.Run("FTFDRIP", (db, tr, ed) =>

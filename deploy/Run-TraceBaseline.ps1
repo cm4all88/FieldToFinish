@@ -198,7 +198,6 @@ $ftfBefore = @{}
 foreach ($f in $ftfRoots) {
     if (Test-Path -LiteralPath $f) {
         $ftfBefore[$f] = Get-BundleFingerprint $f
-        $script:isolationNeeded = $true
         Add-Note ("Existing FieldToFinish bundle found (will not be touched): " + $f + " [" + $ftfBefore[$f].Count + " files fingerprinted]")
     }
 }

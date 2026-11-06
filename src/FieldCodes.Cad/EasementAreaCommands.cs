@@ -28,7 +28,7 @@ namespace FieldCodes.Cad
 
         // ======================================================== PORTIONEASEMENT
 
-        [CommandMethod("PORTIONEASEMENT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.PORTIONEASEMENT, CommandFlags.Modal)]
         public void PortionEasement()
         {
             FtfSession.Run("PORTIONEASEMENT", (db, tr, ed) =>
@@ -429,7 +429,7 @@ namespace FieldCodes.Cad
             clicked.SideCourses = sideCourses;
             return clicked;
         }
-        [CommandMethod("FTFPORTION", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFPORTION, CommandFlags.Modal)]
         public void FtfPortion() { PortionEasement(); }
 
         private static string Title(string word)
@@ -514,7 +514,7 @@ namespace FieldCodes.Cad
 
         // ======================================================= CONSTRUCTIONAREA
 
-        [CommandMethod("CONSTRUCTIONAREA", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.CONSTRUCTIONAREA, CommandFlags.Modal)]
         public void ConstructionArea()
         {
             FtfSession.Run("CONSTRUCTIONAREA", (db, tr, ed) =>
@@ -550,7 +550,7 @@ namespace FieldCodes.Cad
             });
         }
 
-        [CommandMethod("FTFAREA", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFAREA, CommandFlags.Modal)]
         public void FtfArea() { ConstructionArea(); }
 
         private static void Preview(Editor ed, Course c)

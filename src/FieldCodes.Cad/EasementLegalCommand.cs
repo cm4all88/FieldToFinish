@@ -168,7 +168,7 @@ namespace FieldCodes.Cad
             public Func<LegalInputs, LegalDraft> Write;
         }
 
-        [CommandMethod("FTFEASEMENTLEGAL", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTLEGAL, CommandFlags.Modal)]
         public void WriteLegal()
         {
             FtfSession.Run("FTFEASEMENTLEGAL", (db, tr, ed) =>

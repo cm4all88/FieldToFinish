@@ -61,13 +61,13 @@ namespace FieldCodes.Cad
         /// Opens the Field to Finish window. Deliberately does NOT process anything:
         /// processing is a button in the window, or FTFRUN for the command line.
         /// </summary>
-        [CommandMethod("FTF", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTF, CommandFlags.Modal)]
         public void OpenWindow()
         {
             ShowWindow(null);
         }
 
-        [CommandMethod("FTFRUN", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFRUN, CommandFlags.Modal)]
         public void RunAll()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;

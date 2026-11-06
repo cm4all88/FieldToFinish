@@ -12,10 +12,10 @@ namespace FieldCodes.Cad
     /// </summary>
     public sealed class SettingsCommands
     {
-        [CommandMethod("FTFSETUP", CommandFlags.Modal)]
-        [CommandMethod("FTFSETTINGS", CommandFlags.Modal)]
-        [CommandMethod("FTFCONFIG", CommandFlags.Modal)]
-        [CommandMethod("FTFOPTIONS", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFSETUP, CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFSETTINGS, CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFCONFIG, CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFOPTIONS, CommandFlags.Modal)]
         public void FtfSetup()
         {
             FtfCommand.ShowWindow("Settings");

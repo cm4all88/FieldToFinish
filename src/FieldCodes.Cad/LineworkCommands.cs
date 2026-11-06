@@ -34,7 +34,7 @@ namespace FieldCodes.Cad
         /// </summary>
         internal const string ManualLineLabelMark = "manual";
 
-        [CommandMethod("FTFLINES", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLINES, CommandFlags.Modal)]
         public void FtfLines()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -88,7 +88,7 @@ namespace FieldCodes.Cad
         /// following the line but never upside down. Safe to run twice -- it deletes
         /// only its own previous output first.
         /// </summary>
-        [CommandMethod("FTFLINELABELS", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLINELABELS, CommandFlags.Modal)]
         public void FtfLineLabels()
         {
             FtfSession.Run("FTFLINELABELS", (db, tr, ed) =>
@@ -248,8 +248,8 @@ namespace FieldCodes.Cad
         /// the annotation and its optional mask, stamped with the manual mark so the
         /// bulk pass never regenerates over them (FTFCLEAN still removes everything).
         /// </summary>
-        [CommandMethod("FTFLABELLINE", CommandFlags.Modal)]
-        [CommandMethod("FTFL", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLABELLINE, CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFL, CommandFlags.Modal)]
         public void FtfLabelLine()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -497,8 +497,8 @@ namespace FieldCodes.Cad
         /// exactly like FTFLABELLINE. Both edges stay read-only; the label carries
         /// the manual mark so the bulk pass never touches it.
         /// </summary>
-        [CommandMethod("FTFLABELBETWEEN", CommandFlags.Modal)]
-        [CommandMethod("FTFB", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLABELBETWEEN, CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFB, CommandFlags.Modal)]
         public void FtfLabelBetween()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -668,8 +668,8 @@ namespace FieldCodes.Cad
         /// direction and follows the cursor freely; click to place. The stair
         /// lines themselves stay read-only.
         /// </summary>
-        [CommandMethod("FTFLABELSTAIRS", CommandFlags.Modal | CommandFlags.UsePickSet)]
-        [CommandMethod("FTFS", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        [CommandMethod(CommandNames.FTFLABELSTAIRS, CommandFlags.Modal | CommandFlags.UsePickSet)]
+        [CommandMethod(CommandNames.FTFS, CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void FtfLabelStairs()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -1190,7 +1190,7 @@ namespace FieldCodes.Cad
         /// link to their source field coding (ASPH L, RWC1 ...) before concluding the
         /// coding is gone. Nothing is created, modified or stamped.
         /// </summary>
-        [CommandMethod("FTFLINEMETA", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLINEMETA, CommandFlags.Modal)]
         public void FtfLineMeta()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -1271,7 +1271,7 @@ namespace FieldCodes.Cad
 
             var path = db.Filename == null
                 ? null
-                : System.IO.Path.ChangeExtension(db.Filename, null) + ".ftf-linemeta.txt";
+                : System.IO.Path.ChangeExtension(db.Filename, null) + "." + Branding.FilePrefix + "-linemeta.txt";
 
             if (path != null)
             {

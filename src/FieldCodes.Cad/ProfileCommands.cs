@@ -15,7 +15,7 @@ namespace FieldCodes.Cad
     public sealed class ProfileCommands
     {
         /// <summary>Shows, selects, creates or clears the drawing's drafting profile.</summary>
-        [CommandMethod("FTFPROFILE", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFPROFILE, CommandFlags.Modal)]
         public void Profile()
         {
             FtfSession.Run("FTFPROFILE", (db, tr, ed) =>

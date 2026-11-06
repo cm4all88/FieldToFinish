@@ -202,7 +202,12 @@ namespace FieldCodes.Cad.Ui
                 });
 
                 foreach (var entry in group.Skip(1))
+                {
+                    // The Commands page lists internal command names; TRACE users work from the
+                    // ribbon and palette.
+                    if (Brand && entry.StartsWith("Commands|", StringComparison.Ordinal)) continue;
                     AddNavButton(stack, entry.Split('|')[0], entry.Split('|')[1]);
+                }
             }
 
             nav.Controls.Add(stack);
@@ -496,7 +501,7 @@ namespace FieldCodes.Cad.Ui
                 {
                     var doc = AcadApp.DocumentManager.MdiActiveDocument;
                     if (doc != null)
-                        doc.SendStringToExecute("FTFLABELLINE ", true, false, true);
+                        doc.SendStringToExecute(CommandNames.FTFLABELLINE + " ", true, false, true);
                 }, null);
             }
             catch (Exception)

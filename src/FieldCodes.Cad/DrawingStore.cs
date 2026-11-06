@@ -14,7 +14,7 @@ namespace FieldCodes.Cad
     /// </summary>
     internal static class DrawingStore
     {
-        private const string Root = "FTF_FIELDTOFINISH";
+        private const string Root = DataNames.Root;
         private const string DipsKey = "DIPS";
         private const string EasementsKey = "EASEMENTS";
         private const string ProfileKey = "PROFILE";

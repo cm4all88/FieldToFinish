@@ -25,7 +25,7 @@ namespace FieldCodes.Cad
     /// </summary>
     public sealed class TagCommands
     {
-        [CommandMethod("FTFTAGS", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFTAGS, CommandFlags.Modal)]
         public void FtfTags()
         {
             FtfSession.Run("FTFTAGS", (db, tr, ed) =>
@@ -164,7 +164,7 @@ namespace FieldCodes.Cad
         /// Draws or refreshes the schedule. On a re-run it reappears where it already
         /// was, so a table someone positioned on the sheet does not jump.
         /// </summary>
-        [CommandMethod("FTFTABLE", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFTABLE, CommandFlags.Modal)]
         public void FtfTable()
         {
             FtfSession.Run("FTFTABLE", (db, tr, ed) =>

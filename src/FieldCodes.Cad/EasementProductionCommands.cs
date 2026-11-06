@@ -22,7 +22,7 @@ namespace FieldCodes.Cad
     {
         // =================================================== FTFEASEMENTEXCLUDE
 
-        [CommandMethod("FTFEASEMENTEXCLUDE", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTEXCLUDE, CommandFlags.Modal)]
         public void Exclude()
         {
             FtfSession.Run("FTFEASEMENTEXCLUDE", (db, tr, ed) =>
@@ -95,7 +95,7 @@ namespace FieldCodes.Cad
 
         // ================================================= FTFEASEMENTCOMPONENT
 
-        [CommandMethod("FTFEASEMENTCOMPONENT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTCOMPONENT, CommandFlags.Modal)]
         public void AddComponent()
         {
             FtfSession.Run("FTFEASEMENTCOMPONENT", (db, tr, ed) =>
@@ -165,7 +165,7 @@ namespace FieldCodes.Cad
 
         // ===================================================== FTFEASEMENTGROUP
 
-        [CommandMethod("FTFEASEMENTGROUP", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTGROUP, CommandFlags.Modal)]
         public void Group()
         {
             FtfSession.Run("FTFEASEMENTGROUP", (db, tr, ed) =>

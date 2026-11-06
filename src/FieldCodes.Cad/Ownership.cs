@@ -128,7 +128,7 @@ namespace FieldCodes.Cad
     {
         /// <summary>Registered application name for our XData. Never change this:
         /// entities stamped with the old name would become unowned and undeletable.</summary>
-        public const string AppName = "FTF_FIELDTOFINISH";
+        public const string AppName = DataNames.Root;
 
         /// <summary>Layout of the XData record itself, separate from the rules version.</summary>
         public const string SchemaVersion = "ftf-1";

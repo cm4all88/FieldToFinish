@@ -38,10 +38,10 @@ namespace FieldCodes.Cad
     /// </summary>
     public sealed class EasementInspectCommands
     {
-        [CommandMethod("FTFEASEMENTINSPECT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEASEMENTINSPECT, CommandFlags.Modal)]
         public void InspectEasement() { Inspect("FTFEASEMENTINSPECT"); }
 
-        [CommandMethod("FTFEXHIBITINSPECT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEXHIBITINSPECT, CommandFlags.Modal)]
         public void InspectExhibit() { Inspect("FTFEXHIBITINSPECT"); }
 
         private static void Inspect(string command)

@@ -31,7 +31,7 @@ namespace FieldCodes.Reporting
     /// </summary>
     public static class ExceptionReport
     {
-        public const string Suffix = ".ftf-exceptions.csv";
+        public static readonly string Suffix = "." + Branding.FilePrefix + "-exceptions.csv";
 
         public const string Header =
             "PointNumber,Easting,Northing,Elevation,RawDescription,Severity,Diagnostics";

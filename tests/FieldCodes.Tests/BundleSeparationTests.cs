@@ -118,7 +118,7 @@ public sealed class BundleSeparationTests
         // The other bundle is only warned about.
         Assert.DoesNotContain("Remove-Item $otherFound", script);
         Assert.DoesNotContain("Rename-Item", script);
-        Assert.Contains("is also installed (it is NOT touched)", script);
+        Assert.DoesNotContain("otherFound", script);           // the editions no longer clash, so nothing to warn about
         // Leftover build files from the other edition are never copied into a bundle.
         Assert.Contains("'^TRACE\\.'", script);
         Assert.Contains("'^FieldCodes(\\.|$)'", script);

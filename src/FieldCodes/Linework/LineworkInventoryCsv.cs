@@ -16,7 +16,7 @@ namespace FieldCodes.Linework
     /// </summary>
     public static class LineworkInventoryCsv
     {
-        public const string Suffix = ".ftf-linework.csv";
+        public static readonly string Suffix = "." + Branding.FilePrefix + "-linework.csv";
         public const string Header = "EntityType,Figure,TrimbleName,Layer,Feature,Codes,Source,Length,LabelLayer";
 
         public static string PathFor(string drawingPath)

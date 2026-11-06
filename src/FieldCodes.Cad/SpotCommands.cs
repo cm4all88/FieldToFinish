@@ -33,7 +33,7 @@ namespace FieldCodes.Cad
         /// Dense clusters -- wheelchair ramps -- stay legible: each new text
         /// dodges the ones already placed, deterministically. Esc finishes.
         /// </summary>
-        [CommandMethod("FTFSPOT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFSPOT, CommandFlags.Modal)]
         public void FtfSpot()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -229,7 +229,7 @@ namespace FieldCodes.Cad
         /// controlCodes), with point number, northing, easting, elevation and the
         /// raw note. Re-running keeps the table where it is, like the schedule.
         /// </summary>
-        [CommandMethod("FTFCONTROL", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFCONTROL, CommandFlags.Modal)]
         public void FtfControl()
         {
             FtfSession.Run("FTFCONTROL", (db, tr, ed) =>
@@ -357,7 +357,7 @@ namespace FieldCodes.Cad
             if (string.IsNullOrEmpty(db.Filename)) return;
 
             var path = System.IO.Path.ChangeExtension(db.Filename, null) +
-                       ".ftf-control.csv";
+                       "." + Branding.FilePrefix + "-control.csv";
             var lines = new List<string>
             {
                 "Point,Northing,Easting,Elevation,Latitude,Longitude,Description"
@@ -452,7 +452,7 @@ namespace FieldCodes.Cad
         /// Point symbols live inside Civil 3D point styles, so this legend covers
         /// the linework.
         /// </summary>
-        [CommandMethod("FTFLEGEND", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLEGEND, CommandFlags.Modal)]
         public void FtfLegend()
         {
             FtfSession.Run("FTFLEGEND", (db, tr, ed) =>

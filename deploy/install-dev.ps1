@@ -92,14 +92,6 @@ if ($running) {
 # both are installed Civil 3D can load the wrong one without telling you. This script
 # never touches the other bundle. For TRACE it stops; for the internal edition it warns.
 
-$otherName = if ($Edition -eq 'Parametrix') { 'TRACE.bundle' } else { 'FieldToFinish.bundle' }
-$otherRoots = @(
-    (Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins'),
-    (Join-Path $env:ProgramFiles 'Autodesk\ApplicationPlugins'),
-    (Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins')
-)
-$otherFound = @($otherRoots | Where-Object { $_ } | ForEach-Object { Join-Path $_ $otherName } | Where-Object { Test-Path -LiteralPath $_ })
-
 # --- uninstall --------------------------------------------------------------------
 
 if ($Uninstall) {
@@ -110,13 +102,6 @@ if ($Uninstall) {
         Write-Host "Nothing installed at $target"
     }
     return
-}
-
-if ($otherFound.Count -gt 0 -and -not $Uninstall) {
-    $list = ($otherFound | ForEach-Object { '  ' + $_ }) -join "`n"
-    Write-Warning ("$otherName is also installed (it is NOT touched):`n$list`n" +
-                   "Both editions define the same FTF commands. Do not run both in one Civil 3D session. " +
-                   "See docs\trace\COEXISTENCE.md; deploy\Switch-TraceTestMode.ps1 sets the other one aside reversibly.")
 }
 
 # --- locate the build output ------------------------------------------------------

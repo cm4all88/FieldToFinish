@@ -26,7 +26,7 @@ namespace FieldCodes.Cad
     /// </summary>
     public sealed class LabelCommands
     {
-        [CommandMethod("FTFLABELS", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFLABELS, CommandFlags.Modal)]
         public void FtfLabels()
         {
             FtfSession.Run("FTFLABELS", (db, tr, ed) =>

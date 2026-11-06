@@ -26,7 +26,7 @@ namespace FieldCodes.Cad
     {
         // ============================================================== FTFEXHIBIT
 
-        [CommandMethod("FTFEXHIBIT", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEXHIBIT, CommandFlags.Modal)]
         public void MakeExhibit()
         {
             string switchTo = null;
@@ -113,7 +113,7 @@ namespace FieldCodes.Cad
 
         // ======================================================= FTFEXHIBITREBUILD
 
-        [CommandMethod("FTFEXHIBITREBUILD", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFEXHIBITREBUILD, CommandFlags.Modal)]
         public void RebuildExhibit()
         {
             FtfSession.Run("FTFEXHIBITREBUILD", (db, tr, ed) =>

@@ -322,7 +322,7 @@ namespace FieldCodes.Cad.Ui
             _reopenStructure = _structureId;
             var doc = Autodesk.AutoCAD.ApplicationServices.Core.Application.DocumentManager.MdiActiveDocument;
             Close();
-            if (doc != null) doc.SendStringToExecute("_FTFDIP ", true, false, false);
+            if (doc != null) doc.SendStringToExecute("_" + CommandNames.FTFDIP + " ", true, false, false);
         }
 
         // ================================================================ chrome

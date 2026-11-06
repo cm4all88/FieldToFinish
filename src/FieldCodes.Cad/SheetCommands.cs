@@ -29,7 +29,7 @@ namespace FieldCodes.Cad
     {
         // ------------------------------------------------------------ FTFSHEETS
 
-        [CommandMethod("FTFSHEETS", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFSHEETS, CommandFlags.Modal)]
         public void FtfSheets()
         {
             FtfSession.Run("FTFSHEETS", (db, tr, ed) =>
@@ -100,7 +100,7 @@ namespace FieldCodes.Cad
         /// match lines have a seam. Draws only the proposal -- no layouts or
         /// viewports are created.
         /// </summary>
-        [CommandMethod("FTFSHEETPLAN", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFSHEETPLAN, CommandFlags.Modal)]
         public void FtfSheetPlan()
         {
             FtfSession.Run("FTFSHEETPLAN", (db, tr, ed) =>
@@ -155,7 +155,7 @@ namespace FieldCodes.Cad
         /// right of the sheet's viewport. Re-running replaces each layout's key
         /// map; nothing else on the layout is touched.
         /// </summary>
-        [CommandMethod("FTFKEYMAP", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFKEYMAP, CommandFlags.Modal)]
         public void FtfKeymap()
         {
             FtfSession.Run("FTFKEYMAP", (db, tr, ed) =>
@@ -312,7 +312,7 @@ namespace FieldCodes.Cad
         /// never overwritten, and FTFCLEAN never deletes a layout: creating sheets
         /// is one-way by design.
         /// </summary>
-        [CommandMethod("FTFSHEETMAKE", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFSHEETMAKE, CommandFlags.Modal)]
         public void FtfSheetMake()
         {
             FtfSession.Run("FTFSHEETMAKE", (db, tr, ed) =>

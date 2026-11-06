@@ -50,6 +50,12 @@ namespace FieldCodes
             get { return ConfigFolderName == CommercialFolderName; }
         }
 
+        /// <summary>Prefix for the files TRACE writes beside drawings and settings: trace, or the internal ftf.</summary>
+        public static string FilePrefix
+        {
+            get { return IsCommercial ? "trace" : "ftf"; }
+        }
+
         /// <summary>The product name to show in windows: TRACE, or the internal name.</summary>
         public static string ProductName
         {

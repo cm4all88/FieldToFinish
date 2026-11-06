@@ -23,7 +23,7 @@ namespace FieldCodes.Cad
     /// </summary>
     public sealed class DrawOrderCommands
     {
-        [CommandMethod("FTFORDER", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFORDER, CommandFlags.Modal)]
         public void FtfOrder()
         {
             FtfSession.Run("FTFORDER", (db, tr, ed) =>

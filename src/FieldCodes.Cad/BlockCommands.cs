@@ -22,7 +22,7 @@ namespace FieldCodes.Cad
         /// Lists block definitions in the drawing, optionally filtered by a substring,
         /// and reports which of the blocks the rules file expects are present.
         /// </summary>
-        [CommandMethod("FTFBLOCKS", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFBLOCKS, CommandFlags.Modal)]
         public void FtfBlocks()
         {
             FtfSession.Run("FTFBLOCKS", (db, tr, ed) =>

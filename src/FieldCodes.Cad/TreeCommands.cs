@@ -26,8 +26,8 @@ namespace FieldCodes.Cad
         ///
         /// Safe to run twice: everything this command owns is deleted first.
         /// </summary>
-        [CommandMethod("FTFPOINTS", CommandFlags.Modal | CommandFlags.UsePickSet)]
-        [CommandMethod("FTFTREES", CommandFlags.Modal | CommandFlags.UsePickSet)]
+        [CommandMethod(CommandNames.FTFPOINTS, CommandFlags.Modal | CommandFlags.UsePickSet)]
+        [CommandMethod(CommandNames.FTFTREES, CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void FtfTrees()
         {
             FtfSession.Run("FTFPOINTS", (db, tr, ed) =>
@@ -147,7 +147,7 @@ namespace FieldCodes.Cad
         /// Reports where the plugin is looking for its rules file and what it found.
         /// Run this first when a command complains about the rules file.
         /// </summary>
-        [CommandMethod("FTFWHERE", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFWHERE, CommandFlags.Modal)]
         public void FtfWhere()
         {
             var doc = Autodesk.AutoCAD.ApplicationServices.Application
@@ -186,7 +186,7 @@ namespace FieldCodes.Cad
         /// cleanup of the pipeline must never take a boundary line with it.
         /// FTFDRAFTCLEAN manages the drafted world separately.
         /// </summary>
-        [CommandMethod("FTFCLEAN", CommandFlags.Modal)]
+        [CommandMethod(CommandNames.FTFCLEAN, CommandFlags.Modal)]
         public void FtfClean()
         {
             FtfSession.Run("FTFCLEAN", (db, tr, ed) =>
