@@ -28,15 +28,18 @@ namespace FieldCodes.Cad
         private static void OnIdle(object sender, EventArgs e)
         {
             AcadApp.Idle -= OnIdle;
+            TraceRibbon.EnsureBuilt();
             try
             {
                 var state = TraceUiState.Load(TraceUiState.DefaultPath());
+                TraceLog.Write("idle: palette visible last time = " + (state.PaletteVisible == null ? "never used" : state.PaletteVisible.ToString()));
                 if (state.PaletteVisible == null) Show(true);          // first run: show it once
                 else if (state.PaletteVisible == true) Show(false);    // left open last time
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
-                // The palette is a convenience. A failure here must not affect Civil 3D.
+                // The palette is a convenience. A failure here must not affect Civil 3D; the log says why.
+                TraceLog.Write("restoring the palette", ex);
             }
         }
 

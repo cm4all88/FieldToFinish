@@ -13,12 +13,21 @@ namespace FieldCodes.Cad
     {
         public void Initialize()
         {
-            TraceRibbon.Start();
+            TraceLog.Write("TRACE " + typeof(TraceApp).Assembly.GetName().Version + " loaded from " + typeof(TraceApp).Assembly.Location);
+            try
+            {
+                TraceRibbon.Start();
+            }
+            catch (System.Exception ex)
+            {
+                TraceLog.Write("ribbon start", ex);
+            }
             TracePalette.StartWhenIdle();
         }
 
         public void Terminate()
         {
+            TraceLog.Write("Civil 3D closing");
             TracePalette.OnExit();
         }
     }

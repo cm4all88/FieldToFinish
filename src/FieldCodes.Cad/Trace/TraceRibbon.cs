@@ -20,9 +20,11 @@ namespace FieldCodes.Cad
         {
             if (ComponentManager.Ribbon != null)
             {
+                TraceLog.Write("ribbon already available at startup; building the TRACE tab");
                 Build();
                 return;
             }
+            TraceLog.Write("ribbon not ready yet; waiting for it");
             ComponentManager.ItemInitialized += OnItemInitialized;
         }
 
@@ -30,7 +32,31 @@ namespace FieldCodes.Cad
         {
             if (ComponentManager.Ribbon == null) return;
             ComponentManager.ItemInitialized -= OnItemInitialized;
+            TraceLog.Write("ribbon became ready; building the TRACE tab");
             Build();
+        }
+
+        /// <summary>
+        /// A second chance once Civil 3D is idle, in case the ribbon-ready notification never
+        /// reached us. Does nothing if the tab is already there.
+        /// </summary>
+        internal static void EnsureBuilt()
+        {
+            try
+            {
+                if (ComponentManager.Ribbon == null)
+                {
+                    TraceLog.Write("idle check: the ribbon still does not exist");
+                    return;
+                }
+                if (ComponentManager.Ribbon.FindTab(TabId) != null) return;
+                TraceLog.Write("idle check: TRACE tab missing; building it now");
+                Build();
+            }
+            catch (System.Exception ex)
+            {
+                TraceLog.Write("idle ribbon check", ex);
+            }
         }
 
         /// <summary>True on Civil 3D's light colour theme. Dark is the default.</summary>
@@ -73,11 +99,13 @@ namespace FieldCodes.Cad
                 }
 
                 ribbon.Tabs.Add(tab);
+                TraceLog.Write("TRACE tab added with " + tab.Panels.Count + " panels");
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
                 // A ribbon that cannot build must never take Civil 3D down. The palette and
-                // the TRACE command still work.
+                // the TRACE command still work; the log says why.
+                TraceLog.Write("building the TRACE tab", ex);
             }
         }
 
