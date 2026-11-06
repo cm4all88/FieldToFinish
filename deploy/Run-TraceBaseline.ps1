@@ -238,7 +238,16 @@ if ($SkipTests) {
     $summaryLine = (Select-String -Path $testLog -Pattern '^(Passed|Failed)!' -ErrorAction SilentlyContinue | Select-Object -Last 1)
     $text = if ($summaryLine) { $summaryLine.Line.Trim() } else { 'no summary line, see unit-tests.log' }
     Add-Result 'Unit tests (non-CAD)' ($code -eq 0) $text
-    if ($code -ne 0) { Stop-Run 'Unit tests failed. Nothing was installed. See unit-tests.log.' }
+    if ($code -ne 0) {
+        # Name the failing tests and show why, so nobody has to dig through the log.
+        $failedLines = @(Select-String -Path $testLog -Pattern '^\s+Failed \S' -Context 0,8 -ErrorAction SilentlyContinue)
+        foreach ($f in $failedLines) {
+            Write-Host ('   ' + $f.Line.Trim()) -ForegroundColor Red
+            foreach ($c in $f.Context.PostContext) { Write-Host ('      ' + $c.Trim()) }
+        }
+        ($failedLines | ForEach-Object { $_.Line.Trim() }) | Out-File -FilePath (Join-Path $logDir 'failed-tests.txt') -Encoding utf8
+        Stop-Run 'Unit tests failed. Nothing was installed. See failed-tests.txt and unit-tests.log.'
+    }
 }
 
 # --------------------------------------------------------------------- 4. install
