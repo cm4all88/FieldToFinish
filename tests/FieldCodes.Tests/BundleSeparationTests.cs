@@ -186,6 +186,7 @@ public sealed class BundleSeparationTests
         Assert.Contains("FieldToFinish.bundle.paused", script);
         Assert.Contains("Refusing: '$to' already exists", script);           // never renames over something
         Assert.Contains("IDENTICAL", script);                                 // proves the restore
+        Assert.Contains("Already set aside", script);                         // a hand-renamed folder is fingerprinted in place
         Assert.Contains("Get-Process -Name acad", script);                    // not while Civil 3D is open
     }
 }

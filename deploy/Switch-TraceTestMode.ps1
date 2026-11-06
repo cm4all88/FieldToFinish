@@ -79,6 +79,15 @@ if ($Begin) {
     foreach ($r in $roots) {
         $from = Join-Path $r $name
         $to   = Join-Path $r $paused
+        # Already set aside (for example renamed by hand): fingerprint it where it is, so -End can
+        # still prove nothing changed from now on. Nothing is renamed or touched.
+        if ((-not (Test-Path -LiteralPath $from)) -and (Test-Path -LiteralPath $to)) {
+            $fp = Get-Fingerprint $to
+            $fp | Out-File -FilePath (Get-StateFile $from) -Encoding utf8
+            Write-Host ("Already set aside: " + $to + "  (fingerprinted " + $fp.Count + " files in place; nothing was changed)")
+            $done++
+            continue
+        }
         if (-not (Test-Path -LiteralPath $from)) { continue }
         if (Test-Path -LiteralPath $to) { Write-Error ("Refusing: '$to' already exists. Run -End first or resolve it by hand.") }
         $fp = Get-Fingerprint $from
