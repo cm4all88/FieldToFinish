@@ -7,7 +7,9 @@ using Autodesk.Windows;
 
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
+#if !TRACE_EDITION
 [assembly: ExtensionApplication(typeof(FieldCodes.Cad.FtfRibbon))]
+#endif
 
 namespace FieldCodes.Cad
 {

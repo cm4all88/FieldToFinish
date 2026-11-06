@@ -19,6 +19,11 @@
          the install root. They are NOT in the same directory. -->
     <C3D2024 Condition="'$(C3D2024)' == ''">C:\Program Files\Autodesk\AutoCAD 2024</C3D2024>
 
+    <!-- Defined only in the commercial edition: the TRACE ribbon, palette and commands.
+         The internal edition compiles none of src\FieldCodes.Cad\Trace and keeps its own
+         startup unchanged. -->
+    <DefineConstants Condition="'$(TraceEdition)' != 'Parametrix'">$(DefineConstants);TRACE_EDITION</DefineConstants>
+
     <LangVersion>7.3</LangVersion>
     <!-- TRACE.Cad.dll for the commercial edition; FieldCodes.Cad.dll (unchanged) for the
          internal one. -->

@@ -70,12 +70,17 @@ namespace FieldCodes.Cad.Ui
             AddGroup("FINISHING");
             AddSection("Drafting Lines", new DraftingLinesPage());
             AddSection("Drawing Order", new DrawOrderPage());
-            AddSection("Sheets", new SheetsPage());
 
-            AddGroup("PRODUCTION");
-            AddSection("Storm & Sewer Dips", new DipsPage());
-            AddSection("Strip Easements", new EasementsPage());
-            AddSection("Easement Exhibits", new ExhibitsPage());
+            // Sheets and the production tools are not part of TRACE 1.0.
+            if (!Branding.IsCommercial)
+            {
+                AddSection("Sheets", new SheetsPage());
+
+                AddGroup("PRODUCTION");
+                AddSection("Storm & Sewer Dips", new DipsPage());
+                AddSection("Strip Easements", new EasementsPage());
+                AddSection("Easement Exhibits", new ExhibitsPage());
+            }
 
             AddGroup("MAINTENANCE");
             AddSection("Advanced", new CleanupPage());

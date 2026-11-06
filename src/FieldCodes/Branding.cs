@@ -44,6 +44,18 @@ namespace FieldCodes
             }
         }
 
+        /// <summary>True in the commercial TRACE edition.</summary>
+        public static bool IsCommercial
+        {
+            get { return ConfigFolderName == CommercialFolderName; }
+        }
+
+        /// <summary>The product name to show in windows: TRACE, or the internal name.</summary>
+        public static string ProductName
+        {
+            get { return IsCommercial ? "TRACE" : "Field to Finish"; }
+        }
+
         /// <summary>Maps an edition stamp to a folder. Only "Default" is the commercial
         /// edition; anything else, including no stamp, is the internal folder.</summary>
         public static string FolderForEdition(string edition)

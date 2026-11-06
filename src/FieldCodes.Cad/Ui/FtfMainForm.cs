@@ -86,7 +86,7 @@ namespace FieldCodes.Cad.Ui
         {
             SuspendLayout();
 
-            Text = "Field to Finish";
+            Text = Branding.ProductName;
             FormBorderStyle = FormBorderStyle.Sizable;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = true;
@@ -150,7 +150,7 @@ namespace FieldCodes.Cad.Ui
 
             var title = new Label
             {
-                Text = "FIELD TO FINISH",
+                Text = Branding.ProductName.ToUpperInvariant(),
                 Font = new Font(SystemFonts.DefaultFont.FontFamily, 9.5f, FontStyle.Bold),
                 ForeColor = Accent,
                 AutoSize = true,
