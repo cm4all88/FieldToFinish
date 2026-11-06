@@ -183,18 +183,18 @@ namespace FieldCodes.Cad
                 var answer = ed.GetString(prompt);
                 if (answer.Status != PromptStatus.OK) return;
                 var path = string.IsNullOrWhiteSpace(answer.StringResult) ? fallback : answer.StringResult.Trim().Trim('"');
-                if (path == null || !File.Exists(path)) { ed.WriteMessage("\nFTFDIPNOTES: no notes file at \"{0}\".\n", path); return; }
+                if (path == null || !File.Exists(path)) { ed.Tell("\nFTFDIPNOTES: no notes file at \"{0}\".\n", path); return; }
 
                 var parsed = new DipNoteParser(settings.Dips).Parse(File.ReadAllText(path));
-                foreach (var d in parsed.Diagnostics) ed.WriteMessage("\n  {0}: {1}", d.Severity, d);
-                if (parsed.Structures.Count == 0) { ed.WriteMessage("\nFTFDIPNOTES: no \"PT <number>\" blocks in the file.\n"); return; }
+                foreach (var d in parsed.Diagnostics) ed.Tell("\n  {0}: {1}", d.Severity, d);
+                if (parsed.Structures.Count == 0) { ed.Tell("\nFTFDIPNOTES: no \"PT <number>\" blocks in the file.\n"); return; }
 
                 DipSession.Reload();
                 var project = DipSession.ProjectFor(db, tr);
                 foreach (var message in UtilityCadService.ImportNotes(project, parsed, UtilityCadService.LivePoints(db, tr), settings.Dips))
-                    ed.WriteMessage("\n  " + message);
+                    ed.Tell("\n  " + message);
                 DrawingStore.SaveDips(db, tr, project);
-                ed.WriteMessage("\nFTFDIPNOTES: {0} structure block(s) read from {1}.\n", parsed.Structures.Count, Path.GetFileName(path));
+                ed.Tell("\nFTFDIPNOTES: {0} structure block(s) read from {1}.\n", parsed.Structures.Count, Path.GetFileName(path));
             });
         }
 
@@ -221,10 +221,10 @@ namespace FieldCodes.Cad
                         var existing = project.ConnectionFor(structure.Id, pipe.Id);
                         if (existing != null && existing.Status != ConnectionStatus.Unresolved) continue;
 
-                        ed.WriteMessage("\n{0}: {1}", structure.Label, ConnectionFinder.Describe(pipe));
+                        ed.Tell("\n{0}: {1}", structure.Label, ConnectionFinder.Describe(pipe));
                         if (!pipe.Direction.IsKnown)
                         {
-                            ed.WriteMessage("\n  No observed direction -- left for the field revisit list.");
+                            ed.Tell("\n  No observed direction -- left for the field revisit list.");
                             continue;
                         }
 
@@ -232,12 +232,12 @@ namespace FieldCodes.Cad
                         for (var i = 0; i < candidates.Count; i++)
                         {
                             var c = candidates[i];
-                            ed.WriteMessage(string.Format(CultureInfo.InvariantCulture,
+                            ed.Tell(string.Format(CultureInfo.InvariantCulture,
                                 "\n  {0}. {1}  {2:0.0}'  {3:0.0} deg off  {4} confidence -- {5}",
                                 i + 1, c.Structure.Label, c.Distance, c.DeviationDegrees, c.Confidence,
                                 string.Join("; ", c.Basis.ToArray())));
                         }
-                        if (candidates.Count == 0) ed.WriteMessage("\n  No surveyed structure in the search cone.");
+                        if (candidates.Count == 0) ed.Tell("\n  No surveyed structure in the search cone.");
 
                         var options = new PromptIntegerOptions("\n  Candidate number or [Manual/Leave/Outside/Skip] <Skip>: ")
                         {
@@ -256,7 +256,7 @@ namespace FieldCodes.Cad
                         if (answer.Status == PromptStatus.OK && answer.Value <= candidates.Count && candidates.Count > 0)
                         {
                             ConnectionFinder.Accept(project, structure, pipe, candidates[answer.Value - 1], false, null);
-                            ed.WriteMessage("\n  Confirmed to {0}.", candidates[answer.Value - 1].Structure.Label);
+                            ed.Tell("\n  Confirmed to {0}.", candidates[answer.Value - 1].Structure.Label);
                             changed++;
                         }
                         else if (answer.Status == PromptStatus.Keyword && answer.StringResult == "Manual")
@@ -266,19 +266,19 @@ namespace FieldCodes.Cad
                             var live = UtilityCadService.LivePoints(db, tr);
                             CadStructureSnapshot snapshot;
                             if (!live.TryGetValue(number.StringResult.Trim(), out snapshot))
-                            { ed.WriteMessage("\n  No COGO point {0} in the drawing.", number.StringResult.Trim()); continue; }
+                            { ed.Tell("\n  No COGO point {0} in the drawing.", number.StringResult.Trim()); continue; }
                             var target = UtilityCadService.EnsureStructure(project, snapshot, settings.Dips);
-                            if (target.Id == structure.Id) { ed.WriteMessage("\n  A pipe cannot connect a structure to itself."); continue; }
+                            if (target.Id == structure.Id) { ed.Tell("\n  A pipe cannot connect a structure to itself."); continue; }
                             var note = ed.GetString(new PromptStringOptions("\n  Reason (optional): ") { AllowSpaces = true });
                             ConnectionFinder.Accept(project, structure, pipe, ConnectionFinder.ManualCandidate(project, structure, pipe, target, settings.Dips),
                                                     true, note.Status == PromptStatus.OK ? note.StringResult : null);
-                            ed.WriteMessage("\n  Manual connection to {0} recorded as an override.", target.Label);
+                            ed.Tell("\n  Manual connection to {0} recorded as an override.", target.Label);
                             changed++;
                         }
                         else if (answer.Status == PromptStatus.Keyword && answer.StringResult == "Outside")
                         {
                             ConnectionFinder.MarkOutsideLimits(project, structure, pipe);
-                            ed.WriteMessage("\n  Recorded as running outside the survey limits.");
+                            ed.Tell("\n  Recorded as running outside the survey limits.");
                             changed++;
                         }
                         else if (answer.Status == PromptStatus.Keyword && answer.StringResult == "Leave")
@@ -290,7 +290,7 @@ namespace FieldCodes.Cad
                 }
 
                 if (changed > 0) DrawingStore.SaveDips(db, tr, project);
-                ed.WriteMessage("\nFTFDIPCONNECT: {0} connection decision(s) recorded.\n", changed);
+                ed.Tell("\nFTFDIPCONNECT: {0} connection decision(s) recorded.\n", changed);
             });
         }
 
@@ -314,7 +314,7 @@ namespace FieldCodes.Cad
                 foreach (var pipe in structure.Field.Pipes.Where(p => p.ReferenceUnconfirmed && p.MeasuredDip.HasValue).ToList())
                 {
                     var assumed = ObservationReview.Assumed(structure, pipe, settings.Dips);
-                    ed.WriteMessage("\n{0} {1}: dip {2:0.00}' -- the note does not say what it was measured to.{3}",
+                    ed.Tell("\n{0} {1}: dip {2:0.00}' -- the note does not say what it was measured to.{3}",
                         structure.Label, ConnectionFinder.Describe(pipe), pipe.MeasuredDip.Value,
                         assumed != null ? " If invert: " + assumed.Value.ToString("0.00", CultureInfo.InvariantCulture) : string.Empty);
                     var options = new PromptKeywordOptions("\n  Measured to [Invert/Top/Springline/Skip] <Skip>: ", "Invert Top Springline Skip");
@@ -331,7 +331,7 @@ namespace FieldCodes.Cad
                 }
 
                 if (changed > 0) DrawingStore.SaveDips(db, tr, project);
-                ed.WriteMessage("\nFTFDIPCONFIRM: {0} measurement reference(s) confirmed.\n", changed);
+                ed.Tell("\nFTFDIPCONFIRM: {0} measurement reference(s) confirmed.\n", changed);
             });
         }
 
@@ -348,7 +348,7 @@ namespace FieldCodes.Cad
                 var project = DipSession.ProjectFor(db, tr);
                 DrawConnections(db, tr, ed, project, settings, rules.Version, c => true);
                 DrawingStore.SaveDips(db, tr, project);
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             });
         }
 
@@ -367,10 +367,10 @@ namespace FieldCodes.Cad
                 if (number.Status != PromptStatus.OK) return;
                 var structure = project.StructureByPoint(number.StringResult.Trim());
                 if (structure == null || structure.Cad == null)
-                { ed.WriteMessage("\nFTFDIPLABEL: point {0} is not in the dip project -- read its notes first.\n", number.StringResult.Trim()); return; }
+                { ed.Tell("\nFTFDIPLABEL: point {0} is not in the dip project -- read its notes first.\n", number.StringResult.Trim()); return; }
 
                 var lines = UtilityLabelFormatter.StructureLabel(project, structure, settings.Dips);
-                foreach (var line in lines) ed.WriteMessage("\n  " + line);
+                foreach (var line in lines) ed.Tell("\n  " + line);
 
                 var at = ed.GetPoint(new PromptPointOptions("\nLabel text location: ")
                 {
@@ -382,7 +382,7 @@ namespace FieldCodes.Cad
                                                       at.Value.TransformBy(ed.CurrentUserCoordinateSystem), settings, rules.Version);
                 project.Overrides.RemoveAll(o => o.Target == structure.Id && o.What == "Structure label text");
                 DrawingStore.SaveDips(db, tr, project);
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             });
         }
 
@@ -403,7 +403,7 @@ namespace FieldCodes.Cad
                     new Point3d(structure.Cad.Easting + offset, structure.Cad.Northing + offset, 0), settings, version);
                 placed++;
             }
-            ed.WriteMessage("\nDip Builder: {0} structure label(s) placed; structures already labelled were left as they are.", placed);
+            ed.Tell("\nDip Builder: {0} structure label(s) placed; structures already labelled were left as they are.", placed);
             return placed;
         }
 
@@ -423,18 +423,18 @@ namespace FieldCodes.Cad
 
                 if (findings.Any(f => f.ConnectionId == c.Id && f.BlocksDrafting))
                 {
-                    ed.WriteMessage("\n  {0} -> {1}: not drawn -- the geometry would be invalid.", from.Label, to.Label);
+                    ed.Tell("\n  {0} -> {1}: not drawn -- the geometry would be invalid.", from.Label, to.Label);
                     continue;
                 }
                 foreach (var f in findings.Where(f => f.ConnectionId == c.Id || (f.StructureId == c.FromStructureId && f.PipeId == c.FromPipeId)))
-                    ed.WriteMessage("\n  ! " + f.Message);
+                    ed.Tell("\n  ! " + f.Message);
 
                 var existing = UtilityCadService.FindExisting(db, tr, project, c, settings.Dips, settings.General.UnitsPerFoot, settings.General.LayerMappings);
                 var labelOnly = false;
                 if (existing.Count > 0)
                 {
                     var owned = existing.Any(x => x.OwnedByFtf);
-                    ed.WriteMessage("\n  {0} -> {1}: {2} existing pipe object(s) found between these structures ({3}).",
+                    ed.Tell("\n  {0} -> {1}: {2} existing pipe object(s) found between these structures ({3}).",
                                     from.Label, to.Label, existing.Count, owned ? "drafted by FTF" : "drawn by hand");
                     var options = new PromptKeywordOptions("\n  Existing pipe [Update/Replace/Keep/New] <Keep>: ", "Update Replace Keep New");
                     options.Keywords.Default = "Keep";
@@ -472,7 +472,7 @@ namespace FieldCodes.Cad
                 drawn++;
             }
 
-            ed.WriteMessage("\nDip Builder: {0} pipe(s) drafted.", drawn);
+            ed.Tell("\nDip Builder: {0} pipe(s) drafted.", drawn);
             return drawn;
         }
 
@@ -496,17 +496,17 @@ namespace FieldCodes.Cad
                 var stale = UtilityQc.StaleStructures(project, live);
 
                 var findings = UtilityQc.Evaluate(project, settings.Dips);
-                ed.WriteMessage("\nFTFDIPCHECK: {0}", UtilityQc.Summarize(project, findings, stale.Count));
+                ed.Tell("\nFTFDIPCHECK: {0}", UtilityQc.Summarize(project, findings, stale.Count));
 
                 if (stale.Count == 0)
                 {
-                    ed.WriteMessage("\nNo structure has changed since it was calculated.\n");
+                    ed.Tell("\nNo structure has changed since it was calculated.\n");
                     return;
                 }
 
                 var rebuilt = Rebuild(db, tr, ed, project, settings, rules.Version, stale, live, true);
                 if (rebuilt > 0) DrawingStore.SaveDips(db, tr, project);
-                ed.WriteMessage("\n{0} structure(s) rebuilt.\n", rebuilt);
+                ed.Tell("\n{0} structure(s) rebuilt.\n", rebuilt);
             });
         }
 
@@ -522,11 +522,11 @@ namespace FieldCodes.Cad
                 live.TryGetValue(structure.Cad.PointNumber ?? string.Empty, out now);
                 if (now == null)
                 {
-                    ed.WriteMessage("\n  {0}: its point is no longer in the drawing -- review manually.", structure.Label);
+                    ed.Tell("\n  {0}: its point is no longer in the drawing -- review manually.", structure.Label);
                     continue;
                 }
 
-                ed.WriteMessage(string.Format(CultureInfo.InvariantCulture,
+                ed.Tell(string.Format(CultureInfo.InvariantCulture,
                     "\n  {0}: rim {1:0.00} -> {2:0.00}, moved {3:0.00}'.", structure.Label, structure.Cad.Rim, now.Rim,
                     Math.Sqrt(Math.Pow(now.Easting - structure.Cad.Easting, 2) + Math.Pow(now.Northing - structure.Cad.Northing, 2))));
 
@@ -553,7 +553,7 @@ namespace FieldCodes.Cad
                 {
                     var edited = project.Overrides.Any(o => o.Target == structure.Id && o.What == "Structure label text");
                     if (edited)
-                        ed.WriteMessage("\n  {0}: its label text was edited by hand and is left as is -- review it.", structure.Label);
+                        ed.Tell("\n  {0}: its label text was edited by hand and is left as is -- review it.", structure.Label);
                     else
                         UtilityCadService.PlaceStructureLabel(db, tr, structure,
                             string.Join("\n", UtilityLabelFormatter.StructureLabel(project, structure, settings.Dips).ToArray()),
@@ -589,14 +589,14 @@ namespace FieldCodes.Cad
 
                 if (stamp == null)
                 {
-                    ed.WriteMessage("\nThat object was not drafted by the Dip Builder.\n");
+                    ed.Tell("\nThat object was not drafted by the Dip Builder.\n");
                     return;
                 }
 
                 if (stamp.Kind == FtfEntityKind.UtilityPipe || stamp.Kind == FtfEntityKind.UtilityPipeLabel)
                 {
                     var c = project.Connections.FirstOrDefault(x => x.Id == stamp.PointNumber);
-                    ed.WriteMessage("\n" + (c == null
+                    ed.Tell("\n" + (c == null
                         ? "The pipe's record is missing from the drawing's dip data (was it undone?)."
                         : UtilityProvenance.ForConnection(project, c, findings, settings.Dips)) + "\n");
                     return;
@@ -605,11 +605,11 @@ namespace FieldCodes.Cad
                 if (stamp.Kind == FtfEntityKind.StructureLabel)
                 {
                     var s = project.Structure(stamp.PointNumber);
-                    ed.WriteMessage("\n" + (s == null ? "The structure's record is missing." : DescribeStructure(project, s, findings)) + "\n");
+                    ed.Tell("\n" + (s == null ? "The structure's record is missing." : DescribeStructure(project, s, findings)) + "\n");
                     return;
                 }
 
-                ed.WriteMessage("\nThat FTF object is not part of the Dip Builder.\n");
+                ed.Tell("\nThat FTF object is not part of the Dip Builder.\n");
             });
         }
 
@@ -655,7 +655,7 @@ namespace FieldCodes.Cad
                 var project = DrawingStore.LoadDips(db, tr);
                 var text = UtilityQc.FieldRevisitText(project, UtilityQc.Evaluate(project, settings.Dips));
                 var path = ExportRevisitFile(db, text);
-                ed.WriteMessage(path == null
+                ed.Tell(path == null
                     ? "\nSave the drawing first; the list is written beside it.\n"
                     : "\nField revisit list: " + path + "\n");
             });

@@ -38,7 +38,7 @@ namespace FieldCodes.Cad
 
                 var removed = Ownership.DeleteOwnedKinds(db, tr, FtfEntityKind.DripArc);
                 if (removed > 0)
-                    ed.WriteMessage("\nFTFDRIP: removed {0} previous drip entities.", removed);
+                    ed.Tell("\nFTFDRIP: removed {0} previous drip entities.", removed);
 
                 var circles = new List<Circle2d>();
                 var owners = new List<ParsedPoint>();
@@ -60,7 +60,7 @@ namespace FieldCodes.Cad
 
                 if (circles.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFDRIP: no drip lines to draw.\n");
+                    ed.Tell("\nFTFDRIP: no drip lines to draw.\n");
                     return;
                 }
 
@@ -107,7 +107,7 @@ namespace FieldCodes.Cad
                     }
                 }
 
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFDRIP: {0} whole circle(s), {1} arc(s), {2} canopy(ies) fully covered.\n",
                     whole, arcs, hidden);
             });
@@ -150,7 +150,7 @@ namespace FieldCodes.Cad
             table = (LinetypeTable)tr.GetObject(db.LinetypeTableId, OpenMode.ForRead);
             if (table.Has(name)) return name;
 
-            ed.WriteMessage("\nFTFDRIP: linetype '{0}' is not in this drawing and not " +
+            ed.Tell("\nFTFDRIP: linetype '{0}' is not in this drawing and not " +
                             "in acad.lin; driplines use the layer's linetype instead.",
                             name);
             return string.Empty;

@@ -80,7 +80,7 @@ namespace FieldCodes.Cad
             var enabledTypes = EnabledTypes(settings);
             if (enabledTypes.Count == 0)
             {
-                ed.WriteMessage("\nFTFDRAWLINE: no drafting line types are enabled. " +
+                ed.Tell("\nFTFDRAWLINE: no drafting line types are enabled. " +
                                 "Configure them under FTF Settings > Drafting Lines.\n");
                 return;
             }
@@ -112,13 +112,13 @@ namespace FieldCodes.Cad
                 {
                     if (courses.Count == 0)
                     {
-                        ed.WriteMessage("\nNothing to undo.");
+                        ed.Tell("\nNothing to undo.");
                         continue;
                     }
                     var undone = courses.Pop();
                     EraseCourse(doc, undone);
                     current = undone.Start;
-                    ed.WriteMessage("\nUndid {0}. Back at the previous point.",
+                    ed.Tell("\nUndid {0}. Back at the previous point.",
                                     undone.Summary);
                     continue;
                 }
@@ -130,7 +130,7 @@ namespace FieldCodes.Cad
 
                 if (end.DistanceTo(current) < 1e-8)
                 {
-                    ed.WriteMessage("\nThat would be a zero-length course; nothing drawn.");
+                    ed.Tell("\nThat would be a zero-length course; nothing drawn.");
                     continue;
                 }
 
@@ -144,10 +144,10 @@ namespace FieldCodes.Cad
 
                 courses.Push(course);
                 current = end;
-                ed.WriteMessage("\nDrew {0}", course.Summary);
+                ed.Tell("\nDrew {0}", course.Summary);
             }
 
-            ed.WriteMessage("\nFTFDRAWLINE: {0} course(s) on layer {1}.\n",
+            ed.Tell("\nFTFDRAWLINE: {0} course(s) on layer {1}.\n",
                             courses.Count, std.LineLayerName);
         }
 
@@ -172,12 +172,12 @@ namespace FieldCodes.Cad
 
                 if (lines == 0 && annotation == 0)
                 {
-                    ed.WriteMessage("\nFTFDRAFTCLEAN: nothing drafted by FTFDRAWLINE " +
+                    ed.Tell("\nFTFDRAFTCLEAN: nothing drafted by FTFDRAWLINE " +
                                     "is in this drawing.\n");
                     return;
                 }
 
-                ed.WriteMessage("\nFTFDRAFTCLEAN: {0} drafted line(s), {1} annotation " +
+                ed.Tell("\nFTFDRAFTCLEAN: {0} drafted line(s), {1} annotation " +
                                 "entities (FTFDRAWLINE).", lines, annotation);
 
                 var options = new PromptKeywordOptions("\nRemove")
@@ -195,7 +195,7 @@ namespace FieldCodes.Cad
                 {
                     var removed = Ownership.DeleteOwnedKinds(db, tr,
                         FtfEntityKind.DraftAnnotation, FtfEntityKind.DraftMask);
-                    ed.WriteMessage("\nFTFDRAFTCLEAN: removed {0} annotation entities. " +
+                    ed.Tell("\nFTFDRAFTCLEAN: removed {0} annotation entities. " +
                                     "The drafted geometry was not touched.\n", removed);
                     return;
                 }
@@ -216,14 +216,14 @@ namespace FieldCodes.Cad
                 if (confirmed.Status != PromptStatus.OK ||
                     !string.Equals(confirmed.StringResult, "Yes", StringComparison.OrdinalIgnoreCase))
                 {
-                    ed.WriteMessage("\nNothing was removed.\n");
+                    ed.Tell("\nNothing was removed.\n");
                     return;
                 }
 
                 var total = Ownership.DeleteOwnedKinds(db, tr,
                     FtfEntityKind.DraftLine, FtfEntityKind.DraftAnnotation,
                     FtfEntityKind.DraftMask);
-                ed.WriteMessage("\nFTFDRAFTCLEAN: removed {0} drafted entities.\n", total);
+                ed.Tell("\nFTFDRAFTCLEAN: removed {0} drafted entities.\n", total);
             });
         }
 
@@ -321,7 +321,7 @@ namespace FieldCodes.Cad
         {
             if (string.IsNullOrWhiteSpace(type.Layer))
             {
-                ed.WriteMessage("\nFTFDRAWLINE: \"{0}\" has no layer configured. Set it " +
+                ed.Tell("\nFTFDRAWLINE: \"{0}\" has no layer configured. Set it " +
                                 "under FTF Settings > Drafting Lines, from this " +
                                 "drawing's own layer list.\n", type.Name);
                 return null;
@@ -330,7 +330,7 @@ namespace FieldCodes.Cad
             var lineLayerId = FindLayer(db, tr, type.Layer);
             if (lineLayerId.IsNull)
             {
-                ed.WriteMessage("\nFTFDRAWLINE: layer \"{0}\" (configured for {1}) is " +
+                ed.Tell("\nFTFDRAWLINE: layer \"{0}\" (configured for {1}) is " +
                                 "not in this drawing. FTF never creates office layers " +
                                 "from a configured name -- add the layer to the drawing " +
                                 "or template, or point the type at one that exists.\n",
@@ -343,7 +343,7 @@ namespace FieldCodes.Cad
             var annotationKind = type.AnnotationKind;
             if (annotationKind == null)
             {
-                ed.WriteMessage("\nFTFDRAWLINE: \"{0}\" has an unrecognised annotation " +
+                ed.Tell("\nFTFDRAWLINE: \"{0}\" has an unrecognised annotation " +
                                 "type \"{1}\". Fix it under FTF Settings > Drafting " +
                                 "Lines.\n", type.Name, type.Annotation);
                 return null;
@@ -352,7 +352,7 @@ namespace FieldCodes.Cad
             if (annotationKind == DraftingLineType.AnnotationFeatureText &&
                 string.IsNullOrWhiteSpace(type.FeatureText))
             {
-                ed.WriteMessage("\nFTFDRAWLINE: \"{0}\" uses FeatureText annotation but " +
+                ed.Tell("\nFTFDRAWLINE: \"{0}\" uses FeatureText annotation but " +
                                 "no feature text is configured. Set it under FTF " +
                                 "Settings > Drafting Lines -- FTF will not invent the " +
                                 "label from the type name.\n", type.Name);
@@ -375,7 +375,7 @@ namespace FieldCodes.Cad
                                                             OpenMode.ForRead);
                 if (!linetypes.Has(type.Linetype))
                 {
-                    ed.WriteMessage("\nFTFDRAWLINE: linetype \"{0}\" (configured for " +
+                    ed.Tell("\nFTFDRAWLINE: linetype \"{0}\" (configured for " +
                                     "{1}) is not loaded in this drawing. Load it, or " +
                                     "clear the setting to use the layer's own linetype.\n",
                                     type.Linetype, type.Name);
@@ -384,7 +384,7 @@ namespace FieldCodes.Cad
                 std.Linetype = type.Linetype.Trim();
             }
 
-            ed.WriteMessage("\n{0}: layer {1}{2}", type.Name, std.LineLayerName,
+            ed.Tell("\n{0}: layer {1}{2}", type.Name, std.LineLayerName,
                             std.Linetype.Length > 0
                                 ? ", linetype " + std.Linetype : " (ByLayer linetype)");
 
@@ -400,7 +400,7 @@ namespace FieldCodes.Cad
             {
                 if (FindLayer(db, tr, type.AnnotationLayer).IsNull)
                 {
-                    ed.WriteMessage("\nFTFDRAWLINE: annotation layer \"{0}\" (configured " +
+                    ed.Tell("\nFTFDRAWLINE: annotation layer \"{0}\" (configured " +
                                     "for {1}) is not in this drawing. FTF never creates " +
                                     "office layers -- add it, or clear the setting to " +
                                     "derive the text layer from the drawing.\n",
@@ -408,7 +408,7 @@ namespace FieldCodes.Cad
                     return null;
                 }
                 textLayer = type.AnnotationLayer.Trim();
-                ed.WriteMessage("\nAnnotation layer: {0} (configured)", textLayer);
+                ed.Tell("\nAnnotation layer: {0} (configured)", textLayer);
             }
             else
             {
@@ -416,7 +416,7 @@ namespace FieldCodes.Cad
                 var resolution = LabelLayerResolver.Resolve(std.LineLayerName, null,
                                                             catalog, std.LineLayerName);
                 textLayer = resolution.Layer;
-                ed.WriteMessage("\nAnnotation layer: {0}{1}", resolution.Describe(),
+                ed.Tell("\nAnnotation layer: {0}{1}", resolution.Describe(),
                                 resolution.Source == LabelLayerSource.Default
                                     ? " -- the line's own layer" : string.Empty);
             }
@@ -426,7 +426,7 @@ namespace FieldCodes.Cad
 
             std.TextStyleId = Setup.DrawingResources.FindTextStyle(db, tr, type.TextStyle);
             if (!string.IsNullOrWhiteSpace(type.TextStyle) && std.TextStyleId.IsNull)
-                ed.WriteMessage("\nFTFDRAWLINE: text style \"{0}\" is not in this " +
+                ed.Tell("\nFTFDRAWLINE: text style \"{0}\" is not in this " +
                                 "drawing; using the current style.", type.TextStyle);
 
             var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
@@ -537,7 +537,7 @@ namespace FieldCodes.Cad
                 var parsed = SurveyDirection.ParseAzimuth(typed);
                 if (!parsed.Ok)
                 {
-                    ed.WriteMessage("\n{0}", parsed.Error);
+                    ed.Tell("\n{0}", parsed.Error);
                     return false;
                 }
                 azimuthDegrees = parsed.Value;
@@ -551,7 +551,7 @@ namespace FieldCodes.Cad
                 var parsed = SurveyDirection.ParseBearing(typed);
                 if (!parsed.Ok)
                 {
-                    ed.WriteMessage("\n{0}", parsed.Error);
+                    ed.Tell("\n{0}", parsed.Error);
                     return false;
                 }
                 azimuthDegrees = parsed.Value;
@@ -563,7 +563,7 @@ namespace FieldCodes.Cad
             var distanceParsed = SurveyDirection.ParseDistance(distanceTyped);
             if (!distanceParsed.Ok)
             {
-                ed.WriteMessage("\n{0}", distanceParsed.Error);
+                ed.Tell("\n{0}", distanceParsed.Error);
                 return false;
             }
 
@@ -619,7 +619,7 @@ namespace FieldCodes.Cad
                 tr.Commit();
             }
 
-            ed.WriteMessage("\nCOGO point {0} is not in this drawing.", answer.Value);
+            ed.Tell("\nCOGO point {0} is not in this drawing.", answer.Value);
             return false;
         }
 

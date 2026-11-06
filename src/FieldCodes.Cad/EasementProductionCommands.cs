@@ -33,7 +33,7 @@ namespace FieldCodes.Cad
                 var tolerance = es.ToleranceFt * settings.General.UnitsPerFoot;
                 var records = DrawingStore.LoadEasements(db, tr);
                 var record = PickAny(ed, tr, records, "\nSelect the easement to exclude an area from: ");
-                if (record == null) { ed.WriteMessage("\nFTFEASEMENTEXCLUDE: cancelled.\n"); return; }
+                if (record == null) { ed.Tell("\nFTFEASEMENTEXCLUDE: cancelled.\n"); return; }
 
                 var target = WhichArea(ed, record);
                 if (target == null) return;
@@ -66,11 +66,11 @@ namespace FieldCodes.Cad
                     {
                         basisEntity = OutlineOf(db, tr, record, target);
                         basis = basisEntity == null ? null : EasementCommands.Extract(basisEntity, out _);
-                        if (basis == null) { ed.WriteMessage("\nFTFEASEMENTEXCLUDE: the easement's outline is not in the drawing -- run FTFEASEMENTCHECK first.\n"); return; }
+                        if (basis == null) { ed.Tell("\nFTFEASEMENTEXCLUDE: the easement's outline is not in the drawing -- run FTFEASEMENTCHECK first.\n"); return; }
                     }
                     bool cancelled;
                     var steps = EasementAreaCommands.GatherCalls(db, tr, ed, es, basisEntity, basis, tolerance, out cancelled);
-                    if (cancelled || steps == null || steps.Count == 0) { ed.WriteMessage("\nFTFEASEMENTEXCLUDE: cancelled.\n"); return; }
+                    if (cancelled || steps == null || steps.Count == 0) { ed.Tell("\nFTFEASEMENTEXCLUDE: cancelled.\n"); return; }
                     if (!NotFtfDrafting(db, tr, ed, steps, exclusion.Of)) return;
                     if (on == "Easement")
                     {
@@ -87,7 +87,7 @@ namespace FieldCodes.Cad
                 var rebuilt = EasementCommands.RebuildRecord(db, tr, ed, settings, rules.Version, record, "after an exclusion was added", out problem);
                 if (rebuilt == null) throw new InvalidOperationException("The exclusion could not be applied: " + problem);
                 var applied = target == "A" ? rebuilt.Exclusions.Last() : rebuilt.Components.First(c => c.Label == target).Exclusions.Last();
-                ed.WriteMessage("\nFTFEASEMENTEXCLUDE: {0} -- {1}; {2:N0} sq ft removed; area {3:N0} -> {4:N0} sq ft. The legal draft marks it for surveyor review.\n",
+                ed.Tell("\nFTFEASEMENTEXCLUDE: {0} -- {1}; {2:N0} sq ft removed; area {3:N0} -> {4:N0} sq ft. The legal draft marks it for surveyor review.\n",
                                 rebuilt.Title, applied.Effect == "HOLE" ? "an interior hole" : applied.Effect == "CUT" ? "cut from the outline" : "it does not touch the easement",
                                 applied.RemovedSquareFeet, before, rebuilt.AreaSquareFeet);
             });
@@ -106,7 +106,7 @@ namespace FieldCodes.Cad
                 var tolerance = es.ToleranceFt * settings.General.UnitsPerFoot;
                 var records = DrawingStore.LoadEasements(db, tr);
                 var record = PickAny(ed, tr, records, "\nSelect the easement to add a component to: ");
-                if (record == null) { ed.WriteMessage("\nFTFEASEMENTCOMPONENT: cancelled.\n"); return; }
+                if (record == null) { ed.Tell("\nFTFEASEMENTCOMPONENT: cancelled.\n"); return; }
 
                 var kind = EasementCommands.Keyword(ed, "\nComponent [Portion/Area/Boundary] <Portion>: ", "Portion", "Portion", "Area", "Boundary");
                 if (kind == null) return;
@@ -126,7 +126,7 @@ namespace FieldCodes.Cad
                     if (lotEntity == null) return;
                     bool cancelled;
                     var steps = EasementAreaCommands.GatherCalls(db, tr, ed, es, lotEntity, lot, tolerance, out cancelled);
-                    if (cancelled || steps == null || steps.Count == 0) { ed.WriteMessage("\nFTFEASEMENTCOMPONENT: cancelled.\n"); return; }
+                    if (cancelled || steps == null || steps.Count == 0) { ed.Tell("\nFTFEASEMENTCOMPONENT: cancelled.\n"); return; }
                     if (!NotFtfDrafting(db, tr, ed, steps, null)) return;
                     component.Kind = EasementComponent.PortionKind;
                     component.Parcel = new GeometrySource { Handle = lotEntity.Handle.ToString(), EntityType = EasementCommands.TypeName(lotEntity), Role = "LOT", Fingerprint = EasementAnnotation.Fingerprint(lot) };
@@ -157,7 +157,7 @@ namespace FieldCodes.Cad
                 var rebuilt = EasementCommands.RebuildRecord(db, tr, ed, settings, rules.Version, record, "after component " + component.Label + " was added", out problem);
                 if (rebuilt == null) throw new InvalidOperationException("The component could not be added: " + problem);
                 var added = rebuilt.Components.First(c => c.Label == component.Label);
-                ed.WriteMessage("\nFTFEASEMENTCOMPONENT: component {0} of {1}, {2:N0} sq ft; total {3:N0} -> {4:N0} sq ft.{5}\n",
+                ed.Tell("\nFTFEASEMENTCOMPONENT: component {0} of {1}, {2:N0} sq ft; total {3:N0} -> {4:N0} sq ft.{5}\n",
                                 added.Label, rebuilt.Title, added.AreaSquareFeet, before, rebuilt.AreaSquareFeet,
                                 added.Connector == null ? " The connector (TOGETHER WITH / AND / ALSO) is left for the surveyor." : string.Empty);
             });
@@ -178,17 +178,17 @@ namespace FieldCodes.Cad
                 {
                     var record = PickAny(ed, tr, records, chosen.Count == 0 ? "\nSelect an easement for the exhibit group: " : "\nNext easement for the group <done>: ", chosen.Count > 0);
                     if (record == null) break;
-                    if (chosen.Any(r => r.Id == record.Id)) { ed.WriteMessage("\n  Already in the group."); continue; }
+                    if (chosen.Any(r => r.Id == record.Id)) { ed.Tell("\n  Already in the group."); continue; }
                     chosen.Add(record);
-                    ed.WriteMessage("\n  {0}", record.Title);
+                    ed.Tell("\n  {0}", record.Title);
                 }
-                if (chosen.Count == 0) { ed.WriteMessage("\nFTFEASEMENTGROUP: cancelled.\n"); return; }
+                if (chosen.Count == 0) { ed.Tell("\nFTFEASEMENTGROUP: cancelled.\n"); return; }
 
                 // A strip easement and its temporary construction easement travel together.
                 foreach (var linked in records.Where(r => r.GroupId != null && chosen.Any(c => c.GroupId == r.GroupId) && chosen.All(c => c.Id != r.Id)).ToList())
                 {
                     chosen.Add(linked);
-                    ed.WriteMessage("\n  {0} (linked)", linked.Title);
+                    ed.Tell("\n  {0} (linked)", linked.Title);
                 }
 
                 var existing = chosen.Select(r => r.ExhibitGroup).FirstOrDefault(g => !string.IsNullOrWhiteSpace(g));
@@ -216,12 +216,12 @@ namespace FieldCodes.Cad
                     {
                         string problem;
                         var rebuilt = EasementCommands.RebuildRecord(db, tr, ed, settings, rules.Version, record, "to restyle it as " + record.Role.ToLowerInvariant(), out problem);
-                        if (rebuilt == null) { ed.WriteMessage("\n  Not restyled: " + problem); DrawingStore.SaveEasement(db, tr, record); }
+                        if (rebuilt == null) { ed.Tell("\n  Not restyled: " + problem); DrawingStore.SaveEasement(db, tr, record); }
                     }
                     else
                         DrawingStore.SaveEasement(db, tr, record);
                 }
-                ed.WriteMessage(group == null
+                ed.Tell(group == null
                     ? "\nFTFEASEMENTGROUP: {0} easement(s) taken out of their group.\n"
                     : "\nFTFEASEMENTGROUP: {0} easement(s) in \"" + group + "\"; FTFEXHIBIT shows them together.\n", chosen.Count);
             });
@@ -232,7 +232,7 @@ namespace FieldCodes.Cad
         /// <summary>Any stored easement by picking its drafting, including a temporary construction easement.</summary>
         internal static EasementRecord PickAny(Editor ed, Transaction tr, IList<EasementRecord> records, string message, bool allowNone = false)
         {
-            if (records.Count == 0) { ed.WriteMessage("\n  No easements are stored in this drawing."); return null; }
+            if (records.Count == 0) { ed.Tell("\n  No easements are stored in this drawing."); return null; }
             while (true)
             {
                 var options = new PromptEntityOptions(message) { AllowNone = allowNone };
@@ -247,8 +247,8 @@ namespace FieldCodes.Cad
                 var inside = records.Where(r => r.BoundaryCourses != null && r.BoundaryCourses.Count > 0 &&
                                                 StripTrim.Inside(r.BoundaryCourses.Select(d => d.Course).ToList(), new P2(at.X, at.Y)))
                                     .OrderBy(r => r.AreaSquareFeet).FirstOrDefault();
-                if (inside != null) { ed.WriteMessage("\n  Picked inside {0}.", inside.Title); return inside; }
-                ed.WriteMessage("\n  That is not part of a stored FTF easement.");
+                if (inside != null) { ed.Tell("\n  Picked inside {0}.", inside.Title); return inside; }
+                ed.Tell("\n  That is not part of a stored FTF easement.");
             }
         }
 
@@ -270,7 +270,7 @@ namespace FieldCodes.Cad
             courses = EasementCommands.Extract(entity, out problem);
             if (courses == null || Loops.LargestGap(courses) > tolerance)
             {
-                ed.WriteMessage("\n  That boundary is not closed" + (problem != null ? " (" + problem + ")" : string.Empty) + ".");
+                ed.Tell("\n  That boundary is not closed" + (problem != null ? " (" + problem + ")" : string.Empty) + ".");
                 courses = null;
                 return null;
             }
@@ -307,7 +307,7 @@ namespace FieldCodes.Cad
                 {
                     // The easement outline itself is allowed only as the THEREOF basis; the caller clears its handle.
                     if (stamp.Kind == FtfEntityKind.EasementBoundary || stamp.Kind == FtfEntityKind.EasementLine) continue;
-                    ed.WriteMessage("\n  The " + (s.Side ?? string.Empty).ToLowerInvariant() + " line is FTF drafting; pick the survey lot line instead.");
+                    ed.Tell("\n  The " + (s.Side ?? string.Empty).ToLowerInvariant() + " line is FTF drafting; pick the survey lot line instead.");
                     return false;
                 }
             }

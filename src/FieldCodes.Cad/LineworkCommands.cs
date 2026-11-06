@@ -42,24 +42,24 @@ namespace FieldCodes.Cad
 
             var ed = doc.Editor;
 
-            ed.WriteMessage("\nFTFLINES: read-only linework inventory. Nothing in the " +
+            ed.Tell("\nFTFLINES: read-only linework inventory. Nothing in the " +
                             "drawing is created or modified.\n");
 
             var result = FtfLineworkService.Scan();
 
             if (result.RulesError != null)
             {
-                ed.WriteMessage("\nRules problem: {0}\n", result.RulesError);
+                ed.Tell("\nRules problem: {0}\n", result.RulesError);
                 return;
             }
 
-            ed.WriteMessage("\n{0}\n",
+            ed.Tell("\n{0}\n",
                 LineworkInventoryCsv.Summary(result.Rows, result.FtfOwnedByKind));
 
             var path = LineworkInventoryCsv.PathFor(doc.Database.Filename);
             if (path == null)
             {
-                ed.WriteMessage("\nDrawing has never been saved, so no CSV was written. " +
+                ed.Tell("\nDrawing has never been saved, so no CSV was written. " +
                                 "Save it and run FTFLINES again for the full listing.\n");
                 return;
             }
@@ -69,16 +69,16 @@ namespace FieldCodes.Cad
                 System.IO.File.WriteAllText(path,
                     LineworkInventoryCsv.Render(result.Rows),
                     new System.Text.UTF8Encoding(true));
-                ed.WriteMessage("\nFull inventory ({0} row(s)): {1}\n",
+                ed.Tell("\nFull inventory ({0} row(s)): {1}\n",
                                 result.Rows.Count, path);
             }
             catch (System.IO.IOException ex)
             {
-                ed.WriteMessage("\nCould not write {0}: {1}\n", path, ex.Message);
+                ed.Tell("\nCould not write {0}: {1}\n", path, ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                ed.WriteMessage("\nCould not write {0}: {1}\n", path, ex.Message);
+                ed.Tell("\nCould not write {0}: {1}\n", path, ex.Message);
             }
         }
 
@@ -99,7 +99,7 @@ namespace FieldCodes.Cad
 
                 if (!ls.Enabled)
                 {
-                    ed.WriteMessage("\nFTFLINELABELS: line labelling is turned off in " +
+                    ed.Tell("\nFTFLINELABELS: line labelling is turned off in " +
                                     "settings.\n");
                     return;
                 }
@@ -123,10 +123,10 @@ namespace FieldCodes.Cad
                     return true;
                 });
                 if (removed > 0)
-                    ed.WriteMessage("\nFTFLINELABELS: removed {0} previous line label " +
+                    ed.Tell("\nFTFLINELABELS: removed {0} previous line label " +
                                     "entities.", removed);
                 if (kept > 0)
-                    ed.WriteMessage("\nFTFLINELABELS: kept {0} manually placed " +
+                    ed.Tell("\nFTFLINELABELS: kept {0} manually placed " +
                                     "entities (FTFLABELLINE).", kept);
 
                 var unitsPerFoot = settings.General.UnitsPerFoot;
@@ -135,7 +135,7 @@ namespace FieldCodes.Cad
                 var styleId = Setup.DrawingResources.FindTextStyle(db, tr, ls.TextStyle);
 
                 if (!string.IsNullOrWhiteSpace(ls.TextStyle) && styleId.IsNull)
-                    ed.WriteMessage("\nFTFLINELABELS: text style '{0}' is not in this " +
+                    ed.Tell("\nFTFLINELABELS: text style '{0}' is not in this " +
                                     "drawing; using the current style.", ls.TextStyle);
 
                 var defaultSide = LineSideParser.ParsePlacement(ls.DefaultPlacement);
@@ -223,7 +223,7 @@ namespace FieldCodes.Cad
                     if (planned.Count > 0) featuresLabelled++;
                 }
 
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFLINELABELS: {0} label(s) on {1} feature(s); {2} skipped as " +
                     "shorter than {3:0.#} ft; {4} identified feature(s) have no " +
                     "labelling standard configured.\n",
@@ -267,7 +267,7 @@ namespace FieldCodes.Cad
             }
             catch (ConfigException ex)
             {
-                ed.WriteMessage("\nRules problem: {0}\n", ex.Message);
+                ed.Tell("\nRules problem: {0}\n", ex.Message);
                 return;
             }
 
@@ -295,7 +295,7 @@ namespace FieldCodes.Cad
                 }
             }
 
-            ed.WriteMessage("\nFTFLABELLINE: {0} label(s) placed.\n", placedCount);
+            ed.Tell("\nFTFLABELLINE: {0} label(s) placed.\n", placedCount);
         }
 
         /// <summary>One pick-identify-jig-place cycle. Returns true if a label was
@@ -313,12 +313,12 @@ namespace FieldCodes.Cad
             var curve = entity as Curve;
             if (curve == null)
             {
-                ed.WriteMessage("\nThat object is not a line, polyline, arc or figure.");
+                ed.Tell("\nThat object is not a line, polyline, arc or figure.");
                 return false;
             }
             if (Ownership.Read(entity) != null)
             {
-                ed.WriteMessage("\nThat is FTF's own finishing output, not survey " +
+                ed.Tell("\nThat is FTF's own finishing output, not survey " +
                                 "linework. Pick the source line itself.");
                 return false;
             }
@@ -366,7 +366,7 @@ namespace FieldCodes.Cad
                 }
                 else if (notes.DisagreeingCodes.Count > 0)
                 {
-                    ed.WriteMessage(
+                    ed.Tell(
                         "\nThe survey points along this line disagree ({0}) -- " +
                         "falling back to the layer.",
                         string.Join(" vs ", notes.DisagreeingCodes.ToArray()));
@@ -381,7 +381,7 @@ namespace FieldCodes.Cad
 
             if (candidates == null)
             {
-                ed.WriteMessage(
+                ed.Tell(
                     "\nNot a configured line feature. Found: layer \"{0}\"{1}{2}{3}. " +
                     "Nothing was placed.",
                     entity.Layer,
@@ -400,7 +400,7 @@ namespace FieldCodes.Cad
                     .Select(c => c.Code + (string.IsNullOrEmpty(c.Label)
                         ? " (no label configured)" : " -> \"" + c.Label + "\""))
                     .ToArray());
-                ed.WriteMessage(
+                ed.Tell(
                     "\nIdentified, but no single labelling standard applies: {0}. " +
                     "FTF will not choose silently -- nothing was placed.", descriptions);
                 return false;
@@ -419,14 +419,14 @@ namespace FieldCodes.Cad
 
             var wordings = LineworkCatalog.LabelChoices(candidates);
 
-            ed.WriteMessage("\nFeature: {0} ({1})", featureName, how);
-            ed.WriteMessage("\nSource layer: {0}", entity.Layer);
+            ed.Tell("\nFeature: {0} ({1})", featureName, how);
+            ed.Tell("\nSource layer: {0}", entity.Layer);
             if (notes != null && notes.NoteCount > 0)
-                ed.WriteMessage("\nPoint notes: {0} ({1} vertex point(s))",
+                ed.Tell("\nPoint notes: {0} ({1} vertex point(s))",
                                 string.Join(", ", notes.SampleNotes.ToArray()),
                                 notes.NoteCount);
-            ed.WriteMessage("\nLabel layer: {0}", resolution.Describe());
-            ed.WriteMessage("\nLabel: {0}{1}", labelText,
+            ed.Tell("\nLabel layer: {0}", resolution.Describe());
+            ed.Tell("\nLabel: {0}{1}", labelText,
                 wordings.Count > 1
                     ? "  (type W for: " + string.Join(" / ",
                           wordings.Skip(1).ToArray()) + ")"
@@ -463,7 +463,7 @@ namespace FieldCodes.Cad
 
                 if (dragged.Status != PromptStatus.OK || jig.Plan == null)
                 {
-                    ed.WriteMessage("\nCancelled; nothing was placed.");
+                    ed.Tell("\nCancelled; nothing was placed.");
                     return false;
                 }
                 labelText = jig.CurrentWording;
@@ -476,7 +476,7 @@ namespace FieldCodes.Cad
                                layerId, layerName, ls.DrawMask, candidates[0].Code,
                                rulesVersion, ManualLineLabelMark);
 
-                ed.WriteMessage("\nPlaced \"{0}\" on layer {1}, {2}.",
+                ed.Tell("\nPlaced \"{0}\" on layer {1}, {2}.",
                                 labelText, layerName,
                                 LineSideParser.Describe(jig.Side, ls.SideOffsetFeet));
 
@@ -516,7 +516,7 @@ namespace FieldCodes.Cad
             }
             catch (ConfigException ex)
             {
-                ed.WriteMessage("\nRules problem: {0}\n", ex.Message);
+                ed.Tell("\nRules problem: {0}\n", ex.Message);
                 return;
             }
 
@@ -534,7 +534,7 @@ namespace FieldCodes.Cad
 
                 if (first == second)
                 {
-                    ed.WriteMessage("\nThat is the same line twice. Pick the two " +
+                    ed.Tell("\nThat is the same line twice. Pick the two " +
                                     "edges of the feature.");
                     continue;
                 }
@@ -549,7 +549,7 @@ namespace FieldCodes.Cad
                 }
             }
 
-            ed.WriteMessage("\nFTFLABELBETWEEN: {0} label(s) placed.\n", placedCount);
+            ed.Tell("\nFTFLABELBETWEEN: {0} label(s) placed.\n", placedCount);
         }
 
         private static ObjectId PickEdge(Editor ed, string message)
@@ -571,12 +571,12 @@ namespace FieldCodes.Cad
             var curveB = tr.GetObject(secondId, OpenMode.ForRead, false, true) as Curve;
             if (curveA == null || curveB == null)
             {
-                ed.WriteMessage("\nBoth picks must be lines, polylines, arcs or figures.");
+                ed.Tell("\nBoth picks must be lines, polylines, arcs or figures.");
                 return false;
             }
             if (Ownership.Read(curveA) != null || Ownership.Read(curveB) != null)
             {
-                ed.WriteMessage("\nOne of those is FTF's own output. Pick the source " +
+                ed.Tell("\nOne of those is FTF's own output. Pick the source " +
                                 "edges themselves.");
                 return false;
             }
@@ -588,7 +588,7 @@ namespace FieldCodes.Cad
             var candidates = StagedCandidates(db, tr, curveA, catalog, out how);
             if (candidates == null)
             {
-                ed.WriteMessage(
+                ed.Tell(
                     "\nThe first edge is not a configured line feature (layer " +
                     "\"{0}\"). Pick the feature's own edge first -- nothing was " +
                     "placed.", curveA.Layer);
@@ -600,7 +600,7 @@ namespace FieldCodes.Cad
             var wordings = LineworkCatalog.BetweenChoices(candidates);
             if (wordings.Count == 0)
             {
-                ed.WriteMessage(
+                ed.Tell(
                     "\nIdentified, but no labelling standard is configured for " +
                     "{0}. Nothing was placed.", candidates[0].Code);
                 return false;
@@ -614,10 +614,10 @@ namespace FieldCodes.Cad
             var featureName = string.Join(" / ", candidates
                 .Select(c => string.IsNullOrEmpty(c.Name) ? c.Code : c.Name)
                 .Distinct().ToArray());
-            ed.WriteMessage("\nFeature: {0} (first edge, by {1})", featureName, how);
-            ed.WriteMessage("\nBetween: {0} and {1}", curveA.Layer, curveB.Layer);
-            ed.WriteMessage("\nLabel layer: {0}", resolution.Describe());
-            ed.WriteMessage("\nLabel: {0}{1}", labelText,
+            ed.Tell("\nFeature: {0} (first edge, by {1})", featureName, how);
+            ed.Tell("\nBetween: {0} and {1}", curveA.Layer, curveB.Layer);
+            ed.Tell("\nLabel layer: {0}", resolution.Describe());
+            ed.Tell("\nLabel: {0}{1}", labelText,
                 wordings.Count > 1
                     ? "  (type W for: " + string.Join(" / ",
                           wordings.Skip(1).ToArray()) + ")"
@@ -644,7 +644,7 @@ namespace FieldCodes.Cad
 
                 if (dragged.Status != PromptStatus.OK || jig.Plan == null)
                 {
-                    ed.WriteMessage("\nCancelled; nothing was placed.");
+                    ed.Tell("\nCancelled; nothing was placed.");
                     return false;
                 }
 
@@ -655,7 +655,7 @@ namespace FieldCodes.Cad
                                styleId, layerId, resolution.Layer, ls.DrawMask,
                                candidates[0].Code, rulesVersion, ManualLineLabelMark);
 
-                ed.WriteMessage("\nPlaced \"{0}\" on layer {1}, centred between the " +
+                ed.Tell("\nPlaced \"{0}\" on layer {1}, centred between the " +
                                 "edges.", jig.CurrentWording, resolution.Layer);
                 return true;
             }
@@ -687,7 +687,7 @@ namespace FieldCodes.Cad
             }
             catch (ConfigException ex)
             {
-                ed.WriteMessage("\nRules problem: {0}\n", ex.Message);
+                ed.Tell("\nRules problem: {0}\n", ex.Message);
                 return;
             }
 
@@ -729,12 +729,12 @@ namespace FieldCodes.Cad
                 var count = directions.Count;
                 if (count == 0)
                 {
-                    ed.WriteMessage("\nNo usable stair lines in that selection.\n");
+                    ed.Tell("\nNo usable stair lines in that selection.\n");
                     tr.Commit();
                     return;
                 }
                 if (skipped > 0)
-                    ed.WriteMessage("\n{0} selected object(s) were not stair lines and " +
+                    ed.Tell("\n{0} selected object(s) were not stair lines and " +
                                     "were not counted.", skipped);
 
                 var label = (cfg.StairsLabelFormat ?? "{count} STEPS")
@@ -748,9 +748,9 @@ namespace FieldCodes.Cad
                     catalog.FindByLayer(sourceLayer),
                     FtfLineworkService.LayerNames(db, tr), ls.DefaultLabelLayer);
 
-                ed.WriteMessage("\n{0} stair line(s) selected.", count);
-                ed.WriteMessage("\nLabel layer: {0}", resolution.Describe());
-                ed.WriteMessage("\nLabel: {0}", label);
+                ed.Tell("\n{0} stair line(s) selected.", count);
+                ed.Tell("\nLabel layer: {0}", resolution.Describe());
+                ed.Tell("\nLabel: {0}", label);
 
                 var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
                 var textHeight = ls.TextHeightPlotted * scale;
@@ -769,7 +769,7 @@ namespace FieldCodes.Cad
                                layerId, resolution.Layer, ls.DrawMask, "STR",
                                cfg.Version, ManualLineLabelMark);
 
-                ed.WriteMessage("\nPlaced \"{0}\" centred in the stairs, on layer {1}.\n",
+                ed.Tell("\nPlaced \"{0}\" centred in the stairs, on layer {1}.\n",
                                 label, resolution.Layer);
 
                 tr.Commit();
@@ -1021,7 +1021,7 @@ namespace FieldCodes.Cad
                 }
 
                 if (spans.Count > 0 || leftover)
-                    ed.WriteMessage("\n{0} {1} label(s) placed between marked points{2}.",
+                    ed.Tell("\n{0} {1} label(s) placed between marked points{2}.",
                         spans.Count, marker.Token,
                         leftover ? " -- one marked point had no partner and was " +
                                    "left unlabelled" : "");
@@ -1279,16 +1279,16 @@ namespace FieldCodes.Cad
                 {
                     System.IO.File.WriteAllText(path, report.ToString(),
                         new System.Text.UTF8Encoding(true));
-                    ed.WriteMessage("\nFTFLINEMETA: report written to {0}\n", path);
+                    ed.Tell("\nFTFLINEMETA: report written to {0}\n", path);
                 }
                 catch (System.IO.IOException ex)
                 {
-                    ed.WriteMessage("\nCould not write {0}: {1}\n", path, ex.Message);
+                    ed.Tell("\nCould not write {0}: {1}\n", path, ex.Message);
                 }
             }
             else
             {
-                ed.WriteMessage("\n{0}\n", report);
+                ed.Tell("\n{0}\n", report);
             }
         }
 

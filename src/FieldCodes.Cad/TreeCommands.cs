@@ -40,7 +40,7 @@ namespace FieldCodes.Cad
 
                 var removed = Ownership.DeleteOwnedKinds(db, tr, FtfEntityKind.Block);
                 if (removed > 0)
-                    ed.WriteMessage("\nFTFTREES: removed {0} previously placed block(s).", removed);
+                    ed.Tell("\nFTFTREES: removed {0} previously placed block(s).", removed);
 
                 var points = CadUtil.CogoPointsInOrder(db, tr);
 
@@ -118,28 +118,28 @@ namespace FieldCodes.Cad
                 // "Recognized", not "drawn": Civil 3D's description keys already placed
                 // these symbols. FTF recognized the codes and will finish them -- labels,
                 // driplines, tags -- it did not create the points or their symbols.
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFPOINTS: {0} point(s) read -- {1} recognized for FTF finishing, " +
                     "{2} not configured yet, {3} outside FTF scope (linework / bare codes), " +
                     "{4} with errors.",
                     points.Count, recognized, unhandled.TotalPoints, ignored, skipped);
 
                 if (rotated > 0)
-                    ed.WriteMessage("\n  {0} marker(s) rotated to match the field azimuth.",
+                    ed.Tell("\n  {0} marker(s) rotated to match the field azimuth.",
                                     rotated);
 
                 if (noBlockRule > 0)
-                    ed.WriteMessage(
+                    ed.Tell(
                         "\n  {0} point(s) left to their Civil 3D symbol, as normal. " +
                         "Run FTFDRIP, FTFLABELS and FTFTAGS for the rest of the finishing.",
                         noBlockRule);
 
                 if (placed > 0)
-                    ed.WriteMessage(
+                    ed.Tell(
                         "\n  {0} block(s) inserted by rules that opted in with insertBlock.",
                         placed);
 
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             });
         }
 
@@ -157,25 +157,25 @@ namespace FieldCodes.Cad
             var ed = doc.Editor;
             var db = doc.Database;
 
-            ed.WriteMessage("\nFTFWHERE");
-            ed.WriteMessage("\n  plugin:  {0}", typeof(TreeCommands).Assembly.Location);
-            ed.WriteMessage("\n  drawing: {0}",
+            ed.Tell("\nFTFWHERE");
+            ed.Tell("\n  plugin:  {0}", typeof(TreeCommands).Assembly.Location);
+            ed.Tell("\n  drawing: {0}",
                 string.IsNullOrWhiteSpace(db.Filename) ? "(never saved)" : db.Filename);
 
-            ed.WriteMessage("\n  rules.json search order:");
+            ed.Tell("\n  rules.json search order:");
             foreach (var path in FtfSession.CandidatePaths(db))
-                ed.WriteMessage("\n    [{0}] {1}",
+                ed.Tell("\n    [{0}] {1}",
                     System.IO.File.Exists(path) ? "found" : "  -  ", path);
 
             try
             {
                 var cfg = FtfSession.Rules(db);
-                ed.WriteMessage("\n  loaded rules version {0}: {1} code rule(s), {2} modifier(s).\n",
+                ed.Tell("\n  loaded rules version {0}: {1} code rule(s), {2} modifier(s).\n",
                     cfg.Version, cfg.Codes.Count, cfg.Modifiers.Count);
             }
             catch (ConfigException ex)
             {
-                ed.WriteMessage("\n  NOT LOADED: {0}\n", ex.Message);
+                ed.Tell("\n  NOT LOADED: {0}\n", ex.Message);
             }
         }
 
@@ -205,13 +205,13 @@ namespace FieldCodes.Cad
                     return true;
                 });
 
-                ed.WriteMessage("\nFTFCLEAN: removed {0} plugin-owned entities.", removed);
+                ed.Tell("\nFTFCLEAN: removed {0} plugin-owned entities.", removed);
                 if (drafted > 0)
-                    ed.WriteMessage("\nFTFCLEAN: left {0} production drafting entities " +
+                    ed.Tell("\nFTFCLEAN: left {0} production drafting entities " +
                                     "alone (drafted lines, dip pipes and structure labels, " +
                                     "easements). Their own tools manage those.",
                                     drafted);
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             });
         }
 
@@ -285,12 +285,12 @@ namespace FieldCodes.Cad
         {
             if (summary.TotalPoints == 0) return;
 
-            ed.WriteMessage("\n  Not configured yet: {0}", summary.OneLine(8));
+            ed.Tell("\n  Not configured yet: {0}", summary.OneLine(8));
 
             var path = FieldCodes.Reporting.UnhandledSummary.PathFor(db.Filename);
             if (path == null)
             {
-                ed.WriteMessage(
+                ed.Tell(
                     "\n  ({0} code(s) across {1} point(s); save the drawing to get the " +
                     "full list as a file.)",
                     summary.DistinctCodes, summary.TotalPoints);
@@ -300,15 +300,15 @@ namespace FieldCodes.Cad
             try
             {
                 summary.Write(path);
-                ed.WriteMessage("\n  {0} code(s) listed in {1}", summary.DistinctCodes, path);
+                ed.Tell("\n  {0} code(s) listed in {1}", summary.DistinctCodes, path);
             }
             catch (System.IO.IOException ex)
             {
-                ed.WriteMessage("\n  Could not write {0}: {1}", path, ex.Message);
+                ed.Tell("\n  Could not write {0}: {1}", path, ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                ed.WriteMessage("\n  Could not write {0}: {1}", path, ex.Message);
+                ed.Tell("\n  Could not write {0}: {1}", path, ex.Message);
             }
         }
 
@@ -348,7 +348,7 @@ namespace FieldCodes.Cad
         {
             if (rows.Count == 0 && !settings.General.WriteReportWhenEmpty)
             {
-                ed.WriteMessage("\nNo exceptions; report not written.\n");
+                ed.Tell("\nNo exceptions; report not written.\n");
                 return;
             }
 
@@ -357,7 +357,7 @@ namespace FieldCodes.Cad
             if (path == null)
             {
                 if (rows.Count > 0)
-                    ed.WriteMessage(
+                    ed.Tell(
                         "\n{0} exception(s) found, but the drawing has never been saved " +
                         "so no report was written. Save the drawing and run again.\n",
                         rows.Count);
@@ -373,21 +373,21 @@ namespace FieldCodes.Cad
                 if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
 
                 ExceptionReport.Write(path, rows);
-                ed.WriteMessage("\nException report ({0} row(s)): {1}\n", rows.Count, path);
+                ed.Tell("\nException report ({0} row(s)): {1}\n", rows.Count, path);
             }
             catch (System.IO.DirectoryNotFoundException ex)
             {
-                ed.WriteMessage("\nCould not write the exception report to {0}: {1}\n",
+                ed.Tell("\nCould not write the exception report to {0}: {1}\n",
                                 path, ex.Message);
             }
             catch (System.IO.IOException ex)
             {
-                ed.WriteMessage("\nCould not write the exception report to {0}: {1}\n",
+                ed.Tell("\nCould not write the exception report to {0}: {1}\n",
                                 path, ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                ed.WriteMessage("\nCould not write the exception report to {0}: {1}\n",
+                ed.Tell("\nCould not write the exception report to {0}: {1}\n",
                                 path, ex.Message);
             }
         }

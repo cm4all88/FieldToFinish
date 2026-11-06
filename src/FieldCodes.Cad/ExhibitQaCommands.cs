@@ -45,7 +45,7 @@ namespace FieldCodes.Cad
                 exhibit.QaSummary = Counts(rows) + " -- " + verdict;
                 DrawingStore.SaveExhibit(db, tr, exhibit);
 
-                ed.WriteMessage("\n" + AsText(title, rows));
+                ed.Tell("\n" + AsText(title, rows));
             });
             if (rows != null && !EasementInspectCommands.Headless())
                 EasementInspectCommands.ShowWindow(title + ": " + Verdict(rows), rows);
@@ -65,7 +65,7 @@ namespace FieldCodes.Cad
                 if (exhibit == null) return;
                 var xs = ExhibitCommands.ExhibitProfile(exhibit.ProfileName, settings);
                 var layouts = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
-                if (!layouts.Contains(exhibit.LayoutName)) { ed2.WriteMessage("\nFTFEXHIBITPREVIEW: the layout \"" + exhibit.LayoutName + "\" is not in the drawing.\n"); return; }
+                if (!layouts.Contains(exhibit.LayoutName)) { ed2.Tell("\nFTFEXHIBITPREVIEW: the layout \"" + exhibit.LayoutName + "\" is not in the drawing.\n"); return; }
                 var lay = (Layout)tr.GetObject(layouts.GetAt(exhibit.LayoutName), OpenMode.ForRead);
                 layout = exhibit.LayoutName;
                 device = string.IsNullOrWhiteSpace(xs.PlotDevice) ? lay.PlotConfigurationName : xs.PlotDevice;
@@ -85,7 +85,7 @@ namespace FieldCodes.Cad
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
-                    ed2.WriteMessage("\nFTFEXHIBITPREVIEW: the profile's plotter \"" + device + "\" with paper \"" + canonical + "\" is not available here (" + ex.Message + ").\n");
+                    ed2.Tell("\nFTFEXHIBITPREVIEW: the profile's plotter \"" + device + "\" with paper \"" + canonical + "\" is not available here (" + ex.Message + ").\n");
                     layout = null;
                     return;
                 }
@@ -107,7 +107,7 @@ namespace FieldCodes.Cad
             }
             catch (Autodesk.AutoCAD.Runtime.Exception ex)
             {
-                ed.WriteMessage("\nFTFEXHIBITPREVIEW: the plot did not run: " + ex.Message + "\n");
+                ed.Tell("\nFTFEXHIBITPREVIEW: the plot did not run: " + ex.Message + "\n");
                 return;
             }
             finally
@@ -115,8 +115,8 @@ namespace FieldCodes.Cad
                 AcadApp.SetSystemVariable("BACKGROUNDPLOT", background);
             }
 
-            if (!File.Exists(file)) { ed.WriteMessage("\nFTFEXHIBITPREVIEW: no PDF was written -- check the plotter \"" + device + "\".\n"); return; }
-            ed.WriteMessage("\nFTFEXHIBITPREVIEW: " + file + "\n  This is a preview to look at. A clean plot does not mean the exhibit is correct.\n");
+            if (!File.Exists(file)) { ed.Tell("\nFTFEXHIBITPREVIEW: no PDF was written -- check the plotter \"" + device + "\".\n"); return; }
+            ed.Tell("\nFTFEXHIBITPREVIEW: " + file + "\n  This is a preview to look at. A clean plot does not mean the exhibit is correct.\n");
             if (!EasementInspectCommands.Headless()) OpenFile(file);
         }
 
@@ -137,24 +137,24 @@ namespace FieldCodes.Cad
                 var xs = ExhibitCommands.ExhibitProfile(exhibit.ProfileName, settings);
                 if (!string.Equals((xs.StampMode ?? string.Empty).Trim(), ExhibitSettings.StampBlock, StringComparison.OrdinalIgnoreCase))
                 {
-                    ed.WriteMessage("\nFTFEXHIBITSTAMP: the exhibit's profile places " +
+                    ed.Tell("\nFTFEXHIBITSTAMP: the exhibit's profile places " +
                                     (string.Equals((xs.StampMode ?? string.Empty).Trim(), ExhibitSettings.StampPlaceholder, StringComparison.OrdinalIgnoreCase) ? "a stamp placeholder only" : "no stamp") +
                                     "; set the profile's stamp to Block to place a stamp block. Nothing changed.\n");
                     return;
                 }
                 var names = StampChoices(db, tr, xs);
-                if (names.Count == 0) { ed.WriteMessage("\nFTFEXHIBITSTAMP: no stamp blocks found in " + (string.IsNullOrWhiteSpace(xs.StampLibrary) ? "this drawing" : xs.StampLibrary) + ". Nothing changed.\n"); return; }
-                ed.WriteMessage("\n  Stamp blocks: " + string.Join(", ", names.ToArray()));
+                if (names.Count == 0) { ed.Tell("\nFTFEXHIBITSTAMP: no stamp blocks found in " + (string.IsNullOrWhiteSpace(xs.StampLibrary) ? "this drawing" : xs.StampLibrary) + ". Nothing changed.\n"); return; }
+                ed.Tell("\n  Stamp blocks: " + string.Join(", ", names.ToArray()));
                 var answer = ed.GetString(new PromptStringOptions("\nStamp block to place on " + exhibit.LayoutName + " (nothing is chosen for you), or None to take it off: ") { AllowSpaces = true });
-                if (answer.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(answer.StringResult)) { ed.WriteMessage("\nFTFEXHIBITSTAMP: nothing chosen; nothing changed.\n"); return; }
+                if (answer.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(answer.StringResult)) { ed.Tell("\nFTFEXHIBITSTAMP: nothing chosen; nothing changed.\n"); return; }
                 var typed = answer.StringResult.Trim();
                 if (string.Equals(typed, "None", StringComparison.OrdinalIgnoreCase)) exhibit.StampBlock = null;
                 else
                 {
                     var match = names.FirstOrDefault(n => string.Equals(n, typed, StringComparison.OrdinalIgnoreCase));
-                    if (match == null) { ed.WriteMessage("\nFTFEXHIBITSTAMP: no stamp block \"" + typed + "\"; nothing changed.\n"); return; }
+                    if (match == null) { ed.Tell("\nFTFEXHIBITSTAMP: no stamp block \"" + typed + "\"; nothing changed.\n"); return; }
                     var confirm = EasementCommands.Keyword(ed, "\nPlace stamp block \"" + match + "\" on " + exhibit.LayoutName + "? The stamp remains the surveyor's responsibility [Yes/No] <No>: ", "No", "Yes", "No");
-                    if (confirm != "Yes") { ed.WriteMessage("\nFTFEXHIBITSTAMP: not placed; nothing changed.\n"); return; }
+                    if (confirm != "Yes") { ed.Tell("\nFTFEXHIBITSTAMP: not placed; nothing changed.\n"); return; }
                     exhibit.StampBlock = match;
                 }
                 var records = DrawingStore.LoadEasements(db, tr);
@@ -163,7 +163,7 @@ namespace FieldCodes.Cad
                 if (!builder.Build(exhibit.ScaleChosenByUser ? exhibit.Scale : (double?)null)) return;
                 exhibit.RebuiltUtc = DateTime.UtcNow;
                 DrawingStore.SaveExhibit(db, tr, exhibit);
-                ed.WriteMessage("\nFTFEXHIBITSTAMP: " + (exhibit.StampBlock == null ? "stamp taken off; the placeholder is shown." : "stamp block \"" + exhibit.StampBlock + "\" placed on " + exhibit.LayoutName + ".") +
+                ed.Tell("\nFTFEXHIBITSTAMP: " + (exhibit.StampBlock == null ? "stamp taken off; the placeholder is shown." : "stamp block \"" + exhibit.StampBlock + "\" placed on " + exhibit.LayoutName + ".") +
                                 " The surveyor checks and signs the exhibit.\n");
             });
         }
@@ -210,7 +210,7 @@ namespace FieldCodes.Cad
         internal static ExhibitRecord PickExhibit(Database db, Transaction tr, Editor ed, string command)
         {
             var exhibits = DrawingStore.LoadExhibits(db, tr);
-            if (exhibits.Count == 0) { ed.WriteMessage("\n" + command + ": no FTF exhibits in this drawing.\n"); return null; }
+            if (exhibits.Count == 0) { ed.Tell("\n" + command + ": no FTF exhibits in this drawing.\n"); return null; }
             var current = exhibits.FirstOrDefault(x => string.Equals(x.LayoutName, LayoutManager.Current.CurrentLayout, StringComparison.OrdinalIgnoreCase));
             var fallback = current ?? exhibits[0];
             var answer = ed.GetString(new PromptStringOptions("\nExhibit layout (" + string.Join(", ", exhibits.Select(x => x.LayoutName).ToArray()) + ") <" + fallback.LayoutName + ">: ") { AllowSpaces = true });
@@ -218,7 +218,7 @@ namespace FieldCodes.Cad
             var exhibit = answer.Status == PromptStatus.OK && !string.IsNullOrWhiteSpace(answer.StringResult)
                 ? exhibits.FirstOrDefault(x => string.Equals(x.LayoutName, answer.StringResult.Trim(), StringComparison.OrdinalIgnoreCase))
                 : fallback;
-            if (exhibit == null) ed.WriteMessage("\n" + command + ": no exhibit layout by that name.\n");
+            if (exhibit == null) ed.Tell("\n" + command + ": no exhibit layout by that name.\n");
             return exhibit;
         }
 

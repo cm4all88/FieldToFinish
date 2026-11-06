@@ -112,7 +112,7 @@ namespace FieldCodes.Cad
                 var es = settings.Easements;
 
                 var job = new EasementJob { Trimmable = true, Purpose = es.DefaultPurpose, Begin = TerminationSpec.Perpendicular(), End = TerminationSpec.Perpendicular() };
-                if (!Gather(db, tr, ed, job)) { ed.WriteMessage("\nSTRIPEASEMENT: cancelled -- nothing drawn.\n"); return; }
+                if (!Gather(db, tr, ed, job)) { ed.Tell("\nSTRIPEASEMENT: cancelled -- nothing drawn.\n"); return; }
 
                 var record = new EasementRecord { Profile = DrawingStore.ReadProfileName(db) };
                 var temporary = job.TemporaryWidth != null ? new EasementRecord { Profile = record.Profile } : null;
@@ -121,9 +121,9 @@ namespace FieldCodes.Cad
                 foreach (var r in new[] { record, temporary }.Where(r => r != null))
                 {
                     DrawingStore.SaveEasement(db, tr, r);
-                    ed.WriteMessage("\nSTRIPEASEMENT: {0}, {1}.", r.Title, string.Join(", ", EasementAnnotation.AreaLines(r.AreaSquareFeet, es, r.Purpose).ToArray()));
+                    ed.Tell("\nSTRIPEASEMENT: {0}, {1}.", r.Title, string.Join(", ", EasementAnnotation.AreaLines(r.AreaSquareFeet, es, r.Purpose).ToArray()));
                 }
-                ed.WriteMessage("\nStored in the drawing; FTFEASEMENTCHECK finds it if the survey changes.\n");
+                ed.Tell("\nStored in the drawing; FTFEASEMENTCHECK finds it if the survey changes.\n");
             });
         }
 
@@ -148,7 +148,7 @@ namespace FieldCodes.Cad
             }
 
             // 1. The easement line: angle points in order, or an existing line / curve.
-            ed.WriteMessage("\nClick the easement line's angle points in order, starting at the Point of Beginning end -- snaps work, and it can run past the lot lines.");
+            ed.Tell("\nClick the easement line's angle points in order, starting at the Point of Beginning end -- snaps work, and it can run past the lot lines.");
             while (true)
             {
                 var count = job.AnglePoints.Count;
@@ -174,7 +174,7 @@ namespace FieldCodes.Cad
                 if (location == null) break;
                 if (count > 0 && location.Point.DistanceTo(job.AnglePoints[count - 1].Point) < 1e-6)
                 {
-                    ed.WriteMessage("\n  That is the same point as the last one.");
+                    ed.Tell("\n  That is the same point as the last one.");
                     continue;
                 }
                 if (count > 0)
@@ -214,7 +214,7 @@ namespace FieldCodes.Cad
             string problem;
             var entity = (AcEntity)tr.GetObject(picked.ObjectId, OpenMode.ForRead);
             var courses = Extract(entity, out problem);
-            if (courses == null) { ed.WriteMessage("\n  " + problem); return false; }
+            if (courses == null) { ed.Tell("\n  " + problem); return false; }
 
             // It starts at the end nearer where it was clicked.
             var click = picked.PickedPoint.TransformBy(ed.CurrentUserCoordinateSystem);
@@ -225,7 +225,7 @@ namespace FieldCodes.Cad
             job.RoutePieces.Add(list);
             job.Tpob = new SelectedLocation { X = list[0].Start.X, Y = list[0].Start.Y, Source = LocationSource.GeometryEndpoint, Handle = entity.Handle.ToString() };
             job.Sources.Add(new GeometrySource { Handle = entity.Handle.ToString(), EntityType = TypeName(entity), Role = "ROUTE", Fingerprint = EasementAnnotation.Fingerprint(courses) });
-            ed.WriteMessage("\n  {0}: {1} course(s), starting at N {2:0.00} E {3:0.00}.", TypeName(entity), list.Count, list[0].Start.Y, list[0].Start.X);
+            ed.Tell("\n  {0}: {1} course(s), starting at N {2:0.00} E {3:0.00}.", TypeName(entity), list.Count, list[0].Start.Y, list[0].Start.X);
             return true;
         }
 
@@ -247,7 +247,7 @@ namespace FieldCodes.Cad
             else
             {
                 double left, right;
-                ed.WriteMessage("\nLeft and right are measured looking along the easement line from its first point. Enter 0 for a one-sided easement.");
+                ed.Tell("\nLeft and right are measured looking along the easement line from its first point. Enter 0 for a one-sided easement.");
                 if (!Distance(ed, "\nWidth LEFT of the line (ft): ", true, out left)) return false;
                 if (!Distance(ed, "\nWidth RIGHT of the line (ft): ", true, out right)) return false;
                 job.Width = WidthSpec.Sides(left, right);
@@ -264,7 +264,7 @@ namespace FieldCodes.Cad
                 (job.TemporaryWidth.Left < job.Width.Left - 1e-9 || job.TemporaryWidth.Right < job.Width.Right - 1e-9 ||
                  job.TemporaryWidth.Total <= job.Width.Total + 1e-9))
             {
-                ed.WriteMessage("\n  The temporary construction easement must be wider than the easement on each side it covers.");
+                ed.Tell("\n  The temporary construction easement must be wider than the easement on each side it covers.");
                 return false;
             }
 
@@ -291,13 +291,13 @@ namespace FieldCodes.Cad
                     {
                         // On production drawings a Civil 3D label or text often sits on the lot line: use the line under the pick.
                         var under = CurveUnder(db, tr, ed, picked.PickedPoint.TransformBy(ed.CurrentUserCoordinateSystem), entity.ObjectId);
-                        if (under == null) { ed.WriteMessage("\n  " + problem); continue; }
-                        ed.WriteMessage("\n  The pick was on a {0}; using the {1} under it.", TypeName(entity), TypeName(under));
+                        if (under == null) { ed.Tell("\n  " + problem); continue; }
+                        ed.Tell("\n  The pick was on a {0}; using the {1} under it.", TypeName(entity), TypeName(under));
                         entity = under;
                         courses = Extract(entity, out problem);
                     }
                     var handle = entity.Handle.ToString();
-                    if (job.TrimSources.Any(s => s.Handle == handle)) { ed.WriteMessage("\n  That line is already picked."); continue; }
+                    if (job.TrimSources.Any(s => s.Handle == handle)) { ed.Tell("\n  That line is already picked."); continue; }
 
                     var source = new GeometrySource
                     {
@@ -351,9 +351,9 @@ namespace FieldCodes.Cad
         {
             if (Headless())
             {
-                ed.WriteMessage("\nThe trim lines divide the easement into {0} piece(s), largest first:", preview.Split.Pieces.Count);
+                ed.Tell("\nThe trim lines divide the easement into {0} piece(s), largest first:", preview.Split.Pieces.Count);
                 foreach (var piece in preview.Split.Pieces)
-                    ed.WriteMessage("\n  {0}: {1:N0} sq ft around N {2:0.00} E {3:0.00}", piece.Number,
+                    ed.Tell("\n  {0}: {1:N0} sq ft around N {2:0.00} E {3:0.00}", piece.Number,
                                     piece.Area / (preview.UnitsPerFoot * preview.UnitsPerFoot), piece.InsidePoint.Y, piece.InsidePoint.X);
                 var keep = ed.GetString(new PromptStringOptions("\nKeep which pieces (numbers, comma separated) <1>: ") { AllowSpaces = true });
                 if (keep.Status == PromptStatus.Cancel) return false;
@@ -421,11 +421,11 @@ namespace FieldCodes.Cad
             var built = EasementBuilder.Build(courses, width, job.Begin, job.End, tolerance);
             // Trimming decides the final width and area; the untrimmed strip's width check would only confuse.
             var warnings = job.Trimmable ? built.Warnings.Where(w => !w.StartsWith("Average width", StringComparison.Ordinal)).ToList() : built.Warnings.ToList();
-            foreach (var w in warnings) ed.WriteMessage("\n  ! " + what + w);
+            foreach (var w in warnings) ed.Tell("\n  ! " + what + w);
             if (!built.Ok)
             {
-                foreach (var e in built.Errors) ed.WriteMessage("\n  X " + what + e);
-                ed.WriteMessage("\nSTRIPEASEMENT: not drawn -- the easement geometry is invalid.\n");
+                foreach (var e in built.Errors) ed.Tell("\n  X " + what + e);
+                ed.Tell("\nSTRIPEASEMENT: not drawn -- the easement geometry is invalid.\n");
                 return null;
             }
 
@@ -433,11 +433,11 @@ namespace FieldCodes.Cad
             if (!job.Trimmable) return shape;
 
             shape.Split = StripTrim.Split(built.Boundary, job.Trims, tolerance);
-            foreach (var w in shape.Split.Warnings) ed.WriteMessage("\n  ! " + what + w);
+            foreach (var w in shape.Split.Warnings) ed.Tell("\n  ! " + what + w);
             if (!shape.Split.Ok)
             {
-                foreach (var e in shape.Split.Errors) ed.WriteMessage("\n  X " + what + e);
-                ed.WriteMessage("\nSTRIPEASEMENT: not drawn.\n");
+                foreach (var e in shape.Split.Errors) ed.Tell("\n  X " + what + e);
+                ed.Tell("\nSTRIPEASEMENT: not drawn.\n");
                 return null;
             }
             shape.Warnings.AddRange(shape.Split.Warnings);
@@ -457,11 +457,11 @@ namespace FieldCodes.Cad
             var tolerance = es.ToleranceFt * settings.General.UnitsPerFoot;
 
             var route = EasementBuilder.OrderRoute(job.RoutePieces, job.Tpob.Point, tolerance);
-            foreach (var w in route.Warnings) ed.WriteMessage("\n  ! " + w);
+            foreach (var w in route.Warnings) ed.Tell("\n  ! " + w);
             if (!route.Ok)
             {
-                foreach (var e in route.Errors) ed.WriteMessage("\n  X " + e);
-                ed.WriteMessage("\nSTRIPEASEMENT: not drawn -- fix the route and run it again.\n");
+                foreach (var e in route.Errors) ed.Tell("\n  X " + e);
+                ed.Tell("\nSTRIPEASEMENT: not drawn -- fix the route and run it again.\n");
                 return false;
             }
 
@@ -485,7 +485,7 @@ namespace FieldCodes.Cad
                     keep = PiecesAt(main.Split, job.KeepPoints, out missing);
                     if (missing.HasValue)
                     {
-                        ed.WriteMessage("\n  X The piece kept last time (around N {0:0.00} E {1:0.00}) is no longer part of the easement.", missing.Value.Y, missing.Value.X);
+                        ed.Tell("\n  X The piece kept last time (around N {0:0.00} E {1:0.00}) is no longer part of the easement.", missing.Value.Y, missing.Value.X);
                         return false;
                     }
                 }
@@ -501,7 +501,7 @@ namespace FieldCodes.Cad
                         Commencement = job.Poc != null ? job.Poc.Point : (P2?)null,
                         TerminusCorner = job.TerminusCorner != null ? job.TerminusCorner.Point : (P2?)null
                     };
-                    if (!Choose(ed, preview)) { ed.WriteMessage("\nSTRIPEASEMENT: cancelled -- nothing drawn.\n"); return false; }
+                    if (!Choose(ed, preview)) { ed.Tell("\nSTRIPEASEMENT: cancelled -- nothing drawn.\n"); return false; }
                     keep = preview.Keep;
                     job.Purpose = preview.Purpose;
                 }
@@ -518,7 +518,7 @@ namespace FieldCodes.Cad
                 var temporaryKeep = PiecesAt(temporary.Split, record.KeepPoints ?? new List<P2>(), out missing);
                 if (missing.HasValue || temporaryKeep.Count == 0)
                 {
-                    ed.WriteMessage("\n  X The temporary construction easement could not be matched to the kept pieces.");
+                    ed.Tell("\n  X The temporary construction easement could not be matched to the kept pieces.");
                     return false;
                 }
                 temporaryRecord.Id = temporaryRecord.Id ?? Guid.NewGuid().ToString("N");
@@ -550,16 +550,16 @@ namespace FieldCodes.Cad
                 var merged = StripTrim.Merge(split, keep, tolerance, out failure);
                 if (merged == null)
                 {
-                    ed.WriteMessage("\n  X " + failure);
-                    ed.WriteMessage("\nSTRIPEASEMENT: not drawn.\n");
+                    ed.Tell("\n  X " + failure);
+                    ed.Tell("\nSTRIPEASEMENT: not drawn.\n");
                     return false;
                 }
                 keepPoints = split.Pieces.Where(p => keep.Contains(p.Number)).Select(p => p.InsidePoint).ToList();
                 centerParts = StripTrim.PartsInside(built.Centerline, merged, tolerance);
                 if (centerParts.Count == 0)
                 {
-                    ed.WriteMessage("\n  X None of the easement line is inside the kept area -- keep the pieces the line runs through.");
-                    ed.WriteMessage("\nSTRIPEASEMENT: not drawn.\n");
+                    ed.Tell("\n  X None of the easement line is inside the kept area -- keep the pieces the line runs through.");
+                    ed.Tell("\nSTRIPEASEMENT: not drawn.\n");
                     return false;
                 }
 
@@ -569,7 +569,7 @@ namespace FieldCodes.Cad
                     var note = string.Format(CultureInfo.InvariantCulture,
                         "Trimmed to {0} line(s); kept {1} of {2} piece(s).", split.TrimCuts.Count(c => c), keep.Count, split.Pieces.Count);
                     warnings.Add(note);
-                    if (!isTemporary) ed.WriteMessage("\n  " + note);
+                    if (!isTemporary) ed.Tell("\n  " + note);
                 }
                 boundary = merged;
             }
@@ -579,8 +579,8 @@ namespace FieldCodes.Cad
                 var clippedBoundary = ClipToParcel(boundary, job.ParcelCourses, tolerance, out failure);
                 if (clippedBoundary == null)
                 {
-                    ed.WriteMessage("\n  X Parcel clipping failed: " + failure);
-                    ed.WriteMessage("\nSTRIPEASEMENT: not drawn.\n");
+                    ed.Tell("\n  X Parcel clipping failed: " + failure);
+                    ed.Tell("\nSTRIPEASEMENT: not drawn.\n");
                     return false;
                 }
                 var removed = built.Area - Math.Abs(Loops.SignedArea(clippedBoundary));
@@ -590,7 +590,7 @@ namespace FieldCodes.Cad
                     var note = string.Format(CultureInfo.InvariantCulture,
                         "Clipped to the parent parcel: {0:N0} sq ft outside the parcel removed.", removed / Sq(settings.General.UnitsPerFoot));
                     warnings.Add(note);
-                    ed.WriteMessage("\n  ! " + note);
+                    ed.Tell("\n  ! " + note);
                     boundary = clippedBoundary;
                 }
             }
@@ -657,11 +657,11 @@ namespace FieldCodes.Cad
             if (record.HasComposition)
             {
                 composed = EasementComposition.Apply(db, tr, record, boundary, settings);
-                foreach (var w in composed.Warnings) ed.WriteMessage("\n  ! " + w);
+                foreach (var w in composed.Warnings) ed.Tell("\n  ! " + w);
                 if (!composed.Ok)
                 {
-                    foreach (var e in composed.Errors) ed.WriteMessage("\n  X " + e);
-                    ed.WriteMessage("\nSTRIPEASEMENT: not drawn.\n");
+                    foreach (var e in composed.Errors) ed.Tell("\n  X " + e);
+                    ed.Tell("\nSTRIPEASEMENT: not drawn.\n");
                     return false;
                 }
                 EasementComposition.Store(record, composed, settings);
@@ -796,7 +796,7 @@ namespace FieldCodes.Cad
             var textHeight = es.TextHeightPlotted * scale;
             var styleId = Setup.DrawingResources.FindTextStyle(db, tr, es.TextStyle);
             if (!string.IsNullOrWhiteSpace(es.TextStyle) && styleId.IsNull)
-                ed.WriteMessage("\n  Text style \"{0}\" is not in this drawing; using the current style.", es.TextStyle);
+                ed.Tell("\n  Text style \"{0}\" is not in this drawing; using the current style.", es.TextStyle);
 
             var drafted = new List<string>();
             Action<AcEntity, FtfEntityKind, string> add = (entity, kind, layer) =>
@@ -826,7 +826,7 @@ namespace FieldCodes.Cad
             if (es.DrawSidelines && !temporary)
             {
                 if (clipped || trimmed)
-                    ed.WriteMessage("\n  Sidelines not drawn separately: the boundary was " + (trimmed ? "trimmed" : "clipped to the parcel") + ", so the untrimmed sidelines would disagree with it.");
+                    ed.Tell("\n  Sidelines not drawn separately: the boundary was " + (trimmed ? "trimmed" : "clipped to the parcel") + ", so the untrimmed sidelines would disagree with it.");
                 else
                 {
                     add(ToPolyline(built.LeftSideline, false), FtfEntityKind.EasementLine, es.SidelineLayer);
@@ -858,7 +858,7 @@ namespace FieldCodes.Cad
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
-                    ed.WriteMessage("\n  Hatch \"{0}\" could not be made ({1}); the boundary is drawn without it.", es.HatchPattern, ex.Message);
+                    ed.Tell("\n  Hatch \"{0}\" could not be made ({1}); the boundary is drawn without it.", es.HatchPattern, ex.Message);
                 }
             }
 
@@ -906,7 +906,7 @@ namespace FieldCodes.Cad
             {
                 var table = (DimStyleTable)tr.GetObject(db.DimStyleTableId, OpenMode.ForRead);
                 if (table.Has(es.DimensionStyleOverride)) styleId = table[es.DimensionStyleOverride];
-                else ed.WriteMessage("\n  Dimension style \"{0}\" is not in this drawing; using the current style.", es.DimensionStyleOverride);
+                else ed.Tell("\n  Dimension style \"{0}\" is not in this drawing; using the current style.", es.DimensionStyleOverride);
             }
 
             // A quarter of the way along, square across the full width -- or the nearest
@@ -924,7 +924,7 @@ namespace FieldCodes.Cad
             }
             if (!found)
             {
-                ed.WriteMessage("\n  Width dimension not placed: the trim lines narrow the easement everywhere along it.");
+                ed.Tell("\n  Width dimension not placed: the trim lines narrow the easement everywhere along it.");
                 return;
             }
             var line = at + direction * (es.TextHeightPlotted * scale * 3.0);
@@ -1090,7 +1090,7 @@ namespace FieldCodes.Cad
             {
                 var styles = (DBDictionary)tr.GetObject(db.TableStyleDictionaryId, OpenMode.ForRead);
                 if (styles.Contains(es.TableStyle)) tableStyle = styles.GetAt(es.TableStyle);
-                else ed.WriteMessage("\n  Table style \"{0}\" is not in this drawing; using the current style.", es.TableStyle);
+                else ed.Tell("\n  Table style \"{0}\" is not in this drawing; using the current style.", es.TableStyle);
             }
 
             if (lineRows.Count > 0)
@@ -1399,7 +1399,7 @@ namespace FieldCodes.Cad
             if (onLine && bestEntity != null && bestDistance > 1e-6)
             {
                 bestEntity = null;
-                ed.WriteMessage("\n  On a line between its ends -- kept exactly where it is.");
+                ed.Tell("\n  On a line between its ends -- kept exactly where it is.");
             }
 
             if (bestEntity is CogoPoint)
@@ -1410,22 +1410,22 @@ namespace FieldCodes.Cad
                     X = bestPoint.X, Y = bestPoint.Y, Source = LocationSource.CogoPoint,
                     PointNumber = cogo.PointNumber.ToString(CultureInfo.InvariantCulture), Handle = cogo.Handle.ToString()
                 };
-                ed.WriteMessage("\n  Using COGO point {0}{1}.", cogo.PointNumber, Moved(bestDistance));
+                ed.Tell("\n  Using COGO point {0}{1}.", cogo.PointNumber, Moved(bestDistance));
             }
             else if (bestEntity is Curve)
             {
                 location = new SelectedLocation { X = bestPoint.X, Y = bestPoint.Y, Source = LocationSource.GeometryEndpoint, Handle = bestEntity.Handle.ToString() };
-                ed.WriteMessage("\n  Using the end / vertex of the {0} at N {1:0.00} E {2:0.00}{3}.", TypeName(bestEntity), bestPoint.Y, bestPoint.X, Moved(bestDistance));
+                ed.Tell("\n  Using the end / vertex of the {0} at N {1:0.00} E {2:0.00}{3}.", TypeName(bestEntity), bestPoint.Y, bestPoint.X, Moved(bestDistance));
             }
             else if (bestEntity is DBPoint)
             {
                 location = new SelectedLocation { X = bestPoint.X, Y = bestPoint.Y, Source = LocationSource.CadPoint, Handle = bestEntity.Handle.ToString() };
-                ed.WriteMessage("\n  Using the CAD point at N {0:0.00} E {1:0.00}.", bestPoint.Y, bestPoint.X);
+                ed.Tell("\n  Using the CAD point at N {0:0.00} E {1:0.00}.", bestPoint.Y, bestPoint.X);
             }
             else
             {
                 location = new SelectedLocation { X = p.X, Y = p.Y, Source = LocationSource.Manual };
-                ed.WriteMessage("\n  Not on a survey point or line end -- kept as a coordinate (N {0:0.00} E {1:0.00}); a rebuild will not follow it if the survey moves.", p.Y, p.X);
+                ed.Tell("\n  Not on a survey point or line end -- kept as a coordinate (N {0:0.00} E {1:0.00}); a rebuild will not follow it if the survey moves.", p.Y, p.X);
             }
             return PromptStatus.OK;
         }
@@ -1465,10 +1465,10 @@ namespace FieldCodes.Cad
                 }
                 if (best != null && bestDistance <= tolerance)
                 {
-                    ed.WriteMessage("\n  Using the {0} under the pick.", TypeName(best));
+                    ed.Tell("\n  Using the {0} under the pick.", TypeName(best));
                     return best;
                 }
-                ed.WriteMessage("\n  Select a line, polyline or arc.");
+                ed.Tell("\n  Select a line, polyline or arc.");
             }
         }
 
@@ -1642,7 +1642,7 @@ namespace FieldCodes.Cad
                 var rules = FtfSession.Rules(db);
                 var settings = FtfSession.SettingsFor(db, rules);
                 var records = DrawingStore.LoadEasements(db, tr);
-                if (records.Count == 0) { ed.WriteMessage("\nFTFEASEMENTCHECK: no strip easements are stored in this drawing.\n"); return; }
+                if (records.Count == 0) { ed.Tell("\nFTFEASEMENTCHECK: no strip easements are stored in this drawing.\n"); return; }
 
                 var all = false;
                 var current = 0;
@@ -1653,9 +1653,9 @@ namespace FieldCodes.Cad
                     var handEdited = DraftingEdited(db, tr, record);
                     if (changes.Count == 0 && !handEdited) { current++; continue; }
 
-                    ed.WriteMessage("\n{0} ({1:N0} sq ft):", record.Title, record.AreaSquareFeet);
-                    foreach (var c in changes) ed.WriteMessage("\n  - " + c);
-                    if (handEdited) ed.WriteMessage("\n  - The drawn boundary was edited by hand since it was built; a rebuild would replace that edit.");
+                    ed.Tell("\n{0} ({1:N0} sq ft):", record.Title, record.AreaSquareFeet);
+                    foreach (var c in changes) ed.Tell("\n  - " + c);
+                    if (handEdited) ed.Tell("\n  - The drawn boundary was edited by hand since it was built; a rebuild would replace that edit.");
                     if (changes.Count == 0) continue;
 
                     if (!all)
@@ -1669,11 +1669,11 @@ namespace FieldCodes.Cad
                     string problem;
                     var before = record.AreaSquareFeet;
                     var redone = RebuildRecord(db, tr, ed, settings, rules.Version, record, "after survey changes", out problem);
-                    if (redone == null) { ed.WriteMessage("\n  Not rebuilt: " + problem); continue; }
-                    ed.WriteMessage("\n  Rebuilt: area {0:N0} -> {1:N0} sq ft.", before, redone.AreaSquareFeet);
+                    if (redone == null) { ed.Tell("\n  Not rebuilt: " + problem); continue; }
+                    ed.Tell("\n  Rebuilt: area {0:N0} -> {1:N0} sq ft.", before, redone.AreaSquareFeet);
                     rebuiltIds.Add(record.Id);
                 }
-                ed.WriteMessage("\nFTFEASEMENTCHECK: {0} of {1} easement(s) current with the survey.", current, records.Count);
+                ed.Tell("\nFTFEASEMENTCHECK: {0} of {1} easement(s) current with the survey.", current, records.Count);
 
                 // Exhibits built from these easements: changed or rebuilt easements make them stale.
                 var fresh = DrawingStore.LoadEasements(db, tr);
@@ -1682,12 +1682,12 @@ namespace FieldCodes.Cad
                     var reasons = FieldCodes.Exhibits.ExhibitPlanner.StaleSources(exhibit, fresh);
                     var changedNow = exhibit.Sources.Where(s => fresh.Any(r => r.Id == s.EasementId && Changes(db, tr, r).Count > 0)).Select(s => s.Title).ToList();
                     if (reasons.Count == 0 && changedNow.Count == 0) continue;
-                    ed.WriteMessage("\nEXHIBIT MAY BE STALE: layout \"{0}\"", exhibit.LayoutName);
-                    foreach (var title in changedNow) ed.WriteMessage("\n  - EASEMENT CHANGED: " + title + " (not rebuilt yet)");
-                    foreach (var reason in reasons) ed.WriteMessage("\n  - " + reason);
-                    ed.WriteMessage("\n  Run FTFEXHIBITREBUILD to update it.");
+                    ed.Tell("\nEXHIBIT MAY BE STALE: layout \"{0}\"", exhibit.LayoutName);
+                    foreach (var title in changedNow) ed.Tell("\n  - EASEMENT CHANGED: " + title + " (not rebuilt yet)");
+                    foreach (var reason in reasons) ed.Tell("\n  - " + reason);
+                    ed.Tell("\n  Run FTFEXHIBITREBUILD to update it.");
                 }
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             });
         }
 
@@ -2053,9 +2053,9 @@ namespace FieldCodes.Cad
                 var settings = FtfSession.SettingsFor(db, FtfSession.Rules(db));
                 var es = settings.Easements;
                 var records = DrawingStore.LoadEasements(db, tr);
-                if (records.Count == 0) { ed.WriteMessage("\nFTFEASEMENTEXPORT: no strip easements are stored in this drawing.\n"); return; }
+                if (records.Count == 0) { ed.Tell("\nFTFEASEMENTEXPORT: no strip easements are stored in this drawing.\n"); return; }
                 if (string.IsNullOrWhiteSpace(db.Filename) || !File.Exists(db.Filename))
-                { ed.WriteMessage("\nFTFEASEMENTEXPORT: save the drawing first so the file has somewhere to go.\n"); return; }
+                { ed.Tell("\nFTFEASEMENTEXPORT: save the drawing first so the file has somewhere to go.\n"); return; }
 
                 var path = Path.Combine(Path.GetDirectoryName(db.Filename), Path.GetFileNameWithoutExtension(db.Filename) + ".ftf-easements.txt");
                 var sb = new StringBuilder();
@@ -2063,7 +2063,7 @@ namespace FieldCodes.Cad
                 foreach (var r in records.OrderBy(r => r.CreatedUtc).ThenBy(r => r.GroupId ?? r.Id).ThenBy(r => r.IsTemporary))
                     sb.Append(DescribeRecord(r, es, db, tr)).AppendLine();
                 File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
-                ed.WriteMessage("\nFTFEASEMENTEXPORT: {0} easement(s) written to {1}\n", records.Count, path);
+                ed.Tell("\nFTFEASEMENTEXPORT: {0} easement(s) written to {1}\n", records.Count, path);
             });
         }
 

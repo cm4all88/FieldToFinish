@@ -65,7 +65,7 @@ namespace FieldCodes.Cad
                         SheetWindow window;
                         if (!TryFootprint(viewport, layout.LayoutName, out window))
                         {
-                            ed.WriteMessage("\n  {0}: a viewport is not a straight " +
+                            ed.Tell("\n  {0}: a viewport is not a straight " +
                                             "plan view; skipped.", layout.LayoutName);
                             continue;
                         }
@@ -77,7 +77,7 @@ namespace FieldCodes.Cad
 
                 if (windows.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFSHEETS: no paper-space viewports found. " +
+                    ed.Tell("\nFTFSHEETS: no paper-space viewports found. " +
                                     "Open each layout tab once so its viewport " +
                                     "initialises, then run again.\n");
                     return;
@@ -86,7 +86,7 @@ namespace FieldCodes.Cad
                 DrawEverything(db, tr, ed, ss, cfg.Version, windows);
 
                 if (uninitialized.Count > 0)
-                    ed.WriteMessage("\n  No viewport found on: {0}.",
+                    ed.Tell("\n  No viewport found on: {0}.",
                         string.Join(", ", uninitialized.ToArray()));
             });
         }
@@ -115,7 +115,7 @@ namespace FieldCodes.Cad
                 double minX, minY, maxX, maxY;
                 if (!SurveyExtent(db, tr, out minX, out minY, out maxX, out maxY))
                 {
-                    ed.WriteMessage("\nFTFSHEETPLAN: nothing in model space to lay " +
+                    ed.Tell("\nFTFSHEETPLAN: nothing in model space to lay " +
                                     "sheets over.\n");
                     return;
                 }
@@ -133,7 +133,7 @@ namespace FieldCodes.Cad
                 var plan = SheetPlanner.Plan(minX, minY, maxX, maxY,
                     printableLong, printableShort, ss.OverlapPercent / 100.0);
 
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFSHEETPLAN: {0} x {1}\" at 1\"={2:0.#}', {3:0.#}\" margins, " +
                     "{4:0.#}% overlap -> {5} sheet(s), {6} ({7} row(s) x {8} column(s)).",
                     ss.SheetWidthIn, ss.SheetHeightIn, ss.PlotScaleFeetPerInch,
@@ -167,7 +167,7 @@ namespace FieldCodes.Cad
                 var windows = DrawnWindows(db, tr);
                 if (windows.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFKEYMAP: no sheet windows in the drawing. " +
+                    ed.Tell("\nFTFKEYMAP: no sheet windows in the drawing. " +
                                     "Run FTFSHEETPLAN or FTFSHEETS first.\n");
                     return;
                 }
@@ -208,7 +208,7 @@ namespace FieldCodes.Cad
                     placed++;
                 }
 
-                ed.WriteMessage("\nFTFKEYMAP: key map placed on {0} sheet(s).\n",
+                ed.Tell("\nFTFKEYMAP: key map placed on {0} sheet(s).\n",
                                 placed);
             });
         }
@@ -324,7 +324,7 @@ namespace FieldCodes.Cad
                 var windows = DrawnWindows(db, tr);
                 if (windows.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFSHEETMAKE: no sheet windows in the drawing. " +
+                    ed.Tell("\nFTFSHEETMAKE: no sheet windows in the drawing. " +
                                     "Run FTFSHEETPLAN (or FTFSHEETS) first, adjust " +
                                     "the rectangles if needed, then run this.\n");
                     return;
@@ -404,12 +404,12 @@ namespace FieldCodes.Cad
                     made++;
                 }
 
-                ed.WriteMessage("\nFTFSHEETMAKE: {0} layout(s) created with locked " +
+                ed.Tell("\nFTFSHEETMAKE: {0} layout(s) created with locked " +
                                 "viewports at the planned scale.", made);
                 if (skipped.Count > 0)
-                    ed.WriteMessage("\n  Already existed, left untouched: {0}.",
+                    ed.Tell("\n  Already existed, left untouched: {0}.",
                                     string.Join(", ", skipped.ToArray()));
-                ed.WriteMessage("\n  Assign your office page setup to the new " +
+                ed.Tell("\n  Assign your office page setup to the new " +
                                 "layouts before plotting; FTF does not change " +
                                 "plotter configuration.\n");
             });
@@ -496,7 +496,7 @@ namespace FieldCodes.Cad
             var removed = Ownership.DeleteOwnedKinds(db, tr,
                 FtfEntityKind.SheetArea, FtfEntityKind.MatchLine);
             if (removed > 0)
-                ed.WriteMessage("\n{0}: removed {1} previous sheet entities.",
+                ed.Tell("\n{0}: removed {1} previous sheet entities.",
                                 command, removed);
         }
 
@@ -578,7 +578,7 @@ namespace FieldCodes.Cad
                 DrawMatchLine(db, tr, line, matchLayer, textHeight,
                               ss.MatchlineLabelFormat, rulesVersion);
 
-            ed.WriteMessage("\n{0} sheet window(s) drawn, {1} match line(s).\n",
+            ed.Tell("\n{0} sheet window(s) drawn, {1} match line(s).\n",
                             windows.Count, matchLines.Count);
         }
 

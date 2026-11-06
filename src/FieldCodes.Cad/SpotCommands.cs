@@ -51,7 +51,7 @@ namespace FieldCodes.Cad
             }
             catch (ConfigException ex)
             {
-                ed.WriteMessage("\nRules problem: {0}\n", ex.Message);
+                ed.Tell("\nRules problem: {0}\n", ex.Message);
                 return;
             }
 
@@ -74,11 +74,11 @@ namespace FieldCodes.Cad
             }
             if (surfaceId.IsNull)
             {
-                ed.WriteMessage("\nFTFSPOT: no TIN surface in this drawing to read " +
+                ed.Tell("\nFTFSPOT: no TIN surface in this drawing to read " +
                                 "elevations from.\n");
                 return;
             }
-            ed.WriteMessage("\nFTFSPOT: elevations from surface \"{0}\"; text at " +
+            ed.Tell("\nFTFSPOT: elevations from surface \"{0}\"; text at " +
                             "{1:0}°, {2:0.00}\" plotted. Esc to finish.",
                             surfaceName, sp.AngleDegrees, sp.TextPlotted);
 
@@ -126,7 +126,7 @@ namespace FieldCodes.Cad
                 }
             }
 
-            ed.WriteMessage("\nFTFSPOT: {0} spot elevation(s) placed.\n", placed);
+            ed.Tell("\nFTFSPOT: {0} spot elevation(s) placed.\n", placed);
         }
 
         private static bool PlaceSpot(Database db, Transaction tr, Editor ed,
@@ -146,7 +146,7 @@ namespace FieldCodes.Cad
             }
             catch (System.Exception)
             {
-                ed.WriteMessage("\n  Outside the surface; no spot placed there.");
+                ed.Tell("\n  Outside the surface; no spot placed there.");
                 return false;
             }
 
@@ -201,7 +201,7 @@ namespace FieldCodes.Cad
                                 new Point3d(tx, ty, 0));
             }
 
-            ed.WriteMessage("\n  {0}", value);
+            ed.Tell("\n  {0}", value);
             return true;
         }
 
@@ -244,7 +244,7 @@ namespace FieldCodes.Cad
                     StringComparer.OrdinalIgnoreCase);
                 if (codes.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFCONTROL: no controlCodes configured in the " +
+                    ed.Tell("\nFTFCONTROL: no controlCodes configured in the " +
                                     "rules.\n");
                     return;
                 }
@@ -303,7 +303,7 @@ namespace FieldCodes.Cad
 
                 if (rows.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFCONTROL: no control points found.\n");
+                    ed.Tell("\nFTFCONTROL: no control points found.\n");
                     return;
                 }
 
@@ -329,7 +329,7 @@ namespace FieldCodes.Cad
                         "\nTop-left corner for the control table: "));
                     if (picked.Status != PromptStatus.OK)
                     {
-                        ed.WriteMessage("\nCancelled; no table drawn.\n");
+                        ed.Tell("\nCancelled; no table drawn.\n");
                         return;
                     }
                     position = picked.Value;
@@ -339,7 +339,7 @@ namespace FieldCodes.Cad
                     settings.Tags.TableTextHeightPlotted *
                     CadUtil.DrawingUnitsPerPlottedUnit(db), cfg.Version);
 
-                ed.WriteMessage("\nFTFCONTROL: {0} control point(s) tabled.\n",
+                ed.Tell("\nFTFCONTROL: {0} control point(s) tabled.\n",
                                 rows.Count);
 
                 ExportControlCsv(db, ed, export, geo != null);
@@ -369,21 +369,21 @@ namespace FieldCodes.Cad
             {
                 System.IO.File.WriteAllLines(path, lines.ToArray(),
                     new System.Text.UTF8Encoding(true));
-                ed.WriteMessage("\nControl export: {0}", path);
+                ed.Tell("\nControl export: {0}", path);
                 if (!hasGeo)
-                    ed.WriteMessage("\n  Latitude/longitude left empty: this " +
+                    ed.Tell("\n  Latitude/longitude left empty: this " +
                                     "drawing has no coordinate system assigned. " +
                                     "Set one (GEOGRAPHICLOCATION, or the zone in " +
                                     "Drawing Settings) and run FTFCONTROL again.");
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             }
             catch (System.IO.IOException ex)
             {
-                ed.WriteMessage("\nCould not write {0}: {1}\n", path, ex.Message);
+                ed.Tell("\nCould not write {0}: {1}\n", path, ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                ed.WriteMessage("\nCould not write {0}: {1}\n", path, ex.Message);
+                ed.Tell("\nCould not write {0}: {1}\n", path, ex.Message);
             }
         }
 
@@ -464,14 +464,14 @@ namespace FieldCodes.Cad
                 var inventory = FtfLineworkService.Scan();
                 if (inventory.RulesError != null)
                 {
-                    ed.WriteMessage("\nRules problem: {0}\n", inventory.RulesError);
+                    ed.Tell("\nRules problem: {0}\n", inventory.RulesError);
                     return;
                 }
 
                 var entries = LegendBuilder.Rows(inventory.Rows);
                 if (entries.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFLEGEND: no identified line features to " +
+                    ed.Tell("\nFTFLEGEND: no identified line features to " +
                                     "put in a legend.\n");
                     return;
                 }
@@ -500,7 +500,7 @@ namespace FieldCodes.Cad
                         "\nTop-left corner for the legend: "));
                     if (picked.Status != PromptStatus.OK)
                     {
-                        ed.WriteMessage("\nCancelled; no legend drawn.\n");
+                        ed.Tell("\nCancelled; no legend drawn.\n");
                         return;
                     }
                     position = picked.Value;
@@ -556,7 +556,7 @@ namespace FieldCodes.Cad
                     y -= rowStep;
                 }
 
-                ed.WriteMessage("\nFTFLEGEND: {0} feature(s) in the legend. Point " +
+                ed.Tell("\nFTFLEGEND: {0} feature(s) in the legend. Point " +
                                 "symbols live in Civil 3D point styles, so the " +
                                 "legend covers the linework.\n", entries.Count);
             });

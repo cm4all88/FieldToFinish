@@ -60,7 +60,7 @@ namespace FieldCodes.Cad
 
                 if (assignments.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFTAGS: nothing to tag. Only codes whose rule sets " +
+                    ed.Tell("\nFTFTAGS: nothing to tag. Only codes whose rule sets " +
                                     "a tagPrefix are tagged.\n");
                     return;
                 }
@@ -109,7 +109,7 @@ namespace FieldCodes.Cad
                     {
                         text.Erase();
                         failed++;
-                        ed.WriteMessage("\n  {0}: no clear position for tag {1}.",
+                        ed.Tell("\n  {0}: no clear position for tag {1}.",
                                         assignment.PointNumber, assignment.Text);
                         continue;
                     }
@@ -149,13 +149,13 @@ namespace FieldCodes.Cad
                     if (!assignment.IsNew) reissued++;
                 }
 
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFTAGS: {0} tag(s) drawn -- {1} carried over unchanged, {2} newly " +
                     "issued, {3} with leaders, {4} with no clear position.\n",
                     drawn, reissued, drawn - reissued, leaders, failed);
 
                 if (drawn - reissued > 0 && previous.Count > 0)
-                    ed.WriteMessage("Existing tag numbers were preserved; new points " +
+                    ed.Tell("Existing tag numbers were preserved; new points " +
                                     "continue past the highest number issued.\n");
             });
         }
@@ -179,7 +179,7 @@ namespace FieldCodes.Cad
                 var previous = ReadPreviousTags(db, tr);
                 if (previous.Count == 0)
                 {
-                    ed.WriteMessage("\nFTFTABLE: no tags in this drawing. Run FTFTAGS first.\n");
+                    ed.Tell("\nFTFTABLE: no tags in this drawing. Run FTFTAGS first.\n");
                     return;
                 }
 
@@ -197,7 +197,7 @@ namespace FieldCodes.Cad
                     var result = ed.GetPoint(prompt);
                     if (result.Status != PromptStatus.OK)
                     {
-                        ed.WriteMessage("\nFTFTABLE: cancelled.\n");
+                        ed.Tell("\nFTFTABLE: cancelled.\n");
                         return;
                     }
                     corner = result.Value;
@@ -232,14 +232,14 @@ namespace FieldCodes.Cad
 
                 if (model.RowCount == 0)
                 {
-                    ed.WriteMessage("\nFTFTABLE: no tagged points to list.\n");
+                    ed.Tell("\nFTFTABLE: no tagged points to list.\n");
                     return;
                 }
 
                 var scale = CadUtil.DrawingUnitsPerPlottedUnit(db);
                 DrawTable(db, tr, model, corner, ts, scale, cfg.Version);
 
-                ed.WriteMessage("\nFTFTABLE: {0} row(s) at {1:0.##},{2:0.##}.\n",
+                ed.Tell("\nFTFTABLE: {0} row(s) at {1:0.##},{2:0.##}.\n",
                                 model.RowCount, corner.X, corner.Y);
             });
         }

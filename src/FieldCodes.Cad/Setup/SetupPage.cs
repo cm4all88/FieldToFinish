@@ -108,6 +108,7 @@ namespace FieldCodes.Cad.Setup
             {
                 Text = text,
                 Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+                ForeColor = Branding.IsCommercial ? Color.FromArgb(0x0B, 0x2E, 0x4F) : SystemColors.ControlText,
                 AutoSize = true,
                 Margin = new Padding(0, _row == 1 ? 0 : 14, 0, 4)
             };

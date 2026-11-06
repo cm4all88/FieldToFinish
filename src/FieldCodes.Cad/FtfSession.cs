@@ -186,19 +186,19 @@ namespace FieldCodes.Cad
                 catch (ConfigException ex)
                 {
                     LastRunError = ex.Message;
-                    ed.WriteMessage("\n{0}: rules file problem.\n{1}\n", commandName, ex.Message);
+                    ed.Tell("\n{0}: rules file problem.\n{1}\n", commandName, ex.Message);
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
                     LastRunError = ex.Message;
                     LastRunErrorDetail = commandName + ": " + ex.ErrorStatus + " " + ex.Message + "\n" + ex.StackTrace;
-                    ed.WriteMessage("\n{0}: AutoCAD error: {1}\n", commandName, ex.Message);
+                    ed.Tell("\n{0}: AutoCAD error: {1}\n", commandName, ex.Message);
                 }
                 catch (Exception ex)
                 {
                     LastRunError = ex.Message;
                     LastRunErrorDetail = commandName + ": " + ex + "\n" + ex.StackTrace;
-                    ed.WriteMessage("\n{0} failed: {1}\n{2}\n",
+                    ed.Tell("\n{0} failed: {1}\n{2}\n",
                         commandName, ex.Message, ex.StackTrace);
                 }
             }

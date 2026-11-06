@@ -46,7 +46,7 @@ namespace FieldCodes.Cad
                 var styleId = Setup.DrawingResources.FindTextStyle(db, tr, lp.TextStyle);
 
                 if (!string.IsNullOrWhiteSpace(lp.TextStyle) && styleId.IsNull)
-                    ed.WriteMessage(
+                    ed.Tell(
                         "\nFTFLABELS: text style '{0}' is not in this drawing; using the " +
                         "current style instead.", lp.TextStyle);
 
@@ -93,7 +93,7 @@ namespace FieldCodes.Cad
                     {
                         text.Erase();
                         failed++;
-                        ed.WriteMessage("\n  point {0}: label text has no measurable size.", number);
+                        ed.Tell("\n  point {0}: label text has no measurable size.", number);
                         continue;
                     }
 
@@ -107,7 +107,7 @@ namespace FieldCodes.Cad
                         // symbol is worse than a label that is reported as missing.
                         text.Erase();
                         failed++;
-                        ed.WriteMessage(
+                        ed.Tell(
                             "\n  point {0}: no clear label position found.", number);
                         continue;
                     }
@@ -161,7 +161,7 @@ namespace FieldCodes.Cad
                                                "label:" + number));
                 }
 
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFLABELS: {0} placed, {1} leader(s), {2} kept as hand-placed, " +
                     "{3} with no clear position.\n",
                     placed, leaders, keptByHand.Count, failed);

@@ -1691,7 +1691,7 @@ namespace FieldCodes.Cad.Ui
                 var record = UtilityCadService.EnsureStructure(project, UtilityCadService.Snapshot(point), settings.Dips);
                 _structureId = record.Id;
                 _labelEdited = false;
-                ed.WriteMessage("\nDip Builder: {0}, rim {1:0.00} from the drawing.", record.Label, record.Cad.Rim);
+                ed.Tell("\nDip Builder: {0}, rim {1:0.00} from the drawing.", record.Label, record.Cad.Rim);
                 return true;
             });
             if (posted) Say("Pick the structure's survey point in the drawing...", Muted);
@@ -1736,7 +1736,7 @@ namespace FieldCodes.Cad.Ui
             {
                 var live = UtilityCadService.LivePoints(db, tr);
                 foreach (var message in UtilityCadService.ImportNotes(project, parsed, live, settings.Dips))
-                    ed.WriteMessage("\n  " + message);
+                    ed.Tell("\n  " + message);
                 var first = project.StructureByPoint(parsed.Structures[0].PointNumber);
                 if (first != null) _structureId = first.Id;
                 return true;
@@ -1764,7 +1764,7 @@ namespace FieldCodes.Cad.Ui
                 if (structure == null) return false;
                 var confirmed = pipeIds.Count(id => ObservationReview.ConfirmReference(project, structure,
                                                         project.Pipe(structureId, id), MeasurementReference.Invert));
-                ed.WriteMessage("\nDip Builder: {0} MD(s) at {1} confirmed as inverts. The measurements are unchanged.", confirmed, structure.Label);
+                ed.Tell("\nDip Builder: {0} MD(s) at {1} confirmed as inverts. The measurements are unchanged.", confirmed, structure.Label);
                 return confirmed > 0;
             });
             if (posted) Say(pipeIds.Count + " MD(s) confirmed as inverts.", Good);
@@ -1936,12 +1936,12 @@ namespace FieldCodes.Cad.Ui
 
                 var point = (CogoPoint)tr.GetObject(picked.ObjectId, OpenMode.ForRead);
                 var target = UtilityCadService.EnsureStructure(project, UtilityCadService.Snapshot(point), settings.Dips);
-                if (target.Id == structure.Id) { ed.WriteMessage("\nA pipe cannot connect a structure to itself."); return false; }
+                if (target.Id == structure.Id) { ed.Tell("\nA pipe cannot connect a structure to itself."); return false; }
 
                 var note = ed.GetString(new PromptStringOptions("\nReason for the manual connection (optional): ") { AllowSpaces = true });
                 var candidate = ConnectionFinder.ManualCandidate(project, structure, pipe, target, settings.Dips);
                 ConnectionFinder.Accept(project, structure, pipe, candidate, true, note.Status == PromptStatus.OK ? note.StringResult : null);
-                ed.WriteMessage("\nManual connection {0} -> {1} recorded as a manual override.", structure.Label, target.Label);
+                ed.Tell("\nManual connection {0} -> {1} recorded as a manual override.", structure.Label, target.Label);
                 return true;
             });
         }
@@ -2080,7 +2080,7 @@ namespace FieldCodes.Cad.Ui
                 var stale = UtilityQc.StaleStructures(project, live);
                 if (stale.Count == 0)
                 {
-                    ed.WriteMessage("\nDip Builder: no structure has changed since it was calculated.");
+                    ed.Tell("\nDip Builder: no structure has changed since it was calculated.");
                     return false;
                 }
                 return UtilityCommands.Rebuild(db, tr, ed, project, settings, version, stale, live, true) > 0;
@@ -2093,7 +2093,7 @@ namespace FieldCodes.Cad.Ui
             DipSession.Post("export revisit", (db, tr, ed, project, settings, version) =>
             {
                 var path = UtilityCommands.ExportRevisitFile(db, text);
-                ed.WriteMessage(path == null ? "\nSave the drawing first." : "\nField revisit list: " + path);
+                ed.Tell(path == null ? "\nSave the drawing first." : "\nField revisit list: " + path);
                 return false;
             });
         }

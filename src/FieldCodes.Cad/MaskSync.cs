@@ -67,7 +67,7 @@ namespace FieldCodes.Cad
             }
 
             if (rebuilt > 0)
-                ed.WriteMessage("\nMasks squared up under {0} label(s), including " +
+                ed.Tell("\nMasks squared up under {0} label(s), including " +
                                 "any moved by hand.", rebuilt);
         }
 

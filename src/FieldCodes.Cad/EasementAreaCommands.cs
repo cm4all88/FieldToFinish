@@ -42,7 +42,7 @@ namespace FieldCodes.Cad
                 PromptStatus lotStatus;
                 Autodesk.AutoCAD.Geometry.Point3d lotClick;
                 var lotEntity = EasementCommands.PickCurve(db, tr, ed, "\nSelect the lot boundary (a closed polyline, or one of its lot lines): ", false, out lotStatus, out lotClick);
-                if (lotEntity == null) { ed.WriteMessage("\nPORTIONEASEMENT: cancelled.\n"); return; }
+                if (lotEntity == null) { ed.Tell("\nPORTIONEASEMENT: cancelled.\n"); return; }
                 string problem;
                 var lot = EasementCommands.Extract(lotEntity, out problem);
                 if (lot == null || Loops.LargestGap(lot) > tolerance)
@@ -51,7 +51,7 @@ namespace FieldCodes.Cad
                     var closed = EasementCommands.ClosedUnder(db, tr, ed, lotClick, tolerance);
                     if (closed != null)
                     {
-                        ed.WriteMessage("\n  The pick was on an open {0}; using the closed {1} under it.", EasementCommands.TypeName(lotEntity), EasementCommands.TypeName(closed));
+                        ed.Tell("\n  The pick was on an open {0}; using the closed {1} under it.", EasementCommands.TypeName(lotEntity), EasementCommands.TypeName(closed));
                         lotEntity = closed;
                         lot = EasementCommands.Extract(lotEntity, out problem);
                     }
@@ -61,15 +61,15 @@ namespace FieldCodes.Cad
                 {
                     // No closed object: the lot as its separate lines, joined by FTF for its own use only.
                     var answer = EasementCommands.Keyword(ed, "\nThe lot is not one closed object. Build it from its separate lot lines [Lines/Cancel] <Lines>: ", "Lines", "Lines", "Cancel");
-                    if (answer != "Lines") { ed.WriteMessage("\nPORTIONEASEMENT: cancelled -- the lot boundary must be closed" + (problem != null ? " (" + problem + ")" : string.Empty) + ".\n"); return; }
+                    if (answer != "Lines") { ed.Tell("\nPORTIONEASEMENT: cancelled -- the lot boundary must be closed" + (problem != null ? " (" + problem + ")" : string.Empty) + ".\n"); return; }
                     lot = PickLotLines(db, tr, ed, lotEntity, tolerance, out lotLines, out problem);
                     if (lot == null)
                     {
-                        ed.WriteMessage("\nPORTIONEASEMENT: the selected lines do not make one closed lot -- " + problem +
+                        ed.Tell("\nPORTIONEASEMENT: the selected lines do not make one closed lot -- " + problem +
                                         "\n  Nothing was drawn and no line was changed. Select only this lot's lines (or draw its closed boundary) and run PORTIONEASEMENT again.\n");
                         return;
                     }
-                    ed.WriteMessage("\n  Lot built from {0} line(s): {1} courses, {2:N0} sq ft, closes exactly. The lines themselves are not joined or changed.",
+                    ed.Tell("\n  Lot built from {0} line(s): {1} courses, {2:N0} sq ft, closes exactly. The lines themselves are not joined or changed.",
                                     lotLines.Count, lot.Count, Math.Abs(Loops.SignedArea(lot)) / (settings.General.UnitsPerFoot * settings.General.UnitsPerFoot));
                     lotEntity = null;
                 }
@@ -77,7 +77,7 @@ namespace FieldCodes.Cad
                 // The calls, in reading order.
                 bool cancelled;
                 var steps = GatherCalls(db, tr, ed, es, lotEntity, lot, tolerance, out cancelled);
-                if (cancelled) { ed.WriteMessage("\nPORTIONEASEMENT: cancelled.\n"); return; }
+                if (cancelled) { ed.Tell("\nPORTIONEASEMENT: cancelled.\n"); return; }
                 var purpose = ed.GetString(new PromptStringOptions("\nPurpose for the title <" + es.DefaultPurpose + ">: ") { AllowSpaces = true });
                 if (purpose.Status == PromptStatus.Cancel) return;
                 var record = new EasementRecord
@@ -93,7 +93,7 @@ namespace FieldCodes.Cad
 
                 if (!FinishPortion(db, tr, ed, settings, rules.Version, record, lot)) return;
                 DrawingStore.SaveEasement(db, tr, record);
-                ed.WriteMessage("\nPORTIONEASEMENT: {0} -- {1}. Stored; FTFEASEMENTLEGAL writes its draft description.\n",
+                ed.Tell("\nPORTIONEASEMENT: {0} -- {1}. Stored; FTFEASEMENTLEGAL writes its draft description.\n",
                                 PortionBuilder.Describe(steps, es.DistanceDecimals) + " THE LOT", EasementAnnotation.AreaLine(record.AreaSquareFeet, es, record.Purpose));
             });
         }
@@ -133,7 +133,7 @@ namespace FieldCodes.Cad
             {
                 // Lines that run on past the lot's corners: say how much is set aside and let the drafter decide.
                 var upf2 = Math.Abs(Loops.SignedArea(chain.Courses));
-                ed.WriteMessage("\n  The selected lines enclose one area ({0:N0} sq units, {1} courses); {2:N2}' of selected line beyond its corners is not part of it.",
+                ed.Tell("\n  The selected lines enclose one area ({0:N0} sq units, {1} courses); {2:N2}' of selected line beyond its corners is not part of it.",
                                 upf2, chain.Courses.Count, chain.IgnoredLength);
                 var use = EasementCommands.Keyword(ed, "\nUse that area as the lot [Yes/No] <Yes>: ", "Yes", "Yes", "No");
                 if (use != "Yes") { problem = "not used -- nothing was drawn."; return null; }
@@ -197,7 +197,7 @@ namespace FieldCodes.Cad
                 if (!(entity is Curve)) continue;
                 string problem;
                 var courses = EasementCommands.Extract(entity, out problem);
-                if (courses == null) { ed.WriteMessage("\n  {0} {1} is skipped: {2}", EasementCommands.TypeName(entity), entity.Handle, problem); continue; }
+                if (courses == null) { ed.Tell("\n  {0} {1} is skipped: {2}", EasementCommands.TypeName(entity), entity.Handle, problem); continue; }
                 sources.Add(new GeometrySource { Handle = entity.Handle.ToString(), EntityType = EasementCommands.TypeName(entity), Role = TieFollowsRole + (sources.Count + 1), Fingerprint = EasementAnnotation.Fingerprint(courses) });
             }
             return sources;
@@ -251,7 +251,7 @@ namespace FieldCodes.Cad
         {
             cancelled = false;
             string problem = null;
-            ed.WriteMessage("\nGive the calls in the order they are read: for \"the WEST 10 feet of the SOUTH 50 feet\", pick the west line first.");
+            ed.Tell("\nGive the calls in the order they are read: for \"the WEST 10 feet of the SOUTH 50 feet\", pick the west line first.");
             var steps = new List<PortionStep>();
             var highlighted = new List<AcEntity>();
             if (lotEntity != null) { highlighted.Add(lotEntity); lotEntity.Highlight(); }
@@ -268,10 +268,10 @@ namespace FieldCodes.Cad
                     if (entity == null) { cancelled = true; return null; }
 
                     var courses = lotEntity != null && entity.Handle == lotEntity.Handle ? lot : EasementCommands.Extract(entity, out problem);
-                    if (courses == null) { ed.WriteMessage("\n  " + problem); continue; }
+                    if (courses == null) { ed.Tell("\n  " + problem); continue; }
                     var segment = NearestCourse(courses, new P2(click.X, click.Y));
                     var line = courses[segment];
-                    if (line.Kind != CourseKind.Line) { ed.WriteMessage("\n  That side is a curve; pick a straight lot line."); continue; }
+                    if (line.Kind != CourseKind.Line) { ed.Tell("\n  That side is a curve; pick a straight lot line."); continue; }
 
                     double distance;
                     if (!EasementCommands.Distance(ed, "\nDistance measured at right angles from that line (ft): ", false, out distance)) { cancelled = true; return null; }
@@ -281,7 +281,7 @@ namespace FieldCodes.Cad
                     if (side == null) { cancelled = true; return null; }
                     steps.Add(new PortionStep { Side = side.ToUpperInvariant(), Distance = distance, Line = line, Handle = entity.Handle.ToString(), Segment = segment });
                     if (lotEntity == null || entity.Handle != lotEntity.Handle) { entity.Highlight(); highlighted.Add(entity); }
-                    ed.WriteMessage("\n  So far: {0} ...", PortionBuilder.Describe(steps, es.DistanceDecimals));
+                    ed.Tell("\n  So far: {0} ...", PortionBuilder.Describe(steps, es.DistanceDecimals));
                 }
             }
             finally
@@ -327,13 +327,13 @@ namespace FieldCodes.Cad
                 if (firstStatus == PromptStatus.Keyword && keyword == "Follow")
                 {
                     var follows = PickTieFollows(db, tr, ed);
-                    if (follows == null || follows.Count == 0) { ed.WriteMessage("\n  Nothing selected; the tie is straight."); continue; }
+                    if (follows == null || follows.Count == 0) { ed.Tell("\n  Nothing selected; the tie is straight."); continue; }
                     clicked.TieFollows = follows;
                     continue;
                 }
                 if (firstStatus != PromptStatus.OK || first == null)
                 {
-                    ed.WriteMessage("\n" + commandName + ": cancelled.\n");
+                    ed.Tell("\n" + commandName + ": cancelled.\n");
                     return null;
                 }
                 if (clicked.TieFollows.Count > 0)
@@ -342,11 +342,11 @@ namespace FieldCodes.Cad
                     var tie = TiePath(db, tr, poc.Point, first.Point, clicked.TieFollows, tolerance, string.Empty, null, out tieProblem);
                     if (tie == null)
                     {
-                        ed.WriteMessage("\n  The tie cannot follow those objects: {0} Select them again (Follow), or click the Point of Beginning for a straight tie.", tieProblem);
+                        ed.Tell("\n  The tie cannot follow those objects: {0} Select them again (Follow), or click the Point of Beginning for a straight tie.", tieProblem);
                         clicked.TieFollows = new List<GeometrySource>();
                         continue;
                     }
-                    ed.WriteMessage("\n  The tie follows the line as drawn: {0}.", string.Join(", ", tie.Select(c => c.Kind == CourseKind.Arc
+                    ed.Tell("\n  The tie follows the line as drawn: {0}.", string.Join(", ", tie.Select(c => c.Kind == CourseKind.Arc
                         ? "curve " + c.Length.ToString("0.00", CultureInfo.InvariantCulture) + "' R " + c.Radius.ToString("0.00", CultureInfo.InvariantCulture)
                         : "line " + c.Length.ToString("0.00", CultureInfo.InvariantCulture) + "'").ToArray()));
                     foreach (var c in tie) Preview(ed, c);
@@ -371,10 +371,10 @@ namespace FieldCodes.Cad
 
                 SelectedLocation next;
                 var status = EasementCommands.PickLocation(db, tr, ed, options, out next, out keyword);
-                if (status == PromptStatus.Cancel) { ed.WriteMessage("\n" + commandName + ": cancelled.\n"); return null; }
+                if (status == PromptStatus.Cancel) { ed.Tell("\n" + commandName + ": cancelled.\n"); return null; }
                 if (status == PromptStatus.Keyword && keyword == "Undo")
                 {
-                    if (sides.Count == 0) { ed.WriteMessage("\n  Nothing to undo."); continue; }
+                    if (sides.Count == 0) { ed.Tell("\n  Nothing to undo."); continue; }
                     corners.RemoveAt(corners.Count - 1);
                     sides.RemoveAt(sides.Count - 1);
                     sideCourses.RemoveAt(sideCourses.Count - 1);
@@ -392,12 +392,12 @@ namespace FieldCodes.Cad
                     if (entity == null) continue;
                     string problem;
                     var path = EasementCommands.Extract(entity, out problem);
-                    if (path == null) { ed.WriteMessage("\n  " + problem); continue; }
+                    if (path == null) { ed.Tell("\n  " + problem); continue; }
 
                     var leaveOptions = new PromptPointOptions("\nCorner where the side leaves that line: ") { UseBasePoint = true, BasePoint = EasementCommands.ToUcs(ed, last.Point) };
                     if (EasementCommands.PickLocation(db, tr, ed, leaveOptions, out next, out keyword) != PromptStatus.OK || next == null) continue;
                     courses = AreaPath.Between(path, last.Point, next.Point, tolerance, out problem);
-                    if (courses == null) { ed.WriteMessage("\n  " + problem); continue; }
+                    if (courses == null) { ed.Tell("\n  " + problem); continue; }
                     side = new AreaSide { FollowHandle = entity.Handle.ToString(), FollowType = EasementCommands.TypeName(entity) };
                     var role = "SIDE " + (sides.Count + 1).ToString(CultureInfo.InvariantCulture) + " FOLLOWS";
                     clicked.FollowSources.Add(new GeometrySource { Handle = side.FollowHandle, EntityType = side.FollowType, Role = role, Fingerprint = EasementAnnotation.Fingerprint(path) });
@@ -413,7 +413,7 @@ namespace FieldCodes.Cad
                 }
                 else
                 {
-                    if (next.Point.DistanceTo(last.Point) <= tolerance) { ed.WriteMessage("\n  That is the same point as the last corner."); continue; }
+                    if (next.Point.DistanceTo(last.Point) <= tolerance) { ed.Tell("\n  That is the same point as the last corner."); continue; }
                     side = new AreaSide();
                     courses = new List<Course> { Course.Line(last.Point, next.Point) };
                 }
@@ -455,11 +455,11 @@ namespace FieldCodes.Cad
             var es = settings.Easements;
             var tolerance = es.ToleranceFt * settings.General.UnitsPerFoot;
             var result = PortionBuilder.Build(lot, record.PortionSteps, tolerance);
-            foreach (var w in result.Warnings) ed.WriteMessage("\n  ! " + w);
+            foreach (var w in result.Warnings) ed.Tell("\n  ! " + w);
             if (!result.Ok)
             {
-                foreach (var e in result.Errors) ed.WriteMessage("\n  X " + e);
-                ed.WriteMessage("\nNot drawn.\n");
+                foreach (var e in result.Errors) ed.Tell("\n  X " + e);
+                ed.Tell("\nNot drawn.\n");
                 return false;
             }
 
@@ -545,7 +545,7 @@ namespace FieldCodes.Cad
 
                 if (!FinishArea(db, tr, ed, settings, rules.Version, record, sideCourses)) return;
                 DrawingStore.SaveEasement(db, tr, record);
-                ed.WriteMessage("\nCONSTRUCTIONAREA: {0}, {1}. Stored; FTFEASEMENTLEGAL writes its draft description.\n",
+                ed.Tell("\nCONSTRUCTIONAREA: {0}, {1}. Stored; FTFEASEMENTLEGAL writes its draft description.\n",
                                 record.Title, EasementAnnotation.AreaOfAreaLine(record.AreaSquareFeet, es, record.Purpose));
             });
         }
@@ -569,8 +569,8 @@ namespace FieldCodes.Cad
             var problems = AreaPath.Check(loop, tolerance);
             if (problems.Count > 0)
             {
-                foreach (var p in problems) ed.WriteMessage("\n  X " + p);
-                ed.WriteMessage("\nNot drawn.\n");
+                foreach (var p in problems) ed.Tell("\n  X " + p);
+                ed.Tell("\nNot drawn.\n");
                 return false;
             }
 
@@ -589,7 +589,7 @@ namespace FieldCodes.Cad
                 var tiePath = TiePath(db, tr, record.PointOfCommencement.Point, beginning.Point, record.CommencementTieFollows, tolerance, string.Empty, follows, out tieProblem);
                 if (tiePath == null)
                 {
-                    ed.WriteMessage("\n  X The commencement tie: " + tieProblem + "\nNot drawn.\n");
+                    ed.Tell("\n  X The commencement tie: " + tieProblem + "\nNot drawn.\n");
                     return false;
                 }
                 CourseData tie;
@@ -664,11 +664,11 @@ namespace FieldCodes.Cad
             var composed = record.HasComposition
                 ? EasementComposition.Apply(db, tr, record, loop, settings)
                 : new EasementComposition.Composed { Primary = new RegionShape(loop) };
-            foreach (var w in composed.Warnings) ed.WriteMessage("\n  ! " + w);
+            foreach (var w in composed.Warnings) ed.Tell("\n  ! " + w);
             if (!composed.Ok)
             {
-                foreach (var e in composed.Errors) ed.WriteMessage("\n  X " + e);
-                ed.WriteMessage("\nNot drawn.\n");
+                foreach (var e in composed.Errors) ed.Tell("\n  X " + e);
+                ed.Tell("\nNot drawn.\n");
                 return null;
             }
             if (record.HasComposition) EasementComposition.Store(record, composed, settings);
@@ -823,7 +823,7 @@ namespace FieldCodes.Cad
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception ex)
                 {
-                    _ed.WriteMessage("\n  Hatch \"{0}\" could not be made ({1}); the outline is drawn without it.", pattern, ex.Message);
+                    _ed.Tell("\n  Hatch \"{0}\" could not be made ({1}); the outline is drawn without it.", pattern, ex.Message);
                 }
             }
 

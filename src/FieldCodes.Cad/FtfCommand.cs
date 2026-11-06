@@ -51,7 +51,7 @@ namespace FieldCodes.Cad
                 _window = null;
                 var doc = AcadApp.DocumentManager.MdiActiveDocument;
                 if (doc != null)
-                    doc.Editor.WriteMessage(
+                    doc.Editor.Tell(
                         "\nFTF: the window could not open: {0}\n{1}\n",
                         ex.Message, ex.StackTrace);
             }
@@ -78,27 +78,27 @@ namespace FieldCodes.Cad
             var total = pipeline.Steps.Count;
             var index = 0;
 
-            ed.WriteMessage("\n=== Field to Finish: polishing the Civil 3D survey result ===\n");
+            ed.Tell("\n=== Field to Finish: polishing the Civil 3D survey result ===\n");
 
             var result = pipeline.Run(
                 null,
                 step =>
                 {
                     index++;
-                    ed.WriteMessage("\n--- [{0}/{1}] {2} - {3} ---",
+                    ed.Tell("\n--- [{0}/{1}] {2} - {3} ---",
                                     index, total, step.Name, step.Description);
                 },
                 (step, ex) =>
                 {
-                    ed.WriteMessage("\n{0} failed: {1}", step.Name, ex.Message);
+                    ed.Tell("\n{0} failed: {1}", step.Name, ex.Message);
                     return AskToContinue(ed, step.Name);
                 });
 
-            ed.WriteMessage("\n\n=== Finished: {0} of {1} step(s) ===\n",
+            ed.Tell("\n\n=== Finished: {0} of {1} step(s) ===\n",
                             result.Completed, total);
 
             if (result.Failed == 0)
-                ed.WriteMessage("Run FTFRUN again at any time; every step deletes its own " +
+                ed.Tell("Run FTFRUN again at any time; every step deletes its own " +
                                 "previous output first, so nothing duplicates.\n");
         }
 
@@ -118,7 +118,7 @@ namespace FieldCodes.Cad
                 string.Equals(answer.StringResult, "Yes", StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            ed.WriteMessage("\nStopped after {0}. Fix it and run FTFRUN again, or run the " +
+            ed.Tell("\nStopped after {0}. Fix it and run FTFRUN again, or run the " +
                             "remaining commands individually.\n", failedStep);
             return false;
         }

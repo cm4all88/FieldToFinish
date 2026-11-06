@@ -35,7 +35,7 @@ namespace FieldCodes.Cad
                 var rules = FtfSession.Rules(db);
                 var settings = FtfSession.SettingsFor(db, rules);
                 var records = DrawingStore.LoadEasements(db, tr);
-                if (records.Count == 0) { ed.WriteMessage("\nFTFEXHIBIT: no FTF easements are stored in this drawing.\n"); return; }
+                if (records.Count == 0) { ed.Tell("\nFTFEXHIBIT: no FTF easements are stored in this drawing.\n"); return; }
 
                 // 1. The easements.
                 var chosen = new List<EasementRecord>();
@@ -43,9 +43,9 @@ namespace FieldCodes.Cad
                 {
                     var r = EasementProductionCommands.PickAny(ed, tr, records, chosen.Count == 0 ? "\nSelect an easement for the exhibit: " : "\nNext easement <done>: ", chosen.Count > 0);
                     if (r == null) break;
-                    if (chosen.All(c => c.Id != r.Id)) { chosen.Add(r); ed.WriteMessage("\n  {0}", r.Title); }
+                    if (chosen.All(c => c.Id != r.Id)) { chosen.Add(r); ed.Tell("\n  {0}", r.Title); }
                 }
-                if (chosen.Count == 0) { ed.WriteMessage("\nFTFEXHIBIT: cancelled.\n"); return; }
+                if (chosen.Count == 0) { ed.Tell("\nFTFEXHIBIT: cancelled.\n"); return; }
                 var related = records.Where(r => chosen.All(c => c.Id != r.Id) &&
                                                  chosen.Any(c => (c.GroupId != null && c.GroupId == r.GroupId) || (!string.IsNullOrWhiteSpace(c.ExhibitGroup) && c.ExhibitGroup == r.ExhibitGroup))).ToList();
                 if (related.Count > 0)
@@ -71,7 +71,7 @@ namespace FieldCodes.Cad
                 var request = new ExhibitRequest { Exhibit = exhibit, ProfileNames = FtfSettings.ListProfiles().ToList(), Profile = DrawingStore.ReadProfileName(db), Scales = settings.Exhibits.ScaleList() };
                 if (!(EasementInspectCommands.Headless() ? AskOnCommandLine(ed, request, settings) : ShowInfo(request)))
                 {
-                    ed.WriteMessage("\nFTFEXHIBIT: cancelled.\n");
+                    ed.Tell("\nFTFEXHIBIT: cancelled.\n");
                     return;
                 }
                 var xs = ExhibitProfile(request.Profile, settings);
@@ -86,7 +86,7 @@ namespace FieldCodes.Cad
                 if (layouts.Contains(name))
                 {
                     var answer = EasementCommands.Keyword(ed, "\nLayout \"" + name + "\" already exists [Replace/NewName/Cancel] <NewName>: ", "NewName", "Replace", "NewName", "Cancel");
-                    if (answer == null || answer == "Cancel") { ed.WriteMessage("\nFTFEXHIBIT: cancelled -- nothing changed.\n"); return; }
+                    if (answer == null || answer == "Cancel") { ed.Tell("\nFTFEXHIBIT: cancelled -- nothing changed.\n"); return; }
                     if (answer == "Replace")
                     {
                         foreach (var old in DrawingStore.LoadExhibits(db, tr).Where(x => string.Equals(x.LayoutName, name, StringComparison.OrdinalIgnoreCase)))
@@ -122,7 +122,7 @@ namespace FieldCodes.Cad
                 var settings = FtfSession.SettingsFor(db, rules);
                 var records = DrawingStore.LoadEasements(db, tr);
                 var exhibits = DrawingStore.LoadExhibits(db, tr);
-                if (exhibits.Count == 0) { ed.WriteMessage("\nFTFEXHIBITREBUILD: no FTF exhibits in this drawing.\n"); return; }
+                if (exhibits.Count == 0) { ed.Tell("\nFTFEXHIBITREBUILD: no FTF exhibits in this drawing.\n"); return; }
 
                 var current = exhibits.FirstOrDefault(x => string.Equals(x.LayoutName, LayoutManager.Current.CurrentLayout, StringComparison.OrdinalIgnoreCase));
                 var fallback = current ?? exhibits[0];
@@ -131,12 +131,12 @@ namespace FieldCodes.Cad
                 var exhibit = answer.Status == PromptStatus.OK && !string.IsNullOrWhiteSpace(answer.StringResult)
                     ? exhibits.FirstOrDefault(x => string.Equals(x.LayoutName, answer.StringResult.Trim(), StringComparison.OrdinalIgnoreCase))
                     : fallback;
-                if (exhibit == null) { ed.WriteMessage("\nFTFEXHIBITREBUILD: no exhibit layout by that name.\n"); return; }
+                if (exhibit == null) { ed.Tell("\nFTFEXHIBITREBUILD: no exhibit layout by that name.\n"); return; }
 
                 var stale = ExhibitPlanner.StaleSources(exhibit, records);
-                foreach (var s in stale) ed.WriteMessage("\n  - " + s);
+                foreach (var s in stale) ed.Tell("\n  - " + s);
                 var chosen = exhibit.Sources.Select(s => records.FirstOrDefault(r => r.Id == s.EasementId)).Where(r => r != null).ToList();
-                if (chosen.Count == 0) { ed.WriteMessage("\nFTFEXHIBITREBUILD: none of the exhibit's easements are stored any more.\n"); return; }
+                if (chosen.Count == 0) { ed.Tell("\nFTFEXHIBITREBUILD: none of the exhibit's easements are stored any more.\n"); return; }
 
                 var xs = ExhibitProfile(exhibit.ProfileName, settings);
                 var previous = exhibit.Items.ToList();
@@ -160,17 +160,17 @@ namespace FieldCodes.Cad
 
         private static void Report(Editor ed, string command, ExhibitRecord exhibit)
         {
-            ed.WriteMessage("\n{0}: layout \"{1}\" at 1\" = {2}'{3}; {4} generated item(s).", command, exhibit.LayoutName,
+            ed.Tell("\n{0}: layout \"{1}\" at 1\" = {2}'{3}; {4} generated item(s).", command, exhibit.LayoutName,
                             exhibit.Scale.ToString("0.##", CultureInfo.InvariantCulture),
                             Math.Abs(exhibit.RotationDegrees) > 1e-9 ? ", view turned " + exhibit.RotationDegrees.ToString("0.#", CultureInfo.InvariantCulture) + " degrees" : ", north up",
                             exhibit.Items.Count);
-            if (exhibit.Review.Count == 0) ed.WriteMessage("\n  Review: nothing flagged -- still check the sheet before it goes out.");
+            if (exhibit.Review.Count == 0) ed.Tell("\n  Review: nothing flagged -- still check the sheet before it goes out.");
             else
             {
-                ed.WriteMessage("\n  Review -- {0} item(s) for a drafter to look at:", exhibit.Review.Count);
-                foreach (var r in exhibit.Review) ed.WriteMessage("\n  ? " + r);
+                ed.Tell("\n  Review -- {0} item(s) for a drafter to look at:", exhibit.Review.Count);
+                foreach (var r in exhibit.Review) ed.Tell("\n  ? " + r);
             }
-            ed.WriteMessage("\n");
+            ed.Tell("\n");
         }
 
         private static void SwitchTo(string layout)
@@ -240,7 +240,7 @@ namespace FieldCodes.Cad
             if (profile.Status == PromptStatus.OK && !string.IsNullOrWhiteSpace(profile.StringResult))
             {
                 var match = request.ProfileNames.FirstOrDefault(p => string.Equals(p, profile.StringResult.Trim(), StringComparison.OrdinalIgnoreCase));
-                if (match == null) ed.WriteMessage("\n  No profile \"{0}\"; using the drawing's settings.", profile.StringResult.Trim());
+                if (match == null) ed.Tell("\n  No profile \"{0}\"; using the drawing's settings.", profile.StringResult.Trim());
                 request.Profile = match ?? request.Profile;
             }
             var scale = ed.GetString(new PromptStringOptions("\nScale, feet per inch (" + string.Join(", ", request.Scales.Select(s => s.ToString("0.##", CultureInfo.InvariantCulture)).ToArray()) + ") <Auto>: ") { AllowSpaces = false });
@@ -418,7 +418,7 @@ namespace FieldCodes.Cad
             {
                 if (Rebuilding)
                 {
-                    _ed.WriteMessage("\nThe exhibit layout \"{0}\" was deleted; it is created again.", _exhibit.LayoutName);
+                    _ed.Tell("\nThe exhibit layout \"{0}\" was deleted; it is created again.", _exhibit.LayoutName);
                     _previous.Clear();
                 }
                 var manager = LayoutManager.Current;
@@ -714,7 +714,7 @@ namespace FieldCodes.Cad
             else vp.UpgradeOpen();
 
             var points = ExtentPoints();
-            if (points.Count == 0) { _ed.WriteMessage("\nFTFEXHIBIT: the easements have no stored geometry.\n"); return null; }
+            if (points.Count == 0) { _ed.Tell("\nFTFEXHIBIT: the easements have no stored geometry.\n"); return null; }
 
             if (created || vp.Width < 0.1)
             {

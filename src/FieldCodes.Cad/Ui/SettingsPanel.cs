@@ -116,7 +116,7 @@ namespace FieldCodes.Cad.Ui
             {
                 Dock = DockStyle.Fill,
                 BorderStyle = BorderStyle.None,
-                BackColor = Color.FromArgb(248, 249, 251),
+                BackColor = Branding.IsCommercial ? Color.FromArgb(0x0F, 0x35, 0x58) : Color.FromArgb(248, 249, 251),
                 IntegralHeight = false,
                 ItemHeight = 26,
                 DrawMode = DrawMode.OwnerDrawFixed
@@ -141,9 +141,12 @@ namespace FieldCodes.Cad.Ui
 
             var section = _sections[e.Index];
 
+            var brand = Branding.IsCommercial;
+            var navBack = brand ? Color.FromArgb(0x0F, 0x35, 0x58) : Color.FromArgb(248, 249, 251);
+
             if (section.IsGroup)
             {
-                using (var brush = new SolidBrush(Color.FromArgb(248, 249, 251)))
+                using (var brush = new SolidBrush(navBack))
                     e.Graphics.FillRectangle(brush, e.Bounds);
 
                 using (var small = new Font(e.Font.FontFamily, e.Font.Size - 1.5f,
@@ -151,26 +154,26 @@ namespace FieldCodes.Cad.Ui
                     TextRenderer.DrawText(e.Graphics, section.Label, small,
                         new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 8,
                                       e.Bounds.Height),
-                        Color.FromArgb(130, 135, 145),
+                        brand ? Color.FromArgb(0x9F, 0xC0, 0xE0) : Color.FromArgb(130, 135, 145),
                         TextFormatFlags.Bottom | TextFormatFlags.Left |
                         TextFormatFlags.NoPrefix);
                 return;
             }
 
             var selected = (e.State & DrawItemState.Selected) != 0;
-            var back = selected ? Color.White : Color.FromArgb(248, 249, 251);
+            var back = selected ? (brand ? Color.FromArgb(0x1E, 0x6F, 0xB8) : Color.White) : navBack;
 
             using (var brush = new SolidBrush(back))
                 e.Graphics.FillRectangle(brush, e.Bounds);
 
             if (selected)
-                using (var accent = new SolidBrush(Color.FromArgb(0, 90, 158)))
+                using (var accent = new SolidBrush(brand ? Color.FromArgb(0x7C, 0xC8, 0x4A) : Color.FromArgb(0, 90, 158)))
                     e.Graphics.FillRectangle(accent, e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height);
 
             var font = selected ? new Font(e.Font, FontStyle.Bold) : e.Font;
             TextRenderer.DrawText(e.Graphics, section.Label, font,
                 new Rectangle(e.Bounds.X + 16, e.Bounds.Y, e.Bounds.Width - 16, e.Bounds.Height),
-                SystemColors.ControlText,
+                brand ? (selected ? Color.White : Color.FromArgb(0xDC, 0xE8, 0xF5)) : SystemColors.ControlText,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left |
                 TextFormatFlags.NoPrefix);
         }
@@ -215,6 +218,13 @@ namespace FieldCodes.Cad.Ui
                 Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
                 Margin = new Padding(10, 2, 0, 0)
             };
+            if (Branding.IsCommercial)
+            {
+                _save.FlatStyle = FlatStyle.Flat;
+                _save.BackColor = Color.FromArgb(0x1E, 0x6F, 0xB8);
+                _save.ForeColor = Color.White;
+                _save.FlatAppearance.BorderSize = 0;
+            }
             _save.Click += (s, e) => SaveAll();
             footer.Controls.Add(_save);
 
@@ -277,6 +287,7 @@ namespace FieldCodes.Cad.Ui
                 section.Page.LoadFrom(_context.Resolution.Settings);
                 _built[section.Label] = control;
                 _host.Controls.Add(control);
+                FtfText.BrandControls(control);
             }
 
             foreach (Control child in _host.Controls) child.Visible = false;

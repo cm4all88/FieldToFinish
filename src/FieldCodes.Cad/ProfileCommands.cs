@@ -25,15 +25,15 @@ namespace FieldCodes.Cad
                 var current = DrawingStore.ReadProfileName(db);
                 var profiles = FtfSettings.ListProfiles();
 
-                ed.WriteMessage("\nDrafting profile for this drawing: {0}", string.IsNullOrWhiteSpace(current) ? "(none)" : current);
+                ed.Tell("\nDrafting profile for this drawing: {0}", string.IsNullOrWhiteSpace(current) ? "(none)" : current);
                 if (!string.IsNullOrWhiteSpace(resolution.MissingProfile))
-                    ed.WriteMessage("\n  ! Profile \"{0}\" is not on this computer ({1}); normal settings are in use.",
+                    ed.Tell("\n  ! Profile \"{0}\" is not on this computer ({1}); normal settings are in use.",
                                     resolution.MissingProfile, FtfSettings.ProfilesDirectory());
                 if (resolution.Source == SettingsSource.DrawingFolder && !string.IsNullOrWhiteSpace(current))
-                    ed.WriteMessage("\n  ! A settings file beside the drawing overrides the profile: {0}", resolution.LoadedFrom);
-                ed.WriteMessage("\nSettings in use come from: {0}", resolution.LoadedFrom ?? "shipped defaults");
-                ed.WriteMessage("\nProfiles on this computer: {0}", profiles.Count == 0 ? "(none yet)" : string.Join(", ", profiles.ToArray()));
-                ed.WriteMessage("\n");
+                    ed.Tell("\n  ! A settings file beside the drawing overrides the profile: {0}", resolution.LoadedFrom);
+                ed.Tell("\nSettings in use come from: {0}", resolution.LoadedFrom ?? "shipped defaults");
+                ed.Tell("\nProfiles on this computer: {0}", profiles.Count == 0 ? "(none yet)" : string.Join(", ", profiles.ToArray()));
+                ed.Tell("\n");
 
                 var options = new PromptKeywordOptions("\n[Use/SaveAs/Clear/List] <exit>: ", "Use SaveAs Clear List");
                 options.AllowNone = true;
@@ -49,12 +49,12 @@ namespace FieldCodes.Cad
                         var chosen = profiles.FirstOrDefault(p => string.Equals(p, name.StringResult.Trim(), StringComparison.OrdinalIgnoreCase));
                         if (chosen == null)
                         {
-                            ed.WriteMessage("\nNo profile \"{0}\" on this computer. Use SaveAs to create it from the current settings first.", name.StringResult.Trim());
+                            ed.Tell("\nNo profile \"{0}\" on this computer. Use SaveAs to create it from the current settings first.", name.StringResult.Trim());
                             return;
                         }
                         DrawingStore.WriteProfileName(db, tr, chosen);
                         FtfSession.InvalidateSettings();
-                        ed.WriteMessage("\nThis drawing now drafts with profile \"{0}\". Existing drafting is not changed.", chosen);
+                        ed.Tell("\nThis drawing now drafts with profile \"{0}\". Existing drafting is not changed.", chosen);
                         break;
                     }
                     case "SaveAs":
@@ -72,20 +72,20 @@ namespace FieldCodes.Cad
                         FtfSettings.SaveProfile(trimmed, resolution.Settings);
                         DrawingStore.WriteProfileName(db, tr, trimmed);
                         FtfSession.InvalidateSettings();
-                        ed.WriteMessage("\nSaved profile \"{0}\" to {1} and selected it for this drawing. Edit it in FTF > Settings (save to the profile).",
+                        ed.Tell("\nSaved profile \"{0}\" to {1} and selected it for this drawing. Edit it in FTF > Settings (save to the profile).",
                                         trimmed, FtfSettings.ProfilePath(trimmed));
                         break;
                     }
                     case "Clear":
                         DrawingStore.WriteProfileName(db, tr, string.Empty);
                         FtfSession.InvalidateSettings();
-                        ed.WriteMessage("\nThis drawing no longer uses a drafting profile; normal settings apply.");
+                        ed.Tell("\nThis drawing no longer uses a drafting profile; normal settings apply.");
                         break;
                     default:
-                        foreach (var p in profiles) ed.WriteMessage("\n  {0}  ({1})", p, FtfSettings.ProfilePath(p));
+                        foreach (var p in profiles) ed.Tell("\n  {0}  ({1})", p, FtfSettings.ProfilePath(p));
                         break;
                 }
-                ed.WriteMessage("\n");
+                ed.Tell("\n");
             });
         }
     }

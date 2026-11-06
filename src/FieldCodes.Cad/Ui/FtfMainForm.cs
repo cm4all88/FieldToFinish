@@ -77,16 +77,25 @@ namespace FieldCodes.Cad.Ui
         private FtfDrawingStatus _status;
         private bool _busy;
 
-        private static readonly Color NavBack = Color.FromArgb(243, 243, 245);
-        private static readonly Color NavSelected = Color.White;
+        // The commercial edition uses the TRACE palette (navy navigation, survey blue actions,
+        // accent green marker). The internal edition keeps its original colours.
+        private static readonly bool Brand = Branding.IsCommercial;
+        private static readonly Color NavBack = Brand ? Color.FromArgb(0x0F, 0x35, 0x58) : Color.FromArgb(243, 243, 245);
+        private static readonly Color NavSelected = Brand ? Color.FromArgb(0x1E, 0x6F, 0xB8) : Color.White;
+        private static readonly Color NavText = Brand ? Color.FromArgb(0xDC, 0xE8, 0xF5) : SystemColors.ControlText;
+        private static readonly Color NavSelectedText = Brand ? Color.White : SystemColors.ControlText;
+        private static readonly Color NavHover = Brand ? Color.FromArgb(0x1A, 0x4A, 0x75) : Color.FromArgb(232, 236, 240);
+        private static readonly Color NavBar = Brand ? Color.FromArgb(0x7C, 0xC8, 0x4A) : Color.FromArgb(0, 90, 158);
+        private static readonly Color NavCaption = Brand ? Color.FromArgb(0x9F, 0xC0, 0xE0) : Color.FromArgb(130, 135, 145);
         private static readonly Color CaptionGray = Color.FromArgb(110, 110, 115);
-        private static readonly Color Accent = Color.FromArgb(0, 90, 158);
+        private static readonly Color Accent = Brand ? Color.FromArgb(0x1E, 0x6F, 0xB8) : Color.FromArgb(0, 90, 158);
 
         public FtfMainForm()
         {
             SuspendLayout();
 
             Text = Branding.ProductName;
+            if (Brand) Font = new Font("Segoe UI", 9f);
             FormBorderStyle = FormBorderStyle.Sizable;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = true;
@@ -126,6 +135,7 @@ namespace FieldCodes.Cad.Ui
             ResumeLayout(true);
 
             ShowPage("Overview");
+            FtfText.BrandControls(this);
             Load += (s, e) => RefreshStatus();
         }
 
@@ -148,11 +158,22 @@ namespace FieldCodes.Cad.Ui
                 Padding = new Padding(0, 4, 0, 0)
             };
 
+#if TRACE_EDITION
+            stack.Controls.Add(new PictureBox
+            {
+                Image = TraceIconGdi.Render("trace", 34, false),
+                SizeMode = PictureBoxSizeMode.AutoSize,
+                BackColor = Color.Transparent,
+                Margin = new Padding(16, 0, 0, 4)
+            });
+#endif
             var title = new Label
             {
                 Text = Branding.ProductName.ToUpperInvariant(),
-                Font = new Font(SystemFonts.DefaultFont.FontFamily, 9.5f, FontStyle.Bold),
-                ForeColor = Accent,
+                Font = Brand
+                    ? new Font("Segoe UI", 15f, FontStyle.Bold | FontStyle.Italic)
+                    : new Font(SystemFonts.DefaultFont.FontFamily, 9.5f, FontStyle.Bold),
+                ForeColor = Brand ? Color.White : Accent,
                 AutoSize = true,
                 Margin = new Padding(16, 0, 0, 12)
             };
@@ -175,7 +196,7 @@ namespace FieldCodes.Cad.Ui
                 {
                     Text = group[0],
                     Font = new Font(SystemFonts.DefaultFont.FontFamily, 7.5f, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(130, 135, 145),
+                    ForeColor = NavCaption,
                     AutoSize = true,
                     Margin = new Padding(16, 10, 0, 2)
                 });
@@ -197,19 +218,20 @@ namespace FieldCodes.Cad.Ui
                     TextAlign = ContentAlignment.MiddleLeft,
                     FlatStyle = FlatStyle.Flat,
                     BackColor = NavBack,
+                    ForeColor = NavText,
                     Size = new Size(168, 34),
                     Margin = new Padding(0),
                     TabStop = false
                 };
                 button.FlatAppearance.BorderSize = 0;
-                button.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 236, 240);
+                button.FlatAppearance.MouseOverBackColor = NavHover;
                 button.Click += (s, e) => ShowPage(name);
                 button.Paint += (s, e) =>
                 {
                     // A 3px accent bar marks the selected page far more clearly than
                     // background colour alone.
                     if (Equals(button.Tag, "selected"))
-                        using (var brush = new SolidBrush(Accent))
+                        using (var brush = new SolidBrush(NavBar))
                             e.Graphics.FillRectangle(brush, 0, 2, 3, button.Height - 4);
                 };
 
@@ -231,9 +253,10 @@ namespace FieldCodes.Cad.Ui
             {
                 var selected = pair.Key == name;
                 pair.Value.BackColor = selected ? NavSelected : NavBack;
-                pair.Value.Font = selected
-                    ? new Font(SystemFonts.DefaultFont, FontStyle.Bold)
-                    : SystemFonts.DefaultFont;
+                pair.Value.ForeColor = selected ? NavSelectedText : NavText;
+                var face = Brand ? Font.FontFamily : SystemFonts.DefaultFont.FontFamily;
+                var size = Brand ? Font.Size : SystemFonts.DefaultFont.Size;
+                pair.Value.Font = new Font(face, size, selected ? FontStyle.Bold : FontStyle.Regular);
                 pair.Value.Tag = selected ? "selected" : null;
                 pair.Value.Invalidate();
             }
@@ -242,6 +265,8 @@ namespace FieldCodes.Cad.Ui
             if (name == "Feature Review" || name == "Unknown Codes") EnsureReviewScanned();
             if (name == "Standards") EnsureStandardsBuilt();
             if (name == "Line Features") EnsureLineworkScanned();
+
+            FtfText.BrandControls(page);
         }
 
         private Panel NewPage(string name)

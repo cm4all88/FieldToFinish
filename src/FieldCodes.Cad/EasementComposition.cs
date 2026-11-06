@@ -357,7 +357,7 @@ namespace FieldCodes.Cad
             }
             catch (Autodesk.AutoCAD.Runtime.Exception ex)
             {
-                ed.WriteMessage("\n  Hatch \"{0}\" could not be made ({1}); the outline is drawn without it.", pattern, ex.Message);
+                ed.Tell("\n  Hatch \"{0}\" could not be made ({1}); the outline is drawn without it.", pattern, ex.Message);
             }
         }
     }

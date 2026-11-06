@@ -21,7 +21,8 @@ Built from the approved design. Compiled and type-checked against stand-ins for 
 | Type `TRACE` | Same as the Palette button |
 
 ## Known limits of this first version
-- Some messages printed by the existing tools still say "FTF". Typing an old `FTF...` command still works, by design.
+- Messages from the existing tools are shown in TRACE wording (for example "Driplines: 16 arc(s)...") in the TRACE edition; the tools' own text is unchanged and typing an old `FTF...` command still works, by design.
+- The Settings window has had a first branding pass (navy navigation, blue actions, green marker, Segoe UI, TRACE wording). The full Profiles and Standards redesign from the mockups is a later stage.
 - The Profiles and Standards window, Review Queue, Start window and About are not built yet (still the existing settings window). The Reports and Help buttons are left out because no existing function backs them.
 - Icons follow the Civil 3D colour theme at startup (dark by default; a theme change needs a restart).
 - Tool tiles show an icon over the name; spacing may need a pass once seen at your screen scaling.

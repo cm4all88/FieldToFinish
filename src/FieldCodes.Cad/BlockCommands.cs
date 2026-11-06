@@ -60,9 +60,9 @@ namespace FieldCodes.Cad
                 }
 
                 var list = shown.ToList();
-                ed.WriteMessage("\n{0} block definition(s){1}:",
+                ed.Tell("\n{0} block definition(s){1}:",
                     list.Count, filter == "*" ? "" : " matching '" + filter + "'");
-                foreach (var n in list) ed.WriteMessage("\n    {0}", n);
+                foreach (var n in list) ed.Tell("\n    {0}", n);
 
                 // Now the part that matters: what the rules file is asking for.
                 ReportExpected(db, tr, ed, names);
@@ -83,7 +83,7 @@ namespace FieldCodes.Cad
             }
             catch (ConfigException ex)
             {
-                ed.WriteMessage("\n\nCould not read the rules file: {0}\n", ex.Message);
+                ed.Tell("\n\nCould not read the rules file: {0}\n", ex.Message);
                 return;
             }
 
@@ -133,22 +133,22 @@ namespace FieldCodes.Cad
                 .OrderBy(w => w, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            ed.WriteMessage("\n\nBlocks the rules file expects:");
+            ed.Tell("\n\nBlocks the rules file expects:");
             var missing = 0;
             foreach (var name in distinct)
             {
                 var have = lookup.Contains(name);
                 if (!have) missing++;
-                ed.WriteMessage("\n    [{0}] {1}", have ? "ok " : "  -", name);
+                ed.Tell("\n    [{0}] {1}", have ? "ok " : "  -", name);
             }
 
             if (missing > 0)
-                ed.WriteMessage(
+                ed.Tell(
                     "\n\n{0} missing. Either insert blocks with these names, or point " +
                     "the rules file at the names this drawing uses ('block' on the code " +
                     "rule, and 'block' on any modifier that substitutes one).\n", missing);
             else
-                ed.WriteMessage("\n\nAll expected blocks are present.\n");
+                ed.Tell("\n\nAll expected blocks are present.\n");
         }
     }
 }

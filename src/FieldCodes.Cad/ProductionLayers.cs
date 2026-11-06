@@ -70,9 +70,9 @@ namespace FieldCodes.Cad
         {
             if (ed == null) return resolution.Similar[0];
 
-            ed.WriteMessage("\nLayer {0} is not in this drawing, but similar layer(s) are: {1}",
+            ed.Tell("\nLayer {0} is not in this drawing, but similar layer(s) are: {1}",
                             resolution.Layer, string.Join(", ", resolution.Similar.ToArray()));
-            ed.WriteMessage("\n  Add a layer mapping in Settings > General to decide this permanently.");
+            ed.Tell("\n  Add a layer mapping in Settings > General to decide this permanently.");
 
             var options = new PromptKeywordOptions("\n  Use the existing layer or create the new one? [Existing/Create] <Existing>: ", "Existing Create");
             options.Keywords.Default = "Existing";
@@ -82,7 +82,7 @@ namespace FieldCodes.Cad
 
             if (resolution.Similar.Count == 1) return resolution.Similar[0];
             for (var i = 0; i < resolution.Similar.Count; i++)
-                ed.WriteMessage("\n  {0}. {1}", i + 1, resolution.Similar[i]);
+                ed.Tell("\n  {0}. {1}", i + 1, resolution.Similar[i]);
             var pick = ed.GetInteger(new PromptIntegerOptions("\n  Which layer number <1>: ")
             {
                 AllowNone = true, LowerLimit = 1, UpperLimit = resolution.Similar.Count, DefaultValue = 1, UseDefaultValue = true
@@ -92,7 +92,7 @@ namespace FieldCodes.Cad
 
         private static void Say(Editor ed, string format, params object[] args)
         {
-            if (ed != null) ed.WriteMessage("\n  " + format, args);
+            if (ed != null) ed.Tell("\n  " + format, args);
         }
     }
 }

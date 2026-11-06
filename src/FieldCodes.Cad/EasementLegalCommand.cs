@@ -177,15 +177,15 @@ namespace FieldCodes.Cad
                 var es = settings.Easements;
                 var records = DrawingStore.LoadEasements(db, tr);
                 var permanent = records.Where(r => !r.IsTemporary).ToList();
-                if (permanent.Count == 0) { ed.WriteMessage("\nFTFEASEMENTLEGAL: no strip easements are stored in this drawing.\n"); return; }
+                if (permanent.Count == 0) { ed.Tell("\nFTFEASEMENTLEGAL: no strip easements are stored in this drawing.\n"); return; }
 
                 var easement = permanent.Count == 1 ? permanent[0] : Pick(ed, tr, records);
-                if (easement == null) { ed.WriteMessage("\nFTFEASEMENTLEGAL: cancelled.\n"); return; }
+                if (easement == null) { ed.Tell("\nFTFEASEMENTLEGAL: cancelled.\n"); return; }
                 var temporary = easement.GroupId == null ? null
                     : records.FirstOrDefault(r => r.IsTemporary && r.GroupId == easement.GroupId);
-                ed.WriteMessage("\n  {0}{1}", easement.Title, temporary != null ? " with its " + temporary.Title : string.Empty);
+                ed.Tell("\n  {0}{1}", easement.Title, temporary != null ? " with its " + temporary.Title : string.Empty);
                 if (!easement.Trimmable && !easement.IsPortion && !easement.IsArea)
-                    ed.WriteMessage("\n  ! This easement was made before ties and trim lines were recorded; its draft has fewer blanks filled from the drawing.");
+                    ed.Tell("\n  ! This easement was made before ties and trim lines were recorded; its draft has fewer blanks filled from the drawing.");
 
                 var changes = EasementCommands.Changes(db, tr, easement).ToList();
                 if (temporary != null) changes.AddRange(EasementCommands.Changes(db, tr, temporary).Where(c => !changes.Contains(c)));
@@ -209,7 +209,7 @@ namespace FieldCodes.Cad
                 var closure = Closure.ForRecord(easement, es);
                 var notReady = closure.Problems.ToList();
                 if (temporary != null) notReady.AddRange(Closure.ForRecord(temporary, es).Problems.Select(p => "Temporary construction easement -- " + p));
-                foreach (var p in notReady) ed.WriteMessage("\n  X " + p);
+                foreach (var p in notReady) ed.Tell("\n  X " + p);
 
                 var session = new LegalSession
                 {
@@ -225,7 +225,7 @@ namespace FieldCodes.Cad
                 };
                 if (!(Headless() ? AskOnCommandLine(ed, session) : ShowWindow(session)))
                 {
-                    ed.WriteMessage("\nFTFEASEMENTLEGAL: cancelled -- nothing saved.\n");
+                    ed.Tell("\nFTFEASEMENTLEGAL: cancelled -- nothing saved.\n");
                     return;
                 }
 
@@ -238,11 +238,11 @@ namespace FieldCodes.Cad
                 DrawingStore.SaveEasement(db, tr, easement);
 
                 var path = SaveBesideDrawing(db, easement, draft);
-                ed.WriteMessage(path != null
+                ed.Tell(path != null
                     ? "\nFTFEASEMENTLEGAL: draft written to " + path
                     : "\nFTFEASEMENTLEGAL: the drawing has not been saved, so the draft was not written to a file.");
-                foreach (var check in draft.Checks) ed.WriteMessage("\n  ? " + check);
-                ed.WriteMessage("\n");
+                foreach (var check in draft.Checks) ed.Tell("\n  ? " + check);
+                ed.Tell("\n");
             });
         }
 
@@ -254,11 +254,11 @@ namespace FieldCodes.Cad
                 if (picked.Status != PromptStatus.OK) return null;
                 var stamp = Ownership.Read((AcEntity)tr.GetObject(picked.ObjectId, OpenMode.ForRead));
                 var record = stamp == null ? null : records.FirstOrDefault(r => r.Id == stamp.PointNumber);
-                if (record == null) { ed.WriteMessage("\n  That is not part of a stored strip easement."); continue; }
+                if (record == null) { ed.Tell("\n  That is not part of a stored strip easement."); continue; }
                 if (!record.IsTemporary) return record;
                 var permanent = records.FirstOrDefault(r => !r.IsTemporary && r.GroupId != null && r.GroupId == record.GroupId);
                 if (permanent != null) return permanent;
-                ed.WriteMessage("\n  That temporary construction easement's easement is no longer stored.");
+                ed.Tell("\n  That temporary construction easement's easement is no longer stored.");
             }
         }
 

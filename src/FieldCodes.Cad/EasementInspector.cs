@@ -62,15 +62,15 @@ namespace FieldCodes.Cad
                 {
                     var layout = LayoutManager.Current.CurrentLayout;
                     exhibit = exhibits.FirstOrDefault(x => string.Equals(x.LayoutName, layout, StringComparison.OrdinalIgnoreCase));
-                    if (exhibit == null) { ed.WriteMessage("\n{0}: layout \"{1}\" is not an FTF exhibit.\n", command, layout); return; }
+                    if (exhibit == null) { ed.Tell("\n{0}: layout \"{1}\" is not an FTF exhibit.\n", command, layout); return; }
                 }
                 else if (picked.Status == PromptStatus.OK)
                 {
                     var stamp = Ownership.Read((AcEntity)tr.GetObject(picked.ObjectId, OpenMode.ForRead));
-                    if (stamp == null) { ed.WriteMessage("\n{0}: that object is not FTF easement or exhibit drafting.\n", command); return; }
+                    if (stamp == null) { ed.Tell("\n{0}: that object is not FTF easement or exhibit drafting.\n", command); return; }
                     if (stamp.Kind >= FtfEntityKind.ExhibitViewport) exhibit = exhibits.FirstOrDefault(x => x.Id == stamp.PointNumber);
                     else easement = records.FirstOrDefault(r => r.Id == stamp.PointNumber);
-                    if (exhibit == null && easement == null) { ed.WriteMessage("\n{0}: no stored easement or exhibit owns that object.\n", command); return; }
+                    if (exhibit == null && easement == null) { ed.Tell("\n{0}: no stored easement or exhibit owns that object.\n", command); return; }
                 }
                 else return;
 
@@ -79,11 +79,11 @@ namespace FieldCodes.Cad
 
                 if (Headless())
                 {
-                    ed.WriteMessage("\n{0}: {1}", command, title);
+                    ed.Tell("\n{0}: {1}", command, title);
                     foreach (var r in rows)
-                        ed.WriteMessage("\n  {0}{1} | {2}: {3}{4}", r.Severity.Length > 0 ? "[" + r.Severity.ToUpperInvariant() + "] " : string.Empty,
+                        ed.Tell("\n  {0}{1} | {2}: {3}{4}", r.Severity.Length > 0 ? "[" + r.Severity.ToUpperInvariant() + "] " : string.Empty,
                                         r.Section, r.Item, r.Value, string.IsNullOrEmpty(r.Source) ? string.Empty : "   (source: " + r.Source + ")");
-                    ed.WriteMessage("\n");
+                    ed.Tell("\n");
                 }
             });
             if (rows != null && !Headless()) ShowWindow(title, rows);

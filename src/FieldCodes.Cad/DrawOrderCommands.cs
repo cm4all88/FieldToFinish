@@ -75,7 +75,7 @@ namespace FieldCodes.Cad
                     }
                 }
 
-                ed.WriteMessage(
+                ed.Tell(
                     "\nFTFORDER: {0} entities banded -- {1} linework, {2} mask(s), " +
                     "{3} symbol(s), {4} label(s).\n",
                     counted,

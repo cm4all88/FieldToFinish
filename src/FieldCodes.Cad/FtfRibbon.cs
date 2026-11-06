@@ -226,7 +226,7 @@ namespace FieldCodes.Cad
                     {
                         var doc = AcadApp.DocumentManager.MdiActiveDocument;
                         if (doc != null)
-                            doc.Editor.WriteMessage("\nFTF ribbon: {0}\n", ex.Message);
+                            doc.Editor.Tell("\nFTF ribbon: {0}\n", ex.Message);
                     }
                     catch (System.Exception) { }
                 }
